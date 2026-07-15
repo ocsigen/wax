@@ -1,0 +1,109 @@
+==================
+struct with descriptor
+==================
+
+fn f() { {descriptor(d)| x: 1}; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (struct_expression
+        base: (descriptor_operand
+          (identifier))
+        (field_initializer
+          name: (identifier)
+          value: (integer_literal))))))
+
+==================
+struct default descriptor
+==================
+
+fn f() { {descriptor(d)| ..}; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (struct_default_expression
+        base: (descriptor_operand
+          (identifier))))))
+
+==================
+cast to descriptor
+==================
+
+fn f() { v as descriptor(d); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (cast_desc_expression
+        value: (identifier)
+        descriptor: (descriptor_operand
+          (identifier))))))
+
+==================
+nullable cast to descriptor
+==================
+
+fn f() { v as ? descriptor(d); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (cast_desc_expression
+        value: (identifier)
+        descriptor: (descriptor_operand
+          (identifier))))))
+
+==================
+get descriptor
+==================
+
+fn f() { v.descriptor; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (get_descriptor_expression
+        value: (identifier)))))
+
+==================
+br_on_cast descriptor
+==================
+
+fn f() { br_on_cast 'l ? descriptor(d) v; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (branch_expression
+        label: (label
+          name: (identifier))
+        descriptor: (descriptor_operand
+          (identifier))
+        value: (identifier)))))
+

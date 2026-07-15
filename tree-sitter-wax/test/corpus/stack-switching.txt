@@ -1,0 +1,118 @@
+==================
+cont.new
+==================
+
+fn f() { cont_new t(g); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (cont_new_expression
+        type: (type_identifier)
+        (identifier)))))
+
+==================
+cont.bind
+==================
+
+fn f() { cont_bind s t(x); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (cont_bind_expression
+        source: (type_identifier)
+        target: (type_identifier)
+        (argument_list
+          (identifier))))))
+
+==================
+suspend
+==================
+
+fn f() { suspend e(v); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (suspend_expression
+        tag: (type_identifier)
+        (argument_list
+          (identifier))))))
+
+==================
+resume with on-clauses
+==================
+
+fn f() { resume t [e -> 'h, x -> switch](c); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (resume_expression
+        type: (type_identifier)
+        (on_clauses
+          (on_clause
+            tag: (identifier)
+            label: (label
+              name: (identifier)))
+          (on_clause
+            tag: (identifier)))
+        (argument_list
+          (identifier))))))
+
+==================
+resume_throw empty on-clauses
+==================
+
+fn f() { resume_throw t e [](c); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (resume_throw_expression
+        type: (type_identifier)
+        tag: (type_identifier)
+        (on_clauses)
+        (argument_list
+          (identifier))))))
+
+==================
+switch
+==================
+
+fn f() { switch t e(c); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (switch_expression
+        type: (type_identifier)
+        tag: (type_identifier)
+        (argument_list
+          (identifier))))))
+

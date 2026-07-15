@@ -1,0 +1,135 @@
+==================
+while with continue-expression
+==================
+
+fn f() { 'w: while c : (i += 1) { br 'w; } }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (while_expression
+        (block_label
+          (label
+            name: (identifier)))
+        condition: (identifier)
+        step: (compound_assignment_statement
+          name: (identifier)
+          value: (integer_literal))
+        body: (br_statement
+          label: (label
+            name: (identifier)))))))
+
+==================
+try-table catch
+==================
+
+fn f() { try { nop; } catch [e -> 'h, _ -> 'a]; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (try_table_expression
+        body: (nop)
+        (catch_clause
+          tag: (identifier)
+          label: (label
+            name: (identifier)))
+        (catch_clause
+          label: (label
+            name: (identifier)))))))
+
+==================
+legacy try-catch
+==================
+
+fn f() { try { nop; } catch { e => { nop; } _ => { nop; } } }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (try_expression
+        body: (nop)
+        (legacy_catch
+          tag: (identifier)
+          body: (nop))
+        (legacy_catch_all
+          body: (nop))))))
+
+==================
+br_table
+==================
+
+fn f() { br_table ['a 'b else 'c] x; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (br_table_statement
+        (label
+          name: (identifier))
+        (label
+          name: (identifier))
+        default: (label
+          name: (identifier))
+        value: (identifier)))))
+
+==================
+dispatch
+==================
+
+fn f() { dispatch x ['a else 'b] { 'a: { nop; } } }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (dispatch_expression
+        index: (identifier)
+        (label
+          name: (identifier))
+        default: (label
+          name: (identifier))
+        (dispatch_arm
+          label: (label
+            name: (identifier))
+          body: (nop))))))
+
+==================
+if with block type and else
+==================
+
+fn f() { if c => i32 { 1; } else { 2; } }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (if_expression
+        condition: (identifier)
+        type: (primitive_type
+          (identifier))
+        consequence: (integer_literal)
+        alternative: (integer_literal)))))
+
