@@ -63,4 +63,30 @@ let () =
      descriptor. Dropping the group climbs all the way to the module body, so the
      following "(func …)" is not mistakenly grafted on as the import descriptor. *)
   report "unrepairable field drops without absorbing its sibling"
-    "(module (import \"m\") (func (nop)))\n"
+    "(module (import \"m\") (func (nop)))\n";
+  (* Group-drop must not fire on a stray ")" after an already-complete module:
+     nothing is open there (source depth 0), so it is simply dropped and the
+     module's field survives, rather than popping into the finished module. *)
+  report "stray ) after a complete module keeps the field"
+    "(module (func (nop))) )\n";
+  (* A stray ")" between fields closes the module early; the trailing field is
+     lost but the fields already parsed are kept (recovery never pops a reduced
+     construct off the stack, which would discard its value). *)
+  report "stray ) between fields keeps the earlier fields"
+    "(module (func $a (nop)) (func $b (nop)) (func $c (nop)) ) (func $d (nop)))\n";
+  (* The barrier is honoured only at the enclosing level: a "(func" nested in a
+     "(type … (func))" functype is content, not a new field, so an earlier error
+     does not make the healthy type vanish. *)
+  report "nested (func in a functype is not a barrier"
+    "(module (import \"m\") (type $t (func)) (func (nop)))\n";
+  (* A missing closer before a fused field opener ("(type"/"(import", lexed as one
+     token) is recovered: the fused opener is a single-token barrier, so the open
+     "func" is closed and the field starts fresh. *)
+  report "missing closer before a fused (type field"
+    "(module (func (i32.const 1) (type $t (func)))\n";
+  report "missing closer before a fused (import field"
+    "(module (func (i32.const 1) (import \"m\" \"n\" (func $f)))\n";
+  (* The barrier reads the previously-offered token, not the raw source, so a
+     comment between "(" and the field keyword does not defeat it. *)
+  report "comment between ( and the keyword still triggers the barrier"
+    "(module (func (i32.const 1) ( ;; c\n func (nop)))\n"

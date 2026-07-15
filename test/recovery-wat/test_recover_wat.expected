@@ -35,3 +35,27 @@ errors: 1
 === unrepairable field drops without absorbing its sibling ===
 errors: 1
 (func (nop))
+=== stray ) after a complete module keeps the field ===
+errors: 1
+(func (nop))
+=== stray ) between fields keeps the earlier fields ===
+errors: 1
+(func $a (nop))
+(func $b (nop))
+(func $c (nop))
+=== nested (func in a functype is not a barrier ===
+errors: 1
+(type $t (func))
+(func (nop))
+=== missing closer before a fused (type field ===
+errors: 1
+(func (i32.const 1))
+(type $t (func))
+=== missing closer before a fused (import field ===
+errors: 1
+(func (i32.const 1))
+(import "m" "n" (func $f))
+=== comment between ( and the keyword still triggers the barrier ===
+errors: 1
+(func (i32.const 1)) ;; c
+(func (nop))
