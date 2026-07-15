@@ -4871,10 +4871,6 @@ let functions ?(warn_unused = true) ctx fields =
                         (* Dummy value *) Ref { nullable = false; typ = None_ }
                     | Some typ' -> typ'
                   in
-                  (* Give the parameter's declaration its type on hover. *)
-                  record
-                    (Option.map (fun (n : Ast.Text.name) -> n.Ast.info) id)
-                    (Pushed (Plain typ));
                   Sequence.register locals id (interned, Plain typ))
                 params
           | _ ->
@@ -4913,10 +4909,6 @@ let functions ?(warn_unused = true) ctx fields =
                 (!i, Option.map (fun id -> id.Ast.desc) id, location)
                 :: !declared_locals;
               incr i;
-              (* Give the local's declaration its type on hover. *)
-              record
-                (Option.map (fun (n : Ast.Text.name) -> n.Ast.info) id)
-                (Pushed (Plain typ));
               Sequence.register locals id (typ', Plain typ))
             locs;
           let ctx =
