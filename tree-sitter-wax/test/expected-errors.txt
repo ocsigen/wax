@@ -5,6 +5,11 @@
 #
 # (Fixtures named `bad*.wax` that are merely *semantic* errors — e.g. type
 # errors — are NOT listed here: they parse cleanly and are positive tests.)
+test/cram-tests/check-all-errors.t/missing-semi.wax
+test/cram-tests/check-all-errors.t/mixed.wax
+test/cram-tests/check-all-errors.t/multi.wax
+test/cram-tests/check-all-errors.t/stack-cascade.wax
+test/cram-tests/check-all-errors.t/unclosed-brace.wax
 test/cram-tests/match.t/err_no_default.wax
 test/cram-tests/parse-error-messages.t/block.wax
 test/cram-tests/parse-error-messages.t/limits.wax

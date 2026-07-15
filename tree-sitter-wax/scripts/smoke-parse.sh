@@ -16,6 +16,15 @@ set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo="$(cd "$here/.." && pwd)"
 
+# Pin the grammar to THIS checkout: a user-level tree-sitter config whose
+# parser-directories point at another worktree would silently compile that
+# worktree's grammar instead. Keep the compiled cache local for the same
+# reason.
+export TREE_SITTER_DIR="$here/build/tree-sitter"
+export TREE_SITTER_LIBDIR="$TREE_SITTER_DIR/lib"
+mkdir -p "$TREE_SITTER_LIBDIR"
+printf '{ "parser-directories": ["%s"] }\n' "$repo" > "$TREE_SITTER_DIR/config.json"
+
 "$here/scripts/extract-doc-blocks.sh" >/dev/null
 
 # Expected-error set (repo-relative paths → absolute).
