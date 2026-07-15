@@ -566,6 +566,32 @@ let format inplace check format_opt color fold_mode warnings debug files =
   Wax_utils.Debug.enable debug;
   if inplace && check then
     usage_error "--inplace and --check cannot be combined.";
+  let same_format_of = function
+    | Wat -> wat_to_wat
+    | Wax -> wax_to_wax
+    | Wasm -> wasm_to_wasm
+  in
+  (* No file: format standard input to standard output. This is the interface an
+     editor formatter or a shell pipe uses. The format cannot be detected (there
+     is no filename), so --format is required, and --inplace / --check act on
+     named files and so are rejected here. *)
+  if files = [] then (
+    if inplace || check then
+      usage_error "--inplace and --check require one or more input files.";
+    match format_opt with
+    | None ->
+        usage_error
+          "A format is required when reading from standard input; use --format."
+    | Some Wasm when Unix.isatty Unix.stdout ->
+        Printf.eprintf "Binary output not allowed on terminal\n";
+        exit 123
+    | Some fmt ->
+        (same_format_of fmt) ~input_file:None ~output_file:None ~validate:false
+          ~warn_unused:false ~color
+          ~output_color:(Wax_utils.Colors.update_flag ~color)
+          ~source_map_file:None ~fold_mode ~desugar:false
+          ~defines:(Wax_wasm.Cond_specialize.of_list []))
+  else begin
   if (not inplace) && (not check) && List.length files <> 1 then
     usage_error
       "Exactly one input file must be specified without --inplace or --check.";
@@ -580,12 +606,7 @@ let format inplace check format_opt color fold_mode warnings debug files =
           "%s: cannot detect format (expected .wat, .wax or .wasm)\n" file;
         false
     | Some fmt ->
-        let same_format =
-          match fmt with
-          | Wat -> wat_to_wat
-          | Wax -> wax_to_wax
-          | Wasm -> wasm_to_wasm
-        in
+        let same_format = same_format_of fmt in
         let run ~output_file ~output_color =
           same_format ~input_file:(Some file) ~output_file ~validate:false
             ~warn_unused:false ~color ~output_color ~source_map_file:None
@@ -619,6 +640,7 @@ let format inplace check format_opt color fold_mode warnings debug files =
   in
   if not (List.fold_left (fun ok file -> format_one file && ok) true files) then
     exit 123
+  end
 
 (* Check files: parse and validate each (type-check Wax, well-formedness Wasm)
    without producing any output, reporting diagnostics and exiting with a
@@ -1032,10 +1054,14 @@ let format_input =
     & opt (some format_conv) None
     & info [ "f"; "format"; "input-format" ] ~docv:"FORMAT" ~doc)
 
-(* Define the input files of the format command *)
+(* Define the input files of the format command. Zero files is allowed: the
+   command then formats standard input to standard output (see [format]). *)
 let format_files =
-  let doc = "Input files (.wat, .wasm or .wax) to format." in
-  Arg.(non_empty & pos_all file_conv [] & info [] ~docv:"FILE" ~doc)
+  let doc =
+    "Input files (.wat, .wasm or .wax) to format. With none, standard input is \
+     formatted to standard output (requires --format)."
+  in
+  Arg.(value & pos_all file_conv [] & info [] ~docv:"FILE" ~doc)
 
 (* Define the input files of the check command *)
 let check_files =

@@ -66,11 +66,11 @@ lowering passes (which trust their input). A same-format conversion (wat→wat,
 wax→wax) only re-prints and is not validated by default; a wasm binary input is
 trusted and not validated. `--validate` forces validation in every case.
 
-**format** — `dune exec wax -- format [options] FILE…`. Reformats each file in its own format (detected from the extension unless `-f` forces one). Formatting never validates.
+**format** — `dune exec wax -- format [options] FILE…`. Reformats each file in its own format (detected from the extension unless `-f` forces one). Formatting never validates. With no `FILE`, reads stdin and writes the formatted result to stdout (requires `-f`, since there is no extension to detect; `-i`/`-c` are rejected) — the interface an editor formatter or shell pipe uses.
 
 | Flag | Long | Description |
 |------|------|-------------|
-| `-i` | `--inplace` | Write back to each file; otherwise exactly one file is formatted to stdout |
+| `-i` | `--inplace` | Write back to each file; otherwise exactly one file is formatted to stdout (or none: stdin→stdout) |
 | `-c` | `--check` | Write nothing; list unformatted files, exit non-zero if any (mutually exclusive with `--inplace`) |
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
 | `-W` | `--warn` | Set a warning's level (as for convert) |

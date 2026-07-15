@@ -254,6 +254,16 @@ The `format` subcommand reformats files in their own format (`.wat` → `.wat`,
 Formatting never validates: it only re-prints; use [`check`](#checking) to
 validate.
 
+With no `FILE`, `format` reads standard input and writes the formatted result to
+standard output. The format cannot be detected without a filename, so `--format`
+is required in this mode (and `--inplace` / `--check`, which act on named files,
+are not allowed). This is the interface an editor formatter or a shell pipe
+uses:
+
+```sh
+echo 'fn f(x:i32)->i32{x*x;}' | wax format -f wax
+```
+
 ```sh
 wax format [OPTIONS] FILE…
 ```
@@ -263,7 +273,8 @@ wax format [OPTIONS] FILE…
 - **`-i`**, **`--inplace`**
     - Write the formatted output back to each input file.
     - Without this flag (and without `--check`), exactly one file must be given
-      and its formatted output is written to `stdout`.
+      and its formatted output is written to `stdout` — or no file, to format
+      `stdin` to `stdout` (see above).
 - **`-c`**, **`--check`**
     - Write nothing; list the files that are not already formatted and exit with
       a non-zero status if any are found. Useful in CI. Cannot be combined with

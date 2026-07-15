@@ -62,6 +62,27 @@ An already-formatted file passes silently:
   $ wax format -f wat m.txt
   (func $f (result i32) (i32.const 1))
 
+With no file, `format` reads standard input and writes to standard output — the
+interface an editor formatter or a shell pipe uses. `--format` is required,
+since there is no extension to detect from:
+
+  $ echo 'fn f(x:i32)->i32{x*x;}' | wax format -f wax
+  fn f(x: i32) -> i32 {
+      x * x;
+  }
+
+Without `--format`, the format cannot be detected:
+
+  $ echo 'fn f(){nop;}' | wax format
+  A format is required when reading from standard input; use --format.
+  [123]
+
+`--inplace` and `--check` act on named files, so they are rejected with no file:
+
+  $ echo 'fn f(){nop;}' | wax format -i -f wax
+  --inplace and --check require one or more input files.
+  [123]
+
 Long tag headers keep `tag` on the opening line when formatting wraps:
 
   $ cat > tag.wat <<'EOF'

@@ -65,6 +65,57 @@ vim.api.nvim_create_autocmd("FileType", {
 (The filetype `wax` maps to the parser named `wax` by default; no
 `vim.treesitter.language.register` call is needed.)
 
+## Formatting
+
+`wax format` reformats a buffer through standard input (`wax format -f wax`,
+reading stdin and writing stdout), so it plugs into Neovim's `formatexpr`. Wire
+`gq` to it and, optionally, format on save:
+
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "wax",
+  callback = function(args)
+    vim.bo[args.buf].formatexpr = "v:lua.require'wax_format'()"
+  end,
+})
+```
+
+with a small module `lua/wax_format.lua` on your `runtimepath`:
+
+```lua
+-- Format the current buffer (or the `gq` range) with `wax format`.
+return function()
+  -- Let Neovim handle the interactive `gq`/`gw` case (e.g. comments).
+  if vim.v.char ~= "" then return 1 end
+  local buf = vim.api.nvim_get_current_buf()
+  local input = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  local result = vim.system(
+    { "wax", "format", "-f", "wax" }, { stdin = input, text = true }):wait()
+  if result.code ~= 0 then
+    vim.notify(vim.trim(result.stderr), vim.log.levels.ERROR, { title = "wax format" })
+    return 0
+  end
+  local formatted = vim.split(vim.trim(result.stdout), "\n")
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, formatted)
+  return 0
+end
+```
+
+Then `gggqG` (or `gq` over a selection) formats. On a parse error `wax format`
+exits non-zero and the buffer is left untouched, with the diagnostic shown via
+`vim.notify`. To format on save, call the same module from `BufWritePre`:
+
+```lua
+vim.api.nvim_create_autocmd("BufWritePre", {
+  pattern = "*.wax",
+  callback = function() require("wax_format")() end,
+})
+```
+
+> Prefer a formatter plugin? Point [conform.nvim](https://github.com/stevearc/conform.nvim)
+> or null-ls at the same command (`wax format -f wax`, stdin) and it works the
+> same way.
+
 ## Verify
 
 Open a `.wax` file, then `:InspectTree` for the parse tree. With
