@@ -285,7 +285,7 @@ fn caml_sys_proc_self_exe(&eq) -> &eq {
 {
     #[export]
     fn caml_sys_system_command(cmd: &eq) -> &eq {
-        try {
+        try_legacy {
             return system(unwrap(caml_jsstring_of_string(cmd)));
         } catch {
             javascript_exception => {

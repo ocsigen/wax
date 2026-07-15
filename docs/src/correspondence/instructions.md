@@ -508,10 +508,11 @@ A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)
 | `try_table ... catch_ref $tag $l ...` | `try { ... } catch [ tag & -> 'l, ... ]` |
 | `try_table ... catch_all $l ...` | `try { ... } catch [ _ -> 'l, ... ]` |
 | `try_table ... catch_all_ref $l ...` | `try { ... } catch [ _ & -> 'l, ... ]` |
-| `try ... catch $tag ...` | `try { ... } catch { tag => { ... } ... }` |
-| `try ... catch_all ...` | `try { ... } catch { _ => { ... } }` |
+| `try_table` + block ladder | `try { ... } catch { tag => { ... } tag & => { ... } _ => { ... } }` |
+| `try ... catch $tag ...` | `try_legacy { ... } catch { tag => { ... } ... }` |
+| `try ... catch_all ...` | `try_legacy { ... } catch { _ => { ... } }` |
 
-The `try { ... } catch [ ... ]` syntax compiles to WebAssembly's `try_table` instruction (the current standard). The `try { ... } catch { tag => { ... } }` syntax compiles to the older `try`/`catch` instructions (deprecated but still supported for compatibility).
+Both `try` forms compile to WebAssembly's `try_table` instruction (the current standard): the bracket form is the raw instruction (each clause branches to a label), and the braced structured form adds one block per arm around it — each catch clause branches to its arm's block, the arm bodies are the trailing code between the block ends (so an arm's completion falls into the next arm), and the body's completion escapes past all arms with a single branch carrying the try's value. The decompiler recovers the structured form from exactly that ladder shape (a label on the try is the join block), falling back to the bracket form for any other use of `try_table`. `try_legacy` compiles to the older `try`/`catch` instructions (deprecated but still supported for compatibility), and legacy-instruction modules decompile to it.
 
 ## Stack Switching Instructions
 

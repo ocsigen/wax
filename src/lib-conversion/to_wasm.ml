@@ -418,6 +418,10 @@ let labels_in_list l =
         lst block.desc;
         List.iter (fun (_, b) -> lst b.desc) catches;
         Option.iter (fun b -> lst b.desc) catch_all
+    | TryCatch { label; block; arms; _ } ->
+        add label;
+        lst block.desc;
+        List.iter (fun a -> lst a.arm_body.desc) arms
     | Dispatch { index; arms; _ } ->
         instr index;
         List.iter (fun (_, b) -> lst b.desc) arms
@@ -524,6 +528,29 @@ let fresh_match_labels ret n =
   in
   let arm_names, used = arms ret.labels 0 in
   arm_names @ [ fresh used "default" ]
+
+(* Readable labels for a structured-[try] lowering (see
+   [Ast_utils.lower_trycatch]): one [catch]/[catch_1]/… per arm, then [join]
+   for the outer block when the try has no label of its own. Bumped against
+   the enclosing labels (and each other), as for {!fresh_match_labels}. *)
+let fresh_trycatch_labels ret ~avoid n =
+  let fresh used base =
+    let rec pick i =
+      let name = if i = 0 then base else base ^ string_of_int i in
+      if List.mem name used then pick (i + 1) else name
+    in
+    pick 0
+  in
+  let rec arms used i =
+    if i >= n then ([], used)
+    else
+      let base = if i = 0 then "catch" else Printf.sprintf "catch_%d" i in
+      let name = fresh used base in
+      let rest, used = arms (name :: used) (i + 1) in
+      (name :: rest, used)
+  in
+  let arm_names, used = arms (avoid @ ret.labels) 0 in
+  (arm_names, fresh used "join")
 
 (* The per-module [type_remap] (see [index]). A reference to an internal,
    synthesized type (its name starts with ['<']) is rewritten to a structurally
@@ -801,6 +828,29 @@ and instruction_desc ret ctx i : location Text.instr list =
       folded loc
         (Try { label; typ = blocktype typ; block; catches; catch_all })
         []
+  | TryCatch { label; typ; block; arms } ->
+      (* Lower to [try_table] plus the block ladder (see
+         [Ast_utils.lower_trycatch]) and convert. Fresh readable [catch]/[join]
+         labels avoid the enclosing labels, any label nested in the bodies, and
+         the try's own label; [join] is the try's label when it has one, so a
+         [br] to it exits the join block carrying the value. The synthesised
+         wrappers need no type annotation ([([||], loc)]): the blocks carry
+         their blocktypes and the [br]'s operand is the [try_table] itself. *)
+      let avoid =
+        (match label with Some l -> [ l.desc ] | None -> [])
+        @ labels_in_list
+            (block.desc @ List.concat_map (fun a -> a.arm_body.desc) arms)
+      in
+      let arm_names, join_name =
+        fresh_trycatch_labels ret ~avoid (List.length arms)
+      in
+      let join =
+        match label with Some l -> l | None -> Ast.no_loc join_name
+      in
+      let arm_labels = List.map Ast.no_loc arm_names in
+      instruction ret ctx
+        (Wax_lang.Ast_utils.lower_trycatch ~block_info:([||], loc) ~join
+           ~arm_labels ~typ ~block ~arms)
   | Unreachable -> folded loc Unreachable []
   | Nop -> folded loc Nop []
   | Hole -> []

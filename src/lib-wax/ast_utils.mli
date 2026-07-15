@@ -62,6 +62,23 @@ val lower_match :
     {!Recover_match} and is used by both type checking and Wax-to-Wasm
     conversion. *)
 
+val lower_trycatch :
+  block_info:'info ->
+  join:Ast.label ->
+  arm_labels:Ast.label list ->
+  typ:Ast.functype ->
+  block:('info Ast.instr list, Ast.location) Ast.annotated ->
+  arms:'info Ast.trycatch_arm list ->
+  'info Ast.instr
+(** [lower_trycatch] desugars a structured [try] to [try_table] plus a block
+    ladder: one block per arm (the first innermost, its result type the arm's
+    entry stack) inside the [join] block, the [try_table] innermost with one
+    catch clause per arm, arm bodies as trailing code (fall-through order), and
+    the body's completion escaping with a [br] to [join] carrying the try's
+    value. [arm_labels] supplies one fresh label per arm; [join] is the try's
+    own label when it has one. It is the exact inverse of {!Recover_trycatch}
+    and is used by Wax-to-Wasm conversion. *)
+
 val map_modulefield : ('a -> 'b) -> 'a Ast.modulefield -> 'b Ast.modulefield
 (** [map_modulefield f modulefield] applies the function [f] to the info field
     of instructions within [modulefield] and returns a new [modulefield]. *)

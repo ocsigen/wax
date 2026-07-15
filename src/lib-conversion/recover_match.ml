@@ -384,6 +384,22 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           catches;
           block = { block with desc = rewrite_list block.desc };
         }
+  | TryCatch { label; typ; block; arms } ->
+      TryCatch
+        {
+          label;
+          typ;
+          block = { block with desc = rewrite_list block.desc };
+          arms =
+            List.map
+              (fun a ->
+                {
+                  a with
+                  arm_body =
+                    { a.arm_body with desc = rewrite_list a.arm_body.desc };
+                })
+              arms;
+        }
   | Try { label; typ; block; catches; catch_all } ->
       Try
         {

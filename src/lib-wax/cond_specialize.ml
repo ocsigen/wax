@@ -112,6 +112,22 @@ let module_ ctx env (fields : location Ast.module_) :
             catch_all =
               Option.map (fun b -> { b with desc = sinstrs b.desc }) catch_all;
           }
+    | TryCatch { label; typ; block; arms } ->
+        TryCatch
+          {
+            label;
+            typ;
+            block = { block with desc = sinstrs block.desc };
+            arms =
+              List.map
+                (fun a ->
+                  {
+                    a with
+                    arm_body =
+                      { a.arm_body with desc = sinstrs a.arm_body.desc };
+                  })
+                arms;
+          }
     | Set (idx, op, v) -> Set (idx, op, sone v)
     | Tee (idx, v) -> Tee (idx, sone v)
     | Labelled (l, v) -> Labelled (l, sone v)

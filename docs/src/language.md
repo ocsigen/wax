@@ -1596,29 +1596,59 @@ throw overflow(42);
 
 ### Try / Catch
 
-A `try` runs its body and routes a matching thrown tag to a handler. Like a
-block it may carry a result type (`try i32 { … }`) that the body and every
-handler produce. A caught tag's payload is left on the operand stack for the
-handler to pick up with a [hole](#holes) `_`:
+A `try` runs its body and routes a matching thrown tag to a catch arm,
+compiling to WebAssembly's standard `try_table` plus a block ladder. Like a
+block it may carry a result type (`try i32 { … }`). An arm enters with the
+caught tag's payload on the operand stack, picked up with [holes](#holes) `_`;
+a `tag & => { … }` arm also delivers the exception reference (`&exn`) above
+the payload, and a bare `_ => { … }` (or `_ & => { … }`) matches any
+exception, grammar-enforced last. Leave the catch-all out to let unmatched
+exceptions propagate.
+
+Like `dispatch` and `match`, the arms are honest trailing code in clause
+order:
+
+- the body's normal completion **escapes past all arms**, supplying the try's
+  value (one implicit branch);
+- an arm's completion **falls into the next arm** — its completion stack must
+  match that arm's entry (payload, plus `&exn` for a `&` arm) — and the last
+  arm's completion supplies the try's value;
+- diverging arms (`throw`, `return`, `become`, a `br` out) are exempt, as
+  usual.
+
+An early arm that produces the result escapes explicitly through a label on
+the try: the label is the join, so branching to it exits the try carrying the
+value, block-like. (In expression position no label can prefix the try, so
+such an arm must diverge, or the code restructures.)
 
 ```wax
 fn lookup(k: i32) -> i32 {
-    try i32 {
-        find(k);             // may throw `overflow`
+    't: try i32 {
+        find(k);                     // may throw `overflow` or `timeout`
     } catch {
-        overflow => { _; }   // `_` is the thrown i32 payload
-        _ => { 0; }          // catch-all
+        overflow => { br 't _; }     // `_` is the thrown i32 payload
+        timeout & => { _ = _; br 't (0 - 1); }  // drop the &exn, escape
+        _ => { 0; }                  // catch-all supplies the value
     }
 }
 ```
 
-Each `tag => { … }` handler matches one tag; a bare `_ => { … }` matches any
-exception. Leave the catch-all out to let unmatched exceptions propagate.
+The fall-through makes the *normalize, then handle* idiom direct — the first
+arm's completion **is** the next arm's payload, with no re-throw:
+
+```wax
+let res: &eq = try &eq {
+    apply(f);
+} catch {
+    javascript_exception => { wrap_exception(_); }  // normalize; falls through
+    ocaml_exception => { _; }                       // handle either
+};
+```
 
 ### Branching handlers (try_table)
 
-A lower-level form branches to a label instead of running an inline handler,
-mapping directly to WebAssembly's `try_table`:
+The low-level spelling branches to a label instead of running an inline arm,
+mapping one-to-one to a raw `try_table`:
 
 ```wax
 try { might_throw(); } catch [overflow -> 'h]    // on `overflow`, branch to 'h
@@ -1628,7 +1658,19 @@ try { might_throw(); } catch [_ -> 'h]           // catch any exception
 
 The target label receives the payload (and, with `&`, the exception reference,
 of type `&exn`, or `&?exn` for the nullable form), so the labelled block's type
-must match what it is handed.
+must match what it is handed. Braced arms are the same clauses with the
+target blocks written inline.
+
+### Legacy exceptions (try_legacy)
+
+`try_legacy` compiles to the deprecated `try`/`catch` instructions, kept for
+targets that still use the legacy exception proposal. Its arms have the old
+semantics — each arm independently produces the try's result (no fall-through,
+no `&` forms):
+
+```wax
+try_legacy i32 { find(k); } catch { overflow => { _; } _ => { 0; } }
+```
 
 ## Stack Switching
 

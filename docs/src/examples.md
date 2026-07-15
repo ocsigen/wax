@@ -471,12 +471,11 @@ fn safe_divide(a: i32, b: i32) -> i32 {
 
 #[export = "try_divide"]
 fn try_divide(a: i32, b: i32) -> i32 {
-    'on_error: do {
-        try {
-            return safe_divide(a, b);
-        } catch [divide_by_zero -> 'on_error]
+    try i32 {
+        safe_divide(a, b);
+    } catch {
+        divide_by_zero => { 0; }   // return 0 on division by zero
     }
-    0;   // Return 0 on division by zero
 }
 ```
 

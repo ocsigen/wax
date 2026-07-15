@@ -360,7 +360,7 @@ type block = [mut &eq];
 {
     #[export]
     fn caml_sys_getcwd(&eq) -> &eq {
-        try {
+        try_legacy {
             caml_string_of_jsstring(wrap(getcwd()));
         } catch {
             javascript_exception => {
@@ -392,7 +392,7 @@ type block = [mut &eq];
 {
     #[export]
     fn caml_sys_chdir(name: &eq) -> &eq {
-        try {
+        try_legacy {
             chdir(unwrap(caml_jsstring_of_string(name)));
         } catch {
             javascript_exception => {
@@ -414,7 +414,7 @@ type block = [mut &eq];
 {
     #[export]
     fn caml_sys_mkdir(name: &eq, perm: &eq) -> &eq {
-        try {
+        try_legacy {
             mkdir(unwrap(caml_jsstring_of_string(name)), perm as i32_u);
         } catch {
             javascript_exception => {
@@ -525,7 +525,7 @@ type block = [mut &eq];
 {
     #[export]
     fn caml_sys_read_directory(name: &eq) -> &eq {
-        try {
+        try_legacy {
             caml_js_to_string_array(read_dir(unwrap(caml_jsstring_of_string(name))));
         } catch {
             javascript_exception => {
@@ -547,7 +547,7 @@ type block = [mut &eq];
 {
     #[export]
     fn caml_sys_rmdir(name: &eq) -> &eq {
-        try {
+        try_legacy {
             rmdir(unwrap(caml_jsstring_of_string(name)));
         } catch {
             javascript_exception => {
@@ -569,7 +569,7 @@ type block = [mut &eq];
 {
     #[export]
     fn caml_sys_remove(name: &eq) -> &eq {
-        try {
+        try_legacy {
             unlink(unwrap(caml_jsstring_of_string(name)));
         } catch {
             javascript_exception => {
@@ -607,7 +607,7 @@ type block = [mut &eq];
 {
     #[export]
     fn caml_sys_rename(o: &eq, n: &eq) -> &eq {
-        try {
+        try_legacy {
             rename(unwrap(caml_jsstring_of_string(o)), unwrap(caml_jsstring_of_string(n)));
         } catch {
             javascript_exception => {
@@ -712,7 +712,7 @@ fn caml_fs_init() -> &eq {
 {
     #[export]
     fn caml_sys_is_directory(name: &eq) -> &eq {
-        try {
+        try_legacy {
             is_directory(unwrap(caml_jsstring_of_string(name)));
         } catch {
             javascript_exception => {
@@ -734,7 +734,7 @@ fn caml_fs_init() -> &eq {
 {
     #[export]
     fn caml_sys_is_regular_file(name: &eq) -> &eq {
-        try {
+        try_legacy {
             is_file(unwrap(caml_jsstring_of_string(name)));
         } catch {
             javascript_exception => {

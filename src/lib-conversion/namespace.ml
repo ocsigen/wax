@@ -65,6 +65,7 @@ let reserved_words =
     "throw";
     "throw_ref";
     "try";
+    "try_legacy";
     "type";
     "unreachable";
     "while";

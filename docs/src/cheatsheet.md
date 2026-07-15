@@ -120,7 +120,8 @@ m.size()   m.grow(n)   m.fill(d, v, n)   m.copy(d, s, n)   // management
 ## Exceptions and stack switching
 
 ```wax
-try t { } catch { oops => { _; }  _ => { } }     // try / catch (payload via hole _)
+try t { } catch { oops => { _; } }               // try / catch arms (payload via hole _)
+try_legacy t { } catch { oops => { _; } }        // deprecated try/catch instructions
 throw oops(42);                                   // throw
 try { } catch [oops -> 'h]                       // branch-to-label form (try_table)
 type k = cont ft;                                // continuation type

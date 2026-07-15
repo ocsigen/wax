@@ -220,7 +220,7 @@ let caml_domain_latest_id = 1;
         caml_domain_id = id;
         let ts = term_sync_v as &block;
         let result: &?eq;
-        try {
+        try_legacy {
             // state = Finished (Ok res)
             result = [block|0 as &i31, [block|0 as &i31, caml_callback_1(f, 0 as &i31)]];
         } catch {
@@ -249,7 +249,7 @@ let caml_domain_latest_id = 1;
         caml_domain_latest_id = id + 1;
         let old = caml_domain_id;
         caml_domain_id = id;
-        try {
+        try_legacy {
             _ = caml_callback_1(f, 0 as &i31);
         } catch {
             ocaml_exception => {

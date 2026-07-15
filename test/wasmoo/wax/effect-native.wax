@@ -126,7 +126,7 @@
                 let (resume_res_0, resume_res_1) =
                     'handle_effect: do () -> (&eq, &continuation) {
                         let res =
-                            try {
+                            try_legacy {
                                 fiber.continuation.resume(f, v) on [effect -> 'handle_effect];
                             } catch {
                                 javascript_exception => {

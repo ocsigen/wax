@@ -3254,9 +3254,9 @@ let rec count_holes i =
   (* [dispatch]/[match], [while] and [do]-[while] are block-like: their
      operands/scrutinee and bodies are checked inside the blocks they desugar
      to, so no hole at this level draws from the stack. *)
-  | Block _ | Loop _ | While _ | TryTable _ | Try _ | If_annotation _
-  | Dispatch _ | Match _ | StructDefault _ | Char _ | String _ | Int _ | Float _
-  | Get _ | Path _ | Null | Unreachable | Nop
+  | Block _ | Loop _ | While _ | TryTable _ | Try _ | TryCatch _
+  | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _ | String _
+  | Int _ | Float _ | Get _ | Path _ | Null | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
   | Return None ->
@@ -3295,6 +3295,9 @@ let rec collect_assigned_locals acc i =
         List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
       in
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
+  | TryCatch { block; arms; _ } ->
+      let acc = in_list acc block.desc in
+      List.fold_left (fun acc a -> in_list acc a.arm_body.desc) acc arms
   | Call (t, args) | TailCall (t, args) ->
       in_list (collect_assigned_locals acc t) args
   | Cast (e, _)
@@ -3402,6 +3405,9 @@ let rec collect_labels acc (i : _ Ast.instr) =
         List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
       in
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
+  | TryCatch { label; block; arms; _ } ->
+      let acc = in_list (add acc label) block.desc in
+      List.fold_left (fun acc a -> in_list acc a.arm_body.desc) acc arms
   | Call (t, args) | TailCall (t, args) -> in_list (collect_labels acc t) args
   | Set (_, _, e)
   | Tee (_, e)
@@ -3516,10 +3522,10 @@ let rec find_eager_hazard (e : _ Ast.instr) =
      control constructs guard their sub-expressions, so stop there. *)
   | Get _ | Path _ | Int _ | Float _ | Char _ | String _ | Null | Nop | Hole
   | StructDefault _ | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _
-  | Br _ | Br_if _ | Br_table _ | Dispatch _ | Match _ | Br_on_null _
-  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Hinted _ | On _ | Return _ | Select _
-  | If_annotation _ ->
+  | TryCatch _ | Br _ | Br_if _ | Br_table _ | Dispatch _ | Match _
+  | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _
+  | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ | Hinted _ | On _
+  | Return _ | Select _ | If_annotation _ ->
       None
 
 (* Report an eager-evaluation hazard in the [?:] branch [arm]; [select] is the
@@ -3623,6 +3629,9 @@ let rec lint_source ctx (i : _ Ast.instr) =
       list block.desc;
       List.iter (fun (_, b) -> list b.desc) catches;
       Option.iter (fun b -> list b.desc) catch_all
+  | TryCatch { block; arms; _ } ->
+      list block.desc;
+      List.iter (fun a -> list a.arm_body.desc) arms
   | Call (t, args) | TailCall (t, args) ->
       lint_source ctx t;
       list args
@@ -3853,9 +3862,9 @@ let rec check_hole_order_rec ctx i n =
   | _ ->
       let n =
         match i.desc with
-        | Block _ | Loop _ | While _ | TryTable _ | Try _ | If_annotation _
-        | Dispatch _ | Match _ | StructDefault _ | Char _ | String _ | Int _
-        | Float _ | Get _ | Path _ | Null | Unreachable | Nop
+        | Block _ | Loop _ | While _ | TryTable _ | Try _ | TryCatch _
+        | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _
+        | String _ | Int _ | Float _ | Get _ | Path _ | Null | Unreachable | Nop
         | Let (_, None)
         | Br (_, None)
         | Return None ->
@@ -5080,7 +5089,8 @@ let rec classify_trailing ctx desc =
   | Block { typ; _ }
   | Loop { typ; _ }
   | TryTable { typ; _ }
-  | Try { typ; _ } ->
+  | Try { typ; _ }
+  | TryCatch { typ; _ } ->
       if Array.length typ.params = 0 then (false, true) else (false, false)
   | Cast (e, _) -> (is_null_initializer e, false)
   | Select (_, a, b) ->
@@ -5142,7 +5152,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
   | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | If_annotation _
-  | TryTable _ | Try _ ->
+  | TryTable _ | Try _ | TryCatch _ ->
       type_block_construct ctx i
   | (Unreachable | Nop) as desc ->
       (* [unreachable] and [nop] are statements that yield no value; they are
@@ -7266,6 +7276,31 @@ and type_block_construct ctx i =
             (TryTable
                { label; typ; block = { blkloc with desc = body' }; catches })
             results)
+  | TryCatch { label; typ; block = { desc = body; _ } as blkloc; arms } -> (
+      (* The structured try (see [Ast_utils.lower_trycatch] for the lowering):
+         the body's normal completion escapes past all arms (one implicit
+         branch to the join, carrying the try's value); the arms are honest
+         trailing code in clause order — arm [k] enters on its tag's payload
+         (plus the [&exn] for a [&] arm) and its completion must be arm
+         [k+1]'s entry, the last arm's the try's result. The label is the
+         join, a block-like exit carrying the result. *)
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      match trycatch_inference ctx i label typ ~body:blkloc ~arms with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let body' = block ctx i.info label [||] results results body in
+          let arms' = type_trycatch_arms ctx i label ~results arms in
+          return_statement i
+            (TryCatch
+               {
+                 label;
+                 typ;
+                 block = { blkloc with desc = body' };
+                 arms = arms';
+               })
+            results)
   | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
     -> (
       assert (typ.params = [||]);
@@ -9265,6 +9300,18 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
              catch_all;
            })
         results
+  | TryCatch { label; typ; block = { desc = body; _ } as blkloc; arms } ->
+      (* A statement-position structured [try]; unlike the raw [TryTable] (a
+         from-Wasm shape) it takes no parameters. *)
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let*! results = array_map_opt (internalize ctx) typ.results in
+      let body' = block ctx i.info label [||] results results body in
+      let arms' = type_trycatch_arms ctx i label ~results arms in
+      return_statement i
+        (TryCatch
+           { label; typ; block = { blkloc with desc = body' }; arms = arms' })
+        results
   | Nop -> return_statement i Nop [||]
   | Unreachable -> return_statement i Unreachable [||] |> unreachable
   | Dispatch { index; cases; default; arms } ->
@@ -9384,10 +9431,85 @@ and check_trytable_catches ctx catches =
           check_catch [| ref_exn |] label)
     catches
 
-(* Type a [try]'s catch handlers (and catch-all) against [results] — each handler
-   is a block that produces the try's result, like the body. Shared by the
-   expression-, statement-, and checking-position [Try] cases; the body is typed
-   by the caller. *)
+(* Type a structured [try]'s arms with the fall-through rule: arm [k] is a
+   block entered on its tag's payload (plus the [&exn] for a [&] arm) whose
+   completion must be arm [k+1]'s entry stack — the last arm's the try's
+   [results]. The try's [label] (the join) is in scope in every arm with the
+   result as its branch type, so [br 'l] exits carrying the try's value.
+   Diverging arms are exempt as any block body is. Each arm's entry types are
+   recorded in the node ([arm_types]) for [To_wasm]'s re-lowering. *)
+and type_trycatch_arms ctx i label ~results arms =
+  (* The arm's entry stack, as source types: the tag's payload, plus the
+     non-null [&exn] for a [&] arm ([[]] for the catch-all). Mirrors
+     [check_trytable_catches]' tag validation (a caught tag must have no
+     results). *)
+  let entry arm =
+    let payload =
+      match arm.arm_tag with
+      | Some tag -> (
+          match Tbl.find ctx.diagnostics ctx.tags tag with
+          | Some { params; results = r } ->
+              if r <> [||] then
+                Error.tag_with_results ctx.diagnostics ~location:tag.info;
+              Array.map (fun p -> snd p.desc) params
+          | None -> [||])
+      | None -> [||]
+    in
+    if arm.arm_ref then
+      Array.append payload [| Ast.Ref { nullable = false; typ = Exn } |]
+    else payload
+  in
+  let entries = List.map entry arms in
+  let internalized e = array_map_opt (internalize ctx) e in
+  let rec go arms entries =
+    match (arms, entries) with
+    | [], [] -> []
+    | arm :: arms', e :: entries' ->
+        let exit_types =
+          match entries' with e' :: _ -> internalized e' | [] -> Some results
+        in
+        let arm' =
+          match (internalized e, exit_types) with
+          | Some params, Some exits ->
+              let body' =
+                block ctx i.info label params exits results arm.arm_body.desc
+              in
+              {
+                arm with
+                arm_types = e;
+                arm_body = { arm.arm_body with desc = body' };
+              }
+          | _ ->
+              (* A type in the chain failed to resolve (already reported);
+                 recover by typing the body as a plain result-producing block
+                 rather than cascading. *)
+              let body' =
+                block ctx i.info label [||] results results arm.arm_body.desc
+              in
+              {
+                arm with
+                arm_types = e;
+                arm_body = { arm.arm_body with desc = body' };
+              }
+        in
+        arm' :: go arms' entries'
+    | _ -> assert false
+  in
+  go arms entries
+
+and trycatch_inference ctx i label typ ~body ~arms =
+  infer_synthesized ctx i typ ~type_body:(fun ~cs:_ ~r ->
+      let results = [| r |] in
+      let body' = block ctx i.info label [||] results results body.desc in
+      let arms' = type_trycatch_arms ctx i label ~results arms in
+      fun typ ->
+        TryCatch
+          { label; typ; block = { body with desc = body' }; arms = arms' })
+
+(* Type a [try_legacy]'s catch handlers (and catch-all) against [results] — each
+   handler is a block that produces the try's result, like the body. Shared by
+   the expression-, statement-, and checking-position [Try] cases; the body is
+   typed by the caller. *)
 and type_try_catches ctx i label ~results catches catch_all =
   let catches =
     List.filter_map
@@ -10070,9 +10192,9 @@ let rec check_constant_instruction ctx i =
         },
         _,
         _ )
-  | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _ | Dispatch _
-  | Match _ | Unreachable | Nop | Hole | Path _ | Set _ | Tee _ | Call _
-  | TailCall _ | Cast _ | CastDesc _ | Test _ | NonNull _ | StructGet _
+  | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _ | TryCatch _
+  | Dispatch _ | Match _ | Unreachable | Nop | Hole | Path _ | Set _ | Tee _
+  | Call _ | TailCall _ | Cast _ | CastDesc _ | Test _ | NonNull _ | StructGet _
   | GetDescriptor _ | StructSet _ | ArraySegment _ | ArrayGet _ | ArraySet _
   | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
   | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
@@ -11083,6 +11205,8 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       any block.desc
       || List.exists (fun (_, l) -> any l.desc) catches
       || Option.fold ~none:false ~some:(fun b -> any b.desc) catch_all
+  | TryCatch { block; arms; _ } ->
+      any block.desc || List.exists (fun a -> any a.arm_body.desc) arms
   | Sequence l -> any l
   | ArrayFixed (_, l) -> any l
   | Dispatch { index; arms; _ } ->
@@ -11253,6 +11377,22 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
               Option.map
                 (fun b -> { b with desc = sinstrs asm b.desc })
                 catch_all;
+          }
+    | TryCatch { label; typ; block; arms } ->
+        TryCatch
+          {
+            label;
+            typ;
+            block = { block with desc = sinstrs asm block.desc };
+            arms =
+              List.map
+                (fun a ->
+                  {
+                    a with
+                    arm_body =
+                      { a.arm_body with desc = sinstrs asm a.arm_body.desc };
+                  })
+                arms;
           }
     | Set (idx, op, v) -> Set (idx, op, sone asm v)
     | Tee (idx, v) -> Tee (idx, sone asm v)

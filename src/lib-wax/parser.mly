@@ -85,7 +85,7 @@
 %token BR BR_IF BR_TABLE RETURN THROW THROW_REF
 %token BR_ON_CAST BR_ON_CAST_FAIL
 %token BR_ON_NULL BR_ON_NON_NULL
-%token TRY CATCH
+%token TRY TRY_LEGACY CATCH
 %token CONT
 %token SUSPEND ON
 %token DISPATCH
@@ -113,7 +113,7 @@
    one, the opener hint is worded locationally ("opens the enclosing construct",
    see generate_error_messages.ml) rather than claiming it is unmatched, which
    would be false in the latter case. *)
-%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) labels_else list(attribute) list(typedef) list(data_item) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) separated_nonempty_list_trailing(",",block_param_type) separated_nonempty_list_trailing(",",condition) separated_nonempty_list_trailing(",",data_number) separated_nonempty_list_trailing(",",data_run_item) separated_nonempty_list_trailing(",",on_clause) blockinstr statement_list raw_statement_list semi_list(match_arm) semi_list(dispatch_arm) semi_list(import_item) loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure argument separated_nonempty_list_trailing(",",argument) argument_list
+%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) labels_else list(attribute) list(typedef) list(data_item) semi_list(legacy_catch) semi_list(trycatch_arm) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) separated_nonempty_list_trailing(",",block_param_type) separated_nonempty_list_trailing(",",condition) separated_nonempty_list_trailing(",",data_number) separated_nonempty_list_trailing(",",data_run_item) separated_nonempty_list_trailing(",",on_clause) blockinstr statement_list raw_statement_list semi_list(match_arm) semi_list(dispatch_arm) semi_list(import_item) loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure argument separated_nonempty_list_trailing(",",argument) argument_list
 
 
 %nonassoc prec_ident (* {a|...} *) prec_block
@@ -523,6 +523,7 @@ ident_or_keyword:
 | BR_ON_NULL { "br_on_null" }
 | BR_ON_NON_NULL { "br_on_non_null" }
 | TRY { "try" }
+| TRY_LEGACY { "try_legacy" }
 | CATCH { "catch" }
 | CONT { "cont" }
 | SUSPEND { "suspend" }
@@ -802,6 +803,22 @@ on_clauses:
 legacy_catch:
 | t = ident "=>" l = braced_block { (t, l) }
 
+(* A structured [try]'s catch arm: [tag => { … }], [tag & => { … }] (catch_ref:
+   the [&exn] is delivered above the payload); the catch-all ([_ => { … }],
+   [_ & => { … }]) is grammar-enforced last, matching try_table's
+   first-match-wins clause order. *)
+trycatch_arm:
+| t = ident "=>" l = braced_block
+  { {arm_tag = Some t; arm_ref = false; arm_types = [||]; arm_body = l} }
+| t = ident "&" "=>" l = braced_block
+  { {arm_tag = Some t; arm_ref = true; arm_types = [||]; arm_body = l} }
+
+trycatch_all:
+| "_" "=>" l = braced_block
+  { {arm_tag = None; arm_ref = false; arm_types = [||]; arm_body = l} }
+| "_" "&" "=>" l = braced_block
+  { {arm_tag = None; arm_ref = true; arm_types = [||]; arm_body = l} }
+
 legacy_catch_all:
 | "_" "=>" l = braced_block { l }
 
@@ -888,6 +905,12 @@ blockinstr:
   CATCH "[" catches = separated_list_trailing(",", catch) "]"
   { with_loc $sloc (TryTable {label; typ = blocktype bt; catches; block = l}) }
 | label = block_label TRY bt = option(block_type) l = braced_block
+  CATCH
+  "{" arms = semi_list(trycatch_arm); catch_all = option(trycatch_all) "}"
+  { with_loc $sloc
+      (TryCatch {label; typ = blocktype bt; block = l;
+                 arms = arms @ Option.to_list catch_all}) }
+| label = block_label TRY_LEGACY bt = option(block_type) l = braced_block
   CATCH
   "{" catches = semi_list(legacy_catch); catch_all = option(legacy_catch_all) "}"
   { with_loc $sloc

@@ -134,6 +134,12 @@ type 'info instr_desc =
       catches : (ident * ('info instr list, location) annotated) list;
       catch_all : ('info instr list, location) annotated option;
     }
+  | TryCatch of {
+      label : label option;
+      typ : functype;
+      block : ('info instr list, location) annotated;
+      arms : 'info trycatch_arm list;
+    }
   | Unreachable
   | Nop
   | Hole
@@ -233,6 +239,13 @@ type 'info instr_desc =
     }
 
 and 'info instr = ('info instr_desc, 'info) annotated
+
+and 'info trycatch_arm = {
+  arm_tag : ident option;
+  arm_ref : bool;
+  arm_types : valtype array;
+  arm_body : ('info instr list, location) annotated;
+}
 
 (* An attribute is a name with an optional value expression and an optional
    conditional-compilation guard: [#[export = "f"]] carries a value, [#[start]]

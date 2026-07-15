@@ -341,7 +341,7 @@ let caml_main_wrapper: &?wrapper_func = null;
 
 #[export]
 fn caml_main(start: &func) {
-    try {
+    try_legacy {
         'fallback: do {
             (br_on_null 'fallback caml_main_wrapper)(start as &thunk);
             return;
@@ -353,7 +353,7 @@ fn caml_main(start: &func) {
             let exn = _;
             'exit: do {
                 'not_registered: do {
-                    try {
+                    try_legacy {
                         _ =
                             caml_callback_2(
                                 br_on_null 'not_registered
