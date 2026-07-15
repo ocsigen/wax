@@ -227,11 +227,13 @@ becomes `(func)` + sibling, and `(import "m")` drops cleanly without absorbing t
 following `(func …)` as its descriptor. No snapshot stack (the reviewer was
 right). Tests in `test/recovery-wat/`; WAT recovery fuzz-clean at 240k.
 
-Aside (pre-existing, unrelated): `wax_parse_recover` can still raise
-`Failure "Int64.of_string"` on an overlong integer literal (a semantic action
-overflows and escapes recovery) — a huge `memory`/`data` size crashes it. Caught
-by `fuzz_recover` at seed 0; predates the recovery work and wants a separate fix
-(clamp/catch the literal conversion so it degrades to a diagnostic).
+Aside (fixed, commit 910ee5bc): `wax_parse_recover` used to raise
+`Failure "Int64.of_string"` on an overlong integer literal (a huge `memory`/table
+limit, page size, or `#[if]` version component — the literals the Wax parser
+converts eagerly rather than carrying as strings). `fuzz_recover` caught it at
+seed 0. Each conversion is now bounds-checked and rejects an out-of-range literal
+with a recoverable `Syntax_error` (as the Wasm parser already did). Regression
+test `test/cram-tests/wax-limit-overflow.t`.
 
 ### Consumers wired (done)
 
@@ -251,6 +253,5 @@ editing. Tested in `test/editor-wat-recovery/`.
 ### Possible follow-ups
 
 `wax check --all-errors` now covers WAT too (commit 03e422df: the `Wat` arm in
-`main.ml` recovers, then validates in recovery mode). Remaining: an overlong
-integer literal still crashes `parse_recover` (see the aside above), independent
-of all this.
+`main.ml` recovers, then validates in recovery mode). The overlong-integer-literal
+crash is fixed (commit 910ee5bc; see the aside above).
