@@ -20,6 +20,9 @@ type ctx = {
   allocated_locals : (Text.name option * Text.valtype) list ref;
   namespace : Namespace.t;
   type_kinds : (string, [ `Struct | `Array | `Func ]) Hashtbl.t;
+  (* The declared continuation types, whose [as]-cast is a compile-time
+     ascription lowering to no instruction. *)
+  cont_types : (string, unit) Hashtbl.t;
   struct_fields : (string, string list) Hashtbl.t;
   referenced_functions : (string, unit) Hashtbl.t;
   extra_types : (string, Text.name * subtype) Hashtbl.t;
@@ -336,6 +339,17 @@ let segment_receiver ctx s =
   (Hashtbl.mem ctx.datas s || Hashtbl.mem ctx.elems s)
   && not (StringMap.mem s ctx.locals)
 
+(* Whether a cast target is a continuation type. [as &k]/[as &?k] is then a
+   compile-time ascription — typing accepted it only as a provable no-op, and
+   a [ref.cast] to a continuation type is invalid Wasm — so it lowers to the
+   operand alone. *)
+let cont_cast_target ctx (t : casttype) =
+  match t with
+  | Valtype (Ref { typ = Cont | NoCont; _ }) -> true
+  | Valtype (Ref { typ = Type t | Exact t; _ }) ->
+      Hashtbl.mem ctx.cont_types t.desc
+  | _ -> false
+
 (*** Labels, control, and memory helpers ***)
 
 (* The branch context threaded down a function body. [return] is the function's
@@ -462,6 +476,7 @@ let labels_in_list l =
     | Let (_, e) | Return e | Br (_, e) -> opt e
     | Br_if (_, e)
     | Hinted (_, e)
+    | On (e, _)
     | Br_table (_, e)
     | Br_on_null (_, e)
     | Br_on_non_null (_, e)
@@ -1182,6 +1197,8 @@ and instruction_desc ret ctx i : location Text.instr list =
       | F32 -> folded loc (Const (F32 s)) []
       | F64 -> folded loc (Const (F64 s)) []
       | _ -> assert false)
+  | Cast (expr, cast_ty) when cont_cast_target ctx cast_ty ->
+      instruction ret ctx expr
   | Cast (expr, cast_ty) -> (
       let default_cast () =
         let code = instruction ret ctx expr in
@@ -1854,6 +1871,9 @@ and instruction_desc ret ctx i : location Text.instr list =
       folded loc
         (Switch (index ct, index tag))
         (List.concat_map (instruction ret ctx) l)
+  (* A parsed [on] clause is folded into the [Resume]/[ResumeThrow]/
+     [ResumeThrowRef] it wraps by the typer, so it never reaches lowering. *)
+  | On _ -> assert false
   | Return None -> folded loc Return []
   | Return (Some expr) -> folded loc Return (instruction ret ctx expr)
   | Sequence body -> List.concat_map (instruction ret ctx) body
@@ -2111,6 +2131,7 @@ let module_ diagnostics types fields =
       allocated_locals = ref [];
       namespace = Namespace.make ();
       type_kinds = Hashtbl.create 16;
+      cont_types = Hashtbl.create 16;
       struct_fields = Hashtbl.create 16;
       referenced_functions = Hashtbl.create 16;
       extra_types = Hashtbl.create 16;
@@ -2155,9 +2176,9 @@ let module_ diagnostics types fields =
               let kind =
                 match subtype.typ with
                 | Func _ -> `Func
-                (* Continuation types have no Wax surface syntax, so this case
-                   is unreachable for Wax-native input. *)
-                | Cont _ -> `Func
+                | Cont _ ->
+                    Hashtbl.replace ctx.cont_types idx.desc ();
+                    `Func
                 | Array _ -> `Array
                 | Struct fields ->
                     let field_names =

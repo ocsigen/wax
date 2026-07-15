@@ -3,6 +3,6 @@ type k = cont ft;
 
 fn g() {}
 
-const C: &k = cont_new k (g);
+const C: &k = k::new(g);
 
 fn use_it() -> &k { return C; }

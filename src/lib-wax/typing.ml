@@ -78,6 +78,9 @@ type member_receiver =
   | R_array of fieldtype  (** by element type: [length]/[fill]/[copy]/[init] *)
   | R_memory of [ `I32 | `I64 ]  (** by address type *)
   | R_table of [ `I32 | `I64 ] * reftype  (** by address and element type *)
+  | R_cont of member_candidate list
+      (** a continuation-typed receiver: the resume family and [switch],
+          prebuilt (their signatures need the type context) *)
 
 (* Record, at a struct field access, the (possibly partial) field's span and the
    receiver it is on, for member completion. [None] outside the editor. *)
@@ -839,6 +842,20 @@ module Error = struct
     report context ~location
       ((text "There is already an export of name" ++ kw name) ^^ text ".")
 
+  (* A cast to a continuation type that is not a provable no-op: continuations
+     carry no RTT, so no cast can ever narrow one — point at the value's
+     introduction, not the cast site. *)
+  let cont_cast_not_ascription context ~location =
+    report context ~location
+      ~hint:
+        (text
+           "Give the value a declared continuation type where it is introduced \
+            (a parameter, local or block-result annotation).")
+      (text
+         "A cast to a continuation type is a compile-time ascription: the \
+          operand's type must already be a subtype of the target, as there is \
+          no runtime continuation cast.")
+
   let invalid_cast_type context ~location =
     report context ~location
       (text "Continuation types cannot be used in a cast instruction.")
@@ -847,6 +864,48 @@ module Error = struct
     report context ~location
       ((text "Type mismatch in this stack switching instruction:" ++ text descr)
       ^^ text ".")
+
+  let reserved_type_name context ~location x =
+    report context ~location (name x ++ text "is a reserved built-in type name.")
+
+  let expected_cont_type context ~location =
+    report context ~location
+      (text
+         "This expression should be a reference to a declared continuation \
+          type.")
+
+  (* Mirrors the call_ref rule for an abstract function reference at a call:
+     the type immediate comes from the receiver's static type. Unlike a
+     function reference, an abstract [&cont] cannot be cast to a declared
+     continuation type (the proposal defines no such cast), so the fix is to
+     give the value its precise type at its source. *)
+  let abstract_cont_receiver context ~location =
+    report context ~location
+      (text
+         "The continuation type cannot be resolved from this expression. Give \
+          the value a declared continuation type where it is introduced (a \
+          parameter, local or block-result annotation): a continuation \
+          reference cannot be narrowed by a cast.")
+
+  let on_clause_context context ~location =
+    report context ~location
+      (text "An" ++ kw "on"
+      ++ text "handler clause is only allowed on a"
+      ++ (kw "resume" ^^ text ",")
+      ++ kw "resume_throw" ++ text "or" ++ kw "resume_throw_ref" ++ text "call."
+      )
+
+  let switch_needs_tag context ~location =
+    report context ~location
+      (text "A" ++ kw "switch"
+      ++ text "names its enabling tag as a labelled immediate, e.g."
+      ++ (kw "c.switch(x, tag: t)" ^^ text "."))
+
+  let resume_throw_needs_tag context ~location =
+    report context ~location
+      (kw "resume_throw"
+      ++ text "raises a tag applied to its payload, e.g."
+      ++ (kw "c.resume_throw(exc(x))" ^^ text "."))
 
   let constant_global_required context ~location =
     report context ~location
@@ -1367,10 +1426,43 @@ let expand_splices d ctx ty =
     ty;
   expanded
 
+(* The built-in type names a [type] declaration (or a [rec] member) may not
+   take: [T::] extends to declared types, making the [::] left-hand side one
+   namespace shared by the intrinsic namespaces and user types, so the
+   built-ins must stay unambiguous ([&i64] is the value type, [atomic::fence]
+   the intrinsic, …). The valtypes, the abstract heap types (the parser's
+   [absheaptype_tbl] set), and the [atomic] intrinsic namespace ([v128]/[i64]
+   are already valtypes; [cont] is a keyword). [From_wasm] renames a [$type]
+   that collides (see [Namespace.reserved_heap_types]). *)
+let reserved_type_names =
+  [
+    "i32";
+    "i64";
+    "f32";
+    "f64";
+    "v128" (* the value types *);
+    "any";
+    "array";
+    "eq";
+    "exn";
+    "extern";
+    "func";
+    "i31";
+    "nocont";
+    "noexn";
+    "noextern";
+    "nofunc";
+    "none";
+    "struct" (* the abstract heap types *);
+    "atomic" (* the intrinsic namespace *);
+  ]
+
 let add_type d ctx ty =
   Array.iteri
     (fun i elt ->
       let name, (typ : subtype) = elt.desc in
+      if List.mem name.desc reserved_type_names then
+        Error.reserved_type_name d ~location:name.info name;
       Tbl.add d ctx.types name (Wax_wasm.Types.Rec i, typ))
     ty;
   (* Expand [..] splices before building the internal type and before the final
@@ -2917,9 +3009,15 @@ let merge_let_tuple ctx head rest =
     | _ -> head :: rest
 
 (* Check a list of typed operands against an array of expected types. *)
-let check_operands ctx l expected =
+let check_operands ctx ~location l expected =
   if Array.length expected = List.length l then
     List.iter2 (fun i ty -> check_type ctx i ty) l (Array.to_list expected)
+  else
+    (* With the type immediates inferred from the receiver, a wrong operand
+       count is no longer caught as an immediate/operand mismatch; report it
+       as an arity error. *)
+    Error.value_count_mismatch ctx.diagnostics ~location
+      ~expected:(Array.length expected) ~provided:(List.length l)
 
 (* A missing else branch behaves like an empty one: it leaves the block
    parameters on the stack, so it is valid only when those already match the
@@ -3113,6 +3211,7 @@ let rec count_holes i =
   | Br (_, Some i)
   | Br_if (_, i)
   | Hinted (_, i)
+  | On (i, _)
   | Br_table (_, i)
   | Br_on_null (_, i)
   | Br_on_non_null (_, i)
@@ -3207,6 +3306,7 @@ let rec collect_assigned_locals acc i =
   | UnOp (_, e)
   | Br_if (_, e)
   | Hinted (_, e)
+  | On (e, _)
   | Labelled (_, e)
   | Br_table (_, e)
   | Br_on_null (_, e)
@@ -3315,6 +3415,7 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | UnOp (_, e)
   | Br_if (_, e)
   | Hinted (_, e)
+  | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
   | Br_on_non_null (_, e)
@@ -3417,8 +3518,8 @@ let rec find_eager_hazard (e : _ Ast.instr) =
   | StructDefault _ | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _
   | Br _ | Br_if _ | Br_table _ | Dispatch _ | Match _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Hinted _ | Return _ | Select _ | If_annotation _
-    ->
+  | Br_on_cast_desc_eq_fail _ | Hinted _ | On _ | Return _ | Select _
+  | If_annotation _ ->
       None
 
 (* Report an eager-evaluation hazard in the [?:] branch [arm]; [select] is the
@@ -3547,6 +3648,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | StructDefaultDesc e
   | UnOp (_, e)
   | Hinted (_, e)
+  | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
   | Br_on_non_null (_, e)
@@ -3820,6 +3922,7 @@ let rec check_hole_order_rec ctx i n =
         | Br (_, Some i)
         | Br_if (_, i)
         | Hinted (_, i)
+        | On (i, _)
         | Br_table (_, i)
         | Br_on_null (_, i)
         | Br_on_non_null (_, i)
@@ -4269,6 +4372,63 @@ let render_signature params result =
   in
   Printf.sprintf "fn(%s) -> %s" (String.concat ", " params) result
 
+(* The methods member completion offers on a continuation-typed receiver — the
+   resume family and [switch] — with [params]/[results] the rendered parameter
+   and result types of the continuation's function type and [switch_results]
+   the rendered results of a [switch] (the last parameter's own continuation
+   parameters, when it has one). Unlike the other receivers, the candidate
+   list is built at record time (the signatures need the type context) and
+   carried by {!R_cont}; the editor's signature help rebuilds it from the
+   declarations. *)
+let cont_method_candidates ~params ~results ~switch_results =
+  let m member_name member_detail =
+    { member_name; member_kind = Method; member_detail }
+  in
+  let leading = List.filteri (fun i _ -> i < List.length params - 1) params in
+  [
+    m "resume" (render_signature params results);
+    m "resume_throw" (render_signature [ "tag(payload)" ] results);
+    m "resume_throw_ref" (render_signature [ "&?exn" ] results);
+    m "switch" (render_signature (leading @ [ "tag: tag" ]) switch_results);
+  ]
+
+(* Build the {!R_cont} descriptor of a receiver of declared continuation type
+   [ct], rendering the method signatures from the type context. *)
+let cont_receiver ctx ct =
+  let render (t : Ast.valtype) =
+    String.trim (Format.asprintf "%a" Output.valtype t)
+  in
+  let sign =
+    let*@ inner = lookup_cont_inner ctx ct in
+    lookup_func_type ctx inner
+  in
+  let params, results =
+    match sign with
+    | Some sg ->
+        ( Array.to_list (Array.map (fun p -> render (snd p.Ast.desc)) sg.params),
+          Array.to_list (Array.map render sg.results) )
+    | None -> ([], [])
+  in
+  let switch_results =
+    match
+      let*@ sg = sign in
+      let n = Array.length sg.params in
+      if n = 0 then None
+      else
+        match snd sg.params.(n - 1).Ast.desc with
+        | Ast.Ref { typ = Type ct2 | Exact ct2; _ } ->
+            let*@ inner2 = lookup_cont_inner ctx ct2 in
+            let*@ sg2 = lookup_func_type ctx inner2 in
+            Some
+              (Array.to_list
+                 (Array.map (fun p -> render (snd p.Ast.desc)) sg2.params))
+        | _ -> None
+    with
+    | Some rs -> rs
+    | None -> []
+  in
+  R_cont (cont_method_candidates ~params ~results ~switch_results)
+
 (* The atomic memory accesses ([mem.atomic_load32(addr)],
    [mem.atomic_rmw_add8(addr, v)], …), enumerated from the
    {!Wax_wasm.Atomics.families} the typer dispatches on; the address takes
@@ -4421,6 +4581,7 @@ let member_candidates : member_receiver -> member_candidate list = function
   | R_table (at, rt) ->
       table_method_candidates ~addr_name:(address_type_name at)
         ~elem_name:(render_reftype rt)
+  | R_cont l -> l
 
 (* Free-function members offered after [v128::] — [bitselect] and the per-shape
    const constructors — with signatures from the SIMD registry. *)
@@ -5062,7 +5223,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       type_branch ctx i
   | Throw _ | ThrowRef _ -> type_exception ctx i
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
-  | ResumeThrowRef _ | Switch _ ->
+  | ResumeThrowRef _ | Switch _ | On _ ->
       type_stack_switching ctx i
   | NonNull i' -> (
       let* i' = instruction ctx i' in
@@ -5539,202 +5700,354 @@ and type_branch ctx i =
 
 and type_stack_switching ctx i =
   (* The typed-continuation / stack-switching instructions: cont.new, cont.bind,
-     suspend, resume(.throw), and switch. *)
+     suspend, resume(.throw), and switch. Two surfaces reach here: the parsed
+     method / constructor forms ([c.resume(x) on […]], [k::new(f)]) arrive as
+     [Call]/[On] nodes routed from [call_instruction] / the dispatch and are
+     resolved into the dedicated nodes below (their type immediates inferred
+     from the receiver, on the call_ref model); the dedicated nodes themselves
+     arrive when re-typing a decompiled module. The [finish_*] helpers hold the
+     shared checks. *)
   match i.desc with
   | ContNew (ct, f) ->
       let* f' = instruction ctx f in
-      let*! ft = lookup_cont_inner ctx ct in
-      (let>@ fref = internalize ctx (Ref { nullable = true; typ = Type ft }) in
-       check_type ctx f' fref);
-      (* [cont.new] allocates a fresh continuation of exactly [ct], so its result
-         is an exact reference. As for [struct.new]/[array.new], we type it exact
-         only under custom-descriptors (exact reference types are part of that
-         proposal); the Wasm validator always tracks it exact internally. *)
-      let want_exact =
-        Wax_utils.Feature.is_enabled ctx.type_context.features
-          Wax_utils.Feature.Custom_descriptors
-      in
-      let*! cref =
-        internalize ctx
-          (Ref
-             {
-               nullable = false;
-               typ = (if want_exact then Exact ct else Type ct);
-             })
-      in
-      return_expression i (ContNew (ct, f')) cref
+      finish_cont_new ctx i ct f'
   | ContBind (src, dst, l) ->
       let* l' = instructions ctx l in
-      let*! src_inner = lookup_cont_inner ctx src in
-      let*! src_sig = lookup_func_type ctx src_inner in
-      let*! dst_inner = lookup_cont_inner ctx dst in
-      let*! dst_sig = lookup_func_type ctx dst_inner in
-      let np = Array.length src_sig.params - Array.length dst_sig.params in
-      (* The destination continuation must be [src] with its leading [np]
+      finish_cont_bind ctx i src dst l'
+  | On (inner, handlers) -> type_on_clause ctx i inner handlers
+  | _ -> type_stack_switching_ops ctx i
+
+and finish_cont_new ctx i ct f' =
+  (let>@ ft = lookup_cont_inner ctx ct in
+   let>@ fref = internalize ctx (Ref { nullable = true; typ = Type ft }) in
+   check_type ctx f' fref);
+  (* [cont.new] allocates a fresh continuation of exactly [ct], so its result
+     is an exact reference. As for [struct.new]/[array.new], we type it exact
+     only under custom-descriptors (exact reference types are part of that
+     proposal); the Wasm validator always tracks it exact internally. *)
+  let want_exact =
+    Wax_utils.Feature.is_enabled ctx.type_context.features
+      Wax_utils.Feature.Custom_descriptors
+  in
+  let*! cref =
+    internalize ctx
+      (Ref
+         { nullable = false; typ = (if want_exact then Exact ct else Type ct) })
+  in
+  return_expression i (ContNew (ct, f')) cref
+
+and finish_cont_bind ctx i src dst l' =
+  let*! src_inner = lookup_cont_inner ctx src in
+  let*! src_sig = lookup_func_type ctx src_inner in
+  let*! dst_inner = lookup_cont_inner ctx dst in
+  let*! dst_sig = lookup_func_type ctx dst_inner in
+  let np = Array.length src_sig.params - Array.length dst_sig.params in
+  (* The destination continuation must be [src] with its leading [np]
          parameters bound away: the unbound tail and the results must match.
          Mirrors [Validation]'s [ContBind] check. *)
-      (if np < 0 then
-         Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
-           ~descr:
-             "the resulting continuation takes more parameters than the \
-              original one"
-       else
-         let>@ src_ft = internal_functype ctx src_sig in
-         let>@ dst_ft = internal_functype ctx dst_sig in
-         let ts12 = Array.sub src_ft.params np (Array.length dst_ft.params) in
-         if
-           not
-             (functype_matches (subtyping_info ctx)
-                { params = ts12; results = src_ft.results }
-                dst_ft)
-         then
-           Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
-             ~descr:
-               "the bound parameters and results do not match between the two \
-                continuation types");
-      (let n = max 0 np in
-       let>@ bound =
-         array_map_opt
-           (fun p -> internalize ctx (snd p.desc))
-           (Array.sub src_sig.params 0 n)
-       in
-       let>@ srcref =
-         internalize ctx (Ref { nullable = true; typ = Type src })
-       in
-       check_operands ctx l' (Array.append bound [| srcref |]));
-      (* Like [cont.new], [cont.bind] yields a fresh continuation of exactly
+  (if np < 0 then
+     Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+       ~descr:
+         "the resulting continuation takes more parameters than the original \
+          one"
+   else
+     let>@ src_ft = internal_functype ctx src_sig in
+     let>@ dst_ft = internal_functype ctx dst_sig in
+     let ts12 = Array.sub src_ft.params np (Array.length dst_ft.params) in
+     if
+       not
+         (functype_matches (subtyping_info ctx)
+            { params = ts12; results = src_ft.results }
+            dst_ft)
+     then
+       Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+         ~descr:
+           "the bound parameters and results do not match between the two \
+            continuation types");
+  (let n = max 0 np in
+   let>@ bound =
+     array_map_opt
+       (fun p -> internalize ctx (snd p.desc))
+       (Array.sub src_sig.params 0 n)
+   in
+   let>@ srcref = internalize ctx (Ref { nullable = true; typ = Type src }) in
+   check_operands ctx ~location:i.info l' (Array.append bound [| srcref |]));
+  (* Like [cont.new], [cont.bind] yields a fresh continuation of exactly
          [dst], so an exact reference (gated on custom-descriptors as above). *)
-      let want_exact =
-        Wax_utils.Feature.is_enabled ctx.type_context.features
-          Wax_utils.Feature.Custom_descriptors
-      in
-      let*! dstref =
-        internalize ctx
-          (Ref
-             {
-               nullable = false;
-               typ = (if want_exact then Exact dst else Type dst);
-             })
-      in
-      return_expression i (ContBind (src, dst, l')) dstref
+  let want_exact =
+    Wax_utils.Feature.is_enabled ctx.type_context.features
+      Wax_utils.Feature.Custom_descriptors
+  in
+  let*! dstref =
+    internalize ctx
+      (Ref
+         {
+           nullable = false;
+           typ = (if want_exact then Exact dst else Type dst);
+         })
+  in
+  return_expression i (ContBind (src, dst, l')) dstref
+
+and type_stack_switching_ops ctx i =
+  match i.desc with
   | Suspend (tag, l) ->
       let* l' = instructions ctx l in
       let*! { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
       (let>@ ptypes =
          array_map_opt (fun p -> internalize ctx (snd p.desc)) params
        in
-       check_operands ctx l' ptypes);
+       check_operands ctx ~location:i.info l' ptypes);
       let*! rtypes = array_map_opt (internalize ctx) results in
       return_statement i (Suspend (tag, l')) rtypes
   | Resume (ct, handlers, l) ->
       let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      (let>@ ptypes =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) sg.params
-       in
-       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
-       check_operands ctx l' (Array.append ptypes [| cref |]));
-      check_resume_handlers ctx ~result_types:sg.results handlers;
-      let*! rtypes = array_map_opt (internalize ctx) sg.results in
-      return_statement i (Resume (ct, handlers, l')) rtypes
+      finish_resume ctx i ct handlers l'
   | ResumeThrow (ct, tag, handlers, l) ->
       let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      let*! { params = tparams; _ } = Tbl.find ctx.diagnostics ctx.tags tag in
-      (let>@ ptypes =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) tparams
-       in
-       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
-       check_operands ctx l' (Array.append ptypes [| cref |]));
-      check_resume_handlers ctx ~result_types:sg.results handlers;
-      let*! rtypes = array_map_opt (internalize ctx) sg.results in
-      return_statement i (ResumeThrow (ct, tag, handlers, l')) rtypes
+      finish_resume_throw ctx i ct tag handlers l'
   | ResumeThrowRef (ct, handlers, l) ->
       let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      (let>@ exnref = internalize ctx (Ref { nullable = true; typ = Exn }) in
-       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
-       check_operands ctx l' [| exnref; cref |]);
-      check_resume_handlers ctx ~result_types:sg.results handlers;
-      let*! rtypes = array_map_opt (internalize ctx) sg.results in
-      return_statement i (ResumeThrowRef (ct, handlers, l')) rtypes
+      finish_resume_throw_ref ctx i ct handlers l'
   | Switch (ct, tag, l) ->
       let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      let tag_sig = Tbl.find ctx.diagnostics ctx.tags tag in
-      let np = Array.length sg.params in
-      (if np >= 1 then
-         let>@ lead =
-           array_map_opt
-             (fun p -> internalize ctx (snd p.desc))
-             (Array.sub sg.params 0 (np - 1))
-         in
-         let>@ cref =
-           internalize ctx (Ref { nullable = true; typ = Type ct })
-         in
-         check_operands ctx l' (Array.append lead [| cref |]));
-      (* The last parameter of [ct]'s function type must itself be a
+      finish_switch ctx i ct tag l'
+  | _ -> assert false (* only invoked on a stack-switching instruction *)
+
+and finish_resume ctx i ct handlers l' =
+  let*! inner = lookup_cont_inner ctx ct in
+  let*! sg = lookup_func_type ctx inner in
+  (let>@ ptypes =
+     array_map_opt (fun p -> internalize ctx (snd p.desc)) sg.params
+   in
+   let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+   check_operands ctx ~location:i.info l' (Array.append ptypes [| cref |]));
+  check_resume_handlers ctx ~result_types:sg.results handlers;
+  let*! rtypes = array_map_opt (internalize ctx) sg.results in
+  return_statement i (Resume (ct, handlers, l')) rtypes
+
+and finish_resume_throw ctx i ct tag handlers l' =
+  let*! inner = lookup_cont_inner ctx ct in
+  let*! sg = lookup_func_type ctx inner in
+  let*! { params = tparams; _ } = Tbl.find ctx.diagnostics ctx.tags tag in
+  (let>@ ptypes =
+     array_map_opt (fun p -> internalize ctx (snd p.desc)) tparams
+   in
+   let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+   check_operands ctx ~location:i.info l' (Array.append ptypes [| cref |]));
+  check_resume_handlers ctx ~result_types:sg.results handlers;
+  let*! rtypes = array_map_opt (internalize ctx) sg.results in
+  return_statement i (ResumeThrow (ct, tag, handlers, l')) rtypes
+
+and finish_resume_throw_ref ctx i ct handlers l' =
+  let*! inner = lookup_cont_inner ctx ct in
+  let*! sg = lookup_func_type ctx inner in
+  (let>@ exnref = internalize ctx (Ref { nullable = true; typ = Exn }) in
+   let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+   check_operands ctx ~location:i.info l' [| exnref; cref |]);
+  check_resume_handlers ctx ~result_types:sg.results handlers;
+  let*! rtypes = array_map_opt (internalize ctx) sg.results in
+  return_statement i (ResumeThrowRef (ct, handlers, l')) rtypes
+
+and finish_switch ctx i ct tag l' =
+  let*! inner = lookup_cont_inner ctx ct in
+  let*! sg = lookup_func_type ctx inner in
+  let tag_sig = Tbl.find ctx.diagnostics ctx.tags tag in
+  let np = Array.length sg.params in
+  (if np >= 1 then
+     let>@ lead =
+       array_map_opt
+         (fun p -> internalize ctx (snd p.desc))
+         (Array.sub sg.params 0 (np - 1))
+     in
+     let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+     check_operands ctx ~location:i.info l' (Array.append lead [| cref |]));
+  (* The last parameter of [ct]'s function type must itself be a
          continuation type; the result is that inner continuation's parameter
          types. *)
-      let inner_sg =
-        match if np = 0 then None else Some (snd sg.params.(np - 1).desc) with
-        | Some (Ref { typ = Type ct2 | Exact ct2; _ }) ->
-            let*@ inner2 = lookup_cont_inner ctx ct2 in
-            lookup_func_type ctx inner2
-        | _ -> None
-      in
-      (* The 'switch' tag must take no parameters and its results must match
+  let inner_sg =
+    match if np = 0 then None else Some (snd sg.params.(np - 1).desc) with
+    | Some (Ref { typ = Type ct2 | Exact ct2; _ }) ->
+        let*@ inner2 = lookup_cont_inner ctx ct2 in
+        lookup_func_type ctx inner2
+    | _ -> None
+  in
+  (* The 'switch' tag must take no parameters and its results must match
          both continuation types. Mirrors [Validation]'s [Switch] check. *)
-      let to_internal arr =
-        array_map_opt
-          (fun typ ->
-            let+@ iv = internalize_valtype ctx typ in
-            iv.internal)
-          arr
-      in
-      let result_subtype a b =
-        match (to_internal a, to_internal b) with
-        | Some a, Some b ->
-            Array.length a = Array.length b
-            && Array.for_all Fun.id
-                 (Array.mapi
-                    (fun i t ->
-                      Wax_wasm.Types.val_subtype (subtyping_info ctx) t b.(i))
-                    a)
-        | _ -> true
-      in
-      (match inner_sg with
-      | None ->
-          Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
-            ~descr:
-              "the continuation's last parameter must itself be a continuation \
-               type"
-      | Some inner_sg -> (
-          match tag_sig with
-          | None -> ()
-          | Some { params = tparams; results = tresults } ->
-              if
-                Array.length tparams <> 0
-                || (not (result_subtype sg.results tresults))
-                || not (result_subtype tresults inner_sg.results)
-              then
-                Error.stack_switching_type_mismatch ctx.diagnostics
-                  ~location:i.info
-                  ~descr:
-                    "the 'switch' tag must take no parameters and its results \
-                     must match the two continuation types"));
-      let result_params =
-        match inner_sg with Some s2 -> s2.params | None -> [||]
-      in
-      let*! rtypes =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) result_params
-      in
-      return_statement i (Switch (ct, tag, l')) rtypes
-  | _ -> assert false (* only invoked on a stack-switching instruction *)
+  let to_internal arr =
+    array_map_opt
+      (fun typ ->
+        let+@ iv = internalize_valtype ctx typ in
+        iv.internal)
+      arr
+  in
+  let result_subtype a b =
+    match (to_internal a, to_internal b) with
+    | Some a, Some b ->
+        Array.length a = Array.length b
+        && Array.for_all Fun.id
+             (Array.mapi
+                (fun i t ->
+                  Wax_wasm.Types.val_subtype (subtyping_info ctx) t b.(i))
+                a)
+    | _ -> true
+  in
+  (match inner_sg with
+  | None ->
+      Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+        ~descr:
+          "the continuation's last parameter must itself be a continuation type"
+  | Some inner_sg -> (
+      match tag_sig with
+      | None -> ()
+      | Some { params = tparams; results = tresults } ->
+          if
+            Array.length tparams <> 0
+            || (not (result_subtype sg.results tresults))
+            || not (result_subtype tresults inner_sg.results)
+          then
+            Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+              ~descr:
+                "the 'switch' tag must take no parameters and its results must \
+                 match the two continuation types"));
+  let result_params =
+    match inner_sg with Some s2 -> s2.params | None -> [||]
+  in
+  let*! rtypes =
+    array_map_opt (fun p -> internalize ctx (snd p.desc)) result_params
+  in
+  return_statement i (Switch (ct, tag, l')) rtypes
+
+(* The declared continuation type of a stack-switching receiver (or of
+   [bind]'s continuation operand): the type immediate, inferred from the
+   operand's static type on the call_ref model. An abstract [&cont] cannot
+   supply it and must be cast to a declared type first, as an abstract
+   function reference must be at a call. [None] after reporting. *)
+and cont_operand_type ctx e' =
+  match Cell.get (expression_type ctx e') with
+  | Valtype { typ = Ref { typ = Type ct | Exact ct; _ }; _ } -> (
+      match Tbl.find_opt ctx.type_context.types ct with
+      | Some (_, { typ = Cont _; _ }) -> Some ct
+      | _ ->
+          Error.expected_cont_type ctx.diagnostics ~location:(snd e'.info);
+          None)
+  | Valtype { typ = Ref { typ = Cont | NoCont; _ }; _ } ->
+      Error.abstract_cont_receiver ctx.diagnostics ~location:(snd e'.info);
+      None
+  | Error -> None (* the operand already failed to type; recover silently *)
+  | Unknown | UnknownRef ->
+      Error.unknown_operand_type ctx.diagnostics ~location:(snd e'.info);
+      None
+  | _ ->
+      Error.expected_cont_type ctx.diagnostics ~location:(snd e'.info);
+      None
+
+(* A stack-switching method call [c.resume(x)], [c.resume_throw(exc(p))],
+   [c.resume_throw_ref(e)], [c.switch(x, tag: t)], with [handlers] from a
+   wrapping [on] clause. The receiver compiles last (Wasm stack order, as for
+   call_ref), so the arguments are typed first and the receiver appended. *)
+and type_cont_method_call ctx i ~handlers recv meth args =
+  (* [switch]'s enabling tag is a required labelled immediate, extracted before
+     the arguments are typed (it names a tag, not a value); [resume_throw]'s
+     tag is invoked with its payload, as in [throw exc(p)] — the callee is
+     resolved in the tag namespace, so a function of the same name does not
+     conflict. *)
+  let tag, args =
+    match meth.desc with
+    | "switch" -> (
+        let tags, rest =
+          List.partition_map
+            (fun a ->
+              match a.Ast.desc with
+              | Ast.Labelled ({ desc = "tag"; _ }, { desc = Get t; _ }) ->
+                  Either.Left t
+              | _ -> Either.Right a)
+            args
+        in
+        match tags with
+        | [ t ] -> (Some t, rest)
+        | t :: dup :: _ ->
+            Error.duplicate_argument_label ctx.diagnostics ~location:dup.info
+              { dup with desc = "tag" };
+            (Some t, rest)
+        | [] ->
+            Error.switch_needs_tag ctx.diagnostics ~location:i.info;
+            (None, rest))
+    | "resume_throw" -> (
+        match args with
+        | [ { desc = Call ({ desc = Get t; _ }, payload); _ } ] ->
+            (Some t, payload)
+        | _ ->
+            Error.resume_throw_needs_tag ctx.diagnostics ~location:i.info;
+            (None, args))
+    | _ -> (None, args)
+  in
+  let* args' = instructions ctx args in
+  let* recv' = instruction ctx recv in
+  let l' = args' @ [ recv' ] in
+  let*! ct = cont_operand_type ctx recv' in
+  match meth.desc with
+  | "resume" -> finish_resume ctx i ct handlers l'
+  | "resume_throw" ->
+      let*! tag = tag in
+      finish_resume_throw ctx i ct tag handlers l'
+  | "resume_throw_ref" -> finish_resume_throw_ref ctx i ct handlers l'
+  | _ ->
+      let*! tag = tag in
+      finish_switch ctx i ct tag l'
+
+(* The postfix handler clause [e on [t -> 'l, …]]: fold the handlers into the
+   resume-family call it wraps; any other wrapped expression is an error (the
+   grammar attaches the clause to any expression). *)
+and type_on_clause ctx i inner handlers =
+  match inner.desc with
+  | Call
+      ( {
+          desc =
+            StructGet
+              ( recv,
+                ({ desc = "resume" | "resume_throw" | "resume_throw_ref"; _ } as
+                 meth) );
+          _;
+        },
+        args ) ->
+      type_cont_method_call ctx i ~handlers recv meth args
+  | _ ->
+      Error.on_clause_context ctx.diagnostics ~location:i.info;
+      (* Recover by typing the wrapped expression and carrying its result. *)
+      let* inner' = instruction ctx inner in
+      return_statement i (On (inner', handlers)) (fst inner'.info)
+
+(* The [T::new] / [T::bind] constructors of a declared continuation type: the
+   [T::] namespace constructs a [&T]. [bind]'s source type — the type
+   immediate — is inferred from its continuation operand (the last argument),
+   as the method receivers' types are. *)
+and type_cont_construct_call ctx i func ns name args =
+  let* args' = instructions ctx args in
+  let recover () =
+    return_statement i
+      (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+      [| Cell.make Error |]
+  in
+  match name.desc with
+  | "new" -> (
+      match args' with
+      | [ f' ] -> finish_cont_new ctx i ns f'
+      | _ ->
+          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+            ~expected:1 ~provided:(List.length args');
+          recover ())
+  | "bind" -> (
+      match List.rev args' with
+      | c' :: _ ->
+          let*! src = cont_operand_type ctx c' in
+          finish_cont_bind ctx i src ns args'
+      | [] ->
+          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+            ~expected:1 ~provided:0;
+          recover ())
+  | _ ->
+      Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+      recover ()
 
 and type_arith ctx i =
   (* Arithmetic, comparison and conversion operators in binary ([a + b]) and
@@ -6061,15 +6374,15 @@ and type_cast ctx i =
             Some (Ref { nullable; typ = Type (anon_function_type ctx sign) })
         | Signedtype _ -> None
       in
-      (* A continuation type cannot be the target of a cast instruction. A null
-         cast to a nullable reference lowers to [ref.null] (no cast) and is
-         allowed; every other form lowers to a [ref.cast]. *)
-      (match target_valtype with
-      | Some (Ref { typ; nullable })
-        when is_cont_heaptype ctx typ && not (nullable && is_null_initializer i')
-        ->
-          Error.invalid_cast_type ctx.diagnostics ~location:i.info
-      | _ -> ());
+      (* A continuation carries no RTT, so there is no [ref.cast] into a
+         continuation type: [as &k] with a continuation target is a
+         compile-time ascription, accepted (below) exactly when it lowers to
+         no instruction. *)
+      let cont_target =
+        match target_valtype with
+        | Some (Ref { typ; _ }) -> is_cont_heaptype ctx typ
+        | _ -> false
+      in
       (* An inline function-type cast target [&fn(..)] is lowered through a
          synthesized type (see [anon_function_type]); carry its signature so the
          result renders as [&fn(..)] rather than that synthetic name. *)
@@ -6090,6 +6403,17 @@ and type_cast ctx i =
       in
       let () =
         match target_valtype with
+        | Some _ when cont_target ->
+            (* Accepted exactly when it is a provable no-op — the cases
+               [subtype] validates: the operand's static type is already a
+               subtype of the target (identity or upcast, letting a [resume]
+               go through a supertype signature), a [null] literal with a
+               nullable target ([ref.null], no cast), or a stack-polymorphic
+               operand (dead code, or an unconstrained inference cell the
+               ascription pins). NOT the general [cast] castability check
+               below, which admits runtime downcasts. *)
+            if not (subtype ctx ty' ty) then
+              Error.cont_cast_not_ascription ctx.diagnostics ~location:i.info
         | Some t ->
             if not (cast ctx ty' t) then
               Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) ty'
@@ -6120,8 +6444,9 @@ and type_cast ctx i =
       (* Lint the cast against its operand's natural type (snapshotted before
          [cast] above concretised it to the target). Skipped for from-Wasm input
          ([simplify]), whose casts are compiler-inserted and whose redundant ones
-         are dropped below. *)
-      if ctx.warn_unused && not ctx.simplify then
+         are dropped below — and for a continuation target, whose "redundant"
+         upcast is the intended use (a compile-time ascription). *)
+      if ctx.warn_unused && (not ctx.simplify) && not cont_target then
         lint_ref_cast ctx ~location:i.info ~is_test:false ty'_natural
           (Cell.get ty);
       (* A cast is load-bearing when its target differs from the type the inner
@@ -6178,6 +6503,20 @@ and type_cast ctx i =
             || match ht with Type _ -> true | _ -> false)
         | _ -> false
       in
+      (* A continuation-target ascription is load-bearing unless it names the
+         operand's own type: [From_wasm] wraps every resume/switch/bind
+         continuation operand in one to pin the instruction's type immediate,
+         and dropping a strict upcast would re-infer the operand's own
+         (narrower) type and change the immediate on the round trip. *)
+      let load_bearing_cont =
+        cont_target
+        &&
+        match (ty'_natural, Cell.get ty) with
+        | ( Valtype { typ = Ref { typ = Type a | Exact a; _ }; _ },
+            Valtype { typ = Ref { typ = Type b | Exact b; _ }; _ } ) ->
+            a.desc <> b.desc
+        | _ -> true
+      in
       (* Drop a cast the inferred types already make redundant. This is only
          desirable when converting from Wasm ([ctx.simplify]): there casts are
          inserted to pin types and precise inference makes some unnecessary. For
@@ -6187,6 +6526,7 @@ and type_cast ctx i =
       let unnecessary_cast =
         ctx.simplify && (not load_bearing_literal) && (not load_bearing_null)
         && (not load_bearing_bottom_ref)
+        && (not load_bearing_cont)
         && (not (is_unknown_or_error ty'))
         && subtype ctx ty' ty
       in
@@ -6274,6 +6614,10 @@ and type_aggregate_access ctx i =
                 | Array elem ->
                     record_members ctx.member_completions field.info
                       (R_array elem)
+                | Cont _ ->
+                    if ctx.member_completions <> None then
+                      record_members ctx.member_completions field.info
+                        (cont_receiver ctx ty)
                 | _ -> ());
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics
@@ -8653,6 +8997,25 @@ and call_instruction ctx i =
       return_statement i
         (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, []))
         [||]
+  (* Stack-switching methods on a continuation receiver: [c.resume(x)],
+     [c.resume_throw(exc(p))], [c.resume_throw_ref(e)], [c.switch(x, tag: t)];
+     an [on] handler clause arrives as a wrapping [On] node (see
+     [type_on_clause]). These were keywords before, so no struct field can be
+     shadowed by claiming the names. *)
+  | Call
+      ( {
+          desc =
+            StructGet
+              ( recv,
+                ({
+                   desc =
+                     "resume" | "resume_throw" | "resume_throw_ref" | "switch";
+                   _;
+                 } as meth) );
+          _;
+        },
+        args ) ->
+      type_cont_method_call ctx i ~handlers:[] recv meth args
   | Call
       ( ({ desc = StructGet (a, ({ desc = "fill"; _ } as meth)); _ } as func),
         [ j; v; n ] ) ->
@@ -8734,6 +9097,13 @@ and type_path_intrinsic_call ctx i func ns name args =
       return_statement i
         (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
         [||]
+  (* A declared continuation type is a namespace holding its constructors,
+     [k::new] / [k::bind] (the [T::] namespace constructs a [&T]). *)
+  | _
+    when match Tbl.find_opt ctx.type_context.types ns with
+         | Some (_, { typ = Cont _; _ }) -> true
+         | _ -> false ->
+      type_cont_construct_call ctx i func ns name args
   | _ ->
       let* args' = instructions ctx args in
       Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
@@ -9707,7 +10077,7 @@ let rec check_constant_instruction ctx i =
   | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
   | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
   | Br_on_cast_desc_eq_fail _ | Hinted _ | Throw _ | ThrowRef _ | ContBind _
-  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | On _
   | Return _ | Sequence _ | Select _ | If_annotation _ | Labelled _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
@@ -10766,6 +11136,7 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | ArrayDefault (_, i)
   | Br_if (_, i)
   | Hinted (_, i)
+  | On (i, _)
   | Br_table (_, i)
   | Br_on_null (_, i)
   | Br_on_non_null (_, i)
@@ -10916,6 +11287,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Br (l, v) -> Br (l, Option.map (sone asm) v)
     | Br_if (l, v) -> Br_if (l, sone asm v)
     | Hinted (h, v) -> Hinted (h, sone asm v)
+    | On (v, h) -> On (sone asm v, h)
     | Br_table (ls, v) -> Br_table (ls, sone asm v)
     | Dispatch { index; cases; default; arms } ->
         Dispatch

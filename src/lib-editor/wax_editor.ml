@@ -1082,6 +1082,75 @@ let member_receiver_at ?(encoding = UTF16) src line ch members =
       else None)
     members
 
+(* The definition of the type named [name] in the module, for resolving a
+   receiver's methods from its declared type. *)
+let type_definition ast name =
+  let found = ref None in
+  Wax_lang.Ast_utils.iter_fields
+    (fun field ->
+      match field.Wax_lang.Ast.desc with
+      | Wax_lang.Ast.Type rectype ->
+          Array.iter
+            (fun entry ->
+              let id, (sub : Wax_lang.Ast.subtype) = entry.Wax_lang.Ast.desc in
+              if id.Wax_lang.Ast.desc = name then found := Some sub)
+            rectype
+      | _ -> ())
+    ast;
+  !found
+
+(* The rendered parameter and result types of the continuation type named
+   [name] — its wrapped function type's signature — plus the results of a
+   [switch] on it (the last parameter's own continuation parameters, when it
+   has one). [None] when [name] is not a continuation type of the module. *)
+let cont_signature ast name =
+  let func_sign ct =
+    match type_definition ast ct with
+    | Some { typ = Cont ft; _ } -> (
+        match type_definition ast ft.Wax_lang.Ast.desc with
+        | Some { typ = Func sign; _ } -> Some sign
+        | _ -> None)
+    | _ -> None
+  in
+  match func_sign name with
+  | None -> None
+  | Some sign ->
+      let render_param p = render_valtype (snd p.Wax_lang.Ast.desc) in
+      let params = Array.to_list (Array.map render_param sign.params) in
+      let results = Array.to_list (Array.map render_valtype sign.results) in
+      let switch_results =
+        let n = Array.length sign.params in
+        if n = 0 then []
+        else
+          match snd sign.params.(n - 1).Wax_lang.Ast.desc with
+          | Wax_lang.Ast.Ref { typ = Type ct2 | Exact ct2; _ } -> (
+              match func_sign ct2.Wax_lang.Ast.desc with
+              | Some sign2 ->
+                  Array.to_list (Array.map render_param sign2.params)
+              | None -> [])
+          | _ -> []
+      in
+      Some (params, results, switch_results)
+
+(* The [T::] members of a declared continuation type — [new]/[bind] — for
+   completion and signature help after [ns::]. Empty when [ns] does not name a
+   continuation type of the module. *)
+let cont_namespace_members ast ns =
+  match type_definition ast ns with
+  | Some { typ = Cont ft; _ } ->
+      let fn member_name member_detail =
+        {
+          Wax_lang.Typing.member_name;
+          member_kind = Wax_lang.Typing.Function;
+          member_detail;
+        }
+      in
+      [
+        fn "new" (Printf.sprintf "fn(&%s) -> &%s" ft.Wax_lang.Ast.desc ns);
+        fn "bind" (Printf.sprintf "fn(bound..., &<k>) -> &%s" ns);
+      ]
+  | _ -> []
+
 let member_completion (c : Wax_lang.Typing.member_candidate) =
   {
     k_name = c.member_name;
@@ -1140,10 +1209,22 @@ let completion_string ?(encoding = UTF16) src line ch defines =
         | None -> [])
   else
     match namespace_position ~encoding src line ch with
-    | Some ns ->
+    | Some ns -> (
         (* After [ns::]: the intrinsic namespace's free functions, known
-           textually (the namespaces are keywords), so this needs no parse. *)
-        List.map member_completion (Wax_lang.Typing.namespace_members ns)
+           textually, need no parse; a declared continuation type's
+           [new]/[bind] members are resolved from the buffer's AST. *)
+        match Wax_lang.Typing.namespace_members ns with
+        | [] -> (
+            let ast_opt, _, _ =
+              Wax_parser.parse_recover ~filename:"<buffer>"
+                ~sync:Wax_lang.Recover.sync ~insert:Wax_lang.Recover.insert
+                ~closers:Wax_lang.Recover.closers src
+            in
+            match ast_opt with
+            | Some ast ->
+                List.map member_completion (cont_namespace_members ast ns)
+            | None -> [])
+        | members -> List.map member_completion members)
     | None -> (
         let target = (line + 1, byte_column ~encoding src line ch) in
         let ast_opt, _syntax_errors, _ctx =
@@ -1223,10 +1304,15 @@ let callee_label ast callee =
         ast;
       !found
   | Path (ns, nm) ->
+      let members =
+        match Wax_lang.Typing.namespace_members ns.desc with
+        | [] -> cont_namespace_members ast ns.desc
+        | members -> members
+      in
       List.find_map
         (fun (c : Wax_lang.Typing.member_candidate) ->
           if c.member_name = nm.desc then Some c.member_detail else None)
-        (Wax_lang.Typing.namespace_members ns.desc)
+        members
   | _ -> None
 
 let addr_type_name : [ `I32 | `I64 ] -> string = function
@@ -1266,10 +1352,17 @@ let method_label typed_module recv meth_name =
       match ty with
       | Wax_lang.Infer.Valtype { typ = Ref { typ = Type n | Exact n; _ }; _ }
         -> (
-          (* an array receiver: its element type selects the array methods *)
+          (* an array receiver: its element type selects the array methods; a
+             continuation receiver, the resume family and switch *)
           match array_element typed_module n.desc with
           | Some elem -> Some (Wax_lang.Typing.array_method_candidates elem)
-          | None -> Wax_lang.Typing.numeric_receiver_candidates ty)
+          | None -> (
+              match cont_signature typed_module n.desc with
+              | Some (params, results, switch_results) ->
+                  Some
+                    (Wax_lang.Typing.cont_method_candidates ~params ~results
+                       ~switch_results)
+              | None -> Wax_lang.Typing.numeric_receiver_candidates ty))
       | _ -> Wax_lang.Typing.numeric_receiver_candidates ty
   in
   let candidates =

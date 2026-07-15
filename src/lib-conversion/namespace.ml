@@ -33,8 +33,6 @@ let reserved_words =
     "catch";
     "const";
     "cont";
-    "cont_bind";
-    "cont_new";
     "data";
     "dispatch";
     "do";
@@ -56,15 +54,12 @@ let reserved_words =
     "nop";
     "null";
     "pagesize";
+    "on";
     "open";
     "rec";
-    "resume";
-    "resume_throw";
-    "resume_throw_ref";
     "return";
     "shared";
     "suspend";
-    "switch";
     "table";
     "tag";
     "throw";
@@ -77,26 +72,15 @@ let reserved_words =
 
 let reserved = build reserved_words
 
+(* A [$type] name may also not collide with a Wax built-in type name — the
+   abstract heap types, the value types, the [atomic] intrinsic namespace —
+   which a [type] declaration may not take (the typer's
+   [Wax_lang.Typing.reserved_type_names], the single source). *)
 let reserved_heap_types =
   StringMap.union
     (fun _ _ -> assert false)
     reserved
-    (build
-       [
-         "any";
-         "array";
-         "eq";
-         "exn";
-         "extern";
-         "func";
-         "i31";
-         "nocont";
-         "noexn";
-         "noextern";
-         "nofunc";
-         "none";
-         "struct";
-       ])
+    (build Wax_lang.Typing.reserved_type_names)
 
 let rec add_indexed ns x i =
   let y = Printf.sprintf "%s_%d" x i in

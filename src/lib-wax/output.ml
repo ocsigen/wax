@@ -485,6 +485,21 @@ let call_instr instr pp ?prefix i l =
           instr CallAndFieldAccess pp i);
       print_arg_list (instr Instruction) pp l)
 
+(* All but the last element ([] if empty) — the non-receiver operands of a
+   stack-switching method call. *)
+let drop_last l = match List.rev l with [] -> [] | _ :: r -> List.rev r
+
+(* A continuation constructor [T::new(f)] / [T::bind(args…, c)]: the [T::]
+   namespace constructs a [&T]; the type is always explicit (it is the
+   namespace itself). *)
+let cont_construct_instr instr pp ct member l =
+  box pp ~indent:indent_level (fun () ->
+      hbox pp (fun () ->
+          identifier pp ct.desc;
+          operator pp "::";
+          identifier pp member);
+      print_arg_list (instr Instruction) pp l)
+
 let print_on_clauses pp handlers =
   punctuation pp "[";
   box pp (fun () ->
@@ -506,6 +521,29 @@ let print_on_clauses pp handlers =
               keyword pp "switch")
         pp handlers);
   punctuation pp "]"
+
+(* A stack-switching method call [recv.meth(args…) on [handlers]]. The receiver
+   is the LAST operand of [l] — Wasm stack order: it compiles last, exactly as
+   call_ref's callee does — and prints first, as the method receiver. [args]
+   renders the parenthesised argument list (closures, so [resume_throw]'s
+   [tag(payload)] and [switch]'s [tag: t] need no AST form). *)
+let cont_method_instr instr pp meth l ~args ~handlers =
+  box pp ~indent:indent_level (fun () ->
+      hvbox pp (fun () ->
+          hbox pp (fun () ->
+              (match List.rev l with
+              | recv :: _ -> instr CallAndFieldAccess pp recv
+              | [] -> operator pp "_" (* ill-formed operand list: recovery *));
+              punctuation pp ".";
+              identifier pp meth);
+          print_arg_list (fun pp g -> g pp) pp args);
+      match handlers with
+      | [] -> ()
+      | _ :: _ ->
+          space pp ();
+          keyword pp "on";
+          space pp ();
+          print_on_clauses pp handlers)
 
 let print_container pp ~opening ~closing ?(indent = 0) opt_type f =
   hvbox pp ~indent (fun () ->
@@ -568,9 +606,12 @@ let rec get_prec (i : _ Ast.instr) =
       Atom
   | Set _ | Tee _ -> Assignement
   | Call _ | TailCall _ -> CallAndFieldAccess
-  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
-  | ResumeThrowRef _ | Switch _ ->
-      CallAndFieldAccess
+  | ContNew _ | ContBind _ | Suspend _ | Switch _ -> CallAndFieldAccess
+  (* A resume-family instruction with handlers carries its postfix [on] clause,
+     which binds like [as]/[is]. *)
+  | Resume (_, h, _) | ResumeThrow (_, _, h, _) | ResumeThrowRef (_, h, _) ->
+      if h = [] then CallAndFieldAccess else Cast
+  | On _ -> Cast
   | Cast _ | CastDesc _ | Test _ -> Cast
   | NonNull _ -> UnaryPostfix
   | UnOp _ -> UnaryPrefix
@@ -599,7 +640,7 @@ let rec is_block (i : _ Ast.instr) =
   | BinOp _ | UnOp _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
   | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
-  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | On _
   | Return _ | Sequence _ | Select _ | Labelled _ ->
       false
 
@@ -624,15 +665,24 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
         let _, left, _ = prec_op op.desc in
         starts_with_block_prec left i
     | Select (i, _, _) -> starts_with_block_prec Select i
+    | On (i, _) -> starts_with_block_prec Cast i
+    (* The method-form stack-switching instructions print their receiver — the
+       last operand — first. *)
+    | Resume (_, _, l)
+    | ResumeThrow (_, _, _, l)
+    | ResumeThrowRef (_, _, l)
+    | Switch (_, _, l) -> (
+        match List.rev l with
+        | recv :: _ -> starts_with_block_prec CallAndFieldAccess recv
+        | [] -> false)
     | Unreachable | Nop | Hole | Null | Get _ | Path _ | Set _ | Tee _
     | TailCall _ | Char _ | String _ | Int _ | Float _ | Struct _
     | StructDefault _ | StructDesc _ | StructDefaultDesc _ | Array _
     | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | Let _ | Br _ | Br_if _
     | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
     | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-    | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _ | Resume _
-    | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Return _ | Sequence _
-    | Labelled _ ->
+    | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _ | Return _
+    | Sequence _ | Labelled _ ->
         false
 
 let starts_with_block i = starts_with_block_prec Instruction i
@@ -1259,22 +1309,10 @@ let rec instr prec pp (i : _ instr) =
           keyword pp "throw_ref";
           space pp ();
           instr Branch pp i)
-  | ContNew (ct, i) ->
-      box pp ~indent:indent_level (fun () ->
-          keyword pp "cont_new";
-          space pp ();
-          identifier pp ct.desc;
-          cut pp ();
-          print_paren_list (instr Instruction) pp [ i ])
-  | ContBind (src, dst, l) ->
-      box pp ~indent:indent_level (fun () ->
-          keyword pp "cont_bind";
-          space pp ();
-          identifier pp src.desc;
-          space pp ();
-          identifier pp dst.desc;
-          cut pp ();
-          print_paren_list (instr Instruction) pp l)
+  | ContNew (ct, i) -> cont_construct_instr instr pp ct "new" [ i ]
+  (* The source continuation type is inferred from the last operand's static
+     type, so only the destination — the namespace — is written. *)
+  | ContBind (_, dst, l) -> cont_construct_instr instr pp dst "bind" l
   | Suspend (tag, l) ->
       box pp ~indent:indent_level (fun () ->
           keyword pp "suspend";
@@ -1282,44 +1320,46 @@ let rec instr prec pp (i : _ instr) =
           identifier pp tag.desc;
           cut pp ();
           print_paren_list (instr Instruction) pp l)
-  | Resume (ct, handlers, l) ->
+  (* The type immediate of the resume family and [switch] is inferred from the
+     receiver's static type, so it is not written. *)
+  | Resume (_, handlers, l) ->
+      cont_method_instr instr pp "resume" l
+        ~args:(List.map (fun a pp -> instr Instruction pp a) (drop_last l))
+        ~handlers
+  | ResumeThrow (_, tag, handlers, l) ->
+      (* The tag is invoked with its payload, [c.resume_throw(exc(p))], exactly
+         as [throw exc(p)] spells it. *)
+      cont_method_instr instr pp "resume_throw" l
+        ~args:
+          [
+            (fun pp ->
+              box pp ~indent:indent_level (fun () ->
+                  identifier pp tag.desc;
+                  print_arg_list (instr Instruction) pp (drop_last l)));
+          ]
+        ~handlers
+  | ResumeThrowRef (_, handlers, l) ->
+      cont_method_instr instr pp "resume_throw_ref" l
+        ~args:(List.map (fun a pp -> instr Instruction pp a) (drop_last l))
+        ~handlers
+  | Switch (_, tag, l) ->
+      cont_method_instr instr pp "switch" l
+        ~args:
+          (List.map (fun a pp -> instr Instruction pp a) (drop_last l)
+          @ [
+              (fun pp ->
+                print_key_value pp "tag"
+                  (fun pp (t : ident) -> identifier pp t.desc)
+                  tag);
+            ])
+        ~handlers:[]
+  | On (i, handlers) ->
       box pp ~indent:indent_level (fun () ->
-          keyword pp "resume";
+          instr Cast pp i;
           space pp ();
-          identifier pp ct.desc;
+          keyword pp "on";
           space pp ();
-          print_on_clauses pp handlers;
-          cut pp ();
-          print_paren_list (instr Instruction) pp l)
-  | ResumeThrow (ct, tag, handlers, l) ->
-      box pp ~indent:indent_level (fun () ->
-          keyword pp "resume_throw";
-          space pp ();
-          identifier pp ct.desc;
-          space pp ();
-          identifier pp tag.desc;
-          space pp ();
-          print_on_clauses pp handlers;
-          cut pp ();
-          print_paren_list (instr Instruction) pp l)
-  | ResumeThrowRef (ct, handlers, l) ->
-      box pp ~indent:indent_level (fun () ->
-          keyword pp "resume_throw_ref";
-          space pp ();
-          identifier pp ct.desc;
-          space pp ();
-          print_on_clauses pp handlers;
-          cut pp ();
-          print_paren_list (instr Instruction) pp l)
-  | Switch (ct, tag, l) ->
-      box pp ~indent:indent_level (fun () ->
-          keyword pp "switch";
-          space pp ();
-          identifier pp ct.desc;
-          space pp ();
-          identifier pp tag.desc;
-          cut pp ();
-          print_paren_list (instr Instruction) pp l)
+          print_on_clauses pp handlers)
   | Sequence l -> print_paren_list (instr Instruction) pp l
   | Select (i1, i2, i3) ->
       box pp ~indent:indent_level (fun () ->

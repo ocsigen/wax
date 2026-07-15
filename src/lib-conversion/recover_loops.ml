@@ -37,7 +37,7 @@ let rec refs_instr name (i : location instr) : bool =
   | Br (l, e) -> lab l || opt e
   | Br_if (l, e) -> lab l || refs_instr name e
   | Br_table (ls, e) -> List.exists lab ls || refs_instr name e
-  | Hinted (_, e) -> refs_instr name e
+  | Hinted (_, e) | On (e, _) -> refs_instr name e
   | Br_on_null (l, e) | Br_on_non_null (l, e) -> lab l || refs_instr name e
   | Br_on_cast (l, _, e) | Br_on_cast_fail (l, _, e) ->
       lab l || refs_instr name e
@@ -127,7 +127,8 @@ let rec reads_var name (i : location instr) : bool =
   | NonNull e
   | StructGet (e, _)
   | GetDescriptor e
-  | Hinted (_, e) ->
+  | Hinted (_, e)
+  | On (e, _) ->
       reads_var name e
   | Select (a, b, c) -> reads_var name a || reads_var name b || reads_var name c
   | Call (f, args) | TailCall (f, args) -> reads_var name f || any args
@@ -321,6 +322,7 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | Br (l, e) -> Br (l, Option.map rewrite_instr e)
   | Br_if (l, e) -> Br_if (l, rewrite_instr e)
   | Hinted (h, e) -> Hinted (h, rewrite_instr e)
+  | On (e, h) -> On (rewrite_instr e, h)
   | Br_table (ls, e) -> Br_table (ls, rewrite_instr e)
   | Br_on_null (l, e) -> Br_on_null (l, rewrite_instr e)
   | Br_on_non_null (l, e) -> Br_on_non_null (l, rewrite_instr e)

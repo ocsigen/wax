@@ -9,4 +9,4 @@ rec {
     type ct2 = cont ft2;
 }
 tag se() -> i32;
-fn sw(k: &?ct1) -> i32 { switch ct1 se(k); }
+fn sw(k: &?ct1) -> i32 { k.switch(tag: se); }

@@ -7,11 +7,24 @@ tag myexn(i32);
 
 fn g1(x: i32) -> i32 { suspend yield(x); }
 
-fn t_new() -> &k1 { cont_new k1 (g1); }
-fn t_bind(c: &k1) -> &k0 { cont_bind k1 k0 (7, c); }
-fn t_resume(c: &k0) -> i32 { resume k0 [] (c); }
-fn t_resume_throw(c: &k0) -> i32 { resume_throw k0 myexn [] (8, c); }
-fn t_resume_throw_ref(c: &k0, e: &?exn) -> i32 { resume_throw_ref k0 [] (e, c); }
+fn t_new() -> &k1 { k1::new(g1); }
+fn t_bind(c: &k1) -> &k0 { k0::bind(7, c); }
+fn t_resume(c: &k0) -> i32 { c.resume(); }
+fn t_resume_args(c: &k1, x: i32) -> i32 { c.resume(x); }
+fn t_resume_throw(c: &k0) -> i32 { c.resume_throw(myexn(8)); }
+fn t_resume_throw_ref(c: &k0, e: &?exn) -> i32 { c.resume_throw_ref(e); }
+
+// a receiver that is itself a call result compiles receiver-last, like call_ref
+fn t_chained(x: i32) -> i32 { t_new().resume(x); }
+
+// a multi-value resume delivers the continuation's full result tuple
+type mft = fn() -> (i32, i64);
+type mk = cont mft;
+fn t_multi(c: &mk) -> i64 {
+    let (a, b) = c.resume();
+    _ = a;
+    b;
+}
 
 // the abstract cont / nocont heap types are written &cont / &nocont
 fn abstract_refs(a: &?cont, b: &nocont) -> i32 { 0; }

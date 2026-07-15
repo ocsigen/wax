@@ -1,3 +1,3 @@
 fn f() {
-  resume k [_ => switch 5] ()
+  c.resume() on [_ => switch 5]
 }

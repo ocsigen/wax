@@ -207,6 +207,9 @@ type 'info instr_desc =
   | ResumeThrow of ident * ident * on_clause list * 'info instr list
   | ResumeThrowRef of ident * on_clause list * 'info instr list
   | Switch of ident * ident * 'info instr list
+  | On of 'info instr * on_clause list
+      (** The postfix handler clause [e on [t -> 'l, ...]] as parsed; the typer
+          folds it into the [Resume]/[ResumeThrow]/[ResumeThrowRef] it wraps. *)
   | Return of 'info instr option
   | Sequence of 'info instr list
   | Select of 'info instr * 'info instr * 'info instr

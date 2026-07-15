@@ -113,4 +113,10 @@ let () =
   (* A memory / table receiver (a name, not a value) records that object's
      methods; a table's short list keeps the golden readable (the memory list,
      including atomic and SIMD accesses, is exercised in test/method-consistency). *)
-  resolve "table receiver" "table tab: &?func [1];\nfn f() { _ = tab.size; }\n"
+  resolve "table receiver" "table tab: &?func [1];\nfn f() { _ = tab.size; }\n";
+  (* A continuation-typed receiver records the resume family and switch, their
+     signatures read from the continuation's function type. *)
+  resolve "continuation receiver"
+    "type ft = fn(i32) -> i32;\n\
+     type k = cont ft;\n\
+     fn f(c: &k) { _ = c.resume; }\n"

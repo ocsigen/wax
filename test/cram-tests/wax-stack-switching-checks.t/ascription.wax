@@ -1,0 +1,16 @@
+type ft0 = open fn(i32) -> i32;
+type k0 = open cont ft0;
+type ft1 : ft0 = fn(i32) -> i32;
+type k1 : k0 = cont ft1;
+
+// upcast: the resume goes through the supertype signature (resume $k0)
+fn upcast(c: &k1, x: i32) -> i32 { (c as &k0).resume(x); }
+
+// identity ascription
+fn identity(c: &k0, x: i32) -> i32 { (c as &k0).resume(x); }
+
+// a null literal cast to a nullable continuation target (ref.null)
+fn nullc() -> &?k0 { null as &?k0; }
+
+// a stack-polymorphic operand: the ascription pins the type
+fn dead() { unreachable; _ = _ as &?cont; }

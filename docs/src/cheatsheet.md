@@ -124,5 +124,6 @@ try t { } catch { oops => { _; }  _ => { } }     // try / catch (payload via hol
 throw oops(42);                                   // throw
 try { } catch [oops -> 'h]                       // branch-to-label form (try_table)
 type k = cont ft;                                // continuation type
-suspend yield(x);   resume k [tag -> 'l] (args, c);   // suspend / resume
+let c = k::new(f);                               // cont.new (k::bind binds args)
+suspend yield(x);   c.resume(args) on [tag -> 'l];    // suspend / resume
 ```
