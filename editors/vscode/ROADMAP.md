@@ -143,9 +143,15 @@ does not carry. Three distinct prerequisites:
 - [ ] **Semantic tokens.** Distinguishing locals / params / functions / types
   could reuse the resolution now recorded (classify each use by its binder kind);
   a coarser version could come from parse-tree structure alone.
-- [ ] **Completion** (locals, functions, types, intrinsics) beyond the current
-  snippets. Both prerequisites — name resolution (in-scope binders) and error
-  tolerance — are now in place; remaining work is the provider itself.
+- [x] **Completion.** A `completion` export offers the names in scope at a
+  position — the module's top-level definitions (reusing the outline walk), the
+  enclosing function's parameters and locals, and the keywords — each tagged with
+  a kind for its icon. It works off the recovered parse alone (no typing), so it
+  survives the half-written buffer completion is invoked in, and the editor
+  filters by the typed prefix. A `CompletionItemProvider` maps the kinds to
+  `CompletionItemKind`. Follow-ups: member completion after `.` (needs the
+  receiver's type), intrinsic namespaces after `::`, per-point local scoping
+  (currently every local in the function is offered), and type details on items.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -157,10 +163,15 @@ does not carry. Three distinct prerequisites:
 
 ## Suggested next step
 
-Name resolution records use -> definition links during type checking; go-to-
-definition, hover-on-names, find-references / document-highlight, and rename all
-ship on top. **Completion** is the remaining big feature (enumerate the in-scope
-binders at a point, member completion after `.`, intrinsics); it is the one users
-feel most and the largest build. Smaller follow-ups: deeper rename
-conflict/shadowing detection, and — lower value given the TextMate grammar —
-semantic tokens for role-based coloring.
+The core language-server features are all in: diagnostics, formatting, outline,
+hover, inlay hints, go-to-definition, find-references / document-highlight,
+rename, and (name-based) completion. What is left refines them:
+
+- **Member completion after `.`** — the highest-value gap. It needs the
+  receiver's type (so the typed tree, resolved at the possibly-incomplete point),
+  which is the harder mid-edit problem the name-based completion sidesteps.
+- **Per-point local scoping + type details** on completion items.
+- **Deeper rename** conflict/shadowing detection.
+- **Semantic tokens** — low value given the TextMate grammar.
+
+Member completion is the natural next target if the LSP work continues.

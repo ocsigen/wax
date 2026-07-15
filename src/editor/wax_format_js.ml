@@ -36,6 +36,11 @@
      Wax only.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
+   - [completion src line ch] -> array of { name; kind }: the names in scope at
+     the (zero-based) position — the module's top-level definitions, the enclosing
+     function's parameters and locals, and the keywords — for completion. Works
+     off the recovered parse alone; the editor filters by the typed prefix. Wax
+     only.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
      side-by-side preview commands.
@@ -881,6 +886,131 @@ let symbols_string src =
   | None -> []
   | Some ast -> List.concat_map field_symbols ast
 
+(* Completion (Wax only). Works off the recovered parse alone — no typing — so it
+   survives the half-written buffer completion is invoked in: the module's
+   top-level names (reusing the outline walk), the parameters and [let] locals of
+   the function the cursor is in, and the keywords. The editor filters by the
+   typed prefix, so every candidate is offered. Member completion after [.] and
+   precise per-point local scoping are follow-ups. *)
+type completion = { k_name : string; k_kind : string }
+
+let wax_keywords =
+  [
+    "fn";
+    "let";
+    "const";
+    "type";
+    "global";
+    "memory";
+    "table";
+    "tag";
+    "data";
+    "elem";
+    "import";
+    "export";
+    "loop";
+    "while";
+    "if";
+    "else";
+    "match";
+    "dispatch";
+    "try";
+    "catch";
+    "return";
+    "br";
+    "br_if";
+    "br_table";
+    "throw";
+    "as";
+    "is";
+    "do";
+    "open";
+    "mut";
+    "null";
+    "true";
+    "false";
+  ]
+
+(* Flatten the outline symbols (which already carry a name and kind) to
+   completion candidates; an import group contributes its members, not itself. *)
+let rec symbol_completions (s : sym) =
+  match s.s_children with
+  | [] -> [ { k_name = s.s_name; k_kind = s.s_kind } ]
+  | children -> List.concat_map symbol_completions children
+
+(* Parameters and [let] locals of the function whose span covers the cursor
+   (over-approximate: every local in the function, not only those in scope at the
+   point). *)
+let function_locals ast target =
+  let open Wax_lang.Ast in
+  let contains (loc : Wax_utils.Ast.location) =
+    let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+    let pos (p : Lexing.position) =
+      (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+    in
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  List.concat_map
+    (fun (field : (location modulefield, Wax_utils.Ast.location) annotated) ->
+      match field.desc with
+      | Func { sign; body = _, instrs; _ } when contains field.info ->
+          let params =
+            match sign with
+            | Some { params; _ } ->
+                Array.to_list params
+                |> List.filter_map (fun p ->
+                    match fst p.desc with
+                    | Some id -> Some { k_name = id.desc; k_kind = "parameter" }
+                    | None -> None)
+            | None -> []
+          in
+          let lets = ref [] in
+          List.iter
+            (Wax_lang.Ast_utils.iter_instr (fun i ->
+                 match i.desc with
+                 | Let (bindings, _) ->
+                     List.iter
+                       (fun (id_opt, _) ->
+                         match id_opt with
+                         | Some id ->
+                             lets :=
+                               { k_name = id.desc; k_kind = "local" } :: !lets
+                         | None -> ())
+                       bindings
+                 | _ -> ()))
+            instrs;
+          params @ List.rev !lets
+      | _ -> [])
+    ast
+
+let completion_string src line ch =
+  let ast_opt, _syntax_errors, _ctx =
+    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+      src
+  in
+  let keywords =
+    List.map (fun k -> { k_name = k; k_kind = "keyword" }) wax_keywords
+  in
+  match ast_opt with
+  | None -> keywords
+  | Some ast ->
+      let target = (line + 1, byte_column src line ch) in
+      let module_ =
+        List.concat_map field_symbols ast |> List.concat_map symbol_completions
+      in
+      let locals = function_locals ast target in
+      (* Locals shadow module names of the same name; keep the first occurrence
+         of each (name, kind). *)
+      let seen = Hashtbl.create 64 in
+      List.filter
+        (fun c ->
+          let k = (c.k_name, c.k_kind) in
+          if Hashtbl.mem seen k then false
+          else (
+            Hashtbl.add seen k ();
+            true))
+        (locals @ module_ @ keywords)
+
 (* The same outline for a Wasm-text module. Its fields differ from Wax's: the
    [$id] name is optional, and a definition carries its exports separately, so an
    anonymous definition is named by its first export, else by a fallback word. *)
@@ -995,6 +1125,16 @@ let symbols_result symbols_fn src =
   let syms = try symbols_fn s with _ -> [] in
   Js.array (Array.of_list (List.map (js_symbol s) syms))
 
+let js_completion c =
+  object%js
+    val name = Js.string c.k_name
+    val kind = Js.string c.k_kind
+  end
+
+let completion_result src line ch =
+  let items = try completion_string (Js.to_string src) line ch with _ -> [] in
+  Js.array (Array.of_list (List.map js_completion items))
+
 let () =
   Js.export "wax"
     object%js
@@ -1007,6 +1147,7 @@ let () =
       method renamePrepare src line ch = rename_prepare_result src line ch
       method rename src line ch newname = rename_result src line ch newname
       method symbols src = symbols_result symbols_string src
+      method completion src line ch = completion_result src line ch
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
       method symbolsWat src = symbols_result symbols_wat_string src

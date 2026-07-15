@@ -14,6 +14,7 @@ import {
   WaxInlay,
   WaxRange,
   WaxEdit,
+  WaxCompletion,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
@@ -51,6 +52,13 @@ interface LanguageSpec {
     character: number,
     newName: string,
   ): WaxEdit[];
+  // Names in scope at a position, for completion. Wax only.
+  completion?(
+    wax: Wax,
+    src: string,
+    line: number,
+    character: number,
+  ): WaxCompletion[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -69,6 +77,8 @@ const LANGUAGES: LanguageSpec[] = [
       wax.renamePrepare(src, line, character),
     rename: (wax, src, line, character, newName) =>
       wax.rename(src, line, character, newName),
+    completion: (wax, src, line, character) =>
+      wax.completion(src, line, character),
   },
   {
     id: "wat",
@@ -94,6 +104,7 @@ export function activateWith(
     if (lang.definition) registerDefinition(context, opts, lang);
     if (lang.references) registerReferences(context, opts, lang);
     if (lang.rename) registerRename(context, opts, lang);
+    if (lang.completion) registerCompletion(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -504,6 +515,78 @@ function registerRename(
 
   context.subscriptions.push(
     vscode.languages.registerRenameProvider(lang.id, provider),
+  );
+}
+
+function completionKind(kind: string): vscode.CompletionItemKind {
+  switch (kind) {
+    case "function":
+      return vscode.CompletionItemKind.Function;
+    case "variable":
+      return vscode.CompletionItemKind.Variable;
+    case "type":
+      return vscode.CompletionItemKind.Struct;
+    case "event":
+      return vscode.CompletionItemKind.Event;
+    case "memory":
+    case "namespace":
+      return vscode.CompletionItemKind.Module;
+    case "table":
+    case "array":
+    case "data":
+      return vscode.CompletionItemKind.Field;
+    case "parameter":
+    case "local":
+      return vscode.CompletionItemKind.Variable;
+    case "keyword":
+      return vscode.CompletionItemKind.Keyword;
+    default:
+      return vscode.CompletionItemKind.Text;
+  }
+}
+
+function registerCompletion(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const completion = lang.completion;
+  if (!completion) return;
+
+  const provider: vscode.CompletionItemProvider = {
+    async provideCompletionItems(document, position, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return [];
+      }
+      if (token.isCancellationRequested) return [];
+      let items: WaxCompletion[];
+      try {
+        items = completion(
+          wax,
+          document.getText(),
+          position.line,
+          position.character,
+        );
+      } catch {
+        return [];
+      }
+      // The editor filters by the typed prefix; every candidate is offered.
+      return items.map((c) => {
+        const item = new vscode.CompletionItem(
+          c.name,
+          completionKind(c.kind),
+        );
+        item.detail = c.kind;
+        return item;
+      });
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(lang.id, provider),
   );
 }
 

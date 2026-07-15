@@ -31,6 +31,9 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   through shadowing. A punned struct field is expanded (`{p| x}` becomes
   `{p| x: new}`) so the struct's field is left intact; rename is declined when the
   cursor is not on a renameable symbol.
+- **Completion** (`.wax`): suggests the names in scope — the module's functions,
+  globals, types, and tags, the enclosing function's parameters and locals, and
+  keywords. Works while the file is mid-edit.
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

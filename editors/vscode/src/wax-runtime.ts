@@ -59,6 +59,13 @@ export interface WaxEdit extends WaxRange {
   newText: string;
 }
 
+export interface WaxCompletion {
+  name: string;
+  // "function" | "variable" | "type" | "event" | "memory" | "table" | "array" |
+  // "data" | "namespace" | "parameter" | "local" | "keyword".
+  kind: string;
+}
+
 export interface WaxSymbol {
   name: string;
   kind: string;
@@ -99,6 +106,9 @@ export interface Wax {
     newName: string,
   ): WaxEdit[];
   symbols(src: string): WaxSymbol[];
+  // Names in scope at the position (module defs, the enclosing function's
+  // params/locals, keywords), for completion. Wax only.
+  completion(src: string, line: number, character: number): WaxCompletion[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;
   checkWat(src: string): WaxDiagnostic[];
