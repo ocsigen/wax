@@ -41,6 +41,11 @@ export interface WaxDiagnostic extends WaxRange {
   related: WaxRelated[];
 }
 
+export interface WaxHover extends WaxRange {
+  // The rendered type of the expression under the cursor.
+  type: string;
+}
+
 export interface WaxSymbol {
   name: string;
   kind: string;
@@ -59,6 +64,9 @@ export interface Wax {
   // Wax language.
   format(src: string): FormatResult;
   check(src: string): WaxDiagnostic[];
+  // The type of the innermost expression at the (zero-based) position, or null
+  // if there is none. Wax only — WAT builds no typed tree.
+  hover(src: string, line: number, character: number): WaxHover | null;
   symbols(src: string): WaxSymbol[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;

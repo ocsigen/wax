@@ -10,6 +10,7 @@ import {
   LoadOptions,
   Wax,
   WaxSymbol,
+  WaxHover,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
@@ -22,6 +23,9 @@ interface LanguageSpec {
   format(wax: Wax, src: string): FormatResult;
   check(wax: Wax, src: string): WaxDiagnostic[];
   symbols(wax: Wax, src: string): WaxSymbol[];
+  // Type of the expression at a position, for hover. Only Wax has a typed tree;
+  // omitted for WAT (its validator builds none), so no hover is registered there.
+  hover?(wax: Wax, src: string, line: number, character: number): WaxHover | null;
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -30,6 +34,7 @@ const LANGUAGES: LanguageSpec[] = [
     format: (wax, src) => wax.format(src),
     check: (wax, src) => wax.check(src),
     symbols: (wax, src) => wax.symbols(src),
+    hover: (wax, src, line, character) => wax.hover(src, line, character),
   },
   {
     id: "wat",
@@ -50,6 +55,7 @@ export function activateWith(
   for (const lang of LANGUAGES) {
     registerFormatter(context, opts, log, lang);
     registerOutline(context, opts, lang);
+    if (lang.hover) registerHover(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -208,6 +214,55 @@ function registerOutline(
 
   context.subscriptions.push(
     vscode.languages.registerDocumentSymbolProvider(lang.id, provider),
+  );
+}
+
+function registerHover(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const hover = lang.hover;
+  if (!hover) return;
+
+  const provider: vscode.HoverProvider = {
+    async provideHover(document, position, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return undefined;
+      }
+      if (token.isCancellationRequested) return undefined;
+      let result: WaxHover | null;
+      try {
+        result = hover(
+          wax,
+          document.getText(),
+          position.line,
+          position.character,
+        );
+      } catch {
+        // A runtime error (e.g. a stack overflow on a deeply nested module)
+        // must not surface as a failed hover popup; just show nothing.
+        return undefined;
+      }
+      if (!result) return undefined;
+      const range = new vscode.Range(
+        result.startLine,
+        result.startChar,
+        result.endLine,
+        result.endChar,
+      );
+      // Render the type in a Wax code block so it picks up syntax colouring.
+      const md = new vscode.MarkdownString();
+      md.appendCodeblock(result.type, "wax");
+      return new vscode.Hover(md, range);
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerHoverProvider(lang.id, provider),
   );
 }
 

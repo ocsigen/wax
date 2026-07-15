@@ -6,6 +6,14 @@ type typed_module_annotation = Ast.storagetype option array * Ast.location
 
 open Infer
 
+(* The typed tree as it stands during checking, before the cells are resolved to
+   [typed_module_annotation]: each node carries the inference cells for the
+   values it leaves on the stack, plus its span. [f] resolves these to storage
+   types for the Wasm conversion; the editor reads the cells directly (they carry
+   the flexible-literal / unknown distinctions [output_inferred_type] renders,
+   which resolution discards). *)
+type inferred_module_annotation = inferred_type Cell.t array * Ast.location
+
 (*** Diagnostics ***)
 
 module Error = struct
@@ -9585,37 +9593,39 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       fields
   end;
   ( ctx.type_context.types,
-    (* Building the annotated module is only needed for the deferred conversion
-       to Wasm/WAT; a validation-only pass ([~build:false]) runs the checking
-       above for its diagnostics and skips this projection. *)
-    if not build then []
-    else
-      List.map
-        (fun f ->
-          let desc =
-            Ast_utils.map_modulefield
-              (fun (types, loc) ->
-                ( Array.map
-                    (fun ty ->
-                      match Cell.get ty with
-                      | Unknown | Error | Collecting _ -> None
-                      | Null ->
-                          Some (Value (Ref { nullable = true; typ = None_ }))
-                      | UnknownRef ->
-                          Some (Value (Ref { nullable = false; typ = None_ }))
-                      | Number -> Some (Value I32)
-                      | Int8 -> Some (Packed I8)
-                      | Int16 -> Some (Packed I16)
-                      | Int -> Some (Value I32)
-                      | LargeInt -> Some (Value I64)
-                      | Float -> Some (Value F64)
-                      | Valtype { typ; _ } -> Some (Value typ))
-                    types,
-                  loc ))
-              f.desc
-          in
-          { f with desc })
-        typed_fields )
+    (* The cell-annotated tree ([inferred_module_annotation]); [f] resolves it to
+       storage types for the deferred Wasm/WAT conversion, while the editor reads
+       the cells directly. A validation-only pass ([~build:false]) runs the
+       checking above for its diagnostics and discards it. *)
+    if not build then [] else typed_fields )
+
+(* Resolve the inference cells at each node to concrete storage types — the
+   projection [f] applies before handing the typed tree to the Wasm conversion.
+   [Unknown]/[Error]/[Collecting] have no concrete type ([None]); a flexible
+   numeric literal takes its default width. *)
+let project_annotation (types, loc) =
+  ( Array.map
+      (fun ty ->
+        match Cell.get ty with
+        | Unknown | Error | Collecting _ -> None
+        | Null -> Some (Value (Ref { nullable = true; typ = None_ }))
+        | UnknownRef -> Some (Value (Ref { nullable = false; typ = None_ }))
+        | Number -> Some (Value I32)
+        | Int8 -> Some (Packed I8)
+        | Int16 -> Some (Packed I16)
+        | Int -> Some (Value I32)
+        | LargeInt -> Some (Value I64)
+        | Float -> Some (Value F64)
+        | Valtype { typ; _ } -> Some (Value typ))
+      types,
+    loc )
+
+let project_module (m : inferred_module_annotation Ast.module_) :
+    typed_module_annotation Ast.module_ =
+  List.map
+    (fun f ->
+      { f with desc = Ast_utils.map_modulefield project_annotation f.desc })
+    m
 
 (* Conditional annotations denote mutually-exclusive branches, so they are
    type-checked by exploring every reachable configuration (as the WAT validator
@@ -10089,7 +10099,7 @@ let check_configurations ~warn_unused ~features ~simplify diagnostics fields =
           : _ * _))
     ()
 
-let f ?(simplify = false) ?(warn_unused = false)
+let f_infer ?(simplify = false) ?(warn_unused = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   check_let_bindings diagnostics fields;
@@ -10097,16 +10107,23 @@ let f ?(simplify = false) ?(warn_unused = false)
     type_configuration ~warn_unused ~features ~simplify diagnostics fields
   else begin
     check_configurations ~warn_unused ~features ~simplify diagnostics fields;
-    (* Build the typed module (consumed only by the deferred WAT conversion;
-       validation-only paths use [check] and never reach here) by typing the
-       module with conditionals preserved. [type_configuration] resolves names
-       per branch (condition-aware tables), so each branch is typed under its
-       own assumption. Diagnostics are discarded — [check_configurations] above
-       did the real checking. *)
+    (* Build the typed module (consumed only by the deferred WAT conversion and
+       the editor; validation-only paths use [check] and never reach here) by
+       typing the module with conditionals preserved. [type_configuration]
+       resolves names per branch (condition-aware tables), so each branch is
+       typed under its own assumption. Diagnostics are discarded —
+       [check_configurations] above did the real checking. *)
     type_configuration ~features ~simplify
       (Wax_utils.Diagnostic.collector ())
       fields
   end
+
+let f ?(simplify = false) ?(warn_unused = false)
+    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
+  let types, typed =
+    f_infer ~simplify ~warn_unused ~features diagnostics fields
+  in
+  (types, project_module typed)
 
 let check ?(warn_unused = false) ?(features = Wax_utils.Feature.default ())
     diagnostics fields =

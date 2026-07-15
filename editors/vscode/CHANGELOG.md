@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Hover types for `.wax`: hovering over an expression shows its inferred type,
+  read off the type-checker's typed tree. Works through the recovering parser
+  while other parts of the file still have errors.
+
 ## 0.2.2
 
 - Large `.wat` / `.wax` files now format in the editor; a non-tail recursion in

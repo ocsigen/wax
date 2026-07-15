@@ -10,6 +10,10 @@
      startChar; endLine; endChar; warning; hint; related }: parse and check
      (type-check for Wax, validate for Wasm text), returning diagnostics for the
      editor. [warning] is the [-W] name of a lint warning, or null.
+   - [hover src line ch] -> { type; startLine; startChar; endLine; endChar } or
+     null: the type of the innermost typed expression under the (zero-based)
+     position, with its span, for editor hover. [null] over a statement or an
+     unresolved node, so those stay quiet. Wax only (WAT builds no typed tree).
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
@@ -156,33 +160,145 @@ let collected_diags d =
       })
     (Wax_utils.Diagnostic.collected d)
 
-(* Diagnostics for Wax. Parse with panic-mode recovery ([parse_recover]) so a
-   buffer with several syntax errors surfaces all of them as squiggles at once,
-   not just the first — the editor is exactly the multi-error consumer recovery
-   exists for. The best-effort AST is then type-checked too, so real type errors
-   in the intact regions still show while the user fixes the syntax: when it was
-   recovered past syntax errors the checker runs in recovery mode
-   ([set_recovery]), which suppresses the "not bound" cascades from the dropped
-   constructs. Type diagnostics are collected without printing and appended to
-   the syntax errors. (WAT keeps the single-error path below: recovery over its
-   paren-counted grammar cascades — see the [Recover] note.) *)
-let check_string src =
+(* One parse + type-check of a Wax buffer, shared by [check] (which wants the
+   diagnostics) and [hover] (which wants the typed tree). Parse with panic-mode
+   recovery ([parse_recover]) so a buffer with several syntax errors surfaces all
+   of them as squiggles at once, not just the first — the editor is exactly the
+   multi-error consumer recovery exists for. The best-effort AST is then
+   type-checked with [Typing.f_infer], which both collects diagnostics and builds
+   the typed tree (annotation = inference cells + span at every node): real type
+   errors in the intact regions still show while the user fixes the syntax, and
+   the tree is what hover reads. When recovered past syntax errors the checker
+   runs in recovery mode ([set_recovery]), which suppresses the "not bound"
+   cascades from the dropped constructs.
+
+   [f_infer] emits the same diagnostics as [Typing.check] — for a
+   conditional-free module both run the one checking pass, and for [#[if]]
+   modules both run the path-sensitive [check_configurations]; [f_infer] only
+   does an extra throwaway-collector pass to build the tree. So routing
+   diagnostics through it leaves them unchanged and gets the tree for free. *)
+type analysis = {
+  a_syntax : diag list;
+  a_type : diag list;
+  a_typed :
+    Wax_lang.Typing.inferred_module_annotation Wax_lang.Ast.module_ option;
+}
+
+let analyze_uncached src =
   let ast_opt, syntax_errors, _ctx =
     Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
       src
   in
-  let syntax_diags = List.map syntax_error_diag syntax_errors in
-  let type_diags =
-    match ast_opt with
-    | None -> []
-    | Some ast ->
-        let d = Wax_utils.Diagnostic.collector ~source:src () in
-        Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
-        (try Wax_lang.Typing.check ~warn_unused:true d ast
-         with Wax_utils.Diagnostic.Aborted -> ());
-        collected_diags d
-  in
-  syntax_diags @ type_diags
+  let a_syntax = List.map syntax_error_diag syntax_errors in
+  match ast_opt with
+  | None -> { a_syntax; a_type = []; a_typed = None }
+  | Some ast ->
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+      (* [f_infer] may abort mid-pass; the diagnostics it collected up to that
+         point still stand (as with [check] before), so read [d] regardless. It
+         emits the same diagnostics as [f]/[check] but keeps the inference cells,
+         which hover renders via [Infer.output_inferred_type]. *)
+      let a_typed =
+        try Some (snd (Wax_lang.Typing.f_infer ~warn_unused:true d ast))
+        with Wax_utils.Diagnostic.Aborted -> None
+      in
+      { a_syntax; a_type = collected_diags d; a_typed }
+
+(* Cache the analysis, keyed by the exact source, so hover — invoked repeatedly
+   on an unchanged buffer, once per mouse-hover — does not re-parse and
+   re-type-check each time, and shares the diagnostics pass's work. A handful of
+   recent buffers are kept (several files may be open); an edit changes the
+   source and so is a fresh entry, evicting the oldest. Keeping the source as the
+   key (not a hash) means a hit is exact — never a collision serving a wrong
+   tree. *)
+let analysis_cache_size = 4
+let analysis_cache : (string * analysis) list ref = ref []
+
+let analyze src =
+  match List.assoc_opt src !analysis_cache with
+  | Some a -> a
+  | None ->
+      let a = analyze_uncached src in
+      analysis_cache :=
+        (src, a)
+        :: List.filteri (fun i _ -> i < analysis_cache_size - 1) !analysis_cache;
+      a
+
+let check_string src =
+  let a = analyze src in
+  a.a_syntax @ a.a_type
+
+(* Hover types (Wax only). Reads the cell-annotated tree [analyze] built (every
+   node's [info] is the inference cells for the values it leaves on the stack,
+   paired with its source span), then keeps the smallest span that covers the
+   cursor and renders its type — the innermost-node walk an editor hover wants,
+   done with the same recursive [map_modulefield] the outline uses. [line]/[ch]
+   are the raw zero-based VS Code coordinates; [ch] is treated as a byte column,
+   exact for ASCII (a UTF-16-to-byte remap for wide characters is left for
+   later). WAT has no equivalent — its validator builds no typed tree. *)
+type hover = { h_type : string; h_range : Wax_utils.Ast.location }
+
+let cell_to_string cell =
+  Format.asprintf "%a" Wax_lang.Infer.output_inferred_type cell
+
+(* A node's result types as a tooltip string, or [None] when there is nothing
+   worth showing: a statement (no value) and a fully unknown / error node (every
+   cell unknown or error) are suppressed, so hovering them stays quiet rather
+   than popping up [()] or [any]. Otherwise it is the bare type for a single
+   value and a parenthesized tuple for several. Types render the way diagnostics
+   do — flexible literals as [number]/[int], unresolved as [any], anonymous
+   composite types inline — via [output_inferred_type]. *)
+let render_result_types
+    (tys : Wax_lang.Infer.inferred_type Wax_lang.Infer.Cell.t array) =
+  match Array.to_list tys with
+  | [] -> None
+  | l when List.for_all Wax_lang.Infer.is_unknown_or_error l -> None
+  | [ t ] -> Some (cell_to_string t)
+  | l -> Some ("(" ^ String.concat ", " (List.map cell_to_string l) ^ ")")
+
+let hover_string src line ch =
+  match (analyze src).a_typed with
+  | None -> None
+  | Some typed -> (
+      (* Lexing lines are one-based; [ch] and [pos_cnum - pos_bol] are both
+         zero-based byte columns. *)
+      let target = (line + 1, ch) in
+      let pos (p : Lexing.position) =
+        (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+      in
+      let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+      (* Track the smallest span that still contains the cursor; a child's
+             span is contained in its parent's, so the smallest is the innermost
+             node. Ties keep the first (deeper) one seen. *)
+      let best = ref None in
+      let observe ((tys, loc) : Wax_lang.Typing.inferred_module_annotation) =
+        (if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
+           let span =
+             loc.loc_end.Lexing.pos_cnum - loc.loc_start.Lexing.pos_cnum
+           in
+           match !best with
+           | Some (best_span, _, _) when best_span <= span -> ()
+           | _ -> best := Some (span, tys, loc));
+        (tys, loc)
+      in
+      List.iter
+        (fun (field :
+               ( Wax_lang.Typing.inferred_module_annotation
+                 Wax_lang.Ast.modulefield,
+                 Wax_utils.Ast.location )
+               Wax_lang.Ast.annotated) ->
+          ignore (Wax_lang.Ast_utils.map_modulefield observe field.desc))
+        typed;
+      (* Show a hover only for the innermost node; do not fall back to an
+             enclosing one, so a suppressed statement / unknown node stays quiet
+             rather than surfacing its parent's type. *)
+      match !best with
+      | None -> None
+      | Some (_, tys, loc) -> (
+          match render_result_types tys with
+          | None -> None
+          | Some h_type -> Some { h_type; h_range = loc }))
 
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
@@ -315,6 +431,19 @@ let js_diagnostic d =
     val related = Js.array (Array.of_list (List.map js_related d.related))
   end
 
+let js_hover h =
+  let start_line, start_char = js_position h.h_range.loc_start in
+  let end_line, end_char = js_position h.h_range.loc_end in
+  object%js
+    (* [type_] is exposed to JS as the property [type] (the ppx strips the
+       trailing underscore, which lets us use the reserved word). *)
+    val type_ = Js.string h.h_type
+    val startLine = start_line
+    val startChar = start_char
+    val endLine = end_line
+    val endChar = end_char
+  end
+
 let result ~ok ~text ~error =
   object%js
     val ok = Js.bool ok
@@ -341,6 +470,13 @@ let format_result format_fn src =
 let check_result check_fn src =
   let diagnostics = try check_fn (Js.to_string src) with _ -> [] in
   Js.array (Array.of_list (List.map js_diagnostic diagnostics))
+
+(* [null] when there is no typed node under the cursor (or anything went wrong):
+   the provider then shows no hover rather than crashing the host. *)
+let hover_result src line ch =
+  match try hover_string (Js.to_string src) line ch with _ -> None with
+  | None -> Js.null
+  | Some h -> Js.some (js_hover h)
 
 (* Document outline: the module's top-level definitions (functions, globals,
    types, memories, tags, tables, elems, data, imports) with their spans, for the
@@ -546,6 +682,7 @@ let () =
     object%js
       method format src = format_result format_string src
       method check src = check_result check_string src
+      method hover src line ch = hover_result src line ch
       method symbols src = symbols_result symbols_string src
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src

@@ -1,6 +1,17 @@
 (** Type checking and validation for Wax modules. *)
 
 type typed_module_annotation = Ast.storagetype option array * Ast.location
+
+type inferred_module_annotation =
+  Infer.inferred_type Infer.Cell.t array * Ast.location
+(** The typed-tree annotation before the inference cells are resolved to
+    {!typed_module_annotation}: each node carries the inference cells for the
+    values it leaves on the stack, plus its span. Unlike the resolved form it
+    keeps the distinctions {!Infer.output_inferred_type} renders — flexible
+    numeric literals ([number]/[int]/…), unknown/unreachable types ([any]), and
+    inline anonymous composite types — which resolution collapses. Produced by
+    {!f_infer}. *)
+
 type types
 
 val f :
@@ -22,6 +33,19 @@ val f :
     When [warn_unused] is set (default [false]), a [let]-bound local that is
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
+
+val f_infer :
+  ?simplify:bool ->
+  ?warn_unused:bool ->
+  ?features:Wax_utils.Feature.set ->
+  Wax_utils.Diagnostic.context ->
+  Ast.location Ast.module_ ->
+  types * inferred_module_annotation Ast.module_
+(** As {!f}, but returns the typed tree with its inference cells intact rather
+    than resolved to storage types — {!f} is exactly [f_infer] followed by that
+    resolution, and both emit the same diagnostics. Lets a consumer render types
+    the way diagnostics do (via {!Infer.output_inferred_type}); used by the
+    editor for hover. *)
 
 val check :
   ?warn_unused:bool ->

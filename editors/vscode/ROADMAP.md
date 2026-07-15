@@ -74,12 +74,29 @@ does not carry. Three distinct prerequisites:
    features that must work mid-edit need either a recovering parser or a
    last-good-tree cache.
 
-- [ ] **Hover types** and **inlay hints** (show inferred `: i32` on `let`s).
-  *Indexing only.* Switch the editor export from `Typing.check` (discards the
-  typed AST) to `Typing.f`, then find the innermost node whose span contains the
-  cursor — the same kind of walk `field_symbols` already does for the outline —
-  and read the type off its annotation. No typer or parser change; a
-  last-good-tree cache keeps it alive mid-edit. Likely the highest-value unlock.
+- [x] **Hover types.** *Indexing only.* Added a `hover` export
+  (`wax_format_js.ml`) that parses with recovery, type-checks with `Typing.f_infer`
+  (a variant of `Typing.f` that keeps the typed tree with its inference cells
+  intact, rather than resolving them to storage types: every node's annotation is
+  its result cells plus its span), then walks it with `Ast_utils.map_modulefield`
+  for the innermost node whose span contains the cursor and renders the type with
+  `Infer.output_inferred_type` — the same rendering diagnostics use, so a callee
+  reads `fn(a: i32, b: i32) -> i32`, a flexible literal `number`/`int`, an
+  unresolved cell `any` (rather than the resolved form's bare valtype and ugly
+  synthetic `<…>` names). A single value shows as the bare type, several as a
+  tuple. A statement (no value) and a fully unknown/error node (`is_unknown_or_error`)
+  show no hover at all, so hovering blank or broken regions stays quiet; there is
+  no fall-back to an enclosing node. A `HoverProvider` in `extension-common.ts`
+  shows it in a `wax` code block. Wax only: WAT's validator builds no typed tree.
+  Recovery (not a last-good-tree cache) keeps it alive through most mid-edit
+  states; a buffer the recovering parser cannot salvage shows no hover. The
+  parse + type-check is cached by source content and shared with the diagnostics
+  pass (which now also runs `f_infer`, since it emits the same diagnostics and
+  yields the tree for free), so a repeat hover on an unchanged buffer is a pure
+  tree walk (~0.4 ms on a 2400-line file) rather than a re-analysis (~20-60 ms).
+- [ ] **Inlay hints** (show inferred `: i32` on `let`s). The same indexing walk
+  on the same typed tree; a `let`-binding node's annotation carries the type.
+  Build on the hover export.
 - [ ] **Go to definition / find references / rename.** *Needs name resolution*
   (prereq 2): the typed tree has spans but not the binding target each identifier
   resolves to.
@@ -100,9 +117,8 @@ does not carry. Three distinct prerequisites:
 
 ## Suggested next step
 
-The **WAT preview/convert command** (most distinctive, reuses the full
-pipeline). Of the Tier 3 features, **hover types / inlay hints** are now within
-reach without new toolchain analysis: `Typing.f` already returns a typed tree
-with spans, so they are an indexing problem, not a typer change. The rest of
-Tier 3 is gated on name resolution (go-to-def / references / rename / semantic
-tokens) or error-tolerant parsing (completion / multi-error).
+**Inlay hints** — hover types are done, and inlay hints are the same indexing
+walk over the same typed tree (`Typing.f`), so they extend the new `hover`
+export directly. The rest of Tier 3 is gated on name resolution (go-to-def /
+references / rename / semantic tokens) or error-tolerant parsing (completion /
+multi-error).
