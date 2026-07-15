@@ -200,7 +200,7 @@ export interface Wax {
     line: number,
     character: number,
     newName: string,
-  ): WaxEdit[];
+  ): WaxRenameResult;
   selectionRangeWat(src: string, line: number, character: number): WaxRange[];
   foldingRangesWat(src: string): WaxFolding[];
   semanticTokensWat(src: string): WaxSemanticToken[];
@@ -209,6 +209,16 @@ export interface Wax {
     line: number,
     character: number,
   ): WaxSignature | null;
+  // The in-scope names of the index space the enclosing instruction expects at
+  // the position (functions, globals, locals, types, labels, …), for WAT
+  // completion. The defines argument is accepted for parity with `completion`
+  // but not yet used.
+  completionWat(
+    src: string,
+    line: number,
+    character: number,
+    defines: string[],
+  ): WaxCompletion[];
   // Cross-language conversion (for the preview commands).
   toWat(src: string): FormatResult;
   toWax(src: string): FormatResult;

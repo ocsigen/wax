@@ -65,6 +65,19 @@ val rename_string :
   string ->
   rename_outcome
 
+(* Completion candidates at the position: the in-scope names of the index space
+   the enclosing instruction expects there (functions, globals, locals, types,
+   labels, …), each with its leading [$]. Empty away from an index operand. The
+   [string list] is the [wax.define] set, accepted for signature parity with the
+   Wax side (WAT completion does not yet specialize on it). *)
+val completion_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  string list ->
+  completion list
+
 (* The module's top-level definitions, for the outline. *)
 val symbols_string : string -> sym list
 

@@ -396,4 +396,57 @@ let () =
     (Wat_editor.references_string config_varying cv_l cv_c);
   Printf.printf "=== rename config-varying $f -> $g ===\n";
   show_rename (Wat_editor.rename_string config_varying cv_l cv_c "g");
+  print_newline ();
+
+  (* Completion: where an index operand is expected — the point a recovering
+     parse repairs with a placeholder, or a partial [$id] — the in-scope names
+     of that index space are offered, their kind fixed by the instruction. Each
+     case is its own buffer with a single incomplete operand (the realistic
+     mid-typing state; the cursor is at the end of [sub], the operand slot). *)
+  let complete label src sub =
+    let i = Str.search_forward (Str.regexp_string sub) src 0 in
+    let line = ref 0 and bol = ref 0 in
+    String.iteri
+      (fun j c ->
+        if j < i && c = '\n' then (
+          incr line;
+          bol := j + 1))
+      src;
+    let col = i - !bol + String.length sub in
+    let items = Wat_editor.completion_string src !line col [] in
+    Printf.printf "  %s -> [%s]\n" label
+      (String.concat " "
+         (List.map
+            (fun (c : Editor_common.completion) ->
+              Printf.sprintf "%s:%s" c.k_name c.k_kind)
+            items))
+  in
+  let prelude =
+    "(module\n\
+    \  (type $t (struct (field i32)))\n\
+    \  (global $g i32 (i32.const 0))\n\
+    \  (func $helper (result i32) (i32.const 0))\n"
+  in
+  Printf.printf "=== completion (index kind from context) ===\n";
+  complete "call (functions)"
+    (prelude ^ "  (func (result i32) (call )))\n")
+    "(call ";
+  complete "global.get (globals)"
+    (prelude ^ "  (func (result i32) (global.get )))\n")
+    "(global.get ";
+  complete "local.get (locals + params)"
+    (prelude ^ "  (func (param $p i32) (local $x i32) (local.get )))\n")
+    "(local.get ";
+  complete "struct.new (types)"
+    (prelude ^ "  (func (result (ref $t)) (struct.new )))\n")
+    "(struct.new ";
+  complete "br (labels)"
+    (prelude ^ "  (func (block $lbl (loop $inner (br )))))\n")
+    "(br ";
+  complete "partial prefix $h (functions)"
+    (prelude ^ "  (func (result i32) (call $h)))\n")
+    "(call $h";
+  complete "not an index position"
+    (prelude ^ "  (func (result i32) (i32.const 0)))\n")
+    "(i32.const 0";
   print_newline ()

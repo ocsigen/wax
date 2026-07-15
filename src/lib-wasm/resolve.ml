@@ -40,8 +40,26 @@ type space = {
   s_by_index : (int, acc) Hashtbl.t;
 }
 
-let f ((_, fields) : location Text.module_) : binding list =
+type expected = {
+  e_loc : location;
+  e_candidates : unit -> (string * kind * string option) list;
+}
+
+let f ?expected ((_, fields) : location Text.module_) : binding list =
   let all = ref [] in
+  (* Record an index use-site for completion: its span and a thunk producing the
+     named definitions in scope for the space it expects. The thunk is forced
+     after resolution completes, so every space is fully built. *)
+  let record loc candidates =
+    match expected with
+    | None -> ()
+    | Some r -> r := { e_loc = loc; e_candidates = candidates } :: !r
+  in
+  let space_candidates sp () =
+    Hashtbl.fold
+      (fun name (b : acc) l -> (name, b.a_kind, b.a_hover) :: l)
+      sp.s_by_name []
+  in
   let add_binding kind defs hover =
     let b = { a_defs = defs; a_uses = []; a_kind = kind; a_hover = hover } in
     all := b :: !all;
@@ -81,8 +99,11 @@ let f ((_, fields) : location Text.module_) : binding list =
     sp.s_next <- sp.s_next + 1;
     b
   in
-  (* Record a use of index [idx] in space [sp], if it resolves. *)
+  (* Record a use of index [idx] in space [sp], if it resolves. The use-site is
+     noted for completion regardless of whether it resolves — an unresolved
+     [$prefix] the user is still typing wants the same space's names. *)
   let use sp (idx : Text.idx) =
+    record idx.info (space_candidates sp);
     let target =
       match idx.desc with
       | Text.Num n -> Hashtbl.find_opt sp.s_by_index (Uint32.to_int n)
@@ -143,6 +164,11 @@ let f ((_, fields) : location Text.module_) : binding list =
      enclosing frames, innermost first, each carrying the label's [$id] name (for
      symbolic resolution) and its binding (for recording uses). *)
   let use_label labels (idx : Text.idx) =
+    record idx.info (fun () ->
+        List.filter_map
+          (fun (nm, (b : acc)) ->
+            Option.map (fun n -> (n, b.a_kind, b.a_hover)) nm)
+          labels);
     let target =
       match idx.desc with
       | Text.Num n -> List.nth_opt labels (Uint32.to_int n)

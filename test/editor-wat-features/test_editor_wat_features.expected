@@ -112,3 +112,12 @@
   (4,17) := $g
   (5,27) := $g
 
+=== completion (index kind from context) ===
+  call (functions) -> [$helper:function]
+  global.get (globals) -> [$g:variable]
+  local.get (locals + params) -> [$x:variable $p:parameter]
+  struct.new (types) -> [$t:type]
+  br (labels) -> [$inner:text $lbl:text]
+  partial prefix $h (functions) -> [$helper:function]
+  not an index position -> []
+

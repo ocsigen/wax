@@ -530,14 +530,16 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
           Some (`DocumentSymbol (List.map (document_symbol src) syms)))
   | Lsp.Client_request.TextDocumentCompletion { textDocument; position; _ } ->
       let uri = textDocument.uri in
-      if is_wat uri then None
-      else
-        with_doc uri (fun src ->
-            let items =
-              Wax_editor.completion_string ~encoding:!encoding src position.line
-                position.character !defines
-            in
-            Some (`List (List.map completion_item items)))
+      let completion =
+        if is_wat uri then Wat_editor.completion_string
+        else Wax_editor.completion_string
+      in
+      with_doc uri (fun src ->
+          let items =
+            completion ~encoding:!encoding src position.line position.character
+              !defines
+          in
+          Some (`List (List.map completion_item items)))
   | Lsp.Client_request.SignatureHelp { textDocument; position; _ } -> (
       let empty = SignatureHelp.create ~signatures:[] () in
       let uri = textDocument.uri in
