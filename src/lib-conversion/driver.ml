@@ -35,7 +35,8 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
   let ast =
     if Wax_wasm.Cond_specialize.is_empty defines then ast
     else
-      Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+      Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+        ~source:(Some text) (fun d ->
           fst (Wax_wasm.Cond_specialize.module_ d defines ast))
   in
   let ast =
@@ -43,8 +44,8 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
     else ast
   in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_wasm.Validation.f d ast);
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:(Some text) (fun d -> Wax_wasm.Validation.f d ast);
   Wax_wasm.Text_to_binary.module_ ast
 
 let wax_to_binary ?(color = Wax_utils.Colors.Never)
@@ -66,7 +67,8 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
         To_wasm.module_ d types ast)
   in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:(Some text) (fun d ->
         (* Unused locals are reported against the Wax source by [Typing.f]
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);

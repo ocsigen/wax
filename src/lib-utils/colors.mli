@@ -70,9 +70,14 @@ val escape_sequence : theme -> style -> string
 (** [escape_sequence theme style] returns the ANSI escape code for the given
     [style] from the provided [theme]. *)
 
-val default_theme : theme
-(** The canonical colored theme used for AST fragments (identifiers, types)
-    embedded in diagnostic messages. *)
+val wax_theme : theme
+(** The Wax source palette: used by {!Wax_lang.Output} to render Wax source, and
+    by diagnostics to colour a Wax AST fragment embedded in a message. *)
+
+val wat_theme : theme
+(** The WebAssembly-text source palette: used by {!Wax_wasm.Output} to render
+    WAT source, and by diagnostics to colour a WAT AST fragment embedded in a
+    message (e.g. types in red rather than the Wax cyan). *)
 
 val no_color : theme
 (** A theme that produces no color output, used when coloring is disabled. *)

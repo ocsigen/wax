@@ -15,6 +15,7 @@ type label = { location : Ast.location; message : Message.t }
 
 val run :
   color:Colors.flag ->
+  ?palette:Colors.theme ->
   source:string option ->
   ?related:label list ->
   ?exit:bool ->
@@ -22,15 +23,19 @@ val run :
   ?policy:Warning.policy ->
   (context -> 'a) ->
   'a
-(** [run ~color ~source ?related ?exit ?output ?policy f] runs the diagnostic
-    context [f], a {e rendering} context that prints its diagnostics. [color] is
-    mandatory: a rendering context must decide up front whether to emit ANSI
-    colour, so a caller cannot silently fall back to the [Auto] default (which
-    sniffs stderr) — contrast {!collector}, which renders nothing and takes no
-    [color]. [source] is the source code for the diagnostics (if available).
-    [policy] sets the level — hidden, displayed, or promoted to an error — of
-    each {e named} warning reported with [report]'s [warning] argument; it
-    defaults to the policy installed by {!set_policy}. *)
+(** [run ~color ?palette ~source ?related ?exit ?output ?policy f] runs the
+    diagnostic context [f], a {e rendering} context that prints its diagnostics.
+    [color] is mandatory: a rendering context must decide up front whether to
+    emit ANSI colour, so a caller cannot silently fall back to the [Auto]
+    default (which sniffs stderr) — contrast {!collector}, which renders nothing
+    and takes no [color]. [palette] (default {!Colors.wax_theme}) is the source
+    palette used to colour AST fragments embedded in messages; pass
+    {!Colors.wat_theme} for a checker whose diagnostics embed WebAssembly-text
+    types (e.g. {!Wax_wasm.Validation}), so they match WAT source colouring.
+    [source] is the source code for the diagnostics (if available). [policy]
+    sets the level — hidden, displayed, or promoted to an error — of each
+    {e named} warning reported with [report]'s [warning] argument; it defaults
+    to the policy installed by {!set_policy}. *)
 
 val source : context -> string option
 (** [source context] is the source code the context was created with (via
@@ -138,5 +143,7 @@ val output_error_with_source :
 (** [output_error_with_source ?output ~theme ~source ~location ~severity ?hint
      ?related message] prints an error message with a source code snippet. *)
 
-val get_theme : ?color:Colors.flag -> unit -> theme
-(** [get_theme ?color ()] returns the diagnostic theme. *)
+val get_theme : ?color:Colors.flag -> ?palette:Colors.theme -> unit -> theme
+(** [get_theme ?color ?palette ()] returns the diagnostic theme. [palette]
+    (default {!Colors.wax_theme}) is the source palette for AST fragments
+    embedded in message bodies. *)

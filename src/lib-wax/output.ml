@@ -15,23 +15,7 @@ let width = 100
 
 (*** Printer primitives ***)
 
-let get_theme use_color =
-  if use_color then
-    {
-      keyword = Ansi.bold ^ Ansi.magenta;
-      operator = Ansi.bold ^ Ansi.white;
-      annotation = Ansi.blue;
-      attribute = Ansi.magenta;
-      type_ = Ansi.cyan;
-      identifier = Ansi.yellow;
-      constant = Ansi.bold ^ Ansi.blue;
-      string = Ansi.green;
-      comment = Ansi.grey;
-      punctuation = Ansi.white;
-      instruction = "";
-      reset = Ansi.reset;
-    }
-  else no_color
+let get_theme use_color = if use_color then wax_theme else no_color
 
 type 'info ctx = {
   base : Wax_utils.Styled_printer.t;

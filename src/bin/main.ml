@@ -56,7 +56,8 @@ let specialize_wat ?ctx ~color ~text defines ast =
   if Wax_wasm.Cond_specialize.is_empty defines then ast
   else
     let ast, dropped =
-      Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+      Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+        ~source:(Some text) (fun d ->
           Wax_wasm.Cond_specialize.module_ d defines ast)
     in
     Option.iter (fun ctx -> Wax_utils.Trivia.drop_in_ranges ctx dropped) ctx;
@@ -184,8 +185,8 @@ let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   in
   let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_wasm.Validation.f ~warn_unused d ast);
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
   let ast =
     if desugar then desugar_wat ~color ~source:(Some text) ast else ast
   in
@@ -203,8 +204,8 @@ let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
   in
   let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_wasm.Validation.f ~warn_unused d ast);
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wax_conversion.From_wasm.module_ d ast)
@@ -249,7 +250,8 @@ let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
         Wax_conversion.To_wasm.module_ d types ast)
   in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:(Some text) (fun d ->
         (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
@@ -309,7 +311,8 @@ let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
         Wax_conversion.To_wasm.module_ d types ast)
   in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:(Some text) (fun d ->
         (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast_text);
@@ -332,8 +335,8 @@ let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
      emitted binary passes strict reference validation. *)
   let ast = Wax_wasm.Declare_refs.module_ ast in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_wasm.Validation.f ~warn_unused d ast);
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
   with_open_out output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file
@@ -361,8 +364,8 @@ let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wax_wasm.Validation.f ~warn_unused d text_ast);
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
   let text_ast = fold_module ~fold_mode ~color ~source:None text_ast in
   let trivia = Hashtbl.create 0 in
   output_wat ~output_file ~color:output_color ~trivia text_ast
@@ -373,8 +376,8 @@ let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wax_wasm.Validation.f ~warn_unused d text_ast);
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
         Wax_conversion.From_wasm.module_ d text_ast)
@@ -725,8 +728,16 @@ let check format_opt strict color warnings features debug error_format defines
         match Wax_utils.Diagnostic.collected d with
         | [] -> true
         | entries ->
+            (* The collected diagnostics embed types of the checked language, so
+               re-report them with that language's palette. *)
+            let palette =
+              match fmt with
+              | Wasm | Wat -> Wax_utils.Colors.wat_theme
+              | Wax -> Wax_utils.Colors.wax_theme
+            in
             ignore
-              (Wax_utils.Diagnostic.run ~color ~source ~exit:false (fun d ->
+              (Wax_utils.Diagnostic.run ~color ~palette ~source ~exit:false
+                 (fun d ->
                    List.iter
                      (fun e ->
                        Wax_utils.Diagnostic.report d

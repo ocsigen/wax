@@ -76,11 +76,13 @@ let escape_sequence theme style =
   | Comment -> theme.comment
   | Punctuation -> theme.punctuation
 
-(* The canonical coloured theme for message bodies (identifiers, types, …) in
-   diagnostics. The per-language source printers ([Wax_lang.Output],
-   [Wax_wasm.Output]) keep their own themes for rendering whole modules; this is
-   the one used when an AST fragment is embedded in a diagnostic message. *)
-let default_theme =
+(* The two source palettes, one per surface language. Each is the single source
+   of truth: the language's source printer ([Wax_lang.Output] / [Wax_wasm.Output])
+   uses it to render whole modules, and diagnostics use it to colour an AST
+   fragment (a type, an identifier) embedded in a message, so a diagnostic about
+   Wax code and one about WebAssembly code colour their types the same way that
+   language's source does (e.g. Wax types cyan, WAT types red). *)
+let wax_theme =
   {
     keyword = Ansi.bold ^ Ansi.magenta;
     operator = Ansi.bold ^ Ansi.white;
@@ -93,6 +95,22 @@ let default_theme =
     comment = Ansi.grey;
     punctuation = Ansi.white;
     instruction = "";
+    reset = Ansi.reset;
+  }
+
+let wat_theme =
+  {
+    keyword = Ansi.bold ^ Ansi.magenta;
+    instruction = Ansi.white;
+    attribute = Ansi.magenta;
+    type_ = Ansi.red;
+    identifier = Ansi.yellow;
+    constant = Ansi.bold ^ Ansi.blue;
+    string = Ansi.green;
+    annotation = Ansi.blue;
+    comment = Ansi.grey;
+    punctuation = Ansi.cyan;
+    operator = "";
     reset = Ansi.reset;
   }
 

@@ -8,23 +8,7 @@ open Ast.Text
 
 (*** Printer primitives and sexp model ***)
 
-let get_theme use_color =
-  if use_color then
-    {
-      keyword = Ansi.bold ^ Ansi.magenta;
-      instruction = Ansi.white;
-      attribute = Ansi.magenta;
-      type_ = Ansi.red;
-      identifier = Ansi.yellow;
-      constant = Ansi.bold ^ Ansi.blue;
-      string = Ansi.green;
-      annotation = Ansi.blue;
-      comment = Ansi.grey;
-      punctuation = Ansi.cyan;
-      operator = "";
-      reset = Ansi.reset;
-    }
-  else no_color
+let get_theme use_color = if use_color then wat_theme else no_color
 
 type format = Compact | Expansive | Hybrid | Adaptive
 type ctx = { base : Styled.t; format : format; indent_level : int }

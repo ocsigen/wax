@@ -12,9 +12,9 @@ type theme = {
          lockstep with the header colours above, both from the one [color] flag. *)
 }
 
-let get_theme ?(color = Colors.Auto) () =
+let get_theme ?(color = Colors.Auto) ?(palette = Colors.wax_theme) () =
   let use_color = Colors.should_use_color ~color ~out_channel:(Some stderr) in
-  let body = if use_color then Colors.default_theme else Colors.no_color in
+  let body = if use_color then palette else Colors.no_color in
   let open Colors in
   if use_color then
     {
@@ -580,10 +580,10 @@ exception Aborted
 
 let abort () = raise Aborted
 
-let run ~color ~source ?related ?(exit = true) ?output ?policy f =
+let run ~color ?palette ~source ?related ?(exit = true) ?output ?policy f =
   let render =
     {
-      theme = get_theme ~color ();
+      theme = get_theme ~color ?palette ();
       output = Option.value output ~default:Format.err_formatter;
       exit_on_error = exit;
     }
