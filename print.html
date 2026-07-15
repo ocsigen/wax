@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
+            window.path_to_searchindex_js = "searchindex-828c4755.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-41a4b7e9.js"></script>
+        <script src="toc-7b4055a9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -217,7 +217,7 @@ dune build
 opam install .
 </code></pre>
 <h2 id="editor-support"><a class="header" href="#editor-support">Editor support</a></h2>
-<p>A <a href="https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax">Wax extension for Visual Studio Code</a> supports both <code>.wax</code> and WebAssembly text (<code>.wat</code>) files: syntax highlighting, formatting (with format on save), diagnostics as you type, a document outline, snippets, and commands to preview the compiled WAT or decompiled Wax side by side. It runs the toolchain compiled to WebAssembly in-process, so it works the same in desktop and web VS Code (including <a href="https://vscode.dev">vscode.dev</a>).</p>
+<p>Wax works in Visual Studio Code through a dedicated <a href="https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax">extension</a>, and in any editor with a Language Server Protocol client (Neovim, Emacs, Helix, and others) through the built-in <a href="#language-server"><code>wax lsp</code></a> server paired with the <code>tree-sitter-wax</code> grammar. Both give the same features: diagnostics, hover, go to definition, find references, rename, completion, signature help, formatting, and more. See <a href="#editor-support-1">Editor Support</a> for the details and per-editor setup.</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Create a file <code>hello.wax</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>
@@ -307,7 +307,7 @@ relaxed SIMD).</p>
 <tr><td>Branch hinting</td><td><code>#[likely]</code> / <code>#[unlikely]</code></td></tr>
 <tr><td>Custom page sizes</td><td><code>pagesize</code></td></tr>
 <tr><td><a href="https://github.com/WebAssembly/extended-name-section">Extended name section</a></td><td><code>$</code>-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip</td></tr>
-<tr><td><a href="https://github.com/WebAssembly/wat-numeric-values">WAT numeric values</a></td><td>typed numeric runs in <a href="#data-segments">data segments</a> (<code>data d = [i16: -1, 2], [f32: 0.5, nan], [v128: i32x4(1,2,3,4)];</code>); runs survive the wax↔wat round-trip</td></tr>
+<tr><td><a href="https://github.com/WebAssembly/wat-numeric-values">WAT numeric values</a></td><td>typed numeric runs in <a href="#data-segments">data segments</a> (<code>data d = [i16: -1, 2] ++ [f32: 0.5, nan] ++ [v128: i32x4(1,2,3,4)];</code>); runs survive the wax↔wat round-trip</td></tr>
 </tbody>
 </table>
 </div>
@@ -850,10 +850,10 @@ jumps to its <em>start</em> (an iteration, see <a href="#loops">Loops</a>).</p>
 <p>Branch instructions:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">br</span> <span class="hljs-symbol">'label</span>;                          <span class="hljs-comment">// unconditional branch</span>
 <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'label</span> cond;                  <span class="hljs-comment">// branch if cond (an i32) is non-zero</span>
-<span class="hljs-keyword">br_table</span> [<span class="hljs-symbol">'a</span> <span class="hljs-symbol">'b</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'default</span>] i;   <span class="hljs-comment">// branch to the i-th label, else 'default</span></span></pre>
+<span class="hljs-keyword">br_table</span> [<span class="hljs-symbol">'a</span>, <span class="hljs-symbol">'b</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'default</span>] i;   <span class="hljs-comment">// branch to the i-th label, else 'default</span></span></pre>
 
-<p>The labels in a <code>br_table</code> are separated by spaces, and <code>else</code> gives the
-fallback for an out-of-range index. A branch also carries any values its target
+<p>The labels in a <code>br_table</code> are separated by commas, and the mandatory final
+<code>else</code> gives the fallback for an out-of-range index. A branch also carries any values its target
 expects: a <code>do i32</code> target receives an <code>i32</code>, and so on.</p>
 <p>Four more branch instructions test a reference and branch on the result, passing
 the refined reference to the target. They appear mainly in Wax decompiled from
@@ -891,7 +891,7 @@ the WebAssembly encoding.</p>
 table. A bracket maps an index to a case label (with an <code>else</code> default for an
 out-of-range index), and each arm gives that case’s body:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">classify</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">dispatch</span> x [<span class="hljs-symbol">'zero</span> <span class="hljs-symbol">'one</span> <span class="hljs-symbol">'two</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'big</span>] {
+    <span class="hljs-keyword">dispatch</span> x [<span class="hljs-symbol">'zero</span>, <span class="hljs-symbol">'one</span>, <span class="hljs-symbol">'two</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'big</span>] {
         <span class="hljs-symbol">'big</span>:  { <span class="hljs-keyword">return</span> <span class="hljs-number">99</span>; }
         <span class="hljs-symbol">'two</span>:  { <span class="hljs-keyword">return</span> <span class="hljs-number">30</span>; }
         <span class="hljs-symbol">'one</span>:  { <span class="hljs-keyword">return</span> <span class="hljs-number">20</span>; }
@@ -914,7 +914,7 @@ last arm is the one index <code>0</code> reaches. The example above gives each c
 own result via <code>return</code>; to break out instead, branch to an enclosing label:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> r: <span class="hljs-type">i32</span>;
 <span class="hljs-symbol">'done</span>: <span class="hljs-keyword">do</span> {
-    <span class="hljs-keyword">dispatch</span> x [<span class="hljs-symbol">'zero</span> <span class="hljs-symbol">'one</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'two</span>] {
+    <span class="hljs-keyword">dispatch</span> x [<span class="hljs-symbol">'zero</span>, <span class="hljs-symbol">'one</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'two</span>] {
         <span class="hljs-symbol">'two</span>:  { r = <span class="hljs-number">30</span>; }
         <span class="hljs-symbol">'one</span>:  { r = <span class="hljs-number">20</span>; <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>; }
         <span class="hljs-symbol">'zero</span>: { r = <span class="hljs-number">10</span>; <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>; }
@@ -1021,7 +1021,7 @@ module may have at most one:</p>
 
 <p>Like <code>#[export]</code>, <code>#[start]</code> can carry an <code>if &lt;condition&gt;</code> guard, so a function
 is the start only in some configurations (at most one start per configuration):</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[start, if debug]</span>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[start, if(debug)]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">init</span>() {
     <span class="hljs-comment">// only run under `-D debug=true`</span>
 }</span></pre>
@@ -1080,7 +1080,7 @@ with its type. It is imported under its own Wax name unless a name-only
 reachability. This is how a definition can be exported under an extra name only
 in some configurations:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export]</span>
-<span class="hljs-meta">#[export = </span><span class="hljs-string">"add_alias"</span><span class="hljs-meta">, if not(bootstrap)]</span>
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"add_alias"</span><span class="hljs-meta">, if(not(bootstrap))]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">add</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> { x + y; }</span></pre>
 
 <p>Here <code>add</code> is always exported under its own name, and also as <code>add_alias</code>
@@ -1373,6 +1373,19 @@ shuffle indices) come first in the argument list.</p>
 <p>Constants are <code>v128::</code> free functions, one argument per lane:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">const</span> ones: <span class="hljs-type">v128</span> = <span class="hljs-type">v128</span>::<span class="hljs-title">i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);</span></pre>
 
+<p>Memory accesses are methods on a <a href="#memories">memory</a>, named like the scalar
+accesses with the access shape in the name (a widening load keeps its
+<code>_s</code>/<code>_u</code> suffix, as the value ops do); the full-width pair takes the family
+letter, <code>loadv128</code>/<code>storev128</code> (like <code>loadf32</code>/<code>storef32</code>):</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> buf: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
+
+<span class="hljs-keyword">fn</span> <span class="hljs-title">sum2</span>(p: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">v128</span> {
+    <span class="hljs-keyword">let</span> v = buf.<span class="hljs-title">loadv128</span>(p);                <span class="hljs-comment">// v128.load</span>
+    <span class="hljs-keyword">let</span> w = buf.<span class="hljs-title">load32x2_s</span>(p, offset: <span class="hljs-number">16</span>);  <span class="hljs-comment">// v128.load32x2_s</span>
+    buf.<span class="hljs-title">storev128</span>(p, v);                    <span class="hljs-comment">// v128.store</span>
+    v.<span class="hljs-title">add_i64x2</span>(w);
+}</span></pre>
+
 <p>See <a href="#simd-vector-instructions">Instructions › SIMD</a> for the full
 mnemonic mapping (<code>extract_lane</code>/<code>replace_lane</code>/<code>shuffle</code>, comparisons, shifts,
 and the whole-vector <code>*_v128</code> operations).</p>
@@ -1393,19 +1406,33 @@ accesses across threads. A shared memory must specify a maximum size:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> pool: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>, <span class="hljs-number">16</span>] <span class="hljs-keyword">shared</span>;</span></pre>
 
 <h3 id="atomics"><a class="header" href="#atomics">Atomics</a></h3>
-<p>Atomic memory operations are methods on a memory, named after the WebAssembly
-mnemonic with <code>.</code> rewritten as <code>_</code> (the value type is part of the name):</p>
-<pre class="wax-highlight"><span class="hljs wax-code">mem.<span class="hljs-title">i32_atomic_load</span>(p)              <span class="hljs-comment">// atomic load</span>
-mem.<span class="hljs-title">i32_atomic_store</span>(p, v);         <span class="hljs-comment">// atomic store</span>
-mem.<span class="hljs-title">i32_atomic_rmw_add</span>(p, v)        <span class="hljs-comment">// read-modify-write, returns the old value</span>
-mem.<span class="hljs-title">i64_atomic_rmw16_add_u</span>(p, v)    <span class="hljs-comment">// narrow (16-bit) RMW on an i64</span>
-mem.<span class="hljs-title">i32_atomic_rmw_cmpxchg</span>(p, expected, replacement)
-mem.<span class="hljs-title">atomic_notify</span>(p, count)         <span class="hljs-comment">// wake waiters</span>
-mem.<span class="hljs-title">atomic_wait32</span>(p, expected, timeout)</span></pre>
+<p>Atomic memory operations are methods on a memory, following the same naming
+convention as the plain <a href="#load-and-store">loads and stores</a>: the access width
+is in the method name, the <code>i32</code>/<code>i64</code> value type comes from the operand and
+result types, and a narrow load returns raw bits, resolved by an <code>as iN_u</code>
+cast:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>, <span class="hljs-number">2</span>] <span class="hljs-keyword">shared</span>;
 
-<p>An atomic access must use its natural alignment. <code>atomic.fence</code>, which has no
-memory operand, is written as the <a href="#qualified-intrinsics"><code>atomic::fence()</code></a>
-intrinsic.</p>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">atomics</span>(p: <span class="hljs-type">i32</span>, v: <span class="hljs-type">i32</span>, w: <span class="hljs-type">i64</span>) -&gt; <span class="hljs-type">i32</span> {
+    _ = mem.<span class="hljs-title">atomic_load32</span>(p);              <span class="hljs-comment">// i32.atomic.load</span>
+    _ = mem.<span class="hljs-title">atomic_load8</span>(p) <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;      <span class="hljs-comment">// i32.atomic.load8_u (zero-extend)</span>
+    _ = mem.<span class="hljs-title">atomic_load32</span>(p) <span class="hljs-keyword">as</span> <span class="hljs-type">i64_u</span>;     <span class="hljs-comment">// i64.atomic.load32_u</span>
+    mem.<span class="hljs-title">atomic_store16</span>(p, v);              <span class="hljs-comment">// i32.atomic.store16 (v is i32)</span>
+    mem.<span class="hljs-title">atomic_store16</span>(p, w);              <span class="hljs-comment">// i64.atomic.store16 (w is i64)</span>
+    _ = mem.<span class="hljs-title">atomic_rmw_add32</span>(p, v);        <span class="hljs-comment">// read-modify-write: the old value</span>
+    _ = mem.<span class="hljs-title">atomic_rmw_add16</span>(p, w);        <span class="hljs-comment">// i64.atomic.rmw16.add_u</span>
+    _ = mem.<span class="hljs-title">atomic_rmw_cmpxchg32</span>(p, v, v); <span class="hljs-comment">// compare-and-exchange</span>
+    _ = mem.<span class="hljs-title">atomic_wait32</span>(p, v, w);        <span class="hljs-comment">// wait: expected value and timeout</span>
+    mem.<span class="hljs-title">atomic_notify</span>(p, <span class="hljs-number">1</span>);               <span class="hljs-comment">// wake waiters: how many woke</span>
+}</span></pre>
+
+<p>A narrow atomic load zero-extends: there is no sign-extending form, so
+<code>as iN_s</code> is rejected on it (use <code>as iN_u</code>, then <code>.extend8_s()</code>/<code>.extend16_s()</code>
+if you need the sign; <code>atomic_load32(p) as i64_s</code> compiles as the plain
+<code>i32.atomic.load</code> followed by <code>i64.extend_i32_s</code>). An atomic access must use
+its natural alignment, the access width from the name. <code>atomic.fence</code>, which
+has no memory operand, is written as the
+<a href="#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
 <h3 id="data-segments"><a class="header" href="#data-segments">Data Segments</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem1: <span class="hljs-type">i64</span> {
     <span class="hljs-keyword">data</span> _ @ [<span class="hljs-number">0x1000</span>] = <span class="hljs-string">"hello world"</span>;   <span class="hljs-comment">// active, anonymous</span>
@@ -1415,10 +1442,11 @@ intrinsic.</p>
 <span class="hljs-keyword">data</span> seg = <span class="hljs-string">"raw</span><span class="hljs-deletion">\x</span><span class="hljs-string">00bytes"</span>;               <span class="hljs-comment">// top-level passive segment</span>
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;          <span class="hljs-comment">// top-level active segment</span></span></pre>
 
-<p>A segment’s contents may mix string literals with <strong>numeric runs</strong> — a bracketed
-list <code>[type: values]</code> whose element type is stated once and whose values are
-packed little-endian — instead of hand-escaping every byte:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> <span class="hljs-keyword">table</span> = <span class="hljs-string">"hdr"</span>, [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>], [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>], [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
+<p>A segment’s contents may concatenate (with <code>++</code>) string literals and <strong>numeric
+runs</strong> — a bracketed list <code>[type: values]</code> whose element type is stated once
+and whose values are packed little-endian — instead of hand-escaping every
+byte:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> <span class="hljs-keyword">table</span> = <span class="hljs-string">"hdr"</span> ++ [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>] ++ [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>] ++ [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
 
 <p>The scalar element types are <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, and <code>f64</code>; values
 (including <code>nan</code>/<code>inf</code>) are ordinary literals. A <code>v128</code> run holds lane groups
@@ -1434,9 +1462,10 @@ mem0.<span class="hljs-title">load32</span>(p) <span class="hljs-keyword">as</sp
 
 mem0.<span class="hljs-title">store32</span>(p, v);         <span class="hljs-comment">// store (width by method, type by value)</span>
 mem0.<span class="hljs-title">store16</span>(p, v);
-mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);  <span class="hljs-comment">// align=1, offset=16</span></span></pre>
+mem0.<span class="hljs-title">store32</span>(p, v, offset: <span class="hljs-number">16</span>, align: <span class="hljs-number">1</span>);</span></pre>
 
-<p>The two optional trailing arguments are the access <code>align</code> and <code>offset</code> (constant integers).</p>
+<p>The optional <code>offset</code> and <code>align</code> of the access are labelled arguments
+(constant integers), written after the operands in either order.</p>
 <p>A <code>load8</code> or <code>load16</code> returns raw bits, so it needs an explicit <code>as i32_s</code>/<code>as i32_u</code>
 (or <code>as i64_s</code>/<code>as i64_u</code>) cast to extend to the value type, as the lines above
 show; <code>load32</code>/<code>load64</code> and the stores need none.</p>
@@ -1477,34 +1506,69 @@ continuation hands this value back to the <code>suspend</code> expression.</p>
 
 <h3 id="throw"><a class="header" href="#throw">Throw</a></h3>
 <p><code>throw</code> raises a tag together with its payload:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">throw</span> overflow <span class="hljs-number">42</span>;</span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">throw</span> <span class="hljs-title">overflow</span>(<span class="hljs-number">42</span>);</span></pre>
 
 <h3 id="try--catch"><a class="header" href="#try--catch">Try / Catch</a></h3>
-<p>A <code>try</code> runs its body and routes a matching thrown tag to a handler. Like a
-block it may carry a result type (<code>try i32 { … }</code>) that the body and every
-handler produce. A caught tag’s payload is left on the operand stack for the
-handler to pick up with a <a href="#holes">hole</a> <code>_</code>:</p>
+<p>A <code>try</code> runs its body and routes a matching thrown tag to a catch arm,
+compiling to WebAssembly’s standard <code>try_table</code> plus a block ladder. Like a
+block it may carry a result type (<code>try i32 { … }</code>). An arm enters with the
+caught tag’s payload on the operand stack, picked up with <a href="#holes">holes</a> <code>_</code>;
+a <code>tag &amp; =&gt; { … }</code> arm also delivers the exception reference (<code>&amp;exn</code>) above
+the payload, and a bare <code>_ =&gt; { … }</code> (or <code>_ &amp; =&gt; { … }</code>) matches any
+exception, grammar-enforced last. Leave the catch-all out to let unmatched
+exceptions propagate.</p>
+<p>Like <code>dispatch</code> and <code>match</code>, the arms are honest trailing code in clause
+order:</p>
+<ul>
+<li>the body’s normal completion <strong>escapes past all arms</strong>, supplying the try’s
+value (one implicit branch);</li>
+<li>an arm’s completion <strong>falls into the next arm</strong> — its completion stack must
+match that arm’s entry (payload, plus <code>&amp;exn</code> for a <code>&amp;</code> arm) — and the last
+arm’s completion supplies the try’s value;</li>
+<li>diverging arms (<code>throw</code>, <code>return</code>, <code>become</code>, a <code>br</code> out) are exempt, as
+usual.</li>
+</ul>
+<p>An early arm that produces the result escapes explicitly through a label on
+the try: the label is the join, so branching to it exits the try carrying the
+value, block-like. (In expression position no label can prefix the try, so
+such an arm must diverge, or the code restructures.)</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">lookup</span>(k: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">try</span> <span class="hljs-type">i32</span> {
-        <span class="hljs-title">find</span>(k);             <span class="hljs-comment">// may throw `overflow`</span>
+    <span class="hljs-symbol">'t</span>: <span class="hljs-keyword">try</span> <span class="hljs-type">i32</span> {
+        <span class="hljs-title">find</span>(k);                     <span class="hljs-comment">// may throw `overflow` or `timeout`</span>
     } <span class="hljs-keyword">catch</span> {
-        overflow =&gt; { _; }   <span class="hljs-comment">// `_` is the thrown i32 payload</span>
-        _ =&gt; { <span class="hljs-number">0</span>; }          <span class="hljs-comment">// catch-all</span>
+        overflow =&gt; { <span class="hljs-keyword">br</span> <span class="hljs-symbol">'t</span> _; }     <span class="hljs-comment">// `_` is the thrown i32 payload</span>
+        timeout &amp; =&gt; { _ = _; <span class="hljs-keyword">br</span> <span class="hljs-symbol">'t</span> (<span class="hljs-number">0</span> - <span class="hljs-number">1</span>); }  <span class="hljs-comment">// drop the &amp;exn, escape</span>
+        _ =&gt; { <span class="hljs-number">0</span>; }                  <span class="hljs-comment">// catch-all supplies the value</span>
     }
 }</span></pre>
 
-<p>Each <code>tag =&gt; { … }</code> handler matches one tag; a bare <code>_ =&gt; { … }</code> matches any
-exception. Leave the catch-all out to let unmatched exceptions propagate.</p>
+<p>The fall-through makes the <em>normalize, then handle</em> idiom direct — the first
+arm’s completion <strong>is</strong> the next arm’s payload, with no re-throw:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> res: &amp;<span class="hljs-type">eq</span> = <span class="hljs-keyword">try</span> &amp;<span class="hljs-type">eq</span> {
+    <span class="hljs-title">apply</span>(f);
+} <span class="hljs-keyword">catch</span> {
+    javascript_exception =&gt; { <span class="hljs-title">wrap_exception</span>(_); }  <span class="hljs-comment">// normalize; falls through</span>
+    ocaml_exception =&gt; { _; }                       <span class="hljs-comment">// handle either</span>
+};</span></pre>
+
 <h3 id="branching-handlers-try_table"><a class="header" href="#branching-handlers-try_table">Branching handlers (try_table)</a></h3>
-<p>A lower-level form branches to a label instead of running an inline handler,
-mapping directly to WebAssembly’s <code>try_table</code>:</p>
+<p>The low-level spelling branches to a label instead of running an inline arm,
+mapping one-to-one to a raw <code>try_table</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">try</span> { <span class="hljs-title">might_throw</span>(); } <span class="hljs-keyword">catch</span> [overflow -&gt; <span class="hljs-symbol">'h</span>]    <span class="hljs-comment">// on `overflow`, branch to 'h</span>
 <span class="hljs-keyword">try</span> { <span class="hljs-title">might_throw</span>(); } <span class="hljs-keyword">catch</span> [overflow &amp; -&gt; <span class="hljs-symbol">'h</span>]  <span class="hljs-comment">// also deliver the exnref</span>
 <span class="hljs-keyword">try</span> { <span class="hljs-title">might_throw</span>(); } <span class="hljs-keyword">catch</span> [_ -&gt; <span class="hljs-symbol">'h</span>]           <span class="hljs-comment">// catch any exception</span></span></pre>
 
 <p>The target label receives the payload (and, with <code>&amp;</code>, the exception reference,
 of type <code>&amp;exn</code>, or <code>&amp;?exn</code> for the nullable form), so the labelled block’s type
-must match what it is handed.</p>
+must match what it is handed. Braced arms are the same clauses with the
+target blocks written inline.</p>
+<h3 id="legacy-exceptions-try_legacy"><a class="header" href="#legacy-exceptions-try_legacy">Legacy exceptions (try_legacy)</a></h3>
+<p><code>try_legacy</code> compiles to the deprecated <code>try</code>/<code>catch</code> instructions, kept for
+targets that still use the legacy exception proposal. Its arms have the old
+semantics — each arm independently produces the try’s result (no fall-through,
+no <code>&amp;</code> forms):</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">try_legacy</span> <span class="hljs-type">i32</span> { <span class="hljs-title">find</span>(k); } <span class="hljs-keyword">catch</span> { overflow =&gt; { _; } _ =&gt; { <span class="hljs-number">0</span>; } }</span></pre>
+
 <h2 id="stack-switching"><a class="header" href="#stack-switching">Stack Switching</a></h2>
 <p><em>Stack switching</em> (the WebAssembly typed-continuations proposal) lets a
 computation suspend itself, yield control to a scheduler, and later be resumed.
@@ -1520,23 +1584,46 @@ passes the tag’s payload out and evaluates to its result once resumed.</p>
     <span class="hljs-keyword">suspend</span> <span class="hljs-title">yield</span>(x);          <span class="hljs-comment">// yield `x`; the result is what resumes it</span>
 }</span></pre>
 
-<p>Continuations are created and driven with <code>cont_new</code>, <code>cont_bind</code>, <code>resume</code>,
-<code>resume_throw</code>, and <code>resume_throw_ref</code>. <code>cont</code> wraps a <em>named</em> function type, so
-each continuation shape is a <code>type</code>. <code>resume</code> takes a list of handlers mapping a
-suspended tag to a label (empty here):</p>
+<p>A continuation is created with the <code>T::new</code> constructor of its declared type
+(the <code>T::</code> namespace constructs a <code>&amp;T</code>, extending the <code>v128::</code>/<code>i64::</code>
+qualified-intrinsic pattern), and driven with the <code>resume</code>, <code>resume_throw</code> and
+<code>resume_throw_ref</code> methods on the continuation reference. <code>T::bind</code> binds
+leading arguments away, yielding a <code>&amp;T</code>; its source type, like the type
+immediate of the resume methods, is inferred from the continuation operand’s
+static type — the call_ref model, so the receiver must have a <em>declared</em>
+continuation type.</p>
+<p>Continuations carry no runtime type information, so <code>as</code> with a continuation
+target is a <em>compile-time ascription</em>, not a cast: it is accepted exactly when
+it is a provable no-op — the operand’s type is already a subtype of the target
+(<code>(c as &amp;k0).resume(x)</code> resumes through the supertype signature, selecting the
+<code>resume $k0</code> immediate), a <code>null</code> literal with a nullable target, or dead code
+the ascription pins — and it compiles to no instruction. A <code>&amp;cont</code> can never
+be <em>narrowed</em>: an abstract reference cannot be resumed, and no cast can fix it,
+so give the value its precise type where it is introduced (a parameter, local
+or block-result annotation). <code>is</code> and <code>br_on_cast</code> reject continuation targets
+outright (they are inherently runtime tests).</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">unit_task</span> = <span class="hljs-keyword">fn</span>() -&gt; <span class="hljs-type">i32</span>;
 <span class="hljs-keyword">type</span> <span class="hljs-type">k0</span> = <span class="hljs-keyword">cont</span> unit_task;
 
-<span class="hljs-keyword">fn</span> <span class="hljs-title">spawn</span>() -&gt; &amp;<span class="hljs-type">k</span> { <span class="hljs-keyword">cont_new</span> <span class="hljs-title">k </span>(worker); }          <span class="hljs-comment">// wrap `worker` (a task)</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">prime</span>(c: &amp;<span class="hljs-type">k</span>) -&gt; &amp;<span class="hljs-type">k0</span> { <span class="hljs-keyword">cont_bind</span> k <span class="hljs-title">k0 </span>(<span class="hljs-number">7</span>, c); }  <span class="hljs-comment">// bind the argument</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">go</span>(c: &amp;<span class="hljs-type">k0</span>) -&gt; <span class="hljs-type">i32</span> { <span class="hljs-keyword">resume</span> k0 [] (c); }         <span class="hljs-comment">// run until it suspends</span></span></pre>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">spawn</span>() -&gt; &amp;<span class="hljs-type">k</span> { <span class="hljs-type">k</span>::<span class="hljs-title">new</span>(worker); }        <span class="hljs-comment">// wrap `worker` (a task)</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">prime</span>(c: &amp;<span class="hljs-type">k</span>) -&gt; &amp;<span class="hljs-type">k0</span> { <span class="hljs-type">k0</span>::<span class="hljs-title">bind</span>(<span class="hljs-number">7</span>, c); }  <span class="hljs-comment">// bind the argument</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">go</span>(c: &amp;<span class="hljs-type">k0</span>) -&gt; <span class="hljs-type">i32</span> { c.<span class="hljs-title">resume</span>(); }        <span class="hljs-comment">// run until it suspends</span></span></pre>
+
+<p>Handlers routing a suspended tag to a label are a postfix <code>on</code> clause on the
+call, a bracket of <code>tag -&gt; 'label</code> or <code>tag -&gt; switch</code> arms (the same shape and
+placement as <code>try { … } catch [t -&gt; 'l]</code>), omitted when empty:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">c.<span class="hljs-title">resume</span>(x) <span class="hljs-keyword">on</span> [yield -&gt; <span class="hljs-symbol">'on_yield</span>]</span></pre>
 
 <p>The abstract continuation heap types are written <code>&amp;cont</code> and <code>&amp;nocont</code> (with
 <code>&amp;?cont</code> for the nullable form).</p>
-<p><code>switch</code> hands control straight to another continuation instead of suspending
-back to a handler. Written <code>switch k tag (args, cont)</code>, it passes <code>args</code> and the
-current continuation to <code>cont</code>, tagged by <code>tag</code>; the <code>resume</code> that drives things
-enables it with a <code>tag -&gt; switch</code> arm in its handler list.</p>
+<p><code>c.switch(args, tag: t)</code> hands control straight to another continuation <code>c</code>
+instead of suspending back to a handler, passing <code>args</code> and the current
+continuation; the enabling tag is the required labelled <code>tag:</code> immediate, and
+the <code>resume</code> that drives things enables it with a <code>t -&gt; switch</code> arm in its
+handler list.</p>
+<p>The receiver of these methods compiles <em>last</em>: operands compile in the
+instruction’s stack order, which for continuations — as for <code>call_ref</code> — puts
+the receiver after the arguments.</p>
 <h2 id="holes"><a class="header" href="#holes">Holes</a></h2>
 <p>A hole (<code>_</code>) is a placeholder for a value that an <strong>earlier statement in the
 same sequence</strong> has left on WebAssembly’s implicit operand stack. It is the
@@ -1701,9 +1788,9 @@ c ? a : b                            <span class="hljs-comment">// conditional e
 <span class="hljs-keyword">do</span> { }        <span class="hljs-symbol">'l</span>: <span class="hljs-keyword">do</span> t { }           <span class="hljs-comment">// block (optionally labeled / typed)</span>
 <span class="hljs-keyword">loop</span> { }                             <span class="hljs-comment">// loop</span>
 <span class="hljs-keyword">while</span> c { }   <span class="hljs-symbol">'l</span>: <span class="hljs-keyword">while</span> c : (step) { }   <span class="hljs-comment">// while (optional continue-expression)</span>
-<span class="hljs-keyword">br</span> <span class="hljs-symbol">'l</span>;   <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'l</span> c;   <span class="hljs-keyword">br_table</span> [<span class="hljs-symbol">'a</span> <span class="hljs-symbol">'b</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] i;
+<span class="hljs-keyword">br</span> <span class="hljs-symbol">'l</span>;   <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'l</span> c;   <span class="hljs-keyword">br_table</span> [<span class="hljs-symbol">'a</span>, <span class="hljs-symbol">'b</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] i;
 <span class="hljs-keyword">br_on_null</span> <span class="hljs-symbol">'l</span> v;   <span class="hljs-keyword">br_on_cast</span> <span class="hljs-symbol">'l</span> &amp;<span class="hljs-type">t</span> v;   <span class="hljs-comment">// also _non_null / _cast_fail</span>
-<span class="hljs-keyword">dispatch</span> i [<span class="hljs-symbol">'a</span> <span class="hljs-symbol">'b</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] { <span class="hljs-symbol">'a</span>: { } <span class="hljs-symbol">'b</span>: { } <span class="hljs-symbol">'d</span>: { } }   <span class="hljs-comment">// jump table (falls through)</span>
+<span class="hljs-keyword">dispatch</span> i [<span class="hljs-symbol">'a</span>, <span class="hljs-symbol">'b</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] { <span class="hljs-symbol">'a</span>: { } <span class="hljs-symbol">'b</span>: { } <span class="hljs-symbol">'d</span>: { } }   <span class="hljs-comment">// jump table (falls through)</span>
 <span class="hljs-keyword">match</span> v { p: &amp;<span class="hljs-type">t</span> =&gt; { }  <span class="hljs-literal">null</span> =&gt; { }  _ =&gt; { } }          <span class="hljs-comment">// type match</span>
 <span class="hljs-keyword">return</span> e;   <span class="hljs-keyword">become</span> <span class="hljs-title">f</span>(x);             <span class="hljs-comment">// return / tail call</span>
 <span class="hljs-keyword">unreachable</span>;   <span class="hljs-keyword">nop</span>;                  <span class="hljs-comment">// trap / no-op (statements, not expressions)</span></span></pre>
@@ -1740,11 +1827,13 @@ a.<span class="hljs-title">fill</span>(i, v, n)   a.<span class="hljs-title">cop
 m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span>(n)   m.<span class="hljs-title">fill</span>(d, v, n)   m.<span class="hljs-title">copy</span>(d, s, n)   <span class="hljs-comment">// management</span></span></pre>
 
 <h2 id="exceptions-and-stack-switching"><a class="header" href="#exceptions-and-stack-switching">Exceptions and stack switching</a></h2>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">try</span> t { } <span class="hljs-keyword">catch</span> { oops =&gt; { _; }  _ =&gt; { } }     <span class="hljs-comment">// try / catch (payload via hole _)</span>
-<span class="hljs-keyword">throw</span> oops <span class="hljs-number">42</span>;                                   <span class="hljs-comment">// throw</span>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">try</span> t { } <span class="hljs-keyword">catch</span> { oops =&gt; { _; } }               <span class="hljs-comment">// try / catch arms (payload via hole _)</span>
+<span class="hljs-keyword">try_legacy</span> t { } <span class="hljs-keyword">catch</span> { oops =&gt; { _; } }        <span class="hljs-comment">// deprecated try/catch instructions</span>
+<span class="hljs-keyword">throw</span> <span class="hljs-title">oops</span>(<span class="hljs-number">42</span>);                                   <span class="hljs-comment">// throw</span>
 <span class="hljs-keyword">try</span> { } <span class="hljs-keyword">catch</span> [oops -&gt; <span class="hljs-symbol">'h</span>]                       <span class="hljs-comment">// branch-to-label form (try_table)</span>
 <span class="hljs-keyword">type</span> <span class="hljs-type">k</span> = <span class="hljs-keyword">cont</span> ft;                                <span class="hljs-comment">// continuation type</span>
-<span class="hljs-keyword">suspend</span> <span class="hljs-title">yield</span>(x);   <span class="hljs-keyword">resume</span> k [<span class="hljs-keyword">tag</span> -&gt; <span class="hljs-symbol">'l</span>] (args, c);   <span class="hljs-comment">// suspend / resume</span></span></pre>
+<span class="hljs-keyword">let</span> c = <span class="hljs-type">k</span>::<span class="hljs-title">new</span>(f);                               <span class="hljs-comment">// cont.new (k::bind binds args)</span>
+<span class="hljs-keyword">suspend</span> <span class="hljs-title">yield</span>(x);   c.<span class="hljs-title">resume</span>(args) <span class="hljs-keyword">on</span> [<span class="hljs-keyword">tag</span> -&gt; <span class="hljs-symbol">'l</span>];    <span class="hljs-comment">// suspend / resume</span></span></pre>
 
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
@@ -1936,7 +2025,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
 <h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"rgb_channel"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">rgb_channel</span>(color: <span class="hljs-type">i32</span>, value: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">dispatch</span> color [<span class="hljs-symbol">'red</span> <span class="hljs-symbol">'green</span> <span class="hljs-symbol">'blue</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'bad</span>] {
+    <span class="hljs-keyword">dispatch</span> color [<span class="hljs-symbol">'red</span>, <span class="hljs-symbol">'green</span>, <span class="hljs-symbol">'blue</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'bad</span>] {
         <span class="hljs-symbol">'bad</span>:   { <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>; }
         <span class="hljs-symbol">'blue</span>:  { <span class="hljs-keyword">return</span> value &amp; <span class="hljs-number">255</span>; }
         <span class="hljs-symbol">'green</span>: { <span class="hljs-keyword">return</span> (value &amp; <span class="hljs-number">255</span>) &lt;&lt; <span class="hljs-number">8</span>; }
@@ -2132,19 +2221,18 @@ the block produces or by the surrounding context:</p>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"safe_divide"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">safe_divide</span>(a: <span class="hljs-type">i32</span>, b: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">if</span> b == <span class="hljs-number">0</span> {
-        <span class="hljs-keyword">throw</span> divide_by_zero;
+        <span class="hljs-keyword">throw</span> <span class="hljs-title">divide_by_zero</span>();
     }
     a /s b;
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"try_divide"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">try_divide</span>(a: <span class="hljs-type">i32</span>, b: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-symbol">'on_error</span>: <span class="hljs-keyword">do</span> {
-        <span class="hljs-keyword">try</span> {
-            <span class="hljs-keyword">return</span> <span class="hljs-title">safe_divide</span>(a, b);
-        } <span class="hljs-keyword">catch</span> [divide_by_zero -&gt; <span class="hljs-symbol">'on_error</span>]
+    <span class="hljs-keyword">try</span> <span class="hljs-type">i32</span> {
+        <span class="hljs-title">safe_divide</span>(a, b);
+    } <span class="hljs-keyword">catch</span> {
+        divide_by_zero =&gt; { <span class="hljs-number">0</span>; }   <span class="hljs-comment">// return 0 on division by zero</span>
     }
-    <span class="hljs-number">0</span>;   <span class="hljs-comment">// Return 0 on division by zero</span>
 }</span></pre>
 
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
@@ -2389,9 +2477,9 @@ load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
 
 <span class="hljs-comment">// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.</span>
 <span class="hljs-keyword">data</span> header @ mem[<span class="hljs-number">0</span>] =
-    <span class="hljs-string">"GIF89a"</span>,
-    [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>],
-    [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
+    <span class="hljs-string">"GIF89a"</span>
+    ++ [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>]
+    ++ [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
 
 <h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
 <p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
@@ -2431,10 +2519,10 @@ reply value.</p>
 <span class="hljs-comment">// Run the worker until its first suspend and return the value it yielded.</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"first_yield"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">first_yield</span>() -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">let</span> c: &amp;?<span class="hljs-type">k</span> = <span class="hljs-keyword">cont_new</span> <span class="hljs-title">k </span>(worker);
+    <span class="hljs-keyword">let</span> c: &amp;?<span class="hljs-type">k</span> = <span class="hljs-type">k</span>::<span class="hljs-title">new</span>(worker);
     <span class="hljs-keyword">let</span> (v, rest) =
         <span class="hljs-symbol">'on_yield</span>: <span class="hljs-keyword">do</span> () -&gt; (<span class="hljs-type">i32</span>, &amp;<span class="hljs-type">kr</span>) {
-            _ = <span class="hljs-keyword">resume</span> k [yield -&gt; <span class="hljs-symbol">'on_yield</span>] (c!);   <span class="hljs-comment">// worker returned; drop its result</span>
+            _ = c!.<span class="hljs-title">resume</span>() <span class="hljs-keyword">on</span> [yield -&gt; <span class="hljs-symbol">'on_yield</span>];  <span class="hljs-comment">// worker returned; drop its result</span>
             <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
         };
     _ = rest;            <span class="hljs-comment">// `rest` could be resumed with a reply to continue the worker</span>
@@ -2783,7 +2871,7 @@ operator with <code>x</code> as its <em>left</em> operand) and reconstructs the 
 <tr><td><code>if ... else ...</code></td><td><code>if cond { ... } else { ... }</code></td></tr>
 <tr><td><code>br $l</code></td><td><code>br 'l</code></td></tr>
 <tr><td><code>br_if $l</code></td><td><code>br_if 'l cond</code></td></tr>
-<tr><td><code>br_table $l* $ld</code></td><td><code>br_table ['l* else 'ld] val</code></td></tr>
+<tr><td><code>br_table $l* $ld</code></td><td><code>br_table ['l1, 'l2, else 'ld] val</code></td></tr>
 <tr><td><code>br_on_null $l</code></td><td><code>br_on_null 'l val</code></td></tr>
 <tr><td><code>br_on_non_null $l</code></td><td><code>br_on_non_null 'l val</code></td></tr>
 <tr><td><code>br_on_cast $l $t1 $t2</code></td><td><code>br_on_cast 'l t2 val</code></td></tr>
@@ -2857,7 +2945,7 @@ and <a href="#match"><code>match</code></a>.</p>
 <code>br_table</code> in the innermost block and the case bodies (which fall through) after
 their blocks; a <code>br_table</code> matching that dense void-switch shape decompiles back
 to <code>dispatch</code>:</p>
-<pre><code>(block $big (block $b (block $a           dispatch x ['zero 'one else 'big] {
+<pre><code>(block $big (block $b (block $a           dispatch x ['zero, 'one, else 'big] {
   (br_table $a $b $big (local.get $x)))     'big:  { … }
   … 'one body …) … 'big body …)             'one:  { … }
                                             'zero: { … } }
@@ -2892,9 +2980,11 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 <tr><td><code>ref.test (ref (exact $t))</code></td><td><code>val is &amp;!t</code></td></tr>
 <tr><td><code>ref.cast_desc_eq $t</code></td><td><code>val as descriptor(d)</code></td></tr>
 <tr><td><code>ref.cast_desc_eq (ref null …) $t</code></td><td><code>val as ?descriptor(d)</code></td></tr>
+<tr><td>(no instruction)</td><td><code>val as &amp;k</code> (<code>k</code> a continuation type: a compile-time ascription)</td></tr>
 </tbody>
 </table>
 </div>
+<p>There is no <code>ref.cast</code> (or <code>ref.test</code>/<code>br_on_cast</code>) to a continuation type: <code>as</code> with a continuation target is a compile-time ascription, accepted only when the operand’s static type is already a subtype of the target (or the operand is a <code>null</code> literal / stack-polymorphic), and it emits nothing — its use is pinning the type immediate of a <a href="#stack-switching-instructions"><code>resume</code> through a supertype signature</a>.</p>
 <p>A bare function name used as a value, <code>f</code> rather than the call <code>f(args)</code>, is <code>ref.func $f</code>: it produces a reference to the function. This works in a global initializer and anywhere a <code>&amp;func</code> reference is expected (for example the callee of an <a href="#indirect-calls">indirect call</a>).</p>
 <p>These casts can also chain through a forced intermediate, written as a single <code>as</code>:</p>
 <ul>
@@ -2944,7 +3034,7 @@ that can be dropped.</p>
 </div>
 <p>A packed (<code>i8</code>/<code>i16</code>) struct field or array element read sign- or zero-extends to <code>i32</code> via the <code>as i32_s</code>/<code>as i32_u</code> cast, as shown above (<code>struct.get_s</code>/<code>_u</code>, <code>array.get_s</code>/<code>_u</code>). Widening straight to <code>i64</code> (<code>val.field as i64_s</code> or <code>arr[idx] as i64_u</code>) emits the packed read followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</p>
 <h2 id="simd-vector-instructions"><a class="header" href="#simd-vector-instructions">SIMD (Vector) Instructions</a></h2>
-<p><code>v128</code> vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: <code>i32x4.add</code> becomes <code>add_i32x4</code>, <code>f32x4.sqrt</code> becomes <code>sqrt_f32x4</code>, and the whole-vector <code>v128.and</code> becomes <code>and_v128</code>. Signed/unsigned variants keep the <code>_s</code>/<code>_u</code> (<code>min_s_i8x16</code>, <code>extract_lane_u_i8x16</code>). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.</p>
+<p><code>v128</code> vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: <code>i32x4.add</code> becomes <code>add_i32x4</code>, <code>f32x4.sqrt</code> becomes <code>sqrt_f32x4</code>, and the whole-vector <code>v128.and</code> becomes <code>and_v128</code>. Signed/unsigned variants keep the <code>_s</code>/<code>_u</code> (<code>min_s_i8x16</code>, <code>extract_lane_u_i8x16</code>). The constant lane immediates of the value-receiver operations (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands; the lane index of a memory lane access is instead the labelled <code>lane:</code> argument (see the loads and stores below).</p>
 <p>Lanewise unary and binary operations (the receiver is the first operand):</p>
 <div class="table-wrapper">
 <table>
@@ -3019,20 +3109,20 @@ that can be dropped.</p>
 </tbody>
 </table>
 </div>
-<p>Memory loads and stores are methods on a <a href="#memories-1">memory</a>, like the scalar <a href="#memory-access-1">memory accesses</a> (the optional trailing <code>align</code>/<code>offset</code> arguments work the same way):</p>
+<p>Memory loads and stores are methods on a <a href="#memories-1">memory</a>, like the scalar <a href="#memory-access-1">memory accesses</a> (the optional labelled <code>offset:</code>/<code>align:</code> arguments work the same way): the <code>v128.</code> mnemonic prefix is dropped and the access shape stays in the name, <code>_s</code>/<code>_u</code> included; the full-width pair takes the family letter, <code>loadv128</code>/<code>storev128</code> (extending the <code>loadf32</code> convention). The lane index of a lane access is the labelled <code>lane:</code> argument, mandatory and in any order with <code>offset:</code>/<code>align:</code>:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>v128.load</code></td><td><code>m.v128_load(p)</code></td></tr>
-<tr><td><code>v128.store</code></td><td><code>m.v128_store(p, v)</code></td></tr>
-<tr><td><code>v128.load8x8_s</code> (and <code>16x4</code>/<code>32x2</code>, <code>_s</code>/<code>_u</code>)</td><td><code>m.v128_load8x8_s(p)</code></td></tr>
-<tr><td><code>v128.load32_zero</code> (and <code>64_zero</code>)</td><td><code>m.v128_load32_zero(p)</code></td></tr>
-<tr><td><code>v128.load8_splat</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_load8_splat(p)</code></td></tr>
-<tr><td><code>v128.load8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_load8_lane(p, v, lane)</code></td></tr>
-<tr><td><code>v128.store8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_store8_lane(p, v, lane)</code></td></tr>
+<tr><td><code>v128.load</code></td><td><code>m.loadv128(p)</code></td></tr>
+<tr><td><code>v128.store</code></td><td><code>m.storev128(p, v)</code></td></tr>
+<tr><td><code>v128.load8x8_s</code> (and <code>16x4</code>/<code>32x2</code>, <code>_s</code>/<code>_u</code>)</td><td><code>m.load8x8_s(p)</code></td></tr>
+<tr><td><code>v128.load32_zero</code> (and <code>64_zero</code>)</td><td><code>m.load32_zero(p)</code></td></tr>
+<tr><td><code>v128.load8_splat</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.load8_splat(p)</code></td></tr>
+<tr><td><code>v128.load8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.load8_lane(p, v, lane: l)</code></td></tr>
+<tr><td><code>v128.store8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.store8_lane(p, v, lane: l)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -3072,12 +3162,13 @@ that can be dropped.</p>
 </table>
 </div>
 <p>A bare narrow load (<code>m.load8(p)</code> with no cast) defaults to unsigned <code>i32</code>, like <code>array.get_u</code>. The store value’s <code>i32</code>/<code>i64</code> type is inferred from the operand.</p>
-<p>Two optional trailing arguments give the <code>align</code> and <code>offset</code> of the access (both constant integers); <code>offset</code> requires <code>align</code> to fill its positional slot:</p>
-<pre class="wax-highlight"><span class="hljs wax-code">m.<span class="hljs-title">load32</span>(p);          <span class="hljs-comment">// i32.load</span>
-m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>);       <span class="hljs-comment">// i32.load align=1</span>
-m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);   <span class="hljs-comment">// i32.load align=1 offset=16</span></span></pre>
+<p>The <code>offset</code> and <code>align</code> of the access (both constant integers) are optional labelled arguments, written after the operands in either order:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">m.<span class="hljs-title">load32</span>(p);                        <span class="hljs-comment">// i32.load</span>
+m.<span class="hljs-title">load32</span>(p, offset: <span class="hljs-number">16</span>);            <span class="hljs-comment">// i32.load offset=16</span>
+m.<span class="hljs-title">load32</span>(p, offset: <span class="hljs-number">16</span>, align: <span class="hljs-number">1</span>);  <span class="hljs-comment">// i32.load offset=16 align=1</span>
+m.<span class="hljs-title">load32</span>(p, align: <span class="hljs-number">1</span>);              <span class="hljs-comment">// i32.load align=1</span></span></pre>
 
-<p>The alignment defaults to the access’s natural alignment and is only printed when it differs; the offset defaults to <code>0</code>.</p>
+<p>The alignment defaults to the access’s natural alignment and is only printed when it differs; the offset defaults to <code>0</code> and is only printed when non-zero.</p>
 <p>The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):</p>
 <div class="table-wrapper">
 <table>
@@ -3096,18 +3187,22 @@ m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, 
 </table>
 </div>
 <h3 id="atomics-1"><a class="header" href="#atomics-1">Atomics</a></h3>
-<p>Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with <code>.</code> rewritten as <code>_</code> (the value type stays in the name). They require exactly their natural alignment. <code>atomic.fence</code> has no memory operand and is the <a href="correspondence/language.html#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
+<p>Atomic accesses (the threads proposal) are methods on a memory, following the scalar-access naming convention: the access width is in the method name (<code>atomic_load16</code>, <code>atomic_rmw_add8</code>), the <code>i32</code>/<code>i64</code> value type comes from the operand and result types, and a narrow load is resolved by an <code>as iN_u</code> cast. The narrow accesses are the zero-extending <code>_u</code> forms, the only kind that exists, so no suffix or cast signedness choice arises (<code>as iN_s</code> on a narrow atomic load is rejected; <code>atomic_load32(p) as i64_s</code> has no fused form and compiles as <code>i32.atomic.load</code> then <code>i64.extend_i32_s</code>). They take the same labelled <code>offset:</code> argument as the other accesses; an <code>align:</code> argument is accepted but must be exactly the natural alignment (the access width from the name), which is also the default. <code>atomic.fence</code> has no memory operand and is the <a href="correspondence/language.html#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i32.atomic.load</code></td><td><code>m.i32_atomic_load(p)</code></td></tr>
-<tr><td><code>i64.atomic.store8</code></td><td><code>m.i64_atomic_store8(p, v)</code></td></tr>
-<tr><td><code>i32.atomic.rmw.add</code></td><td><code>m.i32_atomic_rmw_add(p, v)</code></td></tr>
-<tr><td><code>i64.atomic.rmw16.add_u</code></td><td><code>m.i64_atomic_rmw16_add_u(p, v)</code></td></tr>
-<tr><td><code>i32.atomic.rmw.cmpxchg</code></td><td><code>m.i32_atomic_rmw_cmpxchg(p, expected, replacement)</code></td></tr>
+<tr><td><code>i32.atomic.load</code></td><td><code>m.atomic_load32(p)</code></td></tr>
+<tr><td><code>i64.atomic.load</code></td><td><code>m.atomic_load64(p)</code></td></tr>
+<tr><td><code>i32.atomic.load8_u</code></td><td><code>m.atomic_load8(p) as i32_u</code></td></tr>
+<tr><td><code>i64.atomic.load32_u</code></td><td><code>m.atomic_load32(p) as i64_u</code></td></tr>
+<tr><td><code>i32.atomic.store</code> (<code>v: i32</code>) or <code>i64.atomic.store32</code> (<code>v: i64</code>)</td><td><code>m.atomic_store32(p, v)</code></td></tr>
+<tr><td><code>i64.atomic.store8</code> (<code>v: i64</code>)</td><td><code>m.atomic_store8(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.add</code> (<code>v: i32</code>)</td><td><code>m.atomic_rmw_add32(p, v)</code></td></tr>
+<tr><td><code>i64.atomic.rmw16.add_u</code> (<code>v: i64</code>)</td><td><code>m.atomic_rmw_add16(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.cmpxchg</code></td><td><code>m.atomic_rmw_cmpxchg32(p, expected, replacement)</code></td></tr>
 <tr><td><code>memory.atomic.notify</code></td><td><code>m.atomic_notify(p, count)</code></td></tr>
 <tr><td><code>memory.atomic.wait32</code></td><td><code>m.atomic_wait32(p, expected, timeout)</code></td></tr>
 <tr><td><code>atomic.fence</code></td><td><code>atomic::fence()</code></td></tr>
@@ -3156,40 +3251,42 @@ m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, 
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>throw $tag</code></td><td><code>throw tag</code> (no payload), <code>throw tag x</code> (one), <code>throw tag (x, y)</code> (several)</td></tr>
+<tr><td><code>throw $tag</code></td><td><code>throw tag()</code> (no payload), <code>throw tag(x)</code> (one), <code>throw tag(x, y)</code> (several)</td></tr>
 <tr><td><code>throw_ref</code></td><td><code>throw_ref</code></td></tr>
 <tr><td><code>try_table ... catch $tag $l ...</code></td><td><code>try { ... } catch [ tag -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_ref $tag $l ...</code></td><td><code>try { ... } catch [ tag &amp; -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_all $l ...</code></td><td><code>try { ... } catch [ _ -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_all_ref $l ...</code></td><td><code>try { ... } catch [ _ &amp; -&gt; 'l, ... ]</code></td></tr>
-<tr><td><code>try ... catch $tag ...</code></td><td><code>try { ... } catch { tag =&gt; { ... } ... }</code></td></tr>
-<tr><td><code>try ... catch_all ...</code></td><td><code>try { ... } catch { _ =&gt; { ... } }</code></td></tr>
+<tr><td><code>try_table</code> + block ladder</td><td><code>try { ... } catch { tag =&gt; { ... } tag &amp; =&gt; { ... } _ =&gt; { ... } }</code></td></tr>
+<tr><td><code>try ... catch $tag ...</code></td><td><code>try_legacy { ... } catch { tag =&gt; { ... } ... }</code></td></tr>
+<tr><td><code>try ... catch_all ...</code></td><td><code>try_legacy { ... } catch { _ =&gt; { ... } }</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>The <code>try { ... } catch [ ... ]</code> syntax compiles to WebAssembly’s <code>try_table</code> instruction (the current standard). The <code>try { ... } catch { tag =&gt; { ... } }</code> syntax compiles to the older <code>try</code>/<code>catch</code> instructions (deprecated but still supported for compatibility).</p>
+<p>Both <code>try</code> forms compile to WebAssembly’s <code>try_table</code> instruction (the current standard): the bracket form is the raw instruction (each clause branches to a label), and the braced structured form adds one block per arm around it — each catch clause branches to its arm’s block, the arm bodies are the trailing code between the block ends (so an arm’s completion falls into the next arm), and the body’s completion escapes past all arms with a single branch carrying the try’s value. The decompiler recovers the structured form from exactly that ladder shape (a label on the try is the join block), falling back to the bracket form for any other use of <code>try_table</code>. <code>try_legacy</code> compiles to the older <code>try</code>/<code>catch</code> instructions (deprecated but still supported for compatibility), and legacy-instruction modules decompile to it.</p>
 <h2 id="stack-switching-instructions"><a class="header" href="#stack-switching-instructions">Stack Switching Instructions</a></h2>
 <p>These correspond to the WebAssembly <a href="https://github.com/WebAssembly/stack-switching">stack-switching proposal</a>. A continuation type is declared with <code>type k = cont ft;</code> (see <a href="#types-1">Types</a>); <code>&lt;k&gt;</code> and <code>&lt;tag&gt;</code> below are the names of a continuation type and a tag respectively.</p>
+<p>The resume family and <code>switch</code> are methods on the continuation reference <code>c</code>; <code>cont.new</code> and <code>cont.bind</code> are the <code>T::new</code> / <code>T::bind</code> constructors of the declared continuation type (the <code>T::</code> namespace constructs a <code>&amp;T</code>). The type immediates are not written: the <code>$k</code> of <code>resume</code>/<code>resume_throw</code>/<code>resume_throw_ref</code>/<code>switch</code>, and the <em>source</em> type of <code>bind</code>, are inferred from the static type of the continuation expression, exactly as <code>call_ref</code>’s type immediate comes from the callee’s — so the receiver must have a <em>declared</em> continuation type (an abstract <code>&amp;cont</code> is rejected; a cast can never narrow a continuation, so give the value its precise type where it is introduced). An identity/upcast ascription <code>(c as &amp;k0).resume(x)</code> selects the supertype’s immediate (<code>resume $k0</code>) and emits no instruction; decompilation inserts exactly this ascription when an instruction’s type immediate is a strict supertype of its continuation operand’s own type, so the immediate survives the round trip.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>cont.new $k</code></td><td><code>cont_new k (func)</code></td></tr>
-<tr><td><code>cont.bind $k1 $k2</code></td><td><code>cont_bind k1 k2 (args, cont)</code></td></tr>
-<tr><td><code>suspend $tag</code></td><td><code>suspend tag (args)</code></td></tr>
-<tr><td><code>resume $k</code></td><td><code>resume k [] (args, cont)</code></td></tr>
-<tr><td><code>resume $k (on $tag $l) ...</code></td><td><code>resume k [ tag -&gt; 'l, ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume $k (on $tag switch) ...</code></td><td><code>resume k [ tag -&gt; switch, ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume_throw $k $tag ...</code></td><td><code>resume_throw k tag [ ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume_throw_ref $k ...</code></td><td><code>resume_throw_ref k [ ... ] (exn, cont)</code></td></tr>
-<tr><td><code>switch $k $tag</code></td><td><code>switch k tag (args, cont)</code></td></tr>
+<tr><td><code>cont.new $k</code></td><td><code>k::new(func)</code></td></tr>
+<tr><td><code>cont.bind $k1 $k2</code></td><td><code>k2::bind(args, cont)</code></td></tr>
+<tr><td><code>suspend $tag</code></td><td><code>suspend tag(args)</code></td></tr>
+<tr><td><code>resume $k</code></td><td><code>c.resume(args)</code></td></tr>
+<tr><td><code>resume $k (on $tag $l) ...</code></td><td><code>c.resume(args) on [tag -&gt; 'l, ...]</code></td></tr>
+<tr><td><code>resume $k (on $tag switch) ...</code></td><td><code>c.resume(args) on [tag -&gt; switch, ...]</code></td></tr>
+<tr><td><code>resume_throw $k $tag ...</code></td><td><code>c.resume_throw(tag(payload)) on [...]</code></td></tr>
+<tr><td><code>resume_throw_ref $k ...</code></td><td><code>c.resume_throw_ref(exn) on [...]</code></td></tr>
+<tr><td><code>switch $k $tag</code></td><td><code>c.switch(args, tag: tag)</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in <code>[ ... ]</code> mirrors the <code>try ... catch [ ... ]</code> syntax: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> is an <code>(on $tag switch)</code> clause.</p>
-<p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="#tags-1">Tags</a>. When a function reference is passed to <code>cont_new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
+<p>Operands compile in WebAssembly stack order: for continuations — as for <code>call_ref</code> — that puts the receiver <em>last</em>, so <code>c.resume(x)</code> evaluates <code>x</code> before <code>c</code> even though <code>c</code> is written first (this diverges from receiver-first methods like <code>arr.fill</code>, whose instruction takes the receiver first on the stack). The handler list of a postfix <code>on [...]</code> clause mirrors the <code>try ... catch [...]</code> syntax — a keyword-led handler bracket after the guarded operation: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> an <code>(on $tag switch)</code> clause; the clause is omitted when empty. <code>resume_throw</code> raises its tag applied to the payload, <code>tag(payload)</code>, exactly as <code>throw tag(payload)</code> spells it, and <code>switch</code>’s enabling tag is the required labelled <code>tag:</code> immediate.</p>
+<p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="#tags-1">Tags</a>. When a function reference is passed to <code>T::new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="module-fields-1"><a class="header" href="#module-fields-1">Module Fields</a></h1>
 <p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, memories, tables, and tags.</p>
@@ -3293,7 +3390,7 @@ that referencing it yields an exact reference: <code>fn g: !ft;</code> for a nam
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> x: <span class="hljs-type">i32</span> = mem0.<span class="hljs-title">load32</span>(p);
 <span class="hljs-keyword">let</span> b: <span class="hljs-type">i32</span> = mem0.<span class="hljs-title">load8</span>(p) <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;
 mem0.<span class="hljs-title">store16</span>(p, v);
-mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);     <span class="hljs-comment">// align=1, offset=16</span></span></pre>
+mem0.<span class="hljs-title">store32</span>(p, v, offset: <span class="hljs-number">16</span>, align: <span class="hljs-number">1</span>);</span></pre>
 
 <p>See <a href="#memory-access-1">Memory Access</a> for the full instruction mapping.</p>
 <h3 id="data-segments-1"><a class="header" href="#data-segments-1">Data Segments</a></h3>
@@ -3308,8 +3405,8 @@ mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;</span></pre>
 
 <p>Data bytes are ordinary <a href="#strings">string literals</a>; escapes such as <code>\x41</code> and <code>\x00</code> (two hex digits) decode to raw bytes.</p>
-<p>A segment’s contents may also mix strings with <strong>typed numeric runs</strong> — <code>[type: values]</code>, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly <em>numeric values</em> text-format extension, and it round-trips through WAT:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> pixels = <span class="hljs-string">"hdr"</span>, [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>], [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>, -<span class="hljs-number">3</span>], [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
+<p>A segment’s contents may also concatenate (with <code>++</code>) strings and <strong>typed numeric runs</strong> — <code>[type: values]</code>, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly <em>numeric values</em> text-format extension, and it round-trips through WAT:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> pixels = <span class="hljs-string">"hdr"</span> ++ [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>] ++ [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>, -<span class="hljs-number">3</span>] ++ [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
 
 <p>The scalar element types are <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, and <code>f64</code>; the values (including <code>nan</code>/<code>inf</code>) are ordinary literals. A <code>v128</code> run holds lane groups written <code>shape(lanes)</code>, e.g. <code>[v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)]</code>. The bytes are the same as if the values were written out as an escaped string.</p>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
@@ -3472,12 +3569,14 @@ overrides that.</p>
 wax convert [OPTIONS] [INPUT] # the same, named explicitly
 wax format [OPTIONS] FILE…    # reformat files
 wax check [OPTIONS] FILE…     # validate files
+wax lsp                       # run the language server (over stdin/stdout)
 </code></pre>
 <p>By default <code>wax</code> converts between formats; this command is also available under
 its explicit name, <code>wax convert</code> (useful when an input filename could be
 mistaken for a subcommand). The <code>format</code> subcommand reformats files (see
-<a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
-<a href="#checking">Checking</a>).</p>
+<a href="#formatting">Formatting</a>), <code>check</code> validates them (see <a href="#checking">Checking</a>),
+and <code>lsp</code> starts a Language Server Protocol server for editors (see <a href="#language-server">Language
+server</a>).</p>
 <h2 id="positional-arguments"><a class="header" href="#positional-arguments">Positional Arguments</a></h2>
 <ul>
 <li><code>[INPUT]</code>: Source file to convert/format. Supported extensions: <code>.wax</code>, <code>.wat</code>, <code>.wasm</code>.
@@ -3563,7 +3662,7 @@ WASM↔WASM round-trips on their own, no flag needed.</li>
 </ul>
 </li>
 <li>
-<p><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em></p>
+<p><a id="warnings"></a><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em></p>
 <ul>
 <li>Set the reporting level of a warning produced during validation.</li>
 <li><em>NAME</em> is a single warning, a group, or <code>all</code>:
@@ -3852,13 +3951,16 @@ an optional proposal, as for <a href="#options"><code>convert</code></a>. Repeat
 above.</li>
 <li><strong><code>--all-errors</code></strong>: report <em>every</em> syntax error instead of stopping at the
 first. Normally the parser gives up at the first unexpected token; with this
-flag it uses panic-mode error recovery — resynchronizing at statement and
-block boundaries (<code>;</code>, <code>}</code>, <code>)</code>, <code>]</code>, and the keywords that begin a new item
-or statement) and continuing — so a single run lists all the syntax errors.
-The recovered module is then type-checked too, so genuine type errors in the
-intact regions surface alongside the syntax errors; the “not bound” errors
-that a construct dropped during recovery would otherwise cascade are
-suppressed. Wax input only (ignored for Wat/Wasm).</li>
+flag it uses panic-mode error recovery and continues, so a single run lists
+all the syntax errors. Wax resynchronizes at statement and block boundaries
+(<code>;</code>, <code>}</code>, <code>)</code>, <code>]</code>, and the keywords that begin a new item or statement); WAT,
+being fully parenthesized, resynchronizes on the parentheses (dropping an
+incomplete group, auto-closing an unclosed one). The recovered module is then
+checked too — type-checked for Wax, validated for WAT — so genuine type or
+validation errors in the intact regions surface alongside the syntax errors,
+while the cascades a dropped construct would otherwise trigger (an unbound name
+in Wax; a warning or wrong stack height in WAT) are suppressed. Text input
+only, Wax and Wat (ignored for a Wasm binary).</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em>: as above.</li>
 <li><strong><code>--error-format</code></strong> <em>FORMAT</em>: <code>human</code>, <code>json</code>, or <code>short</code>, as above.</li>
 <li><strong><code>--debug</code></strong> <em>CATEGORY</em>: as above.</li>
@@ -3870,6 +3972,42 @@ suppressed. Wax input only (ignored for Wat/Wasm).</li>
 <p><strong>Report all syntax errors in a Wax file at once:</strong></p>
 <pre><code class="language-sh">wax check --all-errors src/foo.wax
 </code></pre>
+<h2 id="language-server"><a class="header" href="#language-server">Language server</a></h2>
+<p>The <code>lsp</code> subcommand starts a <a href="https://microsoft.github.io/language-server-protocol/">Language Server
+Protocol</a> server for Wax
+and WebAssembly text, speaking JSON-RPC over stdin/stdout. It runs the same
+analysis the VS Code extension runs in-process, exposed to any LSP-capable
+editor (Neovim, Emacs with Eglot or lsp-mode, Helix, Kakoune, Zed, and others).</p>
+<pre><code class="language-sh">wax lsp
+</code></pre>
+<p>It reads no files of its own; the editor tells it which documents are open.
+Supported requests: diagnostics (pushed on open/change), hover,
+go-to-definition, go-to-type-definition, find-references, document highlight,
+rename (with prepare), document symbols (outline), completion, signature help,
+inlay hints, folding ranges, selection ranges, semantic tokens, and document
+formatting. The hover, navigation and completion features that need the typed
+tree are Wax-only, while formatting, diagnostics and the outline work for <code>.wat</code>
+too (dispatched by the document’s URI extension).</p>
+<p>A lint diagnostic carries the extra metadata editors use: the <code>-W</code> name as its
+code (linked to this reference), and <code>DiagnosticTag.Unnecessary</code> on the
+removable/unreachable lints (unused bindings, dead code) so the editor fades
+them.</p>
+<p>The one setting is <code>wax.define</code>, a list of conditional-compilation defines
+(mirroring the <a href="#options"><code>-D</code></a> flag, e.g. <code>["debug=true", "arch=wasm64"]</code>).
+Diagnostics and completion specialize to it, so a definition or an error in a
+branch the defines rule out is dropped. The server reads it from the client’s
+<code>initializationOptions</code> at startup and from <code>workspace/didChangeConfiguration</code>
+live (under a <code>wax</code> section), re-checking the open documents when it changes.</p>
+<p>Documents are synchronized in full (each change carries the whole buffer). The
+position encoding is negotiated: the server uses UTF-8 when the client offers it
+and otherwise UTF-16, the LSP default that every client supports. The <code>--stdio</code>
+flag is accepted (and ignored) for the editors that pass it by convention.</p>
+<h3 id="editor-setup"><a class="header" href="#editor-setup">Editor setup</a></h3>
+<p>Most editors just need the launch command <code>wax lsp</code> bound to the <code>wax</code> (and, if
+desired, <code>wat</code>) file type through their LSP client. Ready-to-use configurations
+for Neovim, Helix, and Emacs — paired with the <code>tree-sitter-wax</code> grammar for
+highlighting — live under <a href="https://github.com/ocsigen/wax/tree/main/editors"><code>editors/</code></a>
+in the repository (one directory per editor, each with a README).</p>
 <h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
 <p>All three commands share the same exit codes:</p>
 <div class="table-wrapper">
@@ -3909,6 +4047,70 @@ autoload -Uz compinit &amp;&amp; compinit
 installed, point it at the cmdliner share directory. See the
 <a href="https://erratique.ch/software/cmdliner/doc/cli.html#cli_completion">cmdliner completion guide</a>
 for the per-shell details and the PowerShell setup.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="editor-support-1"><a class="header" href="#editor-support-1">Editor Support</a></h1>
+<p>Wax integrates with editors in two ways. <strong>Visual Studio Code</strong> has a dedicated
+extension that bundles everything. Every other editor combines two pieces: the
+<a href="https://github.com/ocsigen/wax/tree/main/tree-sitter-wax"><code>tree-sitter-wax</code></a>
+grammar for syntax highlighting, and the built-in <strong><code>wax lsp</code></strong> language server
+(see <a href="#language-server">CLI Reference</a>) for everything else. The extension
+and the server run the same analysis as the <code>wax</code> toolchain, so the language
+features are the same across editors.</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<p>Available in VS Code, and in any editor with a Language Server Protocol client
+through <code>wax lsp</code>:</p>
+<ul>
+<li>Diagnostics as you type: syntax errors, type errors, and lints.</li>
+<li>Hover types, and inlay hints showing the inferred type on each un-annotated
+<code>let</code> binding.</li>
+<li>Go to definition, go to type definition, find references, and document
+highlight.</li>
+<li>Rename (a punned struct field is expanded so the field is preserved).</li>
+<li>Completion: the names in scope, a struct value’s fields and a numeric / array
+/ <code>v128</code> / memory / table receiver’s methods after <code>.</code>, and an intrinsic
+namespace’s functions after <code>::</code>.</li>
+<li>Signature help while typing a call.</li>
+<li>Document outline, folding ranges, selection ranges, and semantic tokens.</li>
+<li>Formatting.</li>
+</ul>
+<p>WebAssembly text (<code>.wat</code>) gets the same features: formatting,
+diagnostics, the outline, hover types, go-to-definition, go-to-type-definition,
+find references, document highlight, rename, folding, selection ranges, signature
+help, semantic tokens (identifiers coloured by the kind of index they resolve
+to), completion (where an index is expected, the names of the space it wants —
+functions, globals, locals, types, labels — since the instruction fixes the
+kind), inlay hints (after a numeric index, the name of the definition it
+refers to, so <code>(local.get 0)</code> reads as <code>(local.get 0 $x)</code>), and inactive-branch
+dimming for <code>(@if)</code> conditional compilation. Syntax highlighting
+otherwise comes from the extension’s own grammar in VS Code and from
+<code>tree-sitter-wax</code> elsewhere.</p>
+<h2 id="visual-studio-code"><a class="header" href="#visual-studio-code">Visual Studio Code</a></h2>
+<p>The <a href="https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax">Wax extension</a>
+(source in <a href="https://github.com/ocsigen/wax/tree/main/editors/vscode"><code>editors/vscode/</code></a>)
+covers both <code>.wax</code> and <code>.wat</code> files with the full feature set above, plus
+snippets and commands to preview the compiled WAT or decompiled Wax side by
+side. It runs the toolchain compiled to WebAssembly in-process, with no separate
+<code>wax</code> install, so it works the same in desktop and web VS Code (including
+<a href="https://vscode.dev">vscode.dev</a>).</p>
+<h2 id="other-editors"><a class="header" href="#other-editors">Other editors</a></h2>
+<p>Any editor with a Language Server Protocol client gets the feature set above by
+launching <code>wax lsp</code>. The editor starts the server itself, so <code>wax</code> only needs to
+be on your <code>PATH</code>; pair it with the tree-sitter grammar for highlighting.
+Ready-to-use configurations, each with a README, live under
+<a href="https://github.com/ocsigen/wax/tree/main/editors"><code>editors/</code></a>:</p>
+<ul>
+<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/nvim">Neovim</a></strong>: register
+the <code>tree-sitter-wax</code> parser (nvim-treesitter or the built-in loader) and
+point <code>vim.lsp</code> at <code>wax lsp</code>.</li>
+<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/helix">Helix</a></strong>: add the
+grammar and a <code>[language-server.wax]</code> entry running <code>wax lsp</code> (a ready-to-paste
+<code>languages.toml</code> is included).</li>
+<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/emacs">Emacs</a></strong>:
+<code>wax-ts-mode</code> provides tree-sitter highlighting, indentation, and <code>imenu</code>,
+with Eglot driving <code>wax lsp</code> for the rest.</li>
+</ul>
+<p>The server’s flags and behaviour (document sync, position-encoding negotiation)
+are documented under <a href="#language-server"><code>wax lsp</code></a> in the CLI reference.</p>
 
                     </main>
 

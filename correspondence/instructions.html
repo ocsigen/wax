@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0e2efc16.js";
+            window.path_to_searchindex_js = "../searchindex-828c4755.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-41a4b7e9.js"></script>
+        <script src="../toc-7b4055a9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -366,7 +366,7 @@ operator with <code>x</code> as its <em>left</em> operand) and reconstructs the 
 <tr><td><code>if ... else ...</code></td><td><code>if cond { ... } else { ... }</code></td></tr>
 <tr><td><code>br $l</code></td><td><code>br 'l</code></td></tr>
 <tr><td><code>br_if $l</code></td><td><code>br_if 'l cond</code></td></tr>
-<tr><td><code>br_table $l* $ld</code></td><td><code>br_table ['l* else 'ld] val</code></td></tr>
+<tr><td><code>br_table $l* $ld</code></td><td><code>br_table ['l1, 'l2, else 'ld] val</code></td></tr>
 <tr><td><code>br_on_null $l</code></td><td><code>br_on_null 'l val</code></td></tr>
 <tr><td><code>br_on_non_null $l</code></td><td><code>br_on_non_null 'l val</code></td></tr>
 <tr><td><code>br_on_cast $l $t1 $t2</code></td><td><code>br_on_cast 'l t2 val</code></td></tr>
@@ -440,7 +440,7 @@ and <a href="../language.html#match"><code>match</code></a>.</p>
 <code>br_table</code> in the innermost block and the case bodies (which fall through) after
 their blocks; a <code>br_table</code> matching that dense void-switch shape decompiles back
 to <code>dispatch</code>:</p>
-<pre><code>(block $big (block $b (block $a           dispatch x ['zero 'one else 'big] {
+<pre><code>(block $big (block $b (block $a           dispatch x ['zero, 'one, else 'big] {
   (br_table $a $b $big (local.get $x)))     'big:  { … }
   … 'one body …) … 'big body …)             'one:  { … }
                                             'zero: { … } }
@@ -475,9 +475,11 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 <tr><td><code>ref.test (ref (exact $t))</code></td><td><code>val is &amp;!t</code></td></tr>
 <tr><td><code>ref.cast_desc_eq $t</code></td><td><code>val as descriptor(d)</code></td></tr>
 <tr><td><code>ref.cast_desc_eq (ref null …) $t</code></td><td><code>val as ?descriptor(d)</code></td></tr>
+<tr><td>(no instruction)</td><td><code>val as &amp;k</code> (<code>k</code> a continuation type: a compile-time ascription)</td></tr>
 </tbody>
 </table>
 </div>
+<p>There is no <code>ref.cast</code> (or <code>ref.test</code>/<code>br_on_cast</code>) to a continuation type: <code>as</code> with a continuation target is a compile-time ascription, accepted only when the operand’s static type is already a subtype of the target (or the operand is a <code>null</code> literal / stack-polymorphic), and it emits nothing — its use is pinning the type immediate of a <a href="#stack-switching-instructions"><code>resume</code> through a supertype signature</a>.</p>
 <p>A bare function name used as a value, <code>f</code> rather than the call <code>f(args)</code>, is <code>ref.func $f</code>: it produces a reference to the function. This works in a global initializer and anywhere a <code>&amp;func</code> reference is expected (for example the callee of an <a href="../language.html#indirect-calls">indirect call</a>).</p>
 <p>These casts can also chain through a forced intermediate, written as a single <code>as</code>:</p>
 <ul>
@@ -527,7 +529,7 @@ that can be dropped.</p>
 </div>
 <p>A packed (<code>i8</code>/<code>i16</code>) struct field or array element read sign- or zero-extends to <code>i32</code> via the <code>as i32_s</code>/<code>as i32_u</code> cast, as shown above (<code>struct.get_s</code>/<code>_u</code>, <code>array.get_s</code>/<code>_u</code>). Widening straight to <code>i64</code> (<code>val.field as i64_s</code> or <code>arr[idx] as i64_u</code>) emits the packed read followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</p>
 <h2 id="simd-vector-instructions"><a class="header" href="#simd-vector-instructions">SIMD (Vector) Instructions</a></h2>
-<p><code>v128</code> vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: <code>i32x4.add</code> becomes <code>add_i32x4</code>, <code>f32x4.sqrt</code> becomes <code>sqrt_f32x4</code>, and the whole-vector <code>v128.and</code> becomes <code>and_v128</code>. Signed/unsigned variants keep the <code>_s</code>/<code>_u</code> (<code>min_s_i8x16</code>, <code>extract_lane_u_i8x16</code>). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.</p>
+<p><code>v128</code> vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: <code>i32x4.add</code> becomes <code>add_i32x4</code>, <code>f32x4.sqrt</code> becomes <code>sqrt_f32x4</code>, and the whole-vector <code>v128.and</code> becomes <code>and_v128</code>. Signed/unsigned variants keep the <code>_s</code>/<code>_u</code> (<code>min_s_i8x16</code>, <code>extract_lane_u_i8x16</code>). The constant lane immediates of the value-receiver operations (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands; the lane index of a memory lane access is instead the labelled <code>lane:</code> argument (see the loads and stores below).</p>
 <p>Lanewise unary and binary operations (the receiver is the first operand):</p>
 <div class="table-wrapper">
 <table>
@@ -602,20 +604,20 @@ that can be dropped.</p>
 </tbody>
 </table>
 </div>
-<p>Memory loads and stores are methods on a <a href="module_fields.html#memories">memory</a>, like the scalar <a href="#memory-access">memory accesses</a> (the optional trailing <code>align</code>/<code>offset</code> arguments work the same way):</p>
+<p>Memory loads and stores are methods on a <a href="module_fields.html#memories">memory</a>, like the scalar <a href="#memory-access">memory accesses</a> (the optional labelled <code>offset:</code>/<code>align:</code> arguments work the same way): the <code>v128.</code> mnemonic prefix is dropped and the access shape stays in the name, <code>_s</code>/<code>_u</code> included; the full-width pair takes the family letter, <code>loadv128</code>/<code>storev128</code> (extending the <code>loadf32</code> convention). The lane index of a lane access is the labelled <code>lane:</code> argument, mandatory and in any order with <code>offset:</code>/<code>align:</code>:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>v128.load</code></td><td><code>m.v128_load(p)</code></td></tr>
-<tr><td><code>v128.store</code></td><td><code>m.v128_store(p, v)</code></td></tr>
-<tr><td><code>v128.load8x8_s</code> (and <code>16x4</code>/<code>32x2</code>, <code>_s</code>/<code>_u</code>)</td><td><code>m.v128_load8x8_s(p)</code></td></tr>
-<tr><td><code>v128.load32_zero</code> (and <code>64_zero</code>)</td><td><code>m.v128_load32_zero(p)</code></td></tr>
-<tr><td><code>v128.load8_splat</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_load8_splat(p)</code></td></tr>
-<tr><td><code>v128.load8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_load8_lane(p, v, lane)</code></td></tr>
-<tr><td><code>v128.store8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_store8_lane(p, v, lane)</code></td></tr>
+<tr><td><code>v128.load</code></td><td><code>m.loadv128(p)</code></td></tr>
+<tr><td><code>v128.store</code></td><td><code>m.storev128(p, v)</code></td></tr>
+<tr><td><code>v128.load8x8_s</code> (and <code>16x4</code>/<code>32x2</code>, <code>_s</code>/<code>_u</code>)</td><td><code>m.load8x8_s(p)</code></td></tr>
+<tr><td><code>v128.load32_zero</code> (and <code>64_zero</code>)</td><td><code>m.load32_zero(p)</code></td></tr>
+<tr><td><code>v128.load8_splat</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.load8_splat(p)</code></td></tr>
+<tr><td><code>v128.load8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.load8_lane(p, v, lane: l)</code></td></tr>
+<tr><td><code>v128.store8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.store8_lane(p, v, lane: l)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -655,12 +657,13 @@ that can be dropped.</p>
 </table>
 </div>
 <p>A bare narrow load (<code>m.load8(p)</code> with no cast) defaults to unsigned <code>i32</code>, like <code>array.get_u</code>. The store value’s <code>i32</code>/<code>i64</code> type is inferred from the operand.</p>
-<p>Two optional trailing arguments give the <code>align</code> and <code>offset</code> of the access (both constant integers); <code>offset</code> requires <code>align</code> to fill its positional slot:</p>
-<pre class="wax-highlight"><span class="hljs wax-code">m.<span class="hljs-title">load32</span>(p);          <span class="hljs-comment">// i32.load</span>
-m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>);       <span class="hljs-comment">// i32.load align=1</span>
-m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);   <span class="hljs-comment">// i32.load align=1 offset=16</span></span></pre>
+<p>The <code>offset</code> and <code>align</code> of the access (both constant integers) are optional labelled arguments, written after the operands in either order:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">m.<span class="hljs-title">load32</span>(p);                        <span class="hljs-comment">// i32.load</span>
+m.<span class="hljs-title">load32</span>(p, offset: <span class="hljs-number">16</span>);            <span class="hljs-comment">// i32.load offset=16</span>
+m.<span class="hljs-title">load32</span>(p, offset: <span class="hljs-number">16</span>, align: <span class="hljs-number">1</span>);  <span class="hljs-comment">// i32.load offset=16 align=1</span>
+m.<span class="hljs-title">load32</span>(p, align: <span class="hljs-number">1</span>);              <span class="hljs-comment">// i32.load align=1</span></span></pre>
 
-<p>The alignment defaults to the access’s natural alignment and is only printed when it differs; the offset defaults to <code>0</code>.</p>
+<p>The alignment defaults to the access’s natural alignment and is only printed when it differs; the offset defaults to <code>0</code> and is only printed when non-zero.</p>
 <p>The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):</p>
 <div class="table-wrapper">
 <table>
@@ -679,18 +682,22 @@ m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, 
 </table>
 </div>
 <h3 id="atomics"><a class="header" href="#atomics">Atomics</a></h3>
-<p>Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with <code>.</code> rewritten as <code>_</code> (the value type stays in the name). They require exactly their natural alignment. <code>atomic.fence</code> has no memory operand and is the <a href="language.html#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
+<p>Atomic accesses (the threads proposal) are methods on a memory, following the scalar-access naming convention: the access width is in the method name (<code>atomic_load16</code>, <code>atomic_rmw_add8</code>), the <code>i32</code>/<code>i64</code> value type comes from the operand and result types, and a narrow load is resolved by an <code>as iN_u</code> cast. The narrow accesses are the zero-extending <code>_u</code> forms, the only kind that exists, so no suffix or cast signedness choice arises (<code>as iN_s</code> on a narrow atomic load is rejected; <code>atomic_load32(p) as i64_s</code> has no fused form and compiles as <code>i32.atomic.load</code> then <code>i64.extend_i32_s</code>). They take the same labelled <code>offset:</code> argument as the other accesses; an <code>align:</code> argument is accepted but must be exactly the natural alignment (the access width from the name), which is also the default. <code>atomic.fence</code> has no memory operand and is the <a href="language.html#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i32.atomic.load</code></td><td><code>m.i32_atomic_load(p)</code></td></tr>
-<tr><td><code>i64.atomic.store8</code></td><td><code>m.i64_atomic_store8(p, v)</code></td></tr>
-<tr><td><code>i32.atomic.rmw.add</code></td><td><code>m.i32_atomic_rmw_add(p, v)</code></td></tr>
-<tr><td><code>i64.atomic.rmw16.add_u</code></td><td><code>m.i64_atomic_rmw16_add_u(p, v)</code></td></tr>
-<tr><td><code>i32.atomic.rmw.cmpxchg</code></td><td><code>m.i32_atomic_rmw_cmpxchg(p, expected, replacement)</code></td></tr>
+<tr><td><code>i32.atomic.load</code></td><td><code>m.atomic_load32(p)</code></td></tr>
+<tr><td><code>i64.atomic.load</code></td><td><code>m.atomic_load64(p)</code></td></tr>
+<tr><td><code>i32.atomic.load8_u</code></td><td><code>m.atomic_load8(p) as i32_u</code></td></tr>
+<tr><td><code>i64.atomic.load32_u</code></td><td><code>m.atomic_load32(p) as i64_u</code></td></tr>
+<tr><td><code>i32.atomic.store</code> (<code>v: i32</code>) or <code>i64.atomic.store32</code> (<code>v: i64</code>)</td><td><code>m.atomic_store32(p, v)</code></td></tr>
+<tr><td><code>i64.atomic.store8</code> (<code>v: i64</code>)</td><td><code>m.atomic_store8(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.add</code> (<code>v: i32</code>)</td><td><code>m.atomic_rmw_add32(p, v)</code></td></tr>
+<tr><td><code>i64.atomic.rmw16.add_u</code> (<code>v: i64</code>)</td><td><code>m.atomic_rmw_add16(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.cmpxchg</code></td><td><code>m.atomic_rmw_cmpxchg32(p, expected, replacement)</code></td></tr>
 <tr><td><code>memory.atomic.notify</code></td><td><code>m.atomic_notify(p, count)</code></td></tr>
 <tr><td><code>memory.atomic.wait32</code></td><td><code>m.atomic_wait32(p, expected, timeout)</code></td></tr>
 <tr><td><code>atomic.fence</code></td><td><code>atomic::fence()</code></td></tr>
@@ -739,40 +746,42 @@ m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, 
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>throw $tag</code></td><td><code>throw tag</code> (no payload), <code>throw tag x</code> (one), <code>throw tag (x, y)</code> (several)</td></tr>
+<tr><td><code>throw $tag</code></td><td><code>throw tag()</code> (no payload), <code>throw tag(x)</code> (one), <code>throw tag(x, y)</code> (several)</td></tr>
 <tr><td><code>throw_ref</code></td><td><code>throw_ref</code></td></tr>
 <tr><td><code>try_table ... catch $tag $l ...</code></td><td><code>try { ... } catch [ tag -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_ref $tag $l ...</code></td><td><code>try { ... } catch [ tag &amp; -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_all $l ...</code></td><td><code>try { ... } catch [ _ -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_all_ref $l ...</code></td><td><code>try { ... } catch [ _ &amp; -&gt; 'l, ... ]</code></td></tr>
-<tr><td><code>try ... catch $tag ...</code></td><td><code>try { ... } catch { tag =&gt; { ... } ... }</code></td></tr>
-<tr><td><code>try ... catch_all ...</code></td><td><code>try { ... } catch { _ =&gt; { ... } }</code></td></tr>
+<tr><td><code>try_table</code> + block ladder</td><td><code>try { ... } catch { tag =&gt; { ... } tag &amp; =&gt; { ... } _ =&gt; { ... } }</code></td></tr>
+<tr><td><code>try ... catch $tag ...</code></td><td><code>try_legacy { ... } catch { tag =&gt; { ... } ... }</code></td></tr>
+<tr><td><code>try ... catch_all ...</code></td><td><code>try_legacy { ... } catch { _ =&gt; { ... } }</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>The <code>try { ... } catch [ ... ]</code> syntax compiles to WebAssembly’s <code>try_table</code> instruction (the current standard). The <code>try { ... } catch { tag =&gt; { ... } }</code> syntax compiles to the older <code>try</code>/<code>catch</code> instructions (deprecated but still supported for compatibility).</p>
+<p>Both <code>try</code> forms compile to WebAssembly’s <code>try_table</code> instruction (the current standard): the bracket form is the raw instruction (each clause branches to a label), and the braced structured form adds one block per arm around it — each catch clause branches to its arm’s block, the arm bodies are the trailing code between the block ends (so an arm’s completion falls into the next arm), and the body’s completion escapes past all arms with a single branch carrying the try’s value. The decompiler recovers the structured form from exactly that ladder shape (a label on the try is the join block), falling back to the bracket form for any other use of <code>try_table</code>. <code>try_legacy</code> compiles to the older <code>try</code>/<code>catch</code> instructions (deprecated but still supported for compatibility), and legacy-instruction modules decompile to it.</p>
 <h2 id="stack-switching-instructions"><a class="header" href="#stack-switching-instructions">Stack Switching Instructions</a></h2>
 <p>These correspond to the WebAssembly <a href="https://github.com/WebAssembly/stack-switching">stack-switching proposal</a>. A continuation type is declared with <code>type k = cont ft;</code> (see <a href="types.html">Types</a>); <code>&lt;k&gt;</code> and <code>&lt;tag&gt;</code> below are the names of a continuation type and a tag respectively.</p>
+<p>The resume family and <code>switch</code> are methods on the continuation reference <code>c</code>; <code>cont.new</code> and <code>cont.bind</code> are the <code>T::new</code> / <code>T::bind</code> constructors of the declared continuation type (the <code>T::</code> namespace constructs a <code>&amp;T</code>). The type immediates are not written: the <code>$k</code> of <code>resume</code>/<code>resume_throw</code>/<code>resume_throw_ref</code>/<code>switch</code>, and the <em>source</em> type of <code>bind</code>, are inferred from the static type of the continuation expression, exactly as <code>call_ref</code>’s type immediate comes from the callee’s — so the receiver must have a <em>declared</em> continuation type (an abstract <code>&amp;cont</code> is rejected; a cast can never narrow a continuation, so give the value its precise type where it is introduced). An identity/upcast ascription <code>(c as &amp;k0).resume(x)</code> selects the supertype’s immediate (<code>resume $k0</code>) and emits no instruction; decompilation inserts exactly this ascription when an instruction’s type immediate is a strict supertype of its continuation operand’s own type, so the immediate survives the round trip.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>cont.new $k</code></td><td><code>cont_new k (func)</code></td></tr>
-<tr><td><code>cont.bind $k1 $k2</code></td><td><code>cont_bind k1 k2 (args, cont)</code></td></tr>
-<tr><td><code>suspend $tag</code></td><td><code>suspend tag (args)</code></td></tr>
-<tr><td><code>resume $k</code></td><td><code>resume k [] (args, cont)</code></td></tr>
-<tr><td><code>resume $k (on $tag $l) ...</code></td><td><code>resume k [ tag -&gt; 'l, ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume $k (on $tag switch) ...</code></td><td><code>resume k [ tag -&gt; switch, ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume_throw $k $tag ...</code></td><td><code>resume_throw k tag [ ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume_throw_ref $k ...</code></td><td><code>resume_throw_ref k [ ... ] (exn, cont)</code></td></tr>
-<tr><td><code>switch $k $tag</code></td><td><code>switch k tag (args, cont)</code></td></tr>
+<tr><td><code>cont.new $k</code></td><td><code>k::new(func)</code></td></tr>
+<tr><td><code>cont.bind $k1 $k2</code></td><td><code>k2::bind(args, cont)</code></td></tr>
+<tr><td><code>suspend $tag</code></td><td><code>suspend tag(args)</code></td></tr>
+<tr><td><code>resume $k</code></td><td><code>c.resume(args)</code></td></tr>
+<tr><td><code>resume $k (on $tag $l) ...</code></td><td><code>c.resume(args) on [tag -&gt; 'l, ...]</code></td></tr>
+<tr><td><code>resume $k (on $tag switch) ...</code></td><td><code>c.resume(args) on [tag -&gt; switch, ...]</code></td></tr>
+<tr><td><code>resume_throw $k $tag ...</code></td><td><code>c.resume_throw(tag(payload)) on [...]</code></td></tr>
+<tr><td><code>resume_throw_ref $k ...</code></td><td><code>c.resume_throw_ref(exn) on [...]</code></td></tr>
+<tr><td><code>switch $k $tag</code></td><td><code>c.switch(args, tag: tag)</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in <code>[ ... ]</code> mirrors the <code>try ... catch [ ... ]</code> syntax: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> is an <code>(on $tag switch)</code> clause.</p>
-<p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="module_fields.html#tags">Tags</a>. When a function reference is passed to <code>cont_new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
+<p>Operands compile in WebAssembly stack order: for continuations — as for <code>call_ref</code> — that puts the receiver <em>last</em>, so <code>c.resume(x)</code> evaluates <code>x</code> before <code>c</code> even though <code>c</code> is written first (this diverges from receiver-first methods like <code>arr.fill</code>, whose instruction takes the receiver first on the stack). The handler list of a postfix <code>on [...]</code> clause mirrors the <code>try ... catch [...]</code> syntax — a keyword-led handler bracket after the guarded operation: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> an <code>(on $tag switch)</code> clause; the clause is omitted when empty. <code>resume_throw</code> raises its tag applied to the payload, <code>tag(payload)</code>, exactly as <code>throw tag(payload)</code> spells it, and <code>switch</code>’s enabling tag is the required labelled <code>tag:</code> immediate.</p>
+<p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="module_fields.html#tags">Tags</a>. When a function reference is passed to <code>T::new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
 
                     </main>
 

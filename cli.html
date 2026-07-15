@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
+            window.path_to_searchindex_js = "searchindex-828c4755.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-41a4b7e9.js"></script>
+        <script src="toc-7b4055a9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,12 +185,14 @@
 wax convert [OPTIONS] [INPUT] # the same, named explicitly
 wax format [OPTIONS] FILE…    # reformat files
 wax check [OPTIONS] FILE…     # validate files
+wax lsp                       # run the language server (over stdin/stdout)
 </code></pre>
 <p>By default <code>wax</code> converts between formats; this command is also available under
 its explicit name, <code>wax convert</code> (useful when an input filename could be
 mistaken for a subcommand). The <code>format</code> subcommand reformats files (see
-<a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
-<a href="#checking">Checking</a>).</p>
+<a href="#formatting">Formatting</a>), <code>check</code> validates them (see <a href="#checking">Checking</a>),
+and <code>lsp</code> starts a Language Server Protocol server for editors (see <a href="#language-server">Language
+server</a>).</p>
 <h2 id="positional-arguments"><a class="header" href="#positional-arguments">Positional Arguments</a></h2>
 <ul>
 <li><code>[INPUT]</code>: Source file to convert/format. Supported extensions: <code>.wax</code>, <code>.wat</code>, <code>.wasm</code>.
@@ -276,7 +278,7 @@ WASM↔WASM round-trips on their own, no flag needed.</li>
 </ul>
 </li>
 <li>
-<p><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em></p>
+<p><a id="warnings"></a><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em></p>
 <ul>
 <li>Set the reporting level of a warning produced during validation.</li>
 <li><em>NAME</em> is a single warning, a group, or <code>all</code>:
@@ -565,13 +567,16 @@ an optional proposal, as for <a href="#options"><code>convert</code></a>. Repeat
 above.</li>
 <li><strong><code>--all-errors</code></strong>: report <em>every</em> syntax error instead of stopping at the
 first. Normally the parser gives up at the first unexpected token; with this
-flag it uses panic-mode error recovery — resynchronizing at statement and
-block boundaries (<code>;</code>, <code>}</code>, <code>)</code>, <code>]</code>, and the keywords that begin a new item
-or statement) and continuing — so a single run lists all the syntax errors.
-The recovered module is then type-checked too, so genuine type errors in the
-intact regions surface alongside the syntax errors; the “not bound” errors
-that a construct dropped during recovery would otherwise cascade are
-suppressed. Wax input only (ignored for Wat/Wasm).</li>
+flag it uses panic-mode error recovery and continues, so a single run lists
+all the syntax errors. Wax resynchronizes at statement and block boundaries
+(<code>;</code>, <code>}</code>, <code>)</code>, <code>]</code>, and the keywords that begin a new item or statement); WAT,
+being fully parenthesized, resynchronizes on the parentheses (dropping an
+incomplete group, auto-closing an unclosed one). The recovered module is then
+checked too — type-checked for Wax, validated for WAT — so genuine type or
+validation errors in the intact regions surface alongside the syntax errors,
+while the cascades a dropped construct would otherwise trigger (an unbound name
+in Wax; a warning or wrong stack height in WAT) are suppressed. Text input
+only, Wax and Wat (ignored for a Wasm binary).</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em>: as above.</li>
 <li><strong><code>--error-format</code></strong> <em>FORMAT</em>: <code>human</code>, <code>json</code>, or <code>short</code>, as above.</li>
 <li><strong><code>--debug</code></strong> <em>CATEGORY</em>: as above.</li>
@@ -583,6 +588,42 @@ suppressed. Wax input only (ignored for Wat/Wasm).</li>
 <p><strong>Report all syntax errors in a Wax file at once:</strong></p>
 <pre><code class="language-sh">wax check --all-errors src/foo.wax
 </code></pre>
+<h2 id="language-server"><a class="header" href="#language-server">Language server</a></h2>
+<p>The <code>lsp</code> subcommand starts a <a href="https://microsoft.github.io/language-server-protocol/">Language Server
+Protocol</a> server for Wax
+and WebAssembly text, speaking JSON-RPC over stdin/stdout. It runs the same
+analysis the VS Code extension runs in-process, exposed to any LSP-capable
+editor (Neovim, Emacs with Eglot or lsp-mode, Helix, Kakoune, Zed, and others).</p>
+<pre><code class="language-sh">wax lsp
+</code></pre>
+<p>It reads no files of its own; the editor tells it which documents are open.
+Supported requests: diagnostics (pushed on open/change), hover,
+go-to-definition, go-to-type-definition, find-references, document highlight,
+rename (with prepare), document symbols (outline), completion, signature help,
+inlay hints, folding ranges, selection ranges, semantic tokens, and document
+formatting. The hover, navigation and completion features that need the typed
+tree are Wax-only, while formatting, diagnostics and the outline work for <code>.wat</code>
+too (dispatched by the document’s URI extension).</p>
+<p>A lint diagnostic carries the extra metadata editors use: the <code>-W</code> name as its
+code (linked to this reference), and <code>DiagnosticTag.Unnecessary</code> on the
+removable/unreachable lints (unused bindings, dead code) so the editor fades
+them.</p>
+<p>The one setting is <code>wax.define</code>, a list of conditional-compilation defines
+(mirroring the <a href="#options"><code>-D</code></a> flag, e.g. <code>["debug=true", "arch=wasm64"]</code>).
+Diagnostics and completion specialize to it, so a definition or an error in a
+branch the defines rule out is dropped. The server reads it from the client’s
+<code>initializationOptions</code> at startup and from <code>workspace/didChangeConfiguration</code>
+live (under a <code>wax</code> section), re-checking the open documents when it changes.</p>
+<p>Documents are synchronized in full (each change carries the whole buffer). The
+position encoding is negotiated: the server uses UTF-8 when the client offers it
+and otherwise UTF-16, the LSP default that every client supports. The <code>--stdio</code>
+flag is accepted (and ignored) for the editors that pass it by convention.</p>
+<h3 id="editor-setup"><a class="header" href="#editor-setup">Editor setup</a></h3>
+<p>Most editors just need the launch command <code>wax lsp</code> bound to the <code>wax</code> (and, if
+desired, <code>wat</code>) file type through their LSP client. Ready-to-use configurations
+for Neovim, Helix, and Emacs — paired with the <code>tree-sitter-wax</code> grammar for
+highlighting — live under <a href="https://github.com/ocsigen/wax/tree/main/editors"><code>editors/</code></a>
+in the repository (one directory per editor, each with a README).</p>
 <h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
 <p>All three commands share the same exit codes:</p>
 <div class="table-wrapper">
@@ -631,6 +672,9 @@ for the per-shell details and the PowerShell setup.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="editor.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -642,6 +686,9 @@ for the per-shell details and the PowerShell setup.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="editor.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>

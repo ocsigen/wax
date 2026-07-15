@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
+            window.path_to_searchindex_js = "searchindex-828c4755.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-41a4b7e9.js"></script>
+        <script src="toc-7b4055a9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -367,7 +367,7 @@
 <h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"rgb_channel"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">rgb_channel</span>(color: <span class="hljs-type">i32</span>, value: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">dispatch</span> color [<span class="hljs-symbol">'red</span> <span class="hljs-symbol">'green</span> <span class="hljs-symbol">'blue</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'bad</span>] {
+    <span class="hljs-keyword">dispatch</span> color [<span class="hljs-symbol">'red</span>, <span class="hljs-symbol">'green</span>, <span class="hljs-symbol">'blue</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'bad</span>] {
         <span class="hljs-symbol">'bad</span>:   { <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>; }
         <span class="hljs-symbol">'blue</span>:  { <span class="hljs-keyword">return</span> value &amp; <span class="hljs-number">255</span>; }
         <span class="hljs-symbol">'green</span>: { <span class="hljs-keyword">return</span> (value &amp; <span class="hljs-number">255</span>) &lt;&lt; <span class="hljs-number">8</span>; }
@@ -563,19 +563,18 @@ the block produces or by the surrounding context:</p>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"safe_divide"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">safe_divide</span>(a: <span class="hljs-type">i32</span>, b: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">if</span> b == <span class="hljs-number">0</span> {
-        <span class="hljs-keyword">throw</span> divide_by_zero;
+        <span class="hljs-keyword">throw</span> <span class="hljs-title">divide_by_zero</span>();
     }
     a /s b;
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"try_divide"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">try_divide</span>(a: <span class="hljs-type">i32</span>, b: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-symbol">'on_error</span>: <span class="hljs-keyword">do</span> {
-        <span class="hljs-keyword">try</span> {
-            <span class="hljs-keyword">return</span> <span class="hljs-title">safe_divide</span>(a, b);
-        } <span class="hljs-keyword">catch</span> [divide_by_zero -&gt; <span class="hljs-symbol">'on_error</span>]
+    <span class="hljs-keyword">try</span> <span class="hljs-type">i32</span> {
+        <span class="hljs-title">safe_divide</span>(a, b);
+    } <span class="hljs-keyword">catch</span> {
+        divide_by_zero =&gt; { <span class="hljs-number">0</span>; }   <span class="hljs-comment">// return 0 on division by zero</span>
     }
-    <span class="hljs-number">0</span>;   <span class="hljs-comment">// Return 0 on division by zero</span>
 }</span></pre>
 
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
@@ -820,9 +819,9 @@ load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
 
 <span class="hljs-comment">// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.</span>
 <span class="hljs-keyword">data</span> header @ mem[<span class="hljs-number">0</span>] =
-    <span class="hljs-string">"GIF89a"</span>,
-    [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>],
-    [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
+    <span class="hljs-string">"GIF89a"</span>
+    ++ [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>]
+    ++ [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
 
 <h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
 <p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
@@ -862,10 +861,10 @@ reply value.</p>
 <span class="hljs-comment">// Run the worker until its first suspend and return the value it yielded.</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"first_yield"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">first_yield</span>() -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">let</span> c: &amp;?<span class="hljs-type">k</span> = <span class="hljs-keyword">cont_new</span> <span class="hljs-title">k </span>(worker);
+    <span class="hljs-keyword">let</span> c: &amp;?<span class="hljs-type">k</span> = <span class="hljs-type">k</span>::<span class="hljs-title">new</span>(worker);
     <span class="hljs-keyword">let</span> (v, rest) =
         <span class="hljs-symbol">'on_yield</span>: <span class="hljs-keyword">do</span> () -&gt; (<span class="hljs-type">i32</span>, &amp;<span class="hljs-type">kr</span>) {
-            _ = <span class="hljs-keyword">resume</span> k [yield -&gt; <span class="hljs-symbol">'on_yield</span>] (c!);   <span class="hljs-comment">// worker returned; drop its result</span>
+            _ = c!.<span class="hljs-title">resume</span>() <span class="hljs-keyword">on</span> [yield -&gt; <span class="hljs-symbol">'on_yield</span>];  <span class="hljs-comment">// worker returned; drop its result</span>
             <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
         };
     _ = rest;            <span class="hljs-comment">// `rest` could be resumed with a reply to continue the worker</span>

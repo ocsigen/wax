@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
+            window.path_to_searchindex_js = "searchindex-828c4755.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-41a4b7e9.js"></script>
+        <script src="toc-7b4055a9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -216,7 +216,7 @@ dune build
 opam install .
 </code></pre>
 <h2 id="editor-support"><a class="header" href="#editor-support">Editor support</a></h2>
-<p>A <a href="https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax">Wax extension for Visual Studio Code</a> supports both <code>.wax</code> and WebAssembly text (<code>.wat</code>) files: syntax highlighting, formatting (with format on save), diagnostics as you type, a document outline, snippets, and commands to preview the compiled WAT or decompiled Wax side by side. It runs the toolchain compiled to WebAssembly in-process, so it works the same in desktop and web VS Code (including <a href="https://vscode.dev">vscode.dev</a>).</p>
+<p>Wax works in Visual Studio Code through a dedicated <a href="https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax">extension</a>, and in any editor with a Language Server Protocol client (Neovim, Emacs, Helix, and others) through the built-in <a href="cli.html#language-server"><code>wax lsp</code></a> server paired with the <code>tree-sitter-wax</code> grammar. Both give the same features: diagnostics, hover, go to definition, find references, rename, completion, signature help, formatting, and more. See <a href="editor.html">Editor Support</a> for the details and per-editor setup.</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Create a file <code>hello.wax</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0e2efc16.js";
+            window.path_to_searchindex_js = "../searchindex-828c4755.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-41a4b7e9.js"></script>
+        <script src="../toc-7b4055a9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -280,7 +280,7 @@ that referencing it yields an exact reference: <code>fn g: !ft;</code> for a nam
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> x: <span class="hljs-type">i32</span> = mem0.<span class="hljs-title">load32</span>(p);
 <span class="hljs-keyword">let</span> b: <span class="hljs-type">i32</span> = mem0.<span class="hljs-title">load8</span>(p) <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;
 mem0.<span class="hljs-title">store16</span>(p, v);
-mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);     <span class="hljs-comment">// align=1, offset=16</span></span></pre>
+mem0.<span class="hljs-title">store32</span>(p, v, offset: <span class="hljs-number">16</span>, align: <span class="hljs-number">1</span>);</span></pre>
 
 <p>See <a href="instructions.html#memory-access">Memory Access</a> for the full instruction mapping.</p>
 <h3 id="data-segments"><a class="header" href="#data-segments">Data Segments</a></h3>
@@ -295,8 +295,8 @@ mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;</span></pre>
 
 <p>Data bytes are ordinary <a href="../language.html#strings">string literals</a>; escapes such as <code>\x41</code> and <code>\x00</code> (two hex digits) decode to raw bytes.</p>
-<p>A segment’s contents may also mix strings with <strong>typed numeric runs</strong> — <code>[type: values]</code>, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly <em>numeric values</em> text-format extension, and it round-trips through WAT:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> pixels = <span class="hljs-string">"hdr"</span>, [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>], [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>, -<span class="hljs-number">3</span>], [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
+<p>A segment’s contents may also concatenate (with <code>++</code>) strings and <strong>typed numeric runs</strong> — <code>[type: values]</code>, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly <em>numeric values</em> text-format extension, and it round-trips through WAT:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> pixels = <span class="hljs-string">"hdr"</span> ++ [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>] ++ [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>, -<span class="hljs-number">3</span>] ++ [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
 
 <p>The scalar element types are <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, and <code>f64</code>; the values (including <code>nan</code>/<code>inf</code>) are ordinary literals. A <code>v128</code> run holds lane groups written <code>shape(lanes)</code>, e.g. <code>[v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)]</code>. The bytes are the same as if the values were written out as an escaped string.</p>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>

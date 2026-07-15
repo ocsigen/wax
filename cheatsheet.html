@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
+            window.path_to_searchindex_js = "searchindex-828c4755.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-41a4b7e9.js"></script>
+        <script src="toc-7b4055a9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -226,9 +226,9 @@ c ? a : b                            <span class="hljs-comment">// conditional e
 <span class="hljs-keyword">do</span> { }        <span class="hljs-symbol">'l</span>: <span class="hljs-keyword">do</span> t { }           <span class="hljs-comment">// block (optionally labeled / typed)</span>
 <span class="hljs-keyword">loop</span> { }                             <span class="hljs-comment">// loop</span>
 <span class="hljs-keyword">while</span> c { }   <span class="hljs-symbol">'l</span>: <span class="hljs-keyword">while</span> c : (step) { }   <span class="hljs-comment">// while (optional continue-expression)</span>
-<span class="hljs-keyword">br</span> <span class="hljs-symbol">'l</span>;   <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'l</span> c;   <span class="hljs-keyword">br_table</span> [<span class="hljs-symbol">'a</span> <span class="hljs-symbol">'b</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] i;
+<span class="hljs-keyword">br</span> <span class="hljs-symbol">'l</span>;   <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'l</span> c;   <span class="hljs-keyword">br_table</span> [<span class="hljs-symbol">'a</span>, <span class="hljs-symbol">'b</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] i;
 <span class="hljs-keyword">br_on_null</span> <span class="hljs-symbol">'l</span> v;   <span class="hljs-keyword">br_on_cast</span> <span class="hljs-symbol">'l</span> &amp;<span class="hljs-type">t</span> v;   <span class="hljs-comment">// also _non_null / _cast_fail</span>
-<span class="hljs-keyword">dispatch</span> i [<span class="hljs-symbol">'a</span> <span class="hljs-symbol">'b</span> <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] { <span class="hljs-symbol">'a</span>: { } <span class="hljs-symbol">'b</span>: { } <span class="hljs-symbol">'d</span>: { } }   <span class="hljs-comment">// jump table (falls through)</span>
+<span class="hljs-keyword">dispatch</span> i [<span class="hljs-symbol">'a</span>, <span class="hljs-symbol">'b</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'d</span>] { <span class="hljs-symbol">'a</span>: { } <span class="hljs-symbol">'b</span>: { } <span class="hljs-symbol">'d</span>: { } }   <span class="hljs-comment">// jump table (falls through)</span>
 <span class="hljs-keyword">match</span> v { p: &amp;<span class="hljs-type">t</span> =&gt; { }  <span class="hljs-literal">null</span> =&gt; { }  _ =&gt; { } }          <span class="hljs-comment">// type match</span>
 <span class="hljs-keyword">return</span> e;   <span class="hljs-keyword">become</span> <span class="hljs-title">f</span>(x);             <span class="hljs-comment">// return / tail call</span>
 <span class="hljs-keyword">unreachable</span>;   <span class="hljs-keyword">nop</span>;                  <span class="hljs-comment">// trap / no-op (statements, not expressions)</span></span></pre>
@@ -265,11 +265,13 @@ a.<span class="hljs-title">fill</span>(i, v, n)   a.<span class="hljs-title">cop
 m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span>(n)   m.<span class="hljs-title">fill</span>(d, v, n)   m.<span class="hljs-title">copy</span>(d, s, n)   <span class="hljs-comment">// management</span></span></pre>
 
 <h2 id="exceptions-and-stack-switching"><a class="header" href="#exceptions-and-stack-switching">Exceptions and stack switching</a></h2>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">try</span> t { } <span class="hljs-keyword">catch</span> { oops =&gt; { _; }  _ =&gt; { } }     <span class="hljs-comment">// try / catch (payload via hole _)</span>
-<span class="hljs-keyword">throw</span> oops <span class="hljs-number">42</span>;                                   <span class="hljs-comment">// throw</span>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">try</span> t { } <span class="hljs-keyword">catch</span> { oops =&gt; { _; } }               <span class="hljs-comment">// try / catch arms (payload via hole _)</span>
+<span class="hljs-keyword">try_legacy</span> t { } <span class="hljs-keyword">catch</span> { oops =&gt; { _; } }        <span class="hljs-comment">// deprecated try/catch instructions</span>
+<span class="hljs-keyword">throw</span> <span class="hljs-title">oops</span>(<span class="hljs-number">42</span>);                                   <span class="hljs-comment">// throw</span>
 <span class="hljs-keyword">try</span> { } <span class="hljs-keyword">catch</span> [oops -&gt; <span class="hljs-symbol">'h</span>]                       <span class="hljs-comment">// branch-to-label form (try_table)</span>
 <span class="hljs-keyword">type</span> <span class="hljs-type">k</span> = <span class="hljs-keyword">cont</span> ft;                                <span class="hljs-comment">// continuation type</span>
-<span class="hljs-keyword">suspend</span> <span class="hljs-title">yield</span>(x);   <span class="hljs-keyword">resume</span> k [<span class="hljs-keyword">tag</span> -&gt; <span class="hljs-symbol">'l</span>] (args, c);   <span class="hljs-comment">// suspend / resume</span></span></pre>
+<span class="hljs-keyword">let</span> c = <span class="hljs-type">k</span>::<span class="hljs-title">new</span>(f);                               <span class="hljs-comment">// cont.new (k::bind binds args)</span>
+<span class="hljs-keyword">suspend</span> <span class="hljs-title">yield</span>(x);   c.<span class="hljs-title">resume</span>(args) <span class="hljs-keyword">on</span> [<span class="hljs-keyword">tag</span> -&gt; <span class="hljs-symbol">'l</span>];    <span class="hljs-comment">// suspend / resume</span></span></pre>
 
 
                     </main>
