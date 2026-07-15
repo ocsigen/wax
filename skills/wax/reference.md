@@ -76,7 +76,7 @@ opam install .
 
 ## Editor support
 
-A [Wax extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax) supports both `.wax` and WebAssembly text (`.wat`) files: syntax highlighting, formatting (with format on save), diagnostics as you type, a document outline, snippets, and commands to preview the compiled WAT or decompiled Wax side by side. It runs the toolchain compiled to WebAssembly in-process, so it works the same in desktop and web VS Code (including [vscode.dev](https://vscode.dev)).
+Wax works in Visual Studio Code through a dedicated [extension](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax), and in any editor with a Language Server Protocol client (Neovim, Emacs, Helix, and others) through the built-in [`wax lsp`](cli.md#language-server) server paired with the `tree-sitter-wax` grammar. Both give the same features: diagnostics, hover, go to definition, find references, rename, completion, signature help, formatting, and more. See [Editor Support](editor.md) for the details and per-editor setup.
 
 ## Quick Start
 
@@ -184,7 +184,7 @@ On top of that, it enables these further proposals by default:
 | Branch hinting | `#[likely]` / `#[unlikely]` |
 | Custom page sizes | `pagesize` |
 | [Extended name section](https://github.com/WebAssembly/extended-name-section) | `$`-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip |
-| [WAT numeric values](https://github.com/WebAssembly/wat-numeric-values) | typed numeric runs in [data segments](./language.md#data-segments) (`data d = [i16: -1, 2], [f32: 0.5, nan], [v128: i32x4(1,2,3,4)];`); runs survive the wax↔wat round-trip |
+| [WAT numeric values](https://github.com/WebAssembly/wat-numeric-values) | typed numeric runs in [data segments](./language.md#data-segments) (`data d = [i16: -1, 2] ++ [f32: 0.5, nan] ++ [v128: i32x4(1,2,3,4)];`); runs survive the wax↔wat round-trip |
 
 ## Enabled with `-X`
 
@@ -894,11 +894,11 @@ Branch instructions:
 ```wax
 br 'label;                          // unconditional branch
 br_if 'label cond;                  // branch if cond (an i32) is non-zero
-br_table ['a 'b else 'default] i;   // branch to the i-th label, else 'default
+br_table ['a, 'b, else 'default] i;   // branch to the i-th label, else 'default
 ```
 
-The labels in a `br_table` are separated by spaces, and `else` gives the
-fallback for an out-of-range index. A branch also carries any values its target
+The labels in a `br_table` are separated by commas, and the mandatory final
+`else` gives the fallback for an out-of-range index. A branch also carries any values its target
 expects: a `do i32` target receives an `i32`, and so on.
 
 Four more branch instructions test a reference and branch on the result, passing
@@ -948,7 +948,7 @@ out-of-range index), and each arm gives that case's body:
 
 ```wax,check
 fn classify(x: i32) -> i32 {
-    dispatch x ['zero 'one 'two else 'big] {
+    dispatch x ['zero, 'one, 'two, else 'big] {
         'big:  { return 99; }
         'two:  { return 30; }
         'one:  { return 20; }
@@ -975,7 +975,7 @@ own result via `return`; to break out instead, branch to an enclosing label:
 ```wax
 let r: i32;
 'done: do {
-    dispatch x ['zero 'one else 'two] {
+    dispatch x ['zero, 'one, else 'two] {
         'two:  { r = 30; }
         'one:  { r = 20; br 'done; }
         'zero: { r = 10; br 'done; }
@@ -1121,7 +1121,7 @@ Like `#[export]`, `#[start]` can carry an `if <condition>` guard, so a function
 is the start only in some configurations (at most one start per configuration):
 
 ```wax,check
-#[start, if debug]
+#[start, if(debug)]
 fn init() {
     // only run under `-D debug=true`
 }
@@ -1213,7 +1213,7 @@ in some configurations:
 
 ```wax,check
 #[export]
-#[export = "add_alias", if not(bootstrap)]
+#[export = "add_alias", if(not(bootstrap))]
 fn add(x: i32, y: i32) -> i32 { x + y; }
 ```
 
@@ -1618,6 +1618,22 @@ Constants are `v128::` free functions, one argument per lane:
 const ones: v128 = v128::i32x4(1, 1, 1, 1);
 ```
 
+Memory accesses are methods on a [memory](#memories), named like the scalar
+accesses with the access shape in the name (a widening load keeps its
+`_s`/`_u` suffix, as the value ops do); the full-width pair takes the family
+letter, `loadv128`/`storev128` (like `loadf32`/`storef32`):
+
+```wax,check
+memory buf: i32 [1];
+
+fn sum2(p: i32) -> v128 {
+    let v = buf.loadv128(p);                // v128.load
+    let w = buf.load32x2_s(p, offset: 16);  // v128.load32x2_s
+    buf.storev128(p, v);                    // v128.store
+    v.add_i64x2(w);
+}
+```
+
 See [Instructions › SIMD](./correspondence/instructions.md#simd-vector-instructions) for the full
 mnemonic mapping (`extract_lane`/`replace_lane`/`shuffle`, comparisons, shifts,
 and the whole-vector `*_v128` operations).
@@ -1650,22 +1666,36 @@ memory pool: i32 [1, 16] shared;
 
 ### Atomics
 
-Atomic memory operations are methods on a memory, named after the WebAssembly
-mnemonic with `.` rewritten as `_` (the value type is part of the name):
+Atomic memory operations are methods on a memory, following the same naming
+convention as the plain [loads and stores](#load-and-store): the access width
+is in the method name, the `i32`/`i64` value type comes from the operand and
+result types, and a narrow load returns raw bits, resolved by an `as iN_u`
+cast:
 
-```wax
-mem.i32_atomic_load(p)              // atomic load
-mem.i32_atomic_store(p, v);         // atomic store
-mem.i32_atomic_rmw_add(p, v)        // read-modify-write, returns the old value
-mem.i64_atomic_rmw16_add_u(p, v)    // narrow (16-bit) RMW on an i64
-mem.i32_atomic_rmw_cmpxchg(p, expected, replacement)
-mem.atomic_notify(p, count)         // wake waiters
-mem.atomic_wait32(p, expected, timeout)
+```wax,check
+memory mem: i32 [1, 2] shared;
+
+fn atomics(p: i32, v: i32, w: i64) -> i32 {
+    _ = mem.atomic_load32(p);              // i32.atomic.load
+    _ = mem.atomic_load8(p) as i32_u;      // i32.atomic.load8_u (zero-extend)
+    _ = mem.atomic_load32(p) as i64_u;     // i64.atomic.load32_u
+    mem.atomic_store16(p, v);              // i32.atomic.store16 (v is i32)
+    mem.atomic_store16(p, w);              // i64.atomic.store16 (w is i64)
+    _ = mem.atomic_rmw_add32(p, v);        // read-modify-write: the old value
+    _ = mem.atomic_rmw_add16(p, w);        // i64.atomic.rmw16.add_u
+    _ = mem.atomic_rmw_cmpxchg32(p, v, v); // compare-and-exchange
+    _ = mem.atomic_wait32(p, v, w);        // wait: expected value and timeout
+    mem.atomic_notify(p, 1);               // wake waiters: how many woke
+}
 ```
 
-An atomic access must use its natural alignment. `atomic.fence`, which has no
-memory operand, is written as the [`atomic::fence()`](#qualified-intrinsics)
-intrinsic.
+A narrow atomic load zero-extends: there is no sign-extending form, so
+`as iN_s` is rejected on it (use `as iN_u`, then `.extend8_s()`/`.extend16_s()`
+if you need the sign; `atomic_load32(p) as i64_s` compiles as the plain
+`i32.atomic.load` followed by `i64.extend_i32_s`). An atomic access must use
+its natural alignment, the access width from the name. `atomic.fence`, which
+has no memory operand, is written as the
+[`atomic::fence()`](#qualified-intrinsics) intrinsic.
 
 ### Data Segments
 
@@ -1679,12 +1709,13 @@ data seg = "raw\x00bytes";               // top-level passive segment
 data init @ mem0 [0] = "hello";          // top-level active segment
 ```
 
-A segment's contents may mix string literals with **numeric runs** — a bracketed
-list `[type: values]` whose element type is stated once and whose values are
-packed little-endian — instead of hand-escaping every byte:
+A segment's contents may concatenate (with `++`) string literals and **numeric
+runs** — a bracketed list `[type: values]` whose element type is stated once
+and whose values are packed little-endian — instead of hand-escaping every
+byte:
 
 ```wax
-data table = "hdr", [f32: 0.2, 0.3, 0.4], [i16: -1, -2], [i8: 1, 2, 3, 4];
+data table = "hdr" ++ [f32: 0.2, 0.3, 0.4] ++ [i16: -1, -2] ++ [i8: 1, 2, 3, 4];
 ```
 
 The scalar element types are `i8`, `i16`, `i32`, `i64`, `f32`, and `f64`; values
@@ -1706,10 +1737,11 @@ mem0.load32(p) as i64_s     // load then widen to i64
 
 mem0.store32(p, v);         // store (width by method, type by value)
 mem0.store16(p, v);
-mem0.store32(p, v, 1, 16);  // align=1, offset=16
+mem0.store32(p, v, offset: 16, align: 1);
 ```
 
-The two optional trailing arguments are the access `align` and `offset` (constant integers).
+The optional `offset` and `align` of the access are labelled arguments
+(constant integers), written after the operands in either order.
 
 A `load8` or `load16` returns raw bits, so it needs an explicit `as i32_s`/`as i32_u`
 (or `as i64_s`/`as i64_u`) cast to extend to the value type, as the lines above
@@ -1773,34 +1805,64 @@ tag yield(i32) -> i32;      // carries an i32; resumes with an i32
 `throw` raises a tag together with its payload:
 
 ```wax
-throw overflow 42;
+throw overflow(42);
 ```
 
 ### Try / Catch
 
-A `try` runs its body and routes a matching thrown tag to a handler. Like a
-block it may carry a result type (`try i32 { … }`) that the body and every
-handler produce. A caught tag's payload is left on the operand stack for the
-handler to pick up with a [hole](#holes) `_`:
+A `try` runs its body and routes a matching thrown tag to a catch arm,
+compiling to WebAssembly's standard `try_table` plus a block ladder. Like a
+block it may carry a result type (`try i32 { … }`). An arm enters with the
+caught tag's payload on the operand stack, picked up with [holes](#holes) `_`;
+a `tag & => { … }` arm also delivers the exception reference (`&exn`) above
+the payload, and a bare `_ => { … }` (or `_ & => { … }`) matches any
+exception, grammar-enforced last. Leave the catch-all out to let unmatched
+exceptions propagate.
+
+Like `dispatch` and `match`, the arms are honest trailing code in clause
+order:
+
+- the body's normal completion **escapes past all arms**, supplying the try's
+  value (one implicit branch);
+- an arm's completion **falls into the next arm** — its completion stack must
+  match that arm's entry (payload, plus `&exn` for a `&` arm) — and the last
+  arm's completion supplies the try's value;
+- diverging arms (`throw`, `return`, `become`, a `br` out) are exempt, as
+  usual.
+
+An early arm that produces the result escapes explicitly through a label on
+the try: the label is the join, so branching to it exits the try carrying the
+value, block-like. (In expression position no label can prefix the try, so
+such an arm must diverge, or the code restructures.)
 
 ```wax
 fn lookup(k: i32) -> i32 {
-    try i32 {
-        find(k);             // may throw `overflow`
+    't: try i32 {
+        find(k);                     // may throw `overflow` or `timeout`
     } catch {
-        overflow => { _; }   // `_` is the thrown i32 payload
-        _ => { 0; }          // catch-all
+        overflow => { br 't _; }     // `_` is the thrown i32 payload
+        timeout & => { _ = _; br 't (0 - 1); }  // drop the &exn, escape
+        _ => { 0; }                  // catch-all supplies the value
     }
 }
 ```
 
-Each `tag => { … }` handler matches one tag; a bare `_ => { … }` matches any
-exception. Leave the catch-all out to let unmatched exceptions propagate.
+The fall-through makes the *normalize, then handle* idiom direct — the first
+arm's completion **is** the next arm's payload, with no re-throw:
+
+```wax
+let res: &eq = try &eq {
+    apply(f);
+} catch {
+    javascript_exception => { wrap_exception(_); }  // normalize; falls through
+    ocaml_exception => { _; }                       // handle either
+};
+```
 
 ### Branching handlers (try_table)
 
-A lower-level form branches to a label instead of running an inline handler,
-mapping directly to WebAssembly's `try_table`:
+The low-level spelling branches to a label instead of running an inline arm,
+mapping one-to-one to a raw `try_table`:
 
 ```wax
 try { might_throw(); } catch [overflow -> 'h]    // on `overflow`, branch to 'h
@@ -1810,7 +1872,19 @@ try { might_throw(); } catch [_ -> 'h]           // catch any exception
 
 The target label receives the payload (and, with `&`, the exception reference,
 of type `&exn`, or `&?exn` for the nullable form), so the labelled block's type
-must match what it is handed.
+must match what it is handed. Braced arms are the same clauses with the
+target blocks written inline.
+
+### Legacy exceptions (try_legacy)
+
+`try_legacy` compiles to the deprecated `try`/`catch` instructions, kept for
+targets that still use the legacy exception proposal. Its arms have the old
+semantics — each arm independently produces the try's result (no fall-through,
+no `&` forms):
+
+```wax
+try_legacy i32 { find(k); } catch { overflow => { _; } _ => { 0; } }
+```
 
 ## Stack Switching
 
@@ -1834,27 +1908,55 @@ fn worker(x: i32) -> i32 {
 }
 ```
 
-Continuations are created and driven with `cont_new`, `cont_bind`, `resume`,
-`resume_throw`, and `resume_throw_ref`. `cont` wraps a *named* function type, so
-each continuation shape is a `type`. `resume` takes a list of handlers mapping a
-suspended tag to a label (empty here):
+A continuation is created with the `T::new` constructor of its declared type
+(the `T::` namespace constructs a `&T`, extending the `v128::`/`i64::`
+qualified-intrinsic pattern), and driven with the `resume`, `resume_throw` and
+`resume_throw_ref` methods on the continuation reference. `T::bind` binds
+leading arguments away, yielding a `&T`; its source type, like the type
+immediate of the resume methods, is inferred from the continuation operand's
+static type — the call_ref model, so the receiver must have a *declared*
+continuation type.
+
+Continuations carry no runtime type information, so `as` with a continuation
+target is a *compile-time ascription*, not a cast: it is accepted exactly when
+it is a provable no-op — the operand's type is already a subtype of the target
+(`(c as &k0).resume(x)` resumes through the supertype signature, selecting the
+`resume $k0` immediate), a `null` literal with a nullable target, or dead code
+the ascription pins — and it compiles to no instruction. A `&cont` can never
+be *narrowed*: an abstract reference cannot be resumed, and no cast can fix it,
+so give the value its precise type where it is introduced (a parameter, local
+or block-result annotation). `is` and `br_on_cast` reject continuation targets
+outright (they are inherently runtime tests).
 
 ```wax
 type unit_task = fn() -> i32;
 type k0 = cont unit_task;
 
-fn spawn() -> &k { cont_new k (worker); }          // wrap `worker` (a task)
-fn prime(c: &k) -> &k0 { cont_bind k k0 (7, c); }  // bind the argument
-fn go(c: &k0) -> i32 { resume k0 [] (c); }         // run until it suspends
+fn spawn() -> &k { k::new(worker); }        // wrap `worker` (a task)
+fn prime(c: &k) -> &k0 { k0::bind(7, c); }  // bind the argument
+fn go(c: &k0) -> i32 { c.resume(); }        // run until it suspends
+```
+
+Handlers routing a suspended tag to a label are a postfix `on` clause on the
+call, a bracket of `tag -> 'label` or `tag -> switch` arms (the same shape and
+placement as `try { … } catch [t -> 'l]`), omitted when empty:
+
+```wax
+c.resume(x) on [yield -> 'on_yield]
 ```
 
 The abstract continuation heap types are written `&cont` and `&nocont` (with
 `&?cont` for the nullable form).
 
-`switch` hands control straight to another continuation instead of suspending
-back to a handler. Written `switch k tag (args, cont)`, it passes `args` and the
-current continuation to `cont`, tagged by `tag`; the `resume` that drives things
-enables it with a `tag -> switch` arm in its handler list.
+`c.switch(args, tag: t)` hands control straight to another continuation `c`
+instead of suspending back to a handler, passing `args` and the current
+continuation; the enabling tag is the required labelled `tag:` immediate, and
+the `resume` that drives things enables it with a `t -> switch` arm in its
+handler list.
+
+The receiver of these methods compiles *last*: operands compile in the
+instruction's stack order, which for continuations — as for `call_ref` — puts
+the receiver after the arguments.
 
 ## Holes
 
@@ -2079,9 +2181,9 @@ c ? a : b                            // conditional expression
 do { }        'l: do t { }           // block (optionally labeled / typed)
 loop { }                             // loop
 while c { }   'l: while c : (step) { }   // while (optional continue-expression)
-br 'l;   br_if 'l c;   br_table ['a 'b else 'd] i;
+br 'l;   br_if 'l c;   br_table ['a, 'b, else 'd] i;
 br_on_null 'l v;   br_on_cast 'l &t v;   // also _non_null / _cast_fail
-dispatch i ['a 'b else 'd] { 'a: { } 'b: { } 'd: { } }   // jump table (falls through)
+dispatch i ['a, 'b, else 'd] { 'a: { } 'b: { } 'd: { } }   // jump table (falls through)
 match v { p: &t => { }  null => { }  _ => { } }          // type match
 return e;   become f(x);             // return / tail call
 unreachable;   nop;                  // trap / no-op (statements, not expressions)
@@ -2133,11 +2235,13 @@ m.size()   m.grow(n)   m.fill(d, v, n)   m.copy(d, s, n)   // management
 ## Exceptions and stack switching
 
 ```wax
-try t { } catch { oops => { _; }  _ => { } }     // try / catch (payload via hole _)
-throw oops 42;                                   // throw
+try t { } catch { oops => { _; } }               // try / catch arms (payload via hole _)
+try_legacy t { } catch { oops => { _; } }        // deprecated try/catch instructions
+throw oops(42);                                   // throw
 try { } catch [oops -> 'h]                       // branch-to-label form (try_table)
 type k = cont ft;                                // continuation type
-suspend yield(x);   resume k [tag -> 'l] (args, c);   // suspend / resume
+let c = k::new(f);                               // cont.new (k::bind binds args)
+suspend yield(x);   c.resume(args) on [tag -> 'l];    // suspend / resume
 ```
 
 
@@ -2377,7 +2481,7 @@ fn countdown(n: i32) -> i32 {
 ```wax
 #[export = "rgb_channel"]
 fn rgb_channel(color: i32, value: i32) -> i32 {
-    dispatch color ['red 'green 'blue else 'bad] {
+    dispatch color ['red, 'green, 'blue, else 'bad] {
         'bad:   { return -1; }
         'blue:  { return value & 255; }
         'green: { return (value & 255) << 8; }
@@ -2609,19 +2713,18 @@ tag overflow();
 #[export = "safe_divide"]
 fn safe_divide(a: i32, b: i32) -> i32 {
     if b == 0 {
-        throw divide_by_zero;
+        throw divide_by_zero();
     }
     a /s b;
 }
 
 #[export = "try_divide"]
 fn try_divide(a: i32, b: i32) -> i32 {
-    'on_error: do {
-        try {
-            return safe_divide(a, b);
-        } catch [divide_by_zero -> 'on_error]
+    try i32 {
+        safe_divide(a, b);
+    } catch {
+        divide_by_zero => { 0; }   // return 0 on division by zero
     }
-    0;   // Return 0 on division by zero
 }
 ```
 
@@ -2930,9 +3033,9 @@ memory mem: i32 [1];
 
 // "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.
 data header @ mem[0] =
-    "GIF89a",
-    [f32: 1.0, 0.5, 0.25, 0.0],
-    [i16: 640, 480];
+    "GIF89a"
+    ++ [f32: 1.0, 0.5, 0.25, 0.0]
+    ++ [i16: 640, 480];
 ```
 
 ## SIMD
@@ -2982,10 +3085,10 @@ fn worker() -> i32 {
 // Run the worker until its first suspend and return the value it yielded.
 #[export = "first_yield"]
 fn first_yield() -> i32 {
-    let c: &?k = cont_new k (worker);
+    let c: &?k = k::new(worker);
     let (v, rest) =
         'on_yield: do () -> (i32, &kr) {
-            _ = resume k [yield -> 'on_yield] (c!);   // worker returned; drop its result
+            _ = c!.resume() on [yield -> 'on_yield];  // worker returned; drop its result
             return -1;
         };
     _ = rest;            // `rest` could be resumed with a reply to continue the worker
@@ -3332,7 +3435,7 @@ operator with `x` as its *left* operand) and reconstructs the compound form
 | `if ... else ...` | `if cond { ... } else { ... }` |
 | `br $l` | `br 'l` |
 | `br_if $l` | `br_if 'l cond` |
-| `br_table $l* $ld` | `br_table ['l* else 'ld] val` |
+| `br_table $l* $ld` | `br_table ['l1, 'l2, else 'ld] val` |
 | `br_on_null $l` | `br_on_null 'l val` |
 | `br_on_non_null $l` | `br_on_non_null 'l val` |
 | `br_on_cast $l $t1 $t2` | `br_on_cast 'l t2 val` |
@@ -3423,7 +3526,7 @@ their blocks; a `br_table` matching that dense void-switch shape decompiles back
 to `dispatch`:
 
 ```
-(block $big (block $b (block $a           dispatch x ['zero 'one else 'big] {
+(block $big (block $b (block $a           dispatch x ['zero, 'one, else 'big] {
   (br_table $a $b $big (local.get $x)))     'big:  { … }
   … 'one body …) … 'big body …)             'one:  { … }
                                             'zero: { … } }
@@ -3459,6 +3562,9 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 | `ref.test (ref (exact $t))` | `val is &!t` |
 | `ref.cast_desc_eq $t` | `val as descriptor(d)` |
 | `ref.cast_desc_eq (ref null …) $t` | `val as ?descriptor(d)` |
+| (no instruction) | `val as &k` (`k` a continuation type: a compile-time ascription) |
+
+There is no `ref.cast` (or `ref.test`/`br_on_cast`) to a continuation type: `as` with a continuation target is a compile-time ascription, accepted only when the operand's static type is already a subtype of the target (or the operand is a `null` literal / stack-polymorphic), and it emits nothing — its use is pinning the type immediate of a [`resume` through a supertype signature](#stack-switching-instructions).
 
 A bare function name used as a value, `f` rather than the call `f(args)`, is `ref.func $f`: it produces a reference to the function. This works in a global initializer and anywhere a `&func` reference is expected (for example the callee of an [indirect call](../language.md#indirect-calls)).
 
@@ -3508,7 +3614,7 @@ A packed (`i8`/`i16`) struct field or array element read sign- or zero-extends t
 
 ## SIMD (Vector) Instructions
 
-`v128` vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: `i32x4.add` becomes `add_i32x4`, `f32x4.sqrt` becomes `sqrt_f32x4`, and the whole-vector `v128.and` becomes `and_v128`. Signed/unsigned variants keep the `_s`/`_u` (`min_s_i8x16`, `extract_lane_u_i8x16`). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.
+`v128` vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: `i32x4.add` becomes `add_i32x4`, `f32x4.sqrt` becomes `sqrt_f32x4`, and the whole-vector `v128.and` becomes `and_v128`. Signed/unsigned variants keep the `_s`/`_u` (`min_s_i8x16`, `extract_lane_u_i8x16`). The constant lane immediates of the value-receiver operations (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands; the lane index of a memory lane access is instead the labelled `lane:` argument (see the loads and stores below).
 
 Lanewise unary and binary operations (the receiver is the first operand):
 
@@ -3559,17 +3665,17 @@ Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `
 | `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::f32x4(1.5, 2.5, 3.5, 4.5)` |
 | `v128.const i8x16 0 1 ... 15` | `v128::i8x16(0, 1, ..., 15)` |
 
-Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional trailing `align`/`offset` arguments work the same way):
+Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional labelled `offset:`/`align:` arguments work the same way): the `v128.` mnemonic prefix is dropped and the access shape stays in the name, `_s`/`_u` included; the full-width pair takes the family letter, `loadv128`/`storev128` (extending the `loadf32` convention). The lane index of a lane access is the labelled `lane:` argument, mandatory and in any order with `offset:`/`align:`:
 
 | Wasm | Wax |
 |------|-----|
-| `v128.load` | `m.v128_load(p)` |
-| `v128.store` | `m.v128_store(p, v)` |
-| `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) | `m.v128_load8x8_s(p)` |
-| `v128.load32_zero` (and `64_zero`) | `m.v128_load32_zero(p)` |
-| `v128.load8_splat` (and `16`/`32`/`64`) | `m.v128_load8_splat(p)` |
-| `v128.load8_lane` (and `16`/`32`/`64`) | `m.v128_load8_lane(p, v, lane)` |
-| `v128.store8_lane` (and `16`/`32`/`64`) | `m.v128_store8_lane(p, v, lane)` |
+| `v128.load` | `m.loadv128(p)` |
+| `v128.store` | `m.storev128(p, v)` |
+| `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) | `m.load8x8_s(p)` |
+| `v128.load32_zero` (and `64_zero`) | `m.load32_zero(p)` |
+| `v128.load8_splat` (and `16`/`32`/`64`) | `m.load8_splat(p)` |
+| `v128.load8_lane` (and `16`/`32`/`64`) | `m.load8_lane(p, v, lane: l)` |
+| `v128.store8_lane` (and `16`/`32`/`64`) | `m.store8_lane(p, v, lane: l)` |
 
 Relaxed-SIMD operations follow the same scheme:
 
@@ -3600,15 +3706,16 @@ Loads and stores are method calls on a [memory](module_fields.md#memories). The 
 
 A bare narrow load (`m.load8(p)` with no cast) defaults to unsigned `i32`, like `array.get_u`. The store value's `i32`/`i64` type is inferred from the operand.
 
-Two optional trailing arguments give the `align` and `offset` of the access (both constant integers); `offset` requires `align` to fill its positional slot:
+The `offset` and `align` of the access (both constant integers) are optional labelled arguments, written after the operands in either order:
 
 ```wax
-m.load32(p);          // i32.load
-m.load32(p, 1);       // i32.load align=1
-m.load32(p, 1, 16);   // i32.load align=1 offset=16
+m.load32(p);                        // i32.load
+m.load32(p, offset: 16);            // i32.load offset=16
+m.load32(p, offset: 16, align: 1);  // i32.load offset=16 align=1
+m.load32(p, align: 1);              // i32.load align=1
 ```
 
-The alignment defaults to the access's natural alignment and is only printed when it differs; the offset defaults to `0`.
+The alignment defaults to the access's natural alignment and is only printed when it differs; the offset defaults to `0` and is only printed when non-zero.
 
 The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):
 
@@ -3624,15 +3731,19 @@ The remaining memory operations are also methods on the memory (a data segment i
 
 ### Atomics
 
-Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with `.` rewritten as `_` (the value type stays in the name). They require exactly their natural alignment. `atomic.fence` has no memory operand and is the [`atomic::fence()`](language.md#qualified-intrinsics) intrinsic.
+Atomic accesses (the threads proposal) are methods on a memory, following the scalar-access naming convention: the access width is in the method name (`atomic_load16`, `atomic_rmw_add8`), the `i32`/`i64` value type comes from the operand and result types, and a narrow load is resolved by an `as iN_u` cast. The narrow accesses are the zero-extending `_u` forms, the only kind that exists, so no suffix or cast signedness choice arises (`as iN_s` on a narrow atomic load is rejected; `atomic_load32(p) as i64_s` has no fused form and compiles as `i32.atomic.load` then `i64.extend_i32_s`). They take the same labelled `offset:` argument as the other accesses; an `align:` argument is accepted but must be exactly the natural alignment (the access width from the name), which is also the default. `atomic.fence` has no memory operand and is the [`atomic::fence()`](language.md#qualified-intrinsics) intrinsic.
 
 | Wasm | Wax |
 |---|---|
-| `i32.atomic.load` | `m.i32_atomic_load(p)` |
-| `i64.atomic.store8` | `m.i64_atomic_store8(p, v)` |
-| `i32.atomic.rmw.add` | `m.i32_atomic_rmw_add(p, v)` |
-| `i64.atomic.rmw16.add_u` | `m.i64_atomic_rmw16_add_u(p, v)` |
-| `i32.atomic.rmw.cmpxchg` | `m.i32_atomic_rmw_cmpxchg(p, expected, replacement)` |
+| `i32.atomic.load` | `m.atomic_load32(p)` |
+| `i64.atomic.load` | `m.atomic_load64(p)` |
+| `i32.atomic.load8_u` | `m.atomic_load8(p) as i32_u` |
+| `i64.atomic.load32_u` | `m.atomic_load32(p) as i64_u` |
+| `i32.atomic.store` (`v: i32`) or `i64.atomic.store32` (`v: i64`) | `m.atomic_store32(p, v)` |
+| `i64.atomic.store8` (`v: i64`) | `m.atomic_store8(p, v)` |
+| `i32.atomic.rmw.add` (`v: i32`) | `m.atomic_rmw_add32(p, v)` |
+| `i64.atomic.rmw16.add_u` (`v: i64`) | `m.atomic_rmw_add16(p, v)` |
+| `i32.atomic.rmw.cmpxchg` | `m.atomic_rmw_cmpxchg32(p, expected, replacement)` |
 | `memory.atomic.notify` | `m.atomic_notify(p, count)` |
 | `memory.atomic.wait32` | `m.atomic_wait32(p, expected, timeout)` |
 | `atomic.fence` | `atomic::fence()` |
@@ -3669,36 +3780,39 @@ A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)
 
 | Wasm | Wax |
 |------|-----|
-| `throw $tag` | `throw tag` (no payload), `throw tag x` (one), `throw tag (x, y)` (several) |
+| `throw $tag` | `throw tag()` (no payload), `throw tag(x)` (one), `throw tag(x, y)` (several) |
 | `throw_ref` | `throw_ref` |
 | `try_table ... catch $tag $l ...` | `try { ... } catch [ tag -> 'l, ... ]` |
 | `try_table ... catch_ref $tag $l ...` | `try { ... } catch [ tag & -> 'l, ... ]` |
 | `try_table ... catch_all $l ...` | `try { ... } catch [ _ -> 'l, ... ]` |
 | `try_table ... catch_all_ref $l ...` | `try { ... } catch [ _ & -> 'l, ... ]` |
-| `try ... catch $tag ...` | `try { ... } catch { tag => { ... } ... }` |
-| `try ... catch_all ...` | `try { ... } catch { _ => { ... } }` |
+| `try_table` + block ladder | `try { ... } catch { tag => { ... } tag & => { ... } _ => { ... } }` |
+| `try ... catch $tag ...` | `try_legacy { ... } catch { tag => { ... } ... }` |
+| `try ... catch_all ...` | `try_legacy { ... } catch { _ => { ... } }` |
 
-The `try { ... } catch [ ... ]` syntax compiles to WebAssembly's `try_table` instruction (the current standard). The `try { ... } catch { tag => { ... } }` syntax compiles to the older `try`/`catch` instructions (deprecated but still supported for compatibility).
+Both `try` forms compile to WebAssembly's `try_table` instruction (the current standard): the bracket form is the raw instruction (each clause branches to a label), and the braced structured form adds one block per arm around it — each catch clause branches to its arm's block, the arm bodies are the trailing code between the block ends (so an arm's completion falls into the next arm), and the body's completion escapes past all arms with a single branch carrying the try's value. The decompiler recovers the structured form from exactly that ladder shape (a label on the try is the join block), falling back to the bracket form for any other use of `try_table`. `try_legacy` compiles to the older `try`/`catch` instructions (deprecated but still supported for compatibility), and legacy-instruction modules decompile to it.
 
 ## Stack Switching Instructions
 
 These correspond to the WebAssembly [stack-switching proposal](https://github.com/WebAssembly/stack-switching). A continuation type is declared with `type k = cont ft;` (see [Types](types.md)); `<k>` and `<tag>` below are the names of a continuation type and a tag respectively.
 
+The resume family and `switch` are methods on the continuation reference `c`; `cont.new` and `cont.bind` are the `T::new` / `T::bind` constructors of the declared continuation type (the `T::` namespace constructs a `&T`). The type immediates are not written: the `$k` of `resume`/`resume_throw`/`resume_throw_ref`/`switch`, and the *source* type of `bind`, are inferred from the static type of the continuation expression, exactly as `call_ref`'s type immediate comes from the callee's — so the receiver must have a *declared* continuation type (an abstract `&cont` is rejected; a cast can never narrow a continuation, so give the value its precise type where it is introduced). An identity/upcast ascription `(c as &k0).resume(x)` selects the supertype's immediate (`resume $k0`) and emits no instruction; decompilation inserts exactly this ascription when an instruction's type immediate is a strict supertype of its continuation operand's own type, so the immediate survives the round trip.
+
 | Wasm | Wax |
 |------|-----|
-| `cont.new $k` | `cont_new k (func)` |
-| `cont.bind $k1 $k2` | `cont_bind k1 k2 (args, cont)` |
-| `suspend $tag` | `suspend tag (args)` |
-| `resume $k` | `resume k [] (args, cont)` |
-| `resume $k (on $tag $l) ...` | `resume k [ tag -> 'l, ... ] (args, cont)` |
-| `resume $k (on $tag switch) ...` | `resume k [ tag -> switch, ... ] (args, cont)` |
-| `resume_throw $k $tag ...` | `resume_throw k tag [ ... ] (args, cont)` |
-| `resume_throw_ref $k ...` | `resume_throw_ref k [ ... ] (exn, cont)` |
-| `switch $k $tag` | `switch k tag (args, cont)` |
+| `cont.new $k` | `k::new(func)` |
+| `cont.bind $k1 $k2` | `k2::bind(args, cont)` |
+| `suspend $tag` | `suspend tag(args)` |
+| `resume $k` | `c.resume(args)` |
+| `resume $k (on $tag $l) ...` | `c.resume(args) on [tag -> 'l, ...]` |
+| `resume $k (on $tag switch) ...` | `c.resume(args) on [tag -> switch, ...]` |
+| `resume_throw $k $tag ...` | `c.resume_throw(tag(payload)) on [...]` |
+| `resume_throw_ref $k ...` | `c.resume_throw_ref(exn) on [...]` |
+| `switch $k $tag` | `c.switch(args, tag: tag)` |
 
-Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in `[ ... ]` mirrors the `try ... catch [ ... ]` syntax: `tag -> 'l` is an `(on $tag $l)` clause and `tag -> switch` is an `(on $tag switch)` clause.
+Operands compile in WebAssembly stack order: for continuations — as for `call_ref` — that puts the receiver *last*, so `c.resume(x)` evaluates `x` before `c` even though `c` is written first (this diverges from receiver-first methods like `arr.fill`, whose instruction takes the receiver first on the stack). The handler list of a postfix `on [...]` clause mirrors the `try ... catch [...]` syntax — a keyword-led handler bracket after the guarded operation: `tag -> 'l` is an `(on $tag $l)` clause and `tag -> switch` an `(on $tag switch)` clause; the clause is omitted when empty. `resume_throw` raises its tag applied to the payload, `tag(payload)`, exactly as `throw tag(payload)` spells it, and `switch`'s enabling tag is the required labelled `tag:` immediate.
 
-Tags used with `suspend`/`resume` may have result types (unlike exception tags); see [Tags](module_fields.md#tags). When a function reference is passed to `cont_new` for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (`fn f: ft (...) { ... }`) so its type matches the continuation's.
+Tags used with `suspend`/`resume` may have result types (unlike exception tags); see [Tags](module_fields.md#tags). When a function reference is passed to `T::new` for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (`fn f: ft (...) { ... }`) so its type matches the continuation's.
 
 
 <!-- docs/src/correspondence/module_fields.md -->
@@ -3877,7 +3991,7 @@ Loads and stores use method-call syntax on the memory, with the value's width in
 let x: i32 = mem0.load32(p);
 let b: i32 = mem0.load8(p) as i32_u;
 mem0.store16(p, v);
-mem0.store32(p, v, 1, 16);     // align=1, offset=16
+mem0.store32(p, v, offset: 16, align: 1);
 ```
 
 See [Memory Access](instructions.md#memory-access) for the full instruction mapping.
@@ -3902,10 +4016,10 @@ data init @ mem0 [0] = "hello";
 
 Data bytes are ordinary [string literals](../language.md#strings); escapes such as `\x41` and `\x00` (two hex digits) decode to raw bytes.
 
-A segment's contents may also mix strings with **typed numeric runs** — `[type: values]`, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly *numeric values* text-format extension, and it round-trips through WAT:
+A segment's contents may also concatenate (with `++`) strings and **typed numeric runs** — `[type: values]`, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly *numeric values* text-format extension, and it round-trips through WAT:
 
 ```wax
-data pixels = "hdr", [f32: 0.2, 0.3, 0.4], [i16: -1, -2, -3], [i8: 1, 2, 3, 4];
+data pixels = "hdr" ++ [f32: 0.2, 0.3, 0.4] ++ [i16: -1, -2, -3] ++ [i8: 1, 2, 3, 4];
 ```
 
 The scalar element types are `i8`, `i16`, `i32`, `i64`, `f32`, and `f64`; the values (including `nan`/`inf`) are ordinary literals. A `v128` run holds lane groups written `shape(lanes)`, e.g. `[v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)]`. The bytes are the same as if the values were written out as an escaped string.
@@ -4148,6 +4262,7 @@ wax [OPTIONS] [INPUT]         # convert (the default command)
 wax convert [OPTIONS] [INPUT] # the same, named explicitly
 wax format [OPTIONS] FILE…    # reformat files
 wax check [OPTIONS] FILE…     # validate files
+wax lsp                       # run the language server (over stdin/stdout)
 wax mcp [OPTIONS]             # serve the toolchain to AI assistants (MCP)
 ```
 
@@ -4155,8 +4270,9 @@ By default `wax` converts between formats; this command is also available under
 its explicit name, `wax convert` (useful when an input filename could be
 mistaken for a subcommand). The `format` subcommand reformats files (see
 [Formatting](#formatting)), `check` validates them (see [Checking](#checking)),
-and `mcp` serves the toolchain to AI assistants (see
-[Serving over MCP](#serving-over-mcp)).
+`lsp` starts a Language Server Protocol server for editors (see [Language
+server](#language-server)), and `mcp` serves the toolchain to AI assistants
+(see [Serving over MCP](#serving-over-mcp)).
 
 ## Positional Arguments
 
@@ -4171,7 +4287,7 @@ and `mcp` serves the toolchain to AI assistants (see
 - **`-f`**, **`--format`**, **`--output-format`** *FORMAT*
     - Specify the output format.
     - Values: `wax`, `wat`, `wasm`.
-    - Default: `wasm` (if not auto-detected from output filename).
+    - Default: `wax` (if not auto-detected from output filename).
 
 - **`-i`**, **`--input-format`** *FORMAT*
     - Specify the input format.
@@ -4215,7 +4331,7 @@ and `mcp` serves the toolchain to AI assistants (see
           already present in a binary — are preserved through WAT↔WAT and
           WASM↔WASM round-trips on their own, no flag needed.
 
-- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
+- <a id="warnings"></a>**`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
     - Set the reporting level of a warning produced during validation.
     - *NAME* is a single warning, a group, or `all`:
         - `unused-local` (group `unused`): a local that is declared but never
@@ -4362,9 +4478,9 @@ and `mcp` serves the toolchain to AI assistants (see
     - Fails (exit `128`) if a conditional-compilation directive `(@if …)`
       remains unresolved; resolve them first with `-D`/`--define`.
 
-- **`--source-map-file`** *FILE*
-    - Generate a source map file. Only valid with wasm output (`-f wasm`);
-      requesting one for wat or wax output is an error.
+- **`--source-map`**
+    - Generate a source map file alongside the output file and insert a `sourceMappingURL` custom section. Only valid with wasm output (`-f wasm`) to a file;
+      requesting one for wat or wax output, or when outputting to `stdout`, is an error.
 
 - **`--debug`** *CATEGORY*
     - Enable developer debug output for a category. Repeatable, and a single
@@ -4390,7 +4506,7 @@ wax input.wat -o output.wax
 
 **Format a Wax file (round-trip):**
 ```sh
-wax input.wax -f wax
+wax input.wax
 ```
 
 **Read from stdin and write to stdout:**
@@ -4493,13 +4609,16 @@ wax check [OPTIONS] FILE…
   above.
 - **`--all-errors`**: report *every* syntax error instead of stopping at the
   first. Normally the parser gives up at the first unexpected token; with this
-  flag it uses panic-mode error recovery — resynchronizing at statement and
-  block boundaries (`;`, `}`, `)`, `]`, and the keywords that begin a new item
-  or statement) and continuing — so a single run lists all the syntax errors.
-  The recovered module is then type-checked too, so genuine type errors in the
-  intact regions surface alongside the syntax errors; the "not bound" errors
-  that a construct dropped during recovery would otherwise cascade are
-  suppressed. Wax input only (ignored for Wat/Wasm).
+  flag it uses panic-mode error recovery and continues, so a single run lists
+  all the syntax errors. Wax resynchronizes at statement and block boundaries
+  (`;`, `}`, `)`, `]`, and the keywords that begin a new item or statement); WAT,
+  being fully parenthesized, resynchronizes on the parentheses (dropping an
+  incomplete group, auto-closing an unclosed one). The recovered module is then
+  checked too — type-checked for Wax, validated for WAT — so genuine type or
+  validation errors in the intact regions surface alongside the syntax errors,
+  while the cascades a dropped construct would otherwise trigger (an unbound name
+  in Wax; a warning or wrong stack height in WAT) are suppressed. Text input
+  only, Wax and Wat (ignored for a Wasm binary).
 - **`--color`** *WHEN*: as above.
 - **`--error-format`** *FORMAT*: `human`, `json`, or `short`, as above.
 - **`--debug`** *CATEGORY*: as above.
@@ -4515,6 +4634,52 @@ wax check src/*.wax
 ```sh
 wax check --all-errors src/foo.wax
 ```
+
+## Language server
+
+The `lsp` subcommand starts a [Language Server
+Protocol](https://microsoft.github.io/language-server-protocol/) server for Wax
+and WebAssembly text, speaking JSON-RPC over stdin/stdout. It runs the same
+analysis the VS Code extension runs in-process, exposed to any LSP-capable
+editor (Neovim, Emacs with Eglot or lsp-mode, Helix, Kakoune, Zed, and others).
+
+```sh
+wax lsp
+```
+
+It reads no files of its own; the editor tells it which documents are open.
+Supported requests: diagnostics (pushed on open/change), hover,
+go-to-definition, go-to-type-definition, find-references, document highlight,
+rename (with prepare), document symbols (outline), completion, signature help,
+inlay hints, folding ranges, selection ranges, semantic tokens, and document
+formatting. The hover, navigation and completion features that need the typed
+tree are Wax-only, while formatting, diagnostics and the outline work for `.wat`
+too (dispatched by the document's URI extension).
+
+A lint diagnostic carries the extra metadata editors use: the `-W` name as its
+code (linked to this reference), and `DiagnosticTag.Unnecessary` on the
+removable/unreachable lints (unused bindings, dead code) so the editor fades
+them.
+
+The one setting is `wax.define`, a list of conditional-compilation defines
+(mirroring the [`-D`](#options) flag, e.g. `["debug=true", "arch=wasm64"]`).
+Diagnostics and completion specialize to it, so a definition or an error in a
+branch the defines rule out is dropped. The server reads it from the client's
+`initializationOptions` at startup and from `workspace/didChangeConfiguration`
+live (under a `wax` section), re-checking the open documents when it changes.
+
+Documents are synchronized in full (each change carries the whole buffer). The
+position encoding is negotiated: the server uses UTF-8 when the client offers it
+and otherwise UTF-16, the LSP default that every client supports. The `--stdio`
+flag is accepted (and ignored) for the editors that pass it by convention.
+
+### Editor setup
+
+Most editors just need the launch command `wax lsp` bound to the `wax` (and, if
+desired, `wat`) file type through their LSP client. Ready-to-use configurations
+for Neovim, Helix, and Emacs — paired with the `tree-sitter-wax` grammar for
+highlighting — live under [`editors/`](https://github.com/ocsigen/wax/tree/main/editors)
+in the repository (one directory per editor, each with a README).
 
 ## Serving over MCP
 
@@ -4561,7 +4726,7 @@ normally exits `0` at end of input, or `125` on an internal error):
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. For `check` / `format --check`, also means every file passed. |
-| `123` | A **usage** error: an invalid combination of flags (e.g. `--source-map-file` with text output, or binary output to a terminal), or a `format --check` run that found files needing formatting. |
+| `123` | A **usage** error: an invalid combination of flags (e.g. `--source-map` with text output, or binary output to a terminal), or a `format --check` run that found files needing formatting. |
 | `124` | A command-line parse error: an unknown flag or a bad option value (reported by the argument parser). |
 | `125` | An internal error (an uncaught exception). |
 | `128` | The input was **rejected by a diagnostic**: a parse, validation, or type error, or a malformed wasm binary. This is also the status of a `check` run that found any problem. |
