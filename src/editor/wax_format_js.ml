@@ -997,26 +997,45 @@ let is_member_position src line ch =
   done;
   !i >= 0 && src.[!i] = '.'
 
-let completion_string src line ch =
+(* The field names of the struct access whose (possibly partial) field span
+   covers the cursor in [members], if any. *)
+let member_fields_at src line ch members =
   let target = (line + 1, byte_column src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  List.find_map
+    (fun ((loc : Wax_utils.Ast.location), names) ->
+      if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
+        Some names
+      else None)
+    members
+
+let completion_string src line ch =
   if is_member_position src line ch then
-    (* The field names of the struct access whose (possibly partial) field span
-       covers the cursor; none for a bare [.] the parser could not keep, or a
-       non-struct receiver (member position offers only members, never names). *)
-    let pos (p : Lexing.position) =
-      (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-    in
-    let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-    let covers (loc : Wax_utils.Ast.location) =
-      le (pos loc.loc_start) target && le target (pos loc.loc_end)
-    in
-    match
-      List.find_opt (fun (loc, _) -> covers loc) (analyze src).a_members
-    with
-    | Some (_, names) ->
-        List.map (fun n -> { k_name = n; k_kind = "field" }) names
-    | None -> []
+    match member_fields_at src line ch (analyze src).a_members with
+    | Some names -> List.map (fun n -> { k_name = n; k_kind = "field" }) names
+    | None -> (
+        (* A bare [.]: the parser drops the field-less access, so nothing is
+           recorded. Splice a sentinel field in so [recv.<sentinel>] parses and
+           types, then read the receiver's fields at the sentinel (analyzed
+           uncached, so the transient buffer does not evict the real one). *)
+        let off = line_start_offset src line + byte_column src line ch in
+        let sentinel = "waxCompletionProbe" in
+        let repaired =
+          String.sub src 0 off ^ sentinel
+          ^ String.sub src off (String.length src - off)
+        in
+        match
+          member_fields_at repaired line ch
+            (analyze_uncached repaired).a_members
+        with
+        | Some names ->
+            List.map (fun n -> { k_name = n; k_kind = "field" }) names
+        | None -> [])
   else
+    let target = (line + 1, byte_column src line ch) in
     let ast_opt, _syntax_errors, _ctx =
       Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
         ~insert:Wax_lang.Recover.insert src
