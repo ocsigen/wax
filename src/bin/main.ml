@@ -525,7 +525,7 @@ let convert input_file output_file input_format_opt output_format_opt validate
      real errors. Text inputs honour the [--strict-validate] flag. *)
   Wax_wasm.Validation.validate_refs := strict_validate || input_format = Wasm;
   let output_format =
-    resolve_format output_file output_format_opt ~default:Wasm
+    resolve_format output_file output_format_opt ~default:Wax
   in
   (* A source map relates a wasm binary's byte offsets to source positions, so
      it is only meaningful for wasm output. Reject it for text output rather
@@ -869,7 +869,7 @@ let input_format =
 let output_format =
   let doc =
     "Output format: wat (Wasm text format), wasm (Wasm binary format), or wax \
-     (Wax language). If not specified, defaults to wasm."
+     (Wax language). If not specified, defaults to wax."
   in
   Arg.(
     value

@@ -32,7 +32,7 @@ server](#language-server)).
 - **`-f`**, **`--format`**, **`--output-format`** *FORMAT*
     - Specify the output format.
     - Values: `wax`, `wat`, `wasm`.
-    - Default: `wasm` (if not auto-detected from output filename).
+    - Default: `wax` (if not auto-detected from output filename).
 
 - **`-i`**, **`--input-format`** *FORMAT*
     - Specify the input format.
@@ -251,7 +251,7 @@ wax input.wat -o output.wax
 
 **Format a Wax file (round-trip):**
 ```sh
-wax input.wax -f wax
+wax input.wax
 ```
 
 **Read from stdin and write to stdout:**

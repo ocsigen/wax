@@ -35,7 +35,7 @@ The following commands define the standard developer workflow.
 ### Options
 | Flag | Long Flag | Description | Values |
 | :--- | :--- | :--- | :--- |
-| `-f` | `--format` | Output format (Default: Auto/`wasm`) | `wat`, `wasm`, `wax` |
+| `-f` | `--format` | Output format (Default: Auto/`wax`) | `wat`, `wasm`, `wax` |
 | `-i` | `--input-format` | Input format (Default: Auto/`wax`) | `wat`, `wasm`, `wax` |
 | `-o` | `--output` | Output file (Default: `stdout`) | File path |
 
