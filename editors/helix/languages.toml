@@ -1,0 +1,17 @@
+# Wax language + grammar for Helix. Merge into ~/.config/helix/languages.toml.
+# See README.md for the full setup (build + query install).
+
+[[language]]
+name = "wax"
+scope = "source.wax"
+file-types = ["wax"]
+comment-tokens = ["//"]
+block-comment-tokens = { start = "/*", end = "*/" }
+indent = { tab-width = 4, unit = "    " }
+grammar = "wax"
+
+[[grammar]]
+name = "wax"
+# Point this at your checkout. A remote works too:
+#   source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" }
+source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" }
