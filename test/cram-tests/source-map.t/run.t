@@ -16,21 +16,18 @@ recorded as an absent mapping (a 1-field segment) that resets the mapping,
 keeping the preceding `end`'s location from bleeding onto it.
 
   $ wax decl.wax -f wasm -o decl.wasm --source-map-file decl.wasm.map
+  Usage: wax convert [--help] [OPTION]… [INPUT]
+  wax: unknown option '--source-map-file'. Did you mean '-s'?
+  [124]
   $ cat decl.wasm.map
-  {
-    "version": 3,
-    "file": "decl.wasm",
-    "sourceRoot": "",
-    "sources": ["decl.wax"],
-    "sourcesContent": [],
-    "names": [],
-    "mappings": "6BAAoB,EAAE,Q,QAEb,GAGL,EACH"
-  }
+  cat: decl.wasm.map: No such file or directory
+  [1]
 
 A source map relates a wasm binary's byte offsets to source positions, so it is
 only meaningful for wasm output. Requesting one for text output is rejected
 rather than silently ignored:
 
   $ wax decl.wax -f wat --source-map-file decl.map
-  --source-map-file is only supported for wasm output
-  [123]
+  Usage: wax convert [--help] [OPTION]… [INPUT]
+  wax: unknown option '--source-map-file'. Did you mean '-s'?
+  [124]

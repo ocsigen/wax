@@ -1382,7 +1382,7 @@ let output_branch_hint_section out_channel
 
 (*** The module writer ***)
 
-let module_ ~out_channel ?output_file ?opt_source_map_file
+let module_ ~out_channel ?output_file ?(source_map = false)
     (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
@@ -1718,17 +1718,33 @@ let module_ ~out_channel ?output_file ?opt_source_map_file
     output_uint len;
     Buffer.output_buffer out_channel b_custom_section_content);
 
-  (* Generate source map file *)
-  match opt_source_map_file with
-  | Some map_file_name ->
-      (* The [file] field names the generated binary this map describes, not the
-         map itself; use its basename so the map stays valid when moved with the
-         binary. Fall back to the map name if the binary went to stdout. *)
-      let file_name =
-        Filename.basename
-          (match output_file with Some f -> f | None -> map_file_name)
-      in
-      let json_content = Wax_utils.Source_map.to_json source_map_t ~file_name in
-      Out_channel.with_open_text map_file_name (fun oc ->
-          Out_channel.output_string oc json_content)
-  | None -> ()
+  (* Generate source map file and custom section *)
+  if source_map then
+    match output_file with
+    | Some f ->
+        let map_file_name = f ^ ".map" in
+        let file_name = Filename.basename f in
+        let map_basename = file_name ^ ".map" in
+
+        (* Write the custom section sourceMappingURL *)
+        let b_custom = Buffer.create 128 in
+        Encoder.name b_custom "sourceMappingURL";
+        Encoder.name b_custom map_basename;
+        let custom_len = Buffer.length b_custom in
+
+        Out_channel.output_byte out_channel 0;
+        let rec output_uint i =
+          if i < 128 then Out_channel.output_byte out_channel i
+          else (
+            Out_channel.output_byte out_channel (128 + (i land 127));
+            output_uint (i lsr 7))
+        in
+        output_uint custom_len;
+        Buffer.output_buffer out_channel b_custom;
+
+        let json_content =
+          Wax_utils.Source_map.to_json source_map_t ~file_name
+        in
+        Out_channel.with_open_text map_file_name (fun oc ->
+            Out_channel.output_string oc json_content)
+    | None -> failwith "--source-map requires an output file"

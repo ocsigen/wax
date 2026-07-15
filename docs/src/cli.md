@@ -223,9 +223,9 @@ server](#language-server)).
     - Fails (exit `128`) if a conditional-compilation directive `(@if …)`
       remains unresolved; resolve them first with `-D`/`--define`.
 
-- **`--source-map-file`** *FILE*
-    - Generate a source map file. Only valid with wasm output (`-f wasm`);
-      requesting one for wat or wax output is an error.
+- **`--source-map`**
+    - Generate a source map file alongside the output file and insert a `sourceMappingURL` custom section. Only valid with wasm output (`-f wasm`) to a file;
+      requesting one for wat or wax output, or when outputting to `stdout`, is an error.
 
 - **`--debug`** *CATEGORY*
     - Enable developer debug output for a category. Repeatable, and a single
@@ -433,7 +433,7 @@ All three commands share the same exit codes:
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. For `check` / `format --check`, also means every file passed. |
-| `123` | A **usage** error: an invalid combination of flags (e.g. `--source-map-file` with text output, or binary output to a terminal), or a `format --check` run that found files needing formatting. |
+| `123` | A **usage** error: an invalid combination of flags (e.g. `--source-map` with text output, or binary output to a terminal), or a `format --check` run that found files needing formatting. |
 | `124` | A command-line parse error: an unknown flag or a bad option value (reported by the argument parser). |
 | `125` | An internal error (an uncaught exception). |
 | `128` | The input was **rejected by a diagnostic**: a parse, validation, or type error, or a malformed wasm binary. This is also the status of a `check` run that found any problem. |

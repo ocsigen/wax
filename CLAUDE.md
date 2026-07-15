@@ -56,7 +56,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 |      | `--desugar` | Expand the Wax-specific `(@string …)`/`(@char …)` annotations into core wasm (`array.new_fixed`/`i32.const`) so the output is plain WebAssembly text. Wat output only (usage error `123` otherwise); fails (`128`) if an `(@if …)` remains unresolved — resolve with `-D` |
 |      | `--color` | Color output: `auto`/`always`/`never` |
 |      | `--error-format` | Diagnostic rendering: `human` (default), `json`, or `short`. `json` emits one JSON object per diagnostic per line (JSON Lines) to stderr — errors, warnings, and syntax errors alike — for editors/CI/AI; `short` emits one `file:line:col: severity: message` line (gcc/rustc style, 1-based column, `-W` name appended as `[name]`). Set process-wide via `Diagnostic.set_format` (like `set_policy`); the emitters `output_error_json`/`output_error_short` live in `lib-utils/diagnostic.ml` (json via yojson). Also on `check`/`format` |
-|      | `--source-map-file` | Emit a source map to the given file (wasm output only; rejected for wat/wax output) |
+|      | `--source-map` | Emit a source map alongside the output file and insert a `sourceMappingURL` custom section (wasm output to a file only; rejected for wat/wax output or stdout) |
 |      | `--debug` | Enable developer debug output for a category (repeatable, comma-separated). Categories: `timing` (log each pass's wall-clock time to stderr) |
 
 Binary output to a terminal is blocked; use `-o` to write WASM to a file.
