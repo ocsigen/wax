@@ -3519,6 +3519,38 @@ let receiver_is_ref ctx recv =
           | [] -> false))
   | _ -> false
 
+(* Whether the receiver of an array-op method call ([a.fill(..)]) names a value
+   whose type is a reference to an array type. Pure, like {!receiver_is_ref}: it
+   reads the name's type from the locals / globals and the referenced type's
+   definition from the type table, recording nothing. Gates the recovery of a
+   wrong-arity array op (an [a.fill()] being typed) so a struct with a field
+   named [fill]/[copy]/[init] is left to the indirect-call path instead. *)
+let receiver_is_array_ref ctx recv =
+  let ref_name = function
+    | Some ({ typ = Ref { typ = Type n | Exact n; _ }; _ } : inferred_valtype)
+      ->
+        Some n
+    | _ -> None
+  in
+  let arrname =
+    match recv.Ast.desc with
+    | Get name -> (
+        match StringMap.find_opt name.desc ctx.locals with
+        | Some (ity, _) -> ref_name ity
+        | None -> (
+            match Tbl.entries ctx.globals name with
+            | (_, (_, ity)) :: _ -> ref_name ity
+            | [] -> None))
+    | _ -> None
+  in
+  match arrname with
+  | None -> false
+  | Some n -> (
+      match Tbl.entries ctx.type_context.types n with
+      | (_, (_, sub)) :: _ -> (
+          match sub.typ with Array _ -> true | _ -> false)
+      | [] -> false)
+
 (* A cast is transparent to the hole-order check exactly when [to_wasm] lowers it
    to no instruction (so it occupies its operand's position and produces nothing):
    an operand with no value type — unreachable / failed code, where the cast emits
@@ -7040,6 +7072,23 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
        ({ desc = StructGet (a', meth); info = ([||], func.info) }, seg' :: rest'))
     [||]
 
+(* An array bulk method ([fill]/[copy]/[init]) on an array receiver but with the
+   wrong argument count — in practice the empty [a.fill()] an auto-closed call
+   leaves while being typed. The exact-arity forms are handled above; this types
+   the receiver and arguments and reports the arity, but keeps the method node so
+   recovery and editor features (signature help) still see the call. Gated on an
+   array receiver, so a struct field of the same name stays an indirect call. *)
+and type_array_method_recovery ctx i func recv meth args =
+  let* recv' = instruction ctx recv in
+  let* args' = instructions ctx args in
+  let expected = match meth.desc with "fill" -> 3 | _ -> 4 in
+  if List.length args' <> expected then
+    Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected
+      ~provided:(List.length args');
+  return_statement i
+    (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))
+    [||]
+
 and type_binary_intrinsic_call ctx i func i1 meth op args =
   let* i1' = instruction ctx i1 in
   let* args' = instructions ctx args in
@@ -8242,6 +8291,18 @@ and call_instruction ctx i =
       ( ({ desc = StructGet (a, ({ desc = "init"; _ } as meth)); _ } as func),
         { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ) ->
       type_array_init_call ctx i func a meth seg sinfo rest
+  (* An array bulk method with the wrong argument count (the exact forms are
+     above) — the empty [a.fill()] a call being typed leaves. Gated on an array
+     receiver so a struct field of the same name stays an indirect call. *)
+  | Call
+      ( ({
+           desc =
+             StructGet (recv, ({ desc = "fill" | "copy" | "init"; _ } as meth));
+           _;
+         } as func),
+        args )
+    when receiver_is_array_ref ctx recv ->
+      type_array_method_recovery ctx i func recv meth args
   (* A scalar binary intrinsic method, [x.min(y)] — reached only when the
      receiver is numeric, not a reference: [s.min(a, b)] on a struct with a
      function-pointer field [min] is an indirect call (below), disambiguated by
