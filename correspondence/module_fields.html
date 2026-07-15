@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9629224b.js";
+            window.path_to_searchindex_js = "../searchindex-0e2efc16.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-41a4b7e9.js"></script>
@@ -295,6 +295,10 @@ mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;</span></pre>
 
 <p>Data bytes are ordinary <a href="../language.html#strings">string literals</a>; escapes such as <code>\x41</code> and <code>\x00</code> (two hex digits) decode to raw bytes.</p>
+<p>A segment’s contents may also mix strings with <strong>typed numeric runs</strong> — <code>[type: values]</code>, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly <em>numeric values</em> text-format extension, and it round-trips through WAT:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> pixels = <span class="hljs-string">"hdr"</span>, [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>], [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>, -<span class="hljs-number">3</span>], [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
+
+<p>The scalar element types are <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, and <code>f64</code>; the values (including <code>nan</code>/<code>inf</code>) are ordinary literals. A <code>v128</code> run holds lane groups written <code>shape(lanes)</code>, e.g. <code>[v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)]</code>. The bytes are the same as if the values were written out as an escaped string.</p>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
 <p>A table is declared with <code>table</code>, followed by its element <a href="types.html">reference type</a> and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">table</span> funcs: &amp;?<span class="hljs-type">func</span> [<span class="hljs-number">1</span>, <span class="hljs-number">10</span>];

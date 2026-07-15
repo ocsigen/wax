@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9629224b.js";
+            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-41a4b7e9.js"></script>
@@ -265,10 +265,12 @@ disables it. Repeatable. Known features:
 <li><code>custom-descriptors</code>: exact reference types (<code>&amp;!t</code>), <code>descriptor</code>/<code>describes</code>
 struct clauses, and the descriptor instructions. Without it these
 constructs are rejected during validation.</li>
-<li><code>compact-import-section</code>: group a module’s consecutive same-module
-imports under one module name in the binary import section. Gated on
-<em>output</em> only: it is emitted just when enabled, but the compact form is
-always accepted on input.</li>
+<li><code>compact-import-section</code>: coalesce a module’s consecutive same-module
+imports under one module name in the binary import section. The flag
+gates only this <em>deriving</em> of groups from plain imports on output.
+Groups written explicitly — in WAT via <code>(import "m" (item …) …)</code>, or
+already present in a binary — are preserved through WAT↔WAT and
+WASM↔WASM round-trips on their own, no flag needed.</li>
 </ul>
 </li>
 </ul>
@@ -395,6 +397,24 @@ skipped.</li>
 </ul>
 </li>
 <li>
+<p><strong><code>--error-format</code></strong> <em>FORMAT</em></p>
+<ul>
+<li>How diagnostics are rendered.</li>
+<li>Values: <code>human</code> (source snippets, the default), <code>json</code>, or <code>short</code>.</li>
+<li>With <code>json</code>, every diagnostic — errors, warnings, and syntax errors — is
+written to stderr as one JSON object per line (JSON Lines), for an editor,
+CI job, or AI assistant to parse. Each object has <code>severity</code>, <code>file</code>,
+<code>startLine</code>/<code>startColumn</code>/<code>endLine</code>/<code>endColumn</code> (1-based line, 0-based
+column), <code>startOffset</code>/<code>endOffset</code> (byte offsets), <code>message</code>, <code>warning</code>
+(the <a href="#options"><code>-W</code></a> name, or null), <code>hint</code>, and <code>related</code>.</li>
+<li>With <code>short</code>, each diagnostic is one
+<code>file:line:col: severity: message</code> line (gcc/rustc style, 1-based column),
+for an editor with a line-based error parser (Vim’s <code>errorformat</code>, Emacs
+Flymake, …). A named warning’s <code>-W</code> name is appended as <code>[name]</code>.</li>
+<li>Exit codes are unchanged. Also accepted by <code>check</code> and <code>format</code>.</li>
+</ul>
+</li>
+<li>
 <p><strong><code>--fold</code></strong></p>
 <ul>
 <li>Fold instructions into nested S-expressions.</li>
@@ -469,6 +489,13 @@ unchanged.</li>
 <code>.wax</code> → <code>.wax</code>, <code>.wasm</code> → <code>.wasm</code>), detected from each file’s extension.
 Formatting never validates: it only re-prints; use <a href="#checking"><code>check</code></a> to
 validate.</p>
+<p>With no <code>FILE</code>, <code>format</code> reads standard input and writes the formatted result to
+standard output. The format cannot be detected without a filename, so <code>--format</code>
+is required in this mode (and <code>--inplace</code> / <code>--check</code>, which act on named files,
+are not allowed). This is the interface an editor formatter or a shell pipe
+uses:</p>
+<pre><code class="language-sh">echo 'fn f(x:i32)-&gt;i32{x*x;}' | wax format -f wax
+</code></pre>
 <pre><code class="language-sh">wax format [OPTIONS] FILE…
 </code></pre>
 <h3 id="options-1"><a class="header" href="#options-1">Options</a></h3>
@@ -477,7 +504,8 @@ validate.</p>
 <ul>
 <li>Write the formatted output back to each input file.</li>
 <li>Without this flag (and without <code>--check</code>), exactly one file must be given
-and its formatted output is written to <code>stdout</code>.</li>
+and its formatted output is written to <code>stdout</code> — or no file, to format
+<code>stdin</code> to <code>stdout</code> (see above).</li>
 </ul>
 </li>
 <li><strong><code>-c</code></strong>, <strong><code>--check</code></strong>
@@ -496,6 +524,8 @@ the detection from each file’s extension.</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em>: set a warning’s level, as
 above.</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em>: as above (ignored when writing back in place).</li>
+<li><strong><code>--error-format</code></strong> <em>FORMAT</em>: <code>human</code>, <code>json</code>, or <code>short</code>, as above (a
+malformed file still reports its syntax error).</li>
 <li><strong><code>--fold</code></strong> / <strong><code>--unfold</code></strong>: as above.</li>
 <li><strong><code>--debug</code></strong> <em>CATEGORY</em>: as above.</li>
 </ul>
@@ -533,12 +563,25 @@ path-sensitive check to explore. Repeatable.</li>
 an optional proposal, as for <a href="#options"><code>convert</code></a>. Repeatable.</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em>: set a warning’s level, as
 above.</li>
+<li><strong><code>--all-errors</code></strong>: report <em>every</em> syntax error instead of stopping at the
+first. Normally the parser gives up at the first unexpected token; with this
+flag it uses panic-mode error recovery — resynchronizing at statement and
+block boundaries (<code>;</code>, <code>}</code>, <code>)</code>, <code>]</code>, and the keywords that begin a new item
+or statement) and continuing — so a single run lists all the syntax errors.
+The recovered module is then type-checked too, so genuine type errors in the
+intact regions surface alongside the syntax errors; the “not bound” errors
+that a construct dropped during recovery would otherwise cascade are
+suppressed. Wax input only (ignored for Wat/Wasm).</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em>: as above.</li>
+<li><strong><code>--error-format</code></strong> <em>FORMAT</em>: <code>human</code>, <code>json</code>, or <code>short</code>, as above.</li>
 <li><strong><code>--debug</code></strong> <em>CATEGORY</em>: as above.</li>
 </ul>
 <h3 id="example"><a class="header" href="#example">Example</a></h3>
 <p><strong>Type-check several Wax files (e.g. in CI):</strong></p>
 <pre><code class="language-sh">wax check src/*.wax
+</code></pre>
+<p><strong>Report all syntax errors in a Wax file at once:</strong></p>
+<pre><code class="language-sh">wax check --all-errors src/foo.wax
 </code></pre>
 <h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
 <p>All three commands share the same exit codes:</p>

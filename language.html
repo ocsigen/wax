@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9629224b.js";
+            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-41a4b7e9.js"></script>
@@ -215,9 +215,7 @@ so on:</p>
 <h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
 <h3 id="integers"><a class="header" href="#integers">Integers</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-number">42</span>          <span class="hljs-comment">// Decimal</span>
-<span class="hljs-number">0x2A</span>        <span class="hljs-comment">// Hexadecimal</span>
-<span class="hljs-number">0o52</span>        <span class="hljs-comment">// Octal</span>
-<span class="hljs-number">0b101010</span>    <span class="hljs-comment">// Binary</span></span></pre>
+<span class="hljs-number">0x2A</span>        <span class="hljs-comment">// Hexadecimal</span></span></pre>
 
 <p>A numeric literal is <strong>flexible</strong>: it has no fixed type of its own but takes a
 concrete one from its context: a type annotation, the operation it feeds, or a
@@ -288,6 +286,10 @@ explicit annotation or from an initializer:</p>
     x + y;
 }</span></pre>
 
+<p>Unlike Rust, a local is freely mutable: there is no <code>let mut</code>, and no
+immutable-local form. (<code>mut</code> exists in Wax, but it marks
+<a href="#structs">struct fields</a> and array element types, not bindings; the
+immutable module-level form is <a href="#global-variables"><code>const</code></a>.)</p>
 <p>A local declared without an initializer starts at its type’s zero value (<code>0</code>,
 <code>0.0</code>, or <code>null</code>). When the type is omitted, it is taken from the initializer;
 an otherwise-unconstrained integer literal then defaults to <code>i32</code> and a float to
@@ -404,6 +406,9 @@ identity, not a numeric comparison.</p>
 +x          <span class="hljs-comment">// Positive (no-op for integers)</span>
 !x          <span class="hljs-comment">// Logical not / is_null for references</span></span></pre>
 
+<p>Unlike Rust, <code>!</code> on an integer is <em>logical</em> not, not bitwise complement: it
+yields <code>1</code> for <code>0</code> and <code>0</code> for any non-zero value (Wasm’s <code>eqz</code>), so <code>!5</code> is
+<code>0</code>, not <code>-6</code>. For a bitwise complement, write <code>x ^ -1</code>.</p>
 <h3 id="operator-precedence"><a class="header" href="#operator-precedence">Operator Precedence</a></h3>
 <p>Operators are listed below from highest precedence (binds tightest) to lowest.
 The ordering follows <strong>Rust’s</strong> for every operator the two share (Wax adds
@@ -473,8 +478,8 @@ ordinary name it can never clash with your own functions, globals, or locals.</p
 <p>Two families use this syntax today.</p>
 <p><strong><code>v128::</code>: SIMD free functions.</strong> The vector constants (one argument per
 lane) and <code>bitselect</code>, which have no receiver:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-type">v128</span>::<span class="hljs-title">const_i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>)         <span class="hljs-comment">// a v128 constant (also a constant expression)</span>
-<span class="hljs-type">v128</span>::<span class="hljs-title">const_f32x4</span>(<span class="hljs-number">1.5</span>, <span class="hljs-number">2.5</span>, <span class="hljs-number">3.5</span>, <span class="hljs-number">4.5</span>)
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-type">v128</span>::<span class="hljs-title">i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>)         <span class="hljs-comment">// a v128 constant (also a constant expression)</span>
+<span class="hljs-type">v128</span>::<span class="hljs-title">f32x4</span>(<span class="hljs-number">1.5</span>, <span class="hljs-number">2.5</span>, <span class="hljs-number">3.5</span>, <span class="hljs-number">4.5</span>)
 <span class="hljs-type">v128</span>::<span class="hljs-title">bitselect</span>(a, b, mask)           <span class="hljs-comment">// per-bit select</span></span></pre>
 
 <p><strong><code>i64::</code>: wide arithmetic.</strong> 128-bit integer operations, taking and returning
@@ -515,7 +520,9 @@ flags a trapping or effectful operation in a <code>?:</code> branch.</p>
 </blockquote>
 <h2 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h2>
 <p>Statements are terminated by <code>;</code>, including the final one that produces the
-block’s or function’s value. The block-shaped statements below
+block’s or function’s value. Unlike Rust, this trailing <code>;</code> is required and does
+not discard that value: the value stays on the stack and becomes the result.
+The block-shaped statements below
 (<code>do</code>, <code>if</code>, <code>while</code>, <code>loop</code>, <code>dispatch</code>, <code>match</code>, and <code>try</code>) are the
 exception: their closing <code>}</code> ends the statement, so no <code>;</code> is needed. A bare
 <code>;</code> is an empty statement (it does nothing), so a redundant one is harmless
@@ -1200,7 +1207,7 @@ shuffle indices) come first in the argument list.</p>
 }</span></pre>
 
 <p>Constants are <code>v128::</code> free functions, one argument per lane:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">const</span> ones: <span class="hljs-type">v128</span> = <span class="hljs-type">v128</span>::<span class="hljs-title">const_i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);</span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">const</span> ones: <span class="hljs-type">v128</span> = <span class="hljs-type">v128</span>::<span class="hljs-title">i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);</span></pre>
 
 <p>See <a href="./correspondence/instructions.html#simd-vector-instructions">Instructions › SIMD</a> for the full
 mnemonic mapping (<code>extract_lane</code>/<code>replace_lane</code>/<code>shuffle</code>, comparisons, shifts,
@@ -1243,6 +1250,16 @@ intrinsic.</p>
 
 <span class="hljs-keyword">data</span> seg = <span class="hljs-string">"raw</span><span class="hljs-deletion">\x</span><span class="hljs-string">00bytes"</span>;               <span class="hljs-comment">// top-level passive segment</span>
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;          <span class="hljs-comment">// top-level active segment</span></span></pre>
+
+<p>A segment’s contents may mix string literals with <strong>numeric runs</strong> — a bracketed
+list <code>[type: values]</code> whose element type is stated once and whose values are
+packed little-endian — instead of hand-escaping every byte:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> <span class="hljs-keyword">table</span> = <span class="hljs-string">"hdr"</span>, [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>], [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>], [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
+
+<p>The scalar element types are <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, and <code>f64</code>; values
+(including <code>nan</code>/<code>inf</code>) are ordinary literals. A <code>v128</code> run holds lane groups
+written <code>shape(lanes)</code>:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> vectors = [<span class="hljs-type">v128</span>: <span class="hljs-title">i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>), <span class="hljs-title">f64x2</span>(<span class="hljs-number">1.0</span>, <span class="hljs-number">2.0</span>)];</span></pre>
 
 <h3 id="load-and-store"><a class="header" href="#load-and-store">Load and Store</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">mem0.<span class="hljs-title">load32</span>(p)              <span class="hljs-comment">// i32 load</span>

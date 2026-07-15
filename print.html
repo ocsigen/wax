@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9629224b.js";
+            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-41a4b7e9.js"></script>
@@ -306,6 +306,8 @@ relaxed SIMD).</p>
 <tr><td>Wide arithmetic</td><td>128-bit integer ops (e.g. <code>i64::add128</code>)</td></tr>
 <tr><td>Branch hinting</td><td><code>#[likely]</code> / <code>#[unlikely]</code></td></tr>
 <tr><td>Custom page sizes</td><td><code>pagesize</code></td></tr>
+<tr><td><a href="https://github.com/WebAssembly/extended-name-section">Extended name section</a></td><td><code>$</code>-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip</td></tr>
+<tr><td><a href="https://github.com/WebAssembly/wat-numeric-values">WAT numeric values</a></td><td>typed numeric runs in <a href="#data-segments">data segments</a> (<code>data d = [i16: -1, 2], [f32: 0.5, nan], [v128: i32x4(1,2,3,4)];</code>); runs survive the wax↔wat round-trip</td></tr>
 </tbody>
 </table>
 </div>
@@ -318,7 +320,7 @@ relaxed SIMD).</p>
 </thead>
 <tbody>
 <tr><td><code>custom-descriptors</code></td><td>exact reference types, descriptor structs, and the descriptor instructions (<code>descriptor</code> / <code>describes</code>)</td></tr>
-<tr><td><code>compact-import-section</code></td><td>groups same-module imports in the binary, a binary-encoding option gated on output but always accepted on input</td></tr>
+<tr><td><code>compact-import-section</code></td><td>coalesces consecutive same-module imports into one group when emitting the binary. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag; the flag only gates <em>deriving</em> groups from plain imports</td></tr>
 </tbody>
 </table>
 </div>
@@ -377,9 +379,7 @@ so on:</p>
 <h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
 <h3 id="integers"><a class="header" href="#integers">Integers</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-number">42</span>          <span class="hljs-comment">// Decimal</span>
-<span class="hljs-number">0x2A</span>        <span class="hljs-comment">// Hexadecimal</span>
-<span class="hljs-number">0o52</span>        <span class="hljs-comment">// Octal</span>
-<span class="hljs-number">0b101010</span>    <span class="hljs-comment">// Binary</span></span></pre>
+<span class="hljs-number">0x2A</span>        <span class="hljs-comment">// Hexadecimal</span></span></pre>
 
 <p>A numeric literal is <strong>flexible</strong>: it has no fixed type of its own but takes a
 concrete one from its context: a type annotation, the operation it feeds, or a
@@ -450,6 +450,10 @@ explicit annotation or from an initializer:</p>
     x + y;
 }</span></pre>
 
+<p>Unlike Rust, a local is freely mutable: there is no <code>let mut</code>, and no
+immutable-local form. (<code>mut</code> exists in Wax, but it marks
+<a href="#structs">struct fields</a> and array element types, not bindings; the
+immutable module-level form is <a href="#global-variables"><code>const</code></a>.)</p>
 <p>A local declared without an initializer starts at its type’s zero value (<code>0</code>,
 <code>0.0</code>, or <code>null</code>). When the type is omitted, it is taken from the initializer;
 an otherwise-unconstrained integer literal then defaults to <code>i32</code> and a float to
@@ -566,6 +570,9 @@ identity, not a numeric comparison.</p>
 +x          <span class="hljs-comment">// Positive (no-op for integers)</span>
 !x          <span class="hljs-comment">// Logical not / is_null for references</span></span></pre>
 
+<p>Unlike Rust, <code>!</code> on an integer is <em>logical</em> not, not bitwise complement: it
+yields <code>1</code> for <code>0</code> and <code>0</code> for any non-zero value (Wasm’s <code>eqz</code>), so <code>!5</code> is
+<code>0</code>, not <code>-6</code>. For a bitwise complement, write <code>x ^ -1</code>.</p>
 <h3 id="operator-precedence"><a class="header" href="#operator-precedence">Operator Precedence</a></h3>
 <p>Operators are listed below from highest precedence (binds tightest) to lowest.
 The ordering follows <strong>Rust’s</strong> for every operator the two share (Wax adds
@@ -635,8 +642,8 @@ ordinary name it can never clash with your own functions, globals, or locals.</p
 <p>Two families use this syntax today.</p>
 <p><strong><code>v128::</code>: SIMD free functions.</strong> The vector constants (one argument per
 lane) and <code>bitselect</code>, which have no receiver:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-type">v128</span>::<span class="hljs-title">const_i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>)         <span class="hljs-comment">// a v128 constant (also a constant expression)</span>
-<span class="hljs-type">v128</span>::<span class="hljs-title">const_f32x4</span>(<span class="hljs-number">1.5</span>, <span class="hljs-number">2.5</span>, <span class="hljs-number">3.5</span>, <span class="hljs-number">4.5</span>)
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-type">v128</span>::<span class="hljs-title">i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>)         <span class="hljs-comment">// a v128 constant (also a constant expression)</span>
+<span class="hljs-type">v128</span>::<span class="hljs-title">f32x4</span>(<span class="hljs-number">1.5</span>, <span class="hljs-number">2.5</span>, <span class="hljs-number">3.5</span>, <span class="hljs-number">4.5</span>)
 <span class="hljs-type">v128</span>::<span class="hljs-title">bitselect</span>(a, b, mask)           <span class="hljs-comment">// per-bit select</span></span></pre>
 
 <p><strong><code>i64::</code>: wide arithmetic.</strong> 128-bit integer operations, taking and returning
@@ -677,7 +684,9 @@ flags a trapping or effectful operation in a <code>?:</code> branch.</p>
 </blockquote>
 <h2 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h2>
 <p>Statements are terminated by <code>;</code>, including the final one that produces the
-block’s or function’s value. The block-shaped statements below
+block’s or function’s value. Unlike Rust, this trailing <code>;</code> is required and does
+not discard that value: the value stays on the stack and becomes the result.
+The block-shaped statements below
 (<code>do</code>, <code>if</code>, <code>while</code>, <code>loop</code>, <code>dispatch</code>, <code>match</code>, and <code>try</code>) are the
 exception: their closing <code>}</code> ends the statement, so no <code>;</code> is needed. A bare
 <code>;</code> is an empty statement (it does nothing), so a redundant one is harmless
@@ -1362,7 +1371,7 @@ shuffle indices) come first in the argument list.</p>
 }</span></pre>
 
 <p>Constants are <code>v128::</code> free functions, one argument per lane:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">const</span> ones: <span class="hljs-type">v128</span> = <span class="hljs-type">v128</span>::<span class="hljs-title">const_i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);</span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">const</span> ones: <span class="hljs-type">v128</span> = <span class="hljs-type">v128</span>::<span class="hljs-title">i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);</span></pre>
 
 <p>See <a href="#simd-vector-instructions">Instructions › SIMD</a> for the full
 mnemonic mapping (<code>extract_lane</code>/<code>replace_lane</code>/<code>shuffle</code>, comparisons, shifts,
@@ -1405,6 +1414,16 @@ intrinsic.</p>
 
 <span class="hljs-keyword">data</span> seg = <span class="hljs-string">"raw</span><span class="hljs-deletion">\x</span><span class="hljs-string">00bytes"</span>;               <span class="hljs-comment">// top-level passive segment</span>
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;          <span class="hljs-comment">// top-level active segment</span></span></pre>
+
+<p>A segment’s contents may mix string literals with <strong>numeric runs</strong> — a bracketed
+list <code>[type: values]</code> whose element type is stated once and whose values are
+packed little-endian — instead of hand-escaping every byte:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> <span class="hljs-keyword">table</span> = <span class="hljs-string">"hdr"</span>, [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>], [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>], [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
+
+<p>The scalar element types are <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, and <code>f64</code>; values
+(including <code>nan</code>/<code>inf</code>) are ordinary literals. A <code>v128</code> run holds lane groups
+written <code>shape(lanes)</code>:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> vectors = [<span class="hljs-type">v128</span>: <span class="hljs-title">i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>), <span class="hljs-title">f64x2</span>(<span class="hljs-number">1.0</span>, <span class="hljs-number">2.0</span>)];</span></pre>
 
 <h3 id="load-and-store"><a class="header" href="#load-and-store">Load and Store</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">mem0.<span class="hljs-title">load32</span>(p)              <span class="hljs-comment">// i32 load</span>
@@ -1648,7 +1667,7 @@ WebAssembly.</p>
 <p>Abstract heap types: <code>any eq i31 struct array func extern exn cont</code>, and the
 bottom types <code>none nofunc noextern noexn nocont</code>.</p>
 <h2 id="literals-1"><a class="header" href="#literals-1">Literals</a></h2>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-number">42</span>  <span class="hljs-number">0x2A</span>  <span class="hljs-number">0o52</span>  <span class="hljs-number">0b101010</span>  <span class="hljs-comment">// integers (flexible: i32/i64/f32/f64 by context)</span>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-number">42</span>  <span class="hljs-number">0x2A</span>  <span class="hljs-comment">// integers (flexible: i32/i64/f32/f64 by context)</span>
 <span class="hljs-number">3.14</span>  <span class="hljs-number">1.0e10</span>  <span class="hljs-number">0x1.5p3</span>  <span class="hljs-literal">inf</span>  <span class="hljs-literal">nan</span>   <span class="hljs-comment">// floats</span>
 <span class="hljs-string">'A'</span>  <span class="hljs-string">'\n'</span>  <span class="hljs-string">'\u{1F600}'</span>    <span class="hljs-comment">// char, an i32 code point</span>
 <span class="hljs-string">"text"</span>  <span class="hljs-type">bytes</span> # <span class="hljs-string">"text"</span>    <span class="hljs-comment">// string, an i8/i16 array</span></span></pre>
@@ -2362,10 +2381,22 @@ load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
     total;
 }</span></pre>
 
+<h2 id="data-segments-with-numeric-values"><a class="header" href="#data-segments-with-numeric-values">Data Segments with Numeric Values</a></h2>
+<p>A data segment’s contents can mix string literals with typed numeric runs —
+<code>[type: values]</code>, packed little-endian — instead of hand-escaping every byte.</p>
+<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
+
+<span class="hljs-comment">// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.</span>
+<span class="hljs-keyword">data</span> header @ mem[<span class="hljs-number">0</span>] =
+    <span class="hljs-string">"GIF89a"</span>,
+    [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>],
+    [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
+
 <h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
 <p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
 name (<code>mul_i32x4</code>, <code>add_i32x4</code>, <code>extract_lane_i32x4</code>).</p>
-<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
+<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"madd_i32x4"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">madd_i32x4</span>(a: <span class="hljs-type">v128</span>, b: <span class="hljs-type">v128</span>, c: <span class="hljs-type">v128</span>) -&gt; <span class="hljs-type">v128</span> {
     a.<span class="hljs-title">mul_i32x4</span>(b).<span class="hljs-title">add_i32x4</span>(c);          <span class="hljs-comment">// a * b + c, four i32 lanes at once</span>
@@ -2383,7 +2414,7 @@ with a value; a driver <code>resume</code>s it, routing the suspended tag to a h
 label that receives the payload and the paused continuation. Note that the
 continuation’s type changes after a suspend, since resuming it now needs the
 reply value.</p>
-<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
+<h3 id="wax-26"><a class="header" href="#wax-26">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">task</span> = <span class="hljs-keyword">fn</span>() -&gt; <span class="hljs-type">i32</span>;
 <span class="hljs-keyword">type</span> <span class="hljs-type">k</span> = <span class="hljs-keyword">cont</span> task;
 <span class="hljs-keyword">type</span> <span class="hljs-type">resumed</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;   <span class="hljs-comment">// the continuation's type after a suspend</span>
@@ -2982,9 +3013,9 @@ that can be dropped.</p>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>v128.const i32x4 1 2 3 4</code></td><td><code>v128::const_i32x4(1, 2, 3, 4)</code></td></tr>
-<tr><td><code>v128.const f32x4 1.5 2.5 3.5 4.5</code></td><td><code>v128::const_f32x4(1.5, 2.5, 3.5, 4.5)</code></td></tr>
-<tr><td><code>v128.const i8x16 0 1 ... 15</code></td><td><code>v128::const_i8x16(0, 1, ..., 15)</code></td></tr>
+<tr><td><code>v128.const i32x4 1 2 3 4</code></td><td><code>v128::i32x4(1, 2, 3, 4)</code></td></tr>
+<tr><td><code>v128.const f32x4 1.5 2.5 3.5 4.5</code></td><td><code>v128::f32x4(1.5, 2.5, 3.5, 4.5)</code></td></tr>
+<tr><td><code>v128.const i8x16 0 1 ... 15</code></td><td><code>v128::i8x16(0, 1, ..., 15)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -3277,6 +3308,10 @@ mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;</span></pre>
 
 <p>Data bytes are ordinary <a href="#strings">string literals</a>; escapes such as <code>\x41</code> and <code>\x00</code> (two hex digits) decode to raw bytes.</p>
+<p>A segment’s contents may also mix strings with <strong>typed numeric runs</strong> — <code>[type: values]</code>, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly <em>numeric values</em> text-format extension, and it round-trips through WAT:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> pixels = <span class="hljs-string">"hdr"</span>, [<span class="hljs-type">f32</span>: <span class="hljs-number">0.2</span>, <span class="hljs-number">0.3</span>, <span class="hljs-number">0.4</span>], [<span class="hljs-type">i16</span>: -<span class="hljs-number">1</span>, -<span class="hljs-number">2</span>, -<span class="hljs-number">3</span>], [<span class="hljs-type">i8</span>: <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>];</span></pre>
+
+<p>The scalar element types are <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>f32</code>, and <code>f64</code>; the values (including <code>nan</code>/<code>inf</code>) are ordinary literals. A <code>v128</code> run holds lane groups written <code>shape(lanes)</code>, e.g. <code>[v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)]</code>. The bytes are the same as if the values were written out as an escaped string.</p>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
 <p>A table is declared with <code>table</code>, followed by its element <a href="#types-1">reference type</a> and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">table</span> funcs: &amp;?<span class="hljs-type">func</span> [<span class="hljs-number">1</span>, <span class="hljs-number">10</span>];
@@ -3517,10 +3552,12 @@ disables it. Repeatable. Known features:
 <li><code>custom-descriptors</code>: exact reference types (<code>&amp;!t</code>), <code>descriptor</code>/<code>describes</code>
 struct clauses, and the descriptor instructions. Without it these
 constructs are rejected during validation.</li>
-<li><code>compact-import-section</code>: group a module’s consecutive same-module
-imports under one module name in the binary import section. Gated on
-<em>output</em> only: it is emitted just when enabled, but the compact form is
-always accepted on input.</li>
+<li><code>compact-import-section</code>: coalesce a module’s consecutive same-module
+imports under one module name in the binary import section. The flag
+gates only this <em>deriving</em> of groups from plain imports on output.
+Groups written explicitly — in WAT via <code>(import "m" (item …) …)</code>, or
+already present in a binary — are preserved through WAT↔WAT and
+WASM↔WASM round-trips on their own, no flag needed.</li>
 </ul>
 </li>
 </ul>
@@ -3647,6 +3684,24 @@ skipped.</li>
 </ul>
 </li>
 <li>
+<p><strong><code>--error-format</code></strong> <em>FORMAT</em></p>
+<ul>
+<li>How diagnostics are rendered.</li>
+<li>Values: <code>human</code> (source snippets, the default), <code>json</code>, or <code>short</code>.</li>
+<li>With <code>json</code>, every diagnostic — errors, warnings, and syntax errors — is
+written to stderr as one JSON object per line (JSON Lines), for an editor,
+CI job, or AI assistant to parse. Each object has <code>severity</code>, <code>file</code>,
+<code>startLine</code>/<code>startColumn</code>/<code>endLine</code>/<code>endColumn</code> (1-based line, 0-based
+column), <code>startOffset</code>/<code>endOffset</code> (byte offsets), <code>message</code>, <code>warning</code>
+(the <a href="#options"><code>-W</code></a> name, or null), <code>hint</code>, and <code>related</code>.</li>
+<li>With <code>short</code>, each diagnostic is one
+<code>file:line:col: severity: message</code> line (gcc/rustc style, 1-based column),
+for an editor with a line-based error parser (Vim’s <code>errorformat</code>, Emacs
+Flymake, …). A named warning’s <code>-W</code> name is appended as <code>[name]</code>.</li>
+<li>Exit codes are unchanged. Also accepted by <code>check</code> and <code>format</code>.</li>
+</ul>
+</li>
+<li>
 <p><strong><code>--fold</code></strong></p>
 <ul>
 <li>Fold instructions into nested S-expressions.</li>
@@ -3721,6 +3776,13 @@ unchanged.</li>
 <code>.wax</code> → <code>.wax</code>, <code>.wasm</code> → <code>.wasm</code>), detected from each file’s extension.
 Formatting never validates: it only re-prints; use <a href="#checking"><code>check</code></a> to
 validate.</p>
+<p>With no <code>FILE</code>, <code>format</code> reads standard input and writes the formatted result to
+standard output. The format cannot be detected without a filename, so <code>--format</code>
+is required in this mode (and <code>--inplace</code> / <code>--check</code>, which act on named files,
+are not allowed). This is the interface an editor formatter or a shell pipe
+uses:</p>
+<pre><code class="language-sh">echo 'fn f(x:i32)-&gt;i32{x*x;}' | wax format -f wax
+</code></pre>
 <pre><code class="language-sh">wax format [OPTIONS] FILE…
 </code></pre>
 <h3 id="options-1"><a class="header" href="#options-1">Options</a></h3>
@@ -3729,7 +3791,8 @@ validate.</p>
 <ul>
 <li>Write the formatted output back to each input file.</li>
 <li>Without this flag (and without <code>--check</code>), exactly one file must be given
-and its formatted output is written to <code>stdout</code>.</li>
+and its formatted output is written to <code>stdout</code> — or no file, to format
+<code>stdin</code> to <code>stdout</code> (see above).</li>
 </ul>
 </li>
 <li><strong><code>-c</code></strong>, <strong><code>--check</code></strong>
@@ -3748,6 +3811,8 @@ the detection from each file’s extension.</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em>: set a warning’s level, as
 above.</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em>: as above (ignored when writing back in place).</li>
+<li><strong><code>--error-format</code></strong> <em>FORMAT</em>: <code>human</code>, <code>json</code>, or <code>short</code>, as above (a
+malformed file still reports its syntax error).</li>
 <li><strong><code>--fold</code></strong> / <strong><code>--unfold</code></strong>: as above.</li>
 <li><strong><code>--debug</code></strong> <em>CATEGORY</em>: as above.</li>
 </ul>
@@ -3785,12 +3850,25 @@ path-sensitive check to explore. Repeatable.</li>
 an optional proposal, as for <a href="#options"><code>convert</code></a>. Repeatable.</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em>: set a warning’s level, as
 above.</li>
+<li><strong><code>--all-errors</code></strong>: report <em>every</em> syntax error instead of stopping at the
+first. Normally the parser gives up at the first unexpected token; with this
+flag it uses panic-mode error recovery — resynchronizing at statement and
+block boundaries (<code>;</code>, <code>}</code>, <code>)</code>, <code>]</code>, and the keywords that begin a new item
+or statement) and continuing — so a single run lists all the syntax errors.
+The recovered module is then type-checked too, so genuine type errors in the
+intact regions surface alongside the syntax errors; the “not bound” errors
+that a construct dropped during recovery would otherwise cascade are
+suppressed. Wax input only (ignored for Wat/Wasm).</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em>: as above.</li>
+<li><strong><code>--error-format</code></strong> <em>FORMAT</em>: <code>human</code>, <code>json</code>, or <code>short</code>, as above.</li>
 <li><strong><code>--debug</code></strong> <em>CATEGORY</em>: as above.</li>
 </ul>
 <h3 id="example"><a class="header" href="#example">Example</a></h3>
 <p><strong>Type-check several Wax files (e.g. in CI):</strong></p>
 <pre><code class="language-sh">wax check src/*.wax
+</code></pre>
+<p><strong>Report all syntax errors in a Wax file at once:</strong></p>
+<pre><code class="language-sh">wax check --all-errors src/foo.wax
 </code></pre>
 <h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
 <p>All three commands share the same exit codes:</p>

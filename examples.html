@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9629224b.js";
+            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-41a4b7e9.js"></script>
@@ -812,10 +812,22 @@ load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
     total;
 }</span></pre>
 
+<h2 id="data-segments-with-numeric-values"><a class="header" href="#data-segments-with-numeric-values">Data Segments with Numeric Values</a></h2>
+<p>A data segment’s contents can mix string literals with typed numeric runs —
+<code>[type: values]</code>, packed little-endian — instead of hand-escaping every byte.</p>
+<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
+
+<span class="hljs-comment">// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.</span>
+<span class="hljs-keyword">data</span> header @ mem[<span class="hljs-number">0</span>] =
+    <span class="hljs-string">"GIF89a"</span>,
+    [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>],
+    [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
+
 <h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
 <p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
 name (<code>mul_i32x4</code>, <code>add_i32x4</code>, <code>extract_lane_i32x4</code>).</p>
-<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
+<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"madd_i32x4"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">madd_i32x4</span>(a: <span class="hljs-type">v128</span>, b: <span class="hljs-type">v128</span>, c: <span class="hljs-type">v128</span>) -&gt; <span class="hljs-type">v128</span> {
     a.<span class="hljs-title">mul_i32x4</span>(b).<span class="hljs-title">add_i32x4</span>(c);          <span class="hljs-comment">// a * b + c, four i32 lanes at once</span>
@@ -833,7 +845,7 @@ with a value; a driver <code>resume</code>s it, routing the suspended tag to a h
 label that receives the payload and the paused continuation. Note that the
 continuation’s type changes after a suspend, since resuming it now needs the
 reply value.</p>
-<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
+<h3 id="wax-26"><a class="header" href="#wax-26">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">task</span> = <span class="hljs-keyword">fn</span>() -&gt; <span class="hljs-type">i32</span>;
 <span class="hljs-keyword">type</span> <span class="hljs-type">k</span> = <span class="hljs-keyword">cont</span> task;
 <span class="hljs-keyword">type</span> <span class="hljs-type">resumed</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;   <span class="hljs-comment">// the continuation's type after a suspend</span>

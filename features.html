@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9629224b.js";
+            window.path_to_searchindex_js = "searchindex-0e2efc16.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-41a4b7e9.js"></script>
@@ -199,6 +199,8 @@ relaxed SIMD).</p>
 <tr><td>Wide arithmetic</td><td>128-bit integer ops (e.g. <code>i64::add128</code>)</td></tr>
 <tr><td>Branch hinting</td><td><code>#[likely]</code> / <code>#[unlikely]</code></td></tr>
 <tr><td>Custom page sizes</td><td><code>pagesize</code></td></tr>
+<tr><td><a href="https://github.com/WebAssembly/extended-name-section">Extended name section</a></td><td><code>$</code>-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip</td></tr>
+<tr><td><a href="https://github.com/WebAssembly/wat-numeric-values">WAT numeric values</a></td><td>typed numeric runs in <a href="./language.html#data-segments">data segments</a> (<code>data d = [i16: -1, 2], [f32: 0.5, nan], [v128: i32x4(1,2,3,4)];</code>); runs survive the wax↔wat round-trip</td></tr>
 </tbody>
 </table>
 </div>
@@ -211,7 +213,7 @@ relaxed SIMD).</p>
 </thead>
 <tbody>
 <tr><td><code>custom-descriptors</code></td><td>exact reference types, descriptor structs, and the descriptor instructions (<code>descriptor</code> / <code>describes</code>)</td></tr>
-<tr><td><code>compact-import-section</code></td><td>groups same-module imports in the binary, a binary-encoding option gated on output but always accepted on input</td></tr>
+<tr><td><code>compact-import-section</code></td><td>coalesces consecutive same-module imports into one group when emitting the binary. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag; the flag only gates <em>deriving</em> groups from plain imports</td></tr>
 </tbody>
 </table>
 </div>
