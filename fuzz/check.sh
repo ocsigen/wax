@@ -44,7 +44,7 @@ run() {
 }
 
 # Build the tools the guards drive (a stale binary would test old code).
-dune build src/bin/main.exe src/bin/fuzz_gen.exe 2>&1 | tail -3 || {
+dune build src/bin/main.exe src/bin/fuzz_gen.exe src/bin/fuzz_recover.exe 2>&1 | tail -3 || {
   echo "check.sh: build failed" >&2; exit 3;
 }
 
@@ -52,6 +52,7 @@ dune build src/bin/main.exe src/bin/fuzz_gen.exe 2>&1 | tail -3 || {
 run cast-lattice.sh
 run drop-width.sh
 run stress.sh
+run "ITERS=$((count * 25))" "WORKERS=2" recover-fuzz.sh
 run wat-cast-chain.sh
 run wat-cast-const.sh
 run comment-preserve.sh

@@ -43,5 +43,5 @@
 ; fuzz/type-fuzz.sh.
 
 (executables
- (names run_wasm_testsuite fuzz_mutate fuzz_gen)
+ (names run_wasm_testsuite fuzz_mutate fuzz_gen fuzz_recover)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
