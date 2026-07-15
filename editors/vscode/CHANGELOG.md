@@ -7,6 +7,9 @@
   while other parts of the file still have errors.
 - Inlay hints for `.wax`: the inferred type is shown inline on each un-annotated
   `let` binding (e.g. `let x = 3` shows `x: i32`).
+- Fixed editor positions (diagnostics, outline, hover, inlay hints) drifting on
+  lines that contain non-ASCII characters: columns are now counted in UTF-16
+  code units, matching VS Code, instead of UTF-8 bytes.
 
 ## 0.2.2
 

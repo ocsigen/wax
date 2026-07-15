@@ -53,6 +53,35 @@ let utf16_code_units s =
   in
   loop 0 []
 
+(* A scalar in the basic multilingual plane is one UTF-16 code unit; one above
+   it (an astral scalar, e.g. an emoji) is a surrogate pair, so two. A malformed
+   byte decodes to U+FFFD, one unit. *)
+let utf16_units_of_uchar u = if Uchar.to_int u < 0x10000 then 1 else 2
+
+let utf16_length s =
+  let n = String.length s in
+  let rec loop i acc =
+    if i >= n then acc
+    else
+      let d = String.get_utf_8_uchar s i in
+      loop
+        (i + Uchar.utf_decode_length d)
+        (acc + utf16_units_of_uchar (Uchar.utf_decode_uchar d))
+  in
+  loop 0 0
+
+let utf16_offset_to_byte s units =
+  let n = String.length s in
+  let rec loop i left =
+    if left <= 0 || i >= n then i
+    else
+      let d = String.get_utf_8_uchar s i in
+      loop
+        (i + Uchar.utf_decode_length d)
+        (left - utf16_units_of_uchar (Uchar.utf_decode_uchar d))
+  in
+  loop 0 units
+
 let utf16_decode units =
   let b = Buffer.create (List.length units) in
   let rec decode = function

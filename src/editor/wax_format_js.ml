@@ -237,9 +237,9 @@ let check_string src =
    paired with its source span), then keeps the smallest span that covers the
    cursor and renders its type — the innermost-node walk an editor hover wants,
    done with the same recursive [map_modulefield] the outline uses. [line]/[ch]
-   are the raw zero-based VS Code coordinates; [ch] is treated as a byte column,
-   exact for ASCII (a UTF-16-to-byte remap for wide characters is left for
-   later). WAT has no equivalent — its validator builds no typed tree. *)
+   are the raw zero-based VS Code coordinates ([ch] a UTF-16 column, mapped to a
+   byte column by [byte_column]). WAT has no equivalent — its validator builds no
+   typed tree. *)
 type hover = { h_type : string; h_range : Wax_utils.Ast.location }
 
 let cell_to_string cell =
@@ -260,13 +260,30 @@ let render_result_types
   | [ t ] -> Some (cell_to_string t)
   | l -> Some ("(" ^ String.concat ", " (List.map cell_to_string l) ^ ")")
 
+(* Map an incoming VS Code position to a byte column for comparison with Lexing
+   columns: the byte column on zero-based [line] that its UTF-16 [char] denotes.
+   The inverse of [js_position]'s column conversion. *)
+let byte_column src line char =
+  let len = String.length src in
+  let rec line_start i n =
+    if n <= 0 || i >= len then i
+    else line_start (i + 1) (if src.[i] = '\n' then n - 1 else n)
+  in
+  let start = line_start 0 line in
+  let stop =
+    match String.index_from_opt src start '\n' with Some j -> j | None -> len
+  in
+  Wax_utils.Unicode.utf16_offset_to_byte
+    (String.sub src start (stop - start))
+    char
+
 let hover_string src line ch =
   match (analyze src).a_typed with
   | None -> None
   | Some typed -> (
-      (* Lexing lines are one-based; [ch] and [pos_cnum - pos_bol] are both
-         zero-based byte columns. *)
-      let target = (line + 1, ch) in
+      (* Lexing lines are one-based and its columns are byte offsets; [ch] is a
+         zero-based UTF-16 column, so convert it against the buffer. *)
+      let target = (line + 1, byte_column src line ch) in
       let pos (p : Lexing.position) =
         (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
       in
@@ -431,13 +448,18 @@ let to_wax_string src =
       with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
 
 (* VS Code positions are zero-based for both line and character; Lexing lines are
-   one-based and [pos_cnum - pos_bol] is the zero-based column. *)
-let js_position (p : Lexing.position) =
-  (p.Lexing.pos_lnum - 1, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+   one-based. The character is a count of UTF-16 code units, whereas Lexing's
+   [pos_cnum - pos_bol] is a byte column — the two differ once a line contains a
+   non-ASCII character (Wax allows them in identifiers and comments), so convert
+   the line prefix up to the position. [src] is the buffer being indexed. *)
+let js_position src (p : Lexing.position) =
+  let bol = p.Lexing.pos_bol and cnum = p.Lexing.pos_cnum in
+  ( p.Lexing.pos_lnum - 1,
+    Wax_utils.Unicode.utf16_length (String.sub src bol (cnum - bol)) )
 
-let js_related (message, (location : Wax_utils.Ast.location)) =
-  let start_line, start_char = js_position location.loc_start in
-  let end_line, end_char = js_position location.loc_end in
+let js_related src (message, (location : Wax_utils.Ast.location)) =
+  let start_line, start_char = js_position src location.loc_start in
+  let end_line, end_char = js_position src location.loc_end in
   object%js
     val message = Js.string (String.trim message)
     val startLine = start_line
@@ -446,9 +468,9 @@ let js_related (message, (location : Wax_utils.Ast.location)) =
     val endChar = end_char
   end
 
-let js_diagnostic d =
-  let start_line, start_char = js_position d.location.loc_start in
-  let end_line, end_char = js_position d.location.loc_end in
+let js_diagnostic src d =
+  let start_line, start_char = js_position src d.location.loc_start in
+  let end_line, end_char = js_position src d.location.loc_end in
   object%js
     val severity =
       Js.string
@@ -470,12 +492,12 @@ let js_diagnostic d =
       | Some h -> Js.some (Js.string (String.trim h))
       | None -> Js.null
 
-    val related = Js.array (Array.of_list (List.map js_related d.related))
+    val related = Js.array (Array.of_list (List.map (js_related src) d.related))
   end
 
-let js_hover h =
-  let start_line, start_char = js_position h.h_range.loc_start in
-  let end_line, end_char = js_position h.h_range.loc_end in
+let js_hover src h =
+  let start_line, start_char = js_position src h.h_range.loc_start in
+  let end_line, end_char = js_position src h.h_range.loc_end in
   object%js
     (* [type_] is exposed to JS as the property [type] (the ppx strips the
        trailing underscore, which lets us use the reserved word). *)
@@ -486,8 +508,8 @@ let js_hover h =
     val endChar = end_char
   end
 
-let js_inlay n =
-  let line, char = js_position n.n_pos in
+let js_inlay src n =
+  let line, char = js_position src n.n_pos in
   object%js
     val line = line
     val char = char
@@ -518,19 +540,22 @@ let format_result format_fn src =
     result ~ok:false ~text:None ~error:(Some (Printexc.to_string exn))
 
 let check_result check_fn src =
-  let diagnostics = try check_fn (Js.to_string src) with _ -> [] in
-  Js.array (Array.of_list (List.map js_diagnostic diagnostics))
+  let s = Js.to_string src in
+  let diagnostics = try check_fn s with _ -> [] in
+  Js.array (Array.of_list (List.map (js_diagnostic s) diagnostics))
 
 (* [null] when there is no typed node under the cursor (or anything went wrong):
    the provider then shows no hover rather than crashing the host. *)
 let hover_result src line ch =
-  match try hover_string (Js.to_string src) line ch with _ -> None with
+  let s = Js.to_string src in
+  match try hover_string s line ch with _ -> None with
   | None -> Js.null
-  | Some h -> Js.some (js_hover h)
+  | Some h -> Js.some (js_hover s h)
 
 let inlays_result src =
-  let hints = try inlays_string (Js.to_string src) with _ -> [] in
-  Js.array (Array.of_list (List.map js_inlay hints))
+  let s = Js.to_string src in
+  let hints = try inlays_string s with _ -> [] in
+  Js.array (Array.of_list (List.map (js_inlay s) hints))
 
 (* Document outline: the module's top-level definitions (functions, globals,
    types, memories, tags, tables, elems, data, imports) with their spans, for the
@@ -708,11 +733,13 @@ let symbols_wat_string src =
   | Error _ -> []
   | Ok ((_name, fields), _ctx) -> List.concat_map wat_field_symbols fields
 
-let rec js_symbol s =
-  let start_line, start_char = js_position s.s_range.loc_start in
-  let end_line, end_char = js_position s.s_range.loc_end in
-  let sel_start_line, sel_start_char = js_position s.s_selection.loc_start in
-  let sel_end_line, sel_end_char = js_position s.s_selection.loc_end in
+let rec js_symbol src s =
+  let start_line, start_char = js_position src s.s_range.loc_start in
+  let end_line, end_char = js_position src s.s_range.loc_end in
+  let sel_start_line, sel_start_char =
+    js_position src s.s_selection.loc_start
+  in
+  let sel_end_line, sel_end_char = js_position src s.s_selection.loc_end in
   object%js
     val name = Js.string s.s_name
     val kind = Js.string s.s_kind
@@ -724,12 +751,15 @@ let rec js_symbol s =
     val selStartChar = sel_start_char
     val selEndLine = sel_end_line
     val selEndChar = sel_end_char
-    val children = Js.array (Array.of_list (List.map js_symbol s.s_children))
+
+    val children =
+      Js.array (Array.of_list (List.map (js_symbol src) s.s_children))
   end
 
 let symbols_result symbols_fn src =
-  let syms = try symbols_fn (Js.to_string src) with _ -> [] in
-  Js.array (Array.of_list (List.map js_symbol syms))
+  let s = Js.to_string src in
+  let syms = try symbols_fn s with _ -> [] in
+  Js.array (Array.of_list (List.map (js_symbol s) syms))
 
 let () =
   Js.export "wax"

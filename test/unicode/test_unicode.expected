@@ -1,0 +1,12 @@
+len ascii                got=3 expected=3 ok
+len bmp                  got=3 expected=3 ok
+len astral               got=4 expected=4 ok
+len empty                got=0 expected=0 ok
+len agrees with list     got=4 expected=4 ok
+byte ascii               got=2 expected=2 ok
+byte bmp                 got=3 expected=3 ok
+byte astral before       got=1 expected=1 ok
+byte astral after        got=5 expected=5 ok
+byte mid-surrogate       got=4 expected=4 ok
+byte clamp               got=2 expected=2 ok
+byte zero                got=0 expected=0 ok

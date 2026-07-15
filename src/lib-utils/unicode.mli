@@ -18,6 +18,17 @@ val utf16_code_units : string -> int list
     value) encoding the valid-UTF-8 string [s]; a scalar outside the basic
     multilingual plane becomes a surrogate pair (two units). *)
 
+val utf16_length : string -> int
+(** [utf16_length s] is the number of UTF-16 code units that encode [s]
+    (equivalently [List.length (utf16_code_units s)], without building the
+    list). Editors such as VS Code count character positions in these units. *)
+
+val utf16_offset_to_byte : string -> int -> int
+(** [utf16_offset_to_byte s n] is the byte offset in [s] just after its first
+    [n] UTF-16 code units — the inverse of {!utf16_length} for a prefix. Clamped
+    to [String.length s]; if [n] falls inside a surrogate pair the offset is
+    past that whole scalar. *)
+
 val utf16_decode : int list -> string option
 (** [utf16_decode units] is the UTF-8 string the UTF-16 [units] (each a 16-bit
     value) encode — the inverse of {!utf16_code_units} — pairing surrogates.

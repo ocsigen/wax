@@ -66,13 +66,15 @@ same thing: `Typing.f` already returns a fully-typed tree (its annotation is
 some features only need to *index* that tree, while others need information it
 does not carry. Three distinct prerequisites:
 
-1. *Indexing only* — walk the tree `Typing.f` already returns.
+1. *Indexing only* — walk the tree `Typing.f` already returns. **Done** (hover,
+   inlay hints).
 2. *Name resolution* — the annotation carries types + spans but not def<->use
    links (which local/function/type a name binds to); the resolver would need to
-   record them.
-3. *Error-tolerant parsing* — today any syntax error yields no AST at all, so
-   features that must work mid-edit need either a recovering parser or a
-   last-good-tree cache.
+   record them. The one prerequisite still outstanding.
+3. *Error-tolerant parsing* — **done**: `parse_recover` (sync-token panic mode)
+   yields a best-effort AST past syntax errors, and `check`/hover/outline/inlays
+   all run on it, so features work mid-edit; `check` reports every syntax error,
+   not just the first.
 
 - [x] **Hover types.** *Indexing only.* Added a `hover` export
   (`wax_format_js.ml`) that parses with recovery, type-checks with `Typing.f_infer`
@@ -110,11 +112,12 @@ does not carry. Three distinct prerequisites:
   also *needs name resolution* (prereq 2) for the precise version; a coarser one
   could come from parse-tree structure alone.
 - [ ] **Completion** (locals, functions, types, intrinsics) beyond the current
-  snippets. *Needs resolution + error tolerance* (prereqs 2 and 3): the buffer
-  is usually syntactically invalid exactly when completion is invoked.
-- [ ] **Multi-error syntax recovery.** *Is* the recovering parser (prereq 3).
-  `check` reports the first syntax error only (the parser stops there); reporting
-  several is a substantial parser change.
+  snippets. *Now needs only name resolution* (prereq 2) — error tolerance
+  (prereq 3), which completion also relies on since the buffer is usually invalid
+  when it is invoked, is already done.
+- [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
+  runs through `parse_recover` and reports every syntax error at once, not just
+  the first.
 
 ## Ops
 
@@ -123,8 +126,10 @@ does not carry. Three distinct prerequisites:
 
 ## Suggested next step
 
-The indexing-only features (hover types, inlay hints) are done. The rest of
-Tier 3 is gated on name resolution (go-to-def / references / rename / semantic
-tokens) or error-tolerant parsing (completion / multi-error); **go-to-definition**
-is the natural next target, needing the resolver to record each identifier's
-binding site.
+The indexing-only features (hover types, inlay hints) and error-tolerant parsing
+(multi-error recovery) are done, so **name resolution is the single remaining
+prerequisite** — it gates every feature left (go-to-def, find-references, rename,
+precise semantic tokens, and completion). **Go-to-definition** is the natural
+next target: it exercises the resolver end-to-end and is the smallest feature
+built on it. The resolver needs to record, per identifier occurrence, the binder
+it resolves to.
