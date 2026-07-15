@@ -49,8 +49,11 @@
      enclosing call's signature at the (zero-based) position — [label] the
      callee's rendered signature, [parameters] the [start, end) offset of each
      parameter within it, [active] the argument index the cursor is on. Found
-     from the innermost [Call] node containing the cursor, so it needs the call
-     to parse (a balanced, auto-closed [f(|)] does). Wax only.
+     from the innermost [Call] node containing the cursor in the typed tree, so
+     a method call's receiver type is available: it covers a named function or
+     import, an [ns::] intrinsic, and a method ([x.min(_)], [mem.load8(_)]) whose
+     signature comes from the receiver's inferred type. Needs the call to parse
+     and type — a balanced, auto-closed [f(|)] does. Wax only.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
      side-by-side preview commands.
@@ -1430,8 +1433,9 @@ let symbols_result symbols_fn src =
 (* The signature label of the callee of a call [callee(args)], for signature
    help: a named function ([Get name], defined or imported) rendered as
    [fn(a: i32) -> i32], or an intrinsic namespace path ([ns::name]) from its
-   registered signature. [None] for a method receiver or an unknown callee. *)
-let callee_label ast (callee : Wax_lang.Ast.location Wax_lang.Ast.instr) =
+   registered signature. [None] for a method call (see [method_label]) or an
+   unknown callee. *)
+let callee_label ast callee =
   let open Wax_lang.Ast in
   match callee.desc with
   | Get name ->
@@ -1462,6 +1466,55 @@ let callee_label ast (callee : Wax_lang.Ast.location Wax_lang.Ast.instr) =
         (Wax_lang.Typing.namespace_members ns.desc)
   | _ -> None
 
+let addr_type_name : [ `I32 | `I64 ] -> string = function
+  | `I32 -> "i32"
+  | `I64 -> "i64"
+
+(* The signature label of a method call [recv.meth(...)], for signature help. The
+   candidate signatures of [recv] are those of a memory / table it names (by the
+   declared address / element type from the module) or, otherwise, the value
+   methods of its inferred type — read from the typed tree, [fst recv.info], the
+   receiver's result cells. The one named [meth] gives the label. *)
+let method_label typed_module recv meth_name =
+  let open Wax_lang.Ast in
+  let value () =
+    let cells = fst recv.info in
+    if Array.length cells = 0 then None
+    else
+      Wax_lang.Typing.numeric_receiver_candidates
+        (Wax_lang.Infer.Cell.get cells.(Array.length cells - 1))
+  in
+  let candidates =
+    match recv.desc with
+    | Get name -> (
+        let obj = ref None in
+        Wax_lang.Ast_utils.iter_fields
+          (fun field ->
+            match field.desc with
+            | Memory { name = n; address_type; _ } when n.desc = name.desc ->
+                obj := Some (`Mem address_type)
+            | Table { name = n; address_type; reftype; _ }
+              when n.desc = name.desc ->
+                obj := Some (`Tab (address_type, reftype))
+            | _ -> ())
+          typed_module;
+        match !obj with
+        | Some (`Mem at) ->
+            Some
+              (Wax_lang.Typing.memory_method_candidates
+                 ~addr_name:(addr_type_name at))
+        | Some (`Tab (at, rt)) ->
+            Some
+              (Wax_lang.Typing.table_method_candidates
+                 ~addr_name:(addr_type_name at)
+                 ~elem_name:(render_valtype (Ref rt)))
+        | None -> value ())
+    | _ -> value ()
+  in
+  Option.bind candidates
+    (List.find_map (fun (c : Wax_lang.Typing.member_candidate) ->
+         if c.member_name = meth_name then Some c.member_detail else None))
+
 (* The [start, end) offsets of each top-level parameter within a rendered
    [fn(<params>) -> …] label — the region between the outer parentheses, split
    at depth-1 commas (so a function-typed parameter's own [(…)] is not split).
@@ -1484,20 +1537,23 @@ let param_ranges label =
   | _ -> []
 
 (* Signature help at the cursor: the innermost call whose parenthesised span
-   contains it (from the recovered parse), rendered as a label with the source
-   offsets of each parameter and the active-parameter index (the number of
-   arguments that end before the cursor). [None] when the cursor is in no call,
-   or the callee has no known signature. *)
+   contains it, rendered as a label with the source offsets of each parameter
+   and the active-parameter index (the number of arguments that end before the
+   cursor). Read from the typed tree ([analyze]'s [a_typed]) so a method call's
+   receiver type is available; a function / namespace callee needs only its
+   name. [None] when the cursor is in no call, or the callee has no known
+   signature. Needs the call to parse and type — a balanced (auto-closed) one
+   does. *)
 let signature_help_string src line ch =
-  let ast_opt, _, _ =
-    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
-      ~insert:Wax_lang.Recover.insert src
-  in
-  match ast_opt with
+  match (analyze src).a_typed with
   | None -> None
   | Some ast -> (
       let cursor = line_start_offset src line + byte_column src line ch in
-      let contains (l : Wax_utils.Ast.location) =
+      let loc_of (i : _ Wax_lang.Ast.instr) : Wax_utils.Ast.location =
+        snd i.info
+      in
+      let contains i =
+        let l = loc_of i in
         l.loc_start.pos_cnum <= cursor && cursor <= l.loc_end.pos_cnum
       in
       (* the innermost (smallest-span) call containing the cursor *)
@@ -1505,8 +1561,9 @@ let signature_help_string src line ch =
       Wax_lang.Ast_utils.iter_module_instr
         (fun i ->
           match i.desc with
-          | Wax_lang.Ast.Call (callee, args) when contains i.info -> (
-              let size = i.info.loc_end.pos_cnum - i.info.loc_start.pos_cnum in
+          | Wax_lang.Ast.Call (callee, args) when contains i -> (
+              let l = loc_of i in
+              let size = l.loc_end.pos_cnum - l.loc_start.pos_cnum in
               match !best with
               | Some (sz, _, _) when sz <= size -> ()
               | _ -> best := Some (size, callee, args))
@@ -1515,7 +1572,13 @@ let signature_help_string src line ch =
       match !best with
       | None -> None
       | Some (_, callee, args) -> (
-          match callee_label ast callee with
+          let label =
+            match callee.desc with
+            | Wax_lang.Ast.StructGet (recv, meth) ->
+                method_label ast recv meth.desc
+            | _ -> callee_label ast callee
+          in
+          match label with
           | None -> None
           | Some label ->
               let ranges = param_ranges label in
@@ -1523,9 +1586,7 @@ let signature_help_string src line ch =
               let active =
                 List.length
                   (List.filter
-                     (fun a ->
-                       let l : Wax_utils.Ast.location = a.Wax_lang.Ast.info in
-                       l.loc_end.pos_cnum < cursor)
+                     (fun a -> (loc_of a).loc_end.pos_cnum < cursor)
                      args)
               in
               let active = if n = 0 then 0 else min active (n - 1) in

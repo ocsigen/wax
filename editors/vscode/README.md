@@ -40,8 +40,8 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   (`v128::`, `i64::`, `atomic::`). Works while the file is
   mid-edit.
 - **Signature help** (`.wax`): while typing a call, shows the callee's signature
-  with the active argument highlighted (functions, imported functions, and
-  `ns::` intrinsics).
+  with the active argument highlighted — for functions, imported functions,
+  `ns::` intrinsics, and methods (`x.min(…)`, `mem.load8(…)`).
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

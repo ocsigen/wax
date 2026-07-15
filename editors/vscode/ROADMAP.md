@@ -224,16 +224,23 @@ does not carry. Three distinct prerequisites:
 - [x] **Signature help.** A `signatureHelp` export returns the enclosing call's
   signature at the cursor — the callee's rendered label, each parameter's
   `[start, end)` offset within it, and the active-argument index. It finds the
-  innermost `Call` node whose parenthesised span contains the cursor (so it
-  needs the call to parse — a balanced, auto-closed `f(|)` does; a genuinely
-  unclosed `f(1,` is dropped by recovery until that is improved) and reads the
-  callee's signature from its definition: a named function (`Get`, defined or
-  imported) rendered via `render_signature`, or an intrinsic namespace path
-  (`Path`, `i64::add128`) from `Typing.namespace_members`. The active parameter
-  is the number of arguments ending before the cursor. A `SignatureHelpProvider`
-  in `extension-common.ts` (triggers `(` and `,`) highlights the active
-  parameter by its label offsets. Method receivers (`x.f(`) need the receiver's
-  type, so are a follow-up. Wax only.
+  innermost `Call` node whose parenthesised span contains the cursor in the
+  *typed* tree (`analyze`'s `a_typed`), so it covers every callee form:
+  - a named function (`Get`, defined or imported), rendered via
+    `render_signature`;
+  - an intrinsic namespace path (`Path`, `i64::add128`) from
+    `Typing.namespace_members`;
+  - a method (`x.min(_)`, `v.add_i32x4(_)`, `mem.load8(_)`, `tab.grow(_)`) —
+    the receiver's inferred type (read from the typed tree, or the module's
+    memory/table declaration) selects the candidate set, and the one named by
+    the method gives the label.
+
+  The active parameter is the number of arguments ending before the cursor. A
+  `SignatureHelpProvider` in `extension-common.ts` (triggers `(` and `,`)
+  highlights the active parameter by its label offsets. Because it keys off the
+  parsed+typed `Call`, it needs the call to parse and type — a balanced,
+  auto-closed `f(|)` does; a genuinely unclosed `f(1,` is dropped by recovery
+  until that synthesises the missing `)`. Wax only.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.

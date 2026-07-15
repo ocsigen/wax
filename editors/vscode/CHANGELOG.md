@@ -58,8 +58,10 @@
   an `#[else]` function is not suggested while editing the matching `#[if]`
   branch (even when the branch is an `#[if]` inside a function body).
 - Signature help for `.wax`: while typing a call, the callee's signature is
-  shown with the active argument highlighted (functions, imported functions, and
-  `ns::` intrinsics). Triggers on `(` and `,`.
+  shown with the active argument highlighted — for functions, imported
+  functions, `ns::` intrinsics, and methods (`x.min(…)`, `v.add_i32x4(…)`,
+  `mem.load8(…)`, `tab.grow(…)`), whose signature comes from the receiver's
+  type. Triggers on `(` and `,`.
 
 ## 0.2.2
 
