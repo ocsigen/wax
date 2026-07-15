@@ -14,6 +14,9 @@
      null: the type of the innermost typed expression under the (zero-based)
      position, with its span, for editor hover. [null] over a statement or an
      unresolved node, so those stay quiet. Wax only (WAT builds no typed tree).
+   - [inlays src] -> array of { line; char; label }: the inferred type on each
+     un-annotated [let] binding ([: i32] after [x] in [let x = 3]), for inlay
+     hints. Wax only.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
@@ -300,6 +303,45 @@ let hover_string src line ch =
           | None -> None
           | Some h_type -> Some { h_type; h_range = loc }))
 
+(* Inlay hints (Wax only): the inferred type on each un-annotated [let] binding,
+   so [let x = 3] shows a virtual [: i32] after [x]. Reads the same cached cell
+   tree as hover; a binding's type is the corresponding result of its
+   initializer. Skipped: a binding the user already annotated ([let x: i32 =]),
+   the discard binding ([_ = e], no name), and one whose type is unknown/error.
+   The hint sits at the identifier's end, where the [: type] would be written. *)
+type inlay = { n_pos : Lexing.position; n_label : string }
+
+let inlays_string src =
+  match (analyze src).a_typed with
+  | None -> []
+  | Some typed ->
+      let hints = ref [] in
+      let visit
+          (i : Wax_lang.Typing.inferred_module_annotation Wax_lang.Ast.instr) =
+        match i.desc with
+        | Wax_lang.Ast.Let (bindings, Some init) ->
+            let cells, _ = init.info in
+            List.iteri
+              (fun idx (id_opt, vt_opt) ->
+                match (id_opt, vt_opt) with
+                | Some id, None
+                  when idx < Array.length cells
+                       && not (Wax_lang.Infer.is_unknown_or_error cells.(idx))
+                  ->
+                    let loc : Wax_utils.Ast.location = id.Wax_lang.Ast.info in
+                    hints :=
+                      {
+                        n_pos = loc.loc_end;
+                        n_label = ": " ^ cell_to_string cells.(idx);
+                      }
+                      :: !hints
+                | _ -> ())
+              bindings
+        | _ -> ()
+      in
+      Wax_lang.Ast_utils.iter_module_instr visit typed;
+      List.rev !hints
+
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
   | Error e -> [ syntax_error_diag e ]
@@ -444,6 +486,14 @@ let js_hover h =
     val endChar = end_char
   end
 
+let js_inlay n =
+  let line, char = js_position n.n_pos in
+  object%js
+    val line = line
+    val char = char
+    val label = Js.string n.n_label
+  end
+
 let result ~ok ~text ~error =
   object%js
     val ok = Js.bool ok
@@ -477,6 +527,10 @@ let hover_result src line ch =
   match try hover_string (Js.to_string src) line ch with _ -> None with
   | None -> Js.null
   | Some h -> Js.some (js_hover h)
+
+let inlays_result src =
+  let hints = try inlays_string (Js.to_string src) with _ -> [] in
+  Js.array (Array.of_list (List.map js_inlay hints))
 
 (* Document outline: the module's top-level definitions (functions, globals,
    types, memories, tags, tables, elems, data, imports) with their spans, for the
@@ -683,6 +737,7 @@ let () =
       method format src = format_result format_string src
       method check src = check_result check_string src
       method hover src line ch = hover_result src line ch
+      method inlays src = inlays_result src
       method symbols src = symbols_result symbols_string src
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src

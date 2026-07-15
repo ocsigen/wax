@@ -11,6 +11,7 @@ import {
   Wax,
   WaxSymbol,
   WaxHover,
+  WaxInlay,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
@@ -26,6 +27,8 @@ interface LanguageSpec {
   // Type of the expression at a position, for hover. Only Wax has a typed tree;
   // omitted for WAT (its validator builds none), so no hover is registered there.
   hover?(wax: Wax, src: string, line: number, character: number): WaxHover | null;
+  // Inferred-type inlay hints. Wax only, for the same reason.
+  inlays?(wax: Wax, src: string): WaxInlay[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -35,6 +38,7 @@ const LANGUAGES: LanguageSpec[] = [
     check: (wax, src) => wax.check(src),
     symbols: (wax, src) => wax.symbols(src),
     hover: (wax, src, line, character) => wax.hover(src, line, character),
+    inlays: (wax, src) => wax.inlays(src),
   },
   {
     id: "wat",
@@ -56,6 +60,7 @@ export function activateWith(
     registerFormatter(context, opts, log, lang);
     registerOutline(context, opts, lang);
     if (lang.hover) registerHover(context, opts, lang);
+    if (lang.inlays) registerInlayHints(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -263,6 +268,51 @@ function registerHover(
 
   context.subscriptions.push(
     vscode.languages.registerHoverProvider(lang.id, provider),
+  );
+}
+
+function registerInlayHints(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const inlays = lang.inlays;
+  if (!inlays) return;
+
+  const provider: vscode.InlayHintsProvider = {
+    async provideInlayHints(document, range, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return [];
+      }
+      if (token.isCancellationRequested) return [];
+      let hints: WaxInlay[];
+      try {
+        hints = inlays(wax, document.getText());
+      } catch {
+        return [];
+      }
+      // The toolchain returns every hint in the buffer; keep those the editor
+      // asked for (the visible range).
+      return hints
+        .filter((h) => range.contains(new vscode.Position(h.line, h.char)))
+        .map(
+          (h) =>
+            // No padding: the hint anchors right after the name and before the
+            // existing space, so ": i32" reads exactly as if it were written.
+            new vscode.InlayHint(
+              new vscode.Position(h.line, h.char),
+              h.label,
+              vscode.InlayHintKind.Type,
+            ),
+        );
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerInlayHintsProvider(lang.id, provider),
   );
 }
 

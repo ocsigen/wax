@@ -46,6 +46,14 @@ export interface WaxHover extends WaxRange {
   type: string;
 }
 
+export interface WaxInlay {
+  // Zero-based position the hint is anchored at (the end of the binding name).
+  line: number;
+  char: number;
+  // The hint text, e.g. ": i32".
+  label: string;
+}
+
 export interface WaxSymbol {
   name: string;
   kind: string;
@@ -67,6 +75,8 @@ export interface Wax {
   // The type of the innermost expression at the (zero-based) position, or null
   // if there is none. Wax only — WAT builds no typed tree.
   hover(src: string, line: number, character: number): WaxHover | null;
+  // Inferred-type inlay hints, one per un-annotated `let` binding. Wax only.
+  inlays(src: string): WaxInlay[];
   symbols(src: string): WaxSymbol[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;

@@ -9983,72 +9983,6 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
   in
   sfields asm0 fields
 
-(* Immediate sub-instructions of an instruction (lists flattened), for generic
-   traversals. *)
-let sub_instrs (i : (_ instr_desc, _) annotated) =
-  match i.desc with
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block.desc
-  | While { cond; step; block; _ } -> (cond :: Option.to_list step) @ block.desc
-  | If { cond; if_block; else_block; _ } ->
-      (cond :: if_block.desc)
-      @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block
-  | Try { block; catches; catch_all; _ } ->
-      block.desc
-      @ List.concat_map (fun (_, b) -> b.desc) catches
-      @ Option.fold ~none:[] ~some:(fun b -> b.desc) catch_all
-  | If_annotation { then_body; else_body; _ } -> (
-      then_body.desc @ match else_body with Some b -> b.desc | None -> [])
-  | Sequence l | ArrayFixed (_, l) -> l
-  | Dispatch { index; arms; _ } ->
-      index :: List.concat_map (fun (_, b) -> b.desc) arms
-  | Match { scrutinee; arms; default } ->
-      (scrutinee :: List.concat_map (fun (_, b) -> b.desc) arms) @ default.desc
-  | ContBind (_, _, l)
-  | Suspend (_, l)
-  | Resume (_, _, l)
-  | ResumeThrow (_, _, _, l)
-  | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l) ->
-      l
-  | Call (a, l) | TailCall (a, l) -> a :: l
-  (* A punned field ([None]) is a leaf [Get] with no sub-instruction. *)
-  | Struct (_, l) -> List.filter_map snd l
-  | StructDesc (d, l) -> List.filter_map snd l @ [ d ]
-  | CastDesc (a, _, b)
-  | Br_on_cast_desc_eq (_, _, a, b)
-  | Br_on_cast_desc_eq_fail (_, _, a, b)
-  | BinOp (_, a, b)
-  | Array (_, a, b)
-  | ArraySegment (_, _, a, b)
-  | ArrayGet (a, b)
-  | StructSet (a, _, b) ->
-      [ a; b ]
-  | ArraySet (a, b, c) | Select (a, b, c) -> [ a; b; c ]
-  | Set (_, _, i)
-  | Tee (_, i)
-  | Cast (i, _)
-  | Test (i, _)
-  | NonNull i
-  | UnOp (_, i)
-  | StructGet (i, _)
-  | GetDescriptor i
-  | StructDefaultDesc i
-  | ArrayDefault (_, i)
-  | Br_if (_, i)
-  | Hinted (_, i)
-  | Br_table (_, i)
-  | Br_on_null (_, i)
-  | Br_on_non_null (_, i)
-  | Br_on_cast (_, _, i)
-  | Br_on_cast_fail (_, _, i)
-  | ThrowRef i
-  | ContNew (_, i) ->
-      [ i ]
-  | Let (_, o) | Br (_, o) | Throw (_, o) | Return o -> Option.to_list o
-  | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
-  | Float _ | StructDefault _ ->
-      []
-
 (* [let] bindings are not allowed inside a conditional branch: branches are
    transparent and mutually exclusive, so a binding declared in one would leak
    past the conditional and clash with the other branch. *)
@@ -10070,7 +10004,7 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
       check_branch then_body.desc;
       Option.iter (fun b -> check_branch b.desc) else_body
   | _ -> ());
-  List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
+  List.iter (check_let_in_conditionals diagnostics) (Ast_utils.sub_instrs i)
 
 let check_let_bindings diagnostics fields =
   Ast_utils.iter_fields

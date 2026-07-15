@@ -5,6 +5,8 @@
 - Hover types for `.wax`: hovering over an expression shows its inferred type,
   read off the type-checker's typed tree. Works through the recovering parser
   while other parts of the file still have errors.
+- Inlay hints for `.wax`: the inferred type is shown inline on each un-annotated
+  `let` binding (e.g. `let x = 3` shows `x: i32`).
 
 ## 0.2.2
 

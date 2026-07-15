@@ -164,6 +164,76 @@ let rec map_instr f instr =
   in
   { desc; info = f instr.info }
 
+(* The instructions immediately nested within [i] (its operands and block
+   bodies), in no particular evaluation order. A punned struct field ([None]) is
+   a leaf and contributes nothing. *)
+let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
+  match i.desc with
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block.desc
+  | While { cond; step; block; _ } -> (cond :: Option.to_list step) @ block.desc
+  | If { cond; if_block; else_block; _ } ->
+      (cond :: if_block.desc)
+      @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block
+  | Try { block; catches; catch_all; _ } ->
+      block.desc
+      @ List.concat_map (fun (_, b) -> b.desc) catches
+      @ Option.fold ~none:[] ~some:(fun b -> b.desc) catch_all
+  | If_annotation { then_body; else_body; _ } -> (
+      then_body.desc @ match else_body with Some b -> b.desc | None -> [])
+  | Sequence l | ArrayFixed (_, l) -> l
+  | Dispatch { index; arms; _ } ->
+      index :: List.concat_map (fun (_, b) -> b.desc) arms
+  | Match { scrutinee; arms; default } ->
+      (scrutinee :: List.concat_map (fun (_, b) -> b.desc) arms) @ default.desc
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l) ->
+      l
+  | Call (a, l) | TailCall (a, l) -> a :: l
+  | Struct (_, l) -> List.filter_map snd l
+  | StructDesc (d, l) -> List.filter_map snd l @ [ d ]
+  | CastDesc (a, _, b)
+  | Br_on_cast_desc_eq (_, _, a, b)
+  | Br_on_cast_desc_eq_fail (_, _, a, b)
+  | BinOp (_, a, b)
+  | Array (_, a, b)
+  | ArraySegment (_, _, a, b)
+  | ArrayGet (a, b)
+  | StructSet (a, _, b) ->
+      [ a; b ]
+  | ArraySet (a, b, c) | Select (a, b, c) -> [ a; b; c ]
+  | Set (_, _, i)
+  | Tee (_, i)
+  | Cast (i, _)
+  | Test (i, _)
+  | NonNull i
+  | UnOp (_, i)
+  | StructGet (i, _)
+  | GetDescriptor i
+  | StructDefaultDesc i
+  | ArrayDefault (_, i)
+  | Br_if (_, i)
+  | Hinted (_, i)
+  | Br_table (_, i)
+  | Br_on_null (_, i)
+  | Br_on_non_null (_, i)
+  | Br_on_cast (_, _, i)
+  | Br_on_cast_fail (_, _, i)
+  | ThrowRef i
+  | ContNew (_, i) ->
+      [ i ]
+  | Let (_, o) | Br (_, o) | Throw (_, o) | Return o -> Option.to_list o
+  | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
+      []
+
+let rec iter_instr f i =
+  f i;
+  List.iter (iter_instr f) (sub_instrs i)
+
 (* Lower a [dispatch] to the conventional dense-switch shape: one nested void
    block per case, the [br_table] in the innermost block, and each case body
    placed just after its block. Branching to case [cᵢ] exits its block and runs
@@ -428,6 +498,29 @@ let rec iter_fields f l =
           Option.iter (fun b -> iter_fields f b.desc) else_fields
       | _ -> ())
     l
+
+let iter_module_instr f m =
+  iter_fields
+    (fun field ->
+      let roots =
+        match field.desc with
+        | Func { body = _, instrs; _ } -> instrs
+        | Global { def; _ } -> [ def ]
+        | Memory { data; _ } -> List.map (fun d -> d.offset) data
+        | Data { mode = Active (_, off); _ } -> [ off ]
+        | Table { init; _ } -> Option.to_list init
+        | Elem { mode; init; _ } -> (
+            init
+            @ match mode with EActive (_, off) -> [ off ] | EPassive -> [])
+        (* No instructions of their own; a [Conditional]'s nested fields reach
+           [f] via [iter_fields]' own recursion. *)
+        | Data { mode = Passive; _ }
+        | Type _ | Tag _ | Import _ | Import_group _ | Module_annotation _
+        | Conditional _ ->
+            []
+      in
+      List.iter (iter_instr f) roots)
+    m
 
 (* The precedence class of a binary operator. Shared by the [precedence] lint
    (see [Typing.lint_precedence]) and the Wax printer (see [Output]), so the

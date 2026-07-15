@@ -2,6 +2,15 @@ val map_instr : ('a -> 'b) -> 'a Ast.instr -> 'b Ast.instr
 (** [map_instr f instr] applies the function [f] to the info field of [instr]
     and recursively applies it to all nested instructions. *)
 
+val sub_instrs : 'info Ast.instr -> 'info Ast.instr list
+(** [sub_instrs i] is the instructions immediately nested within [i] (its
+    operands and block bodies), in no particular order. *)
+
+val iter_instr : ('info Ast.instr -> unit) -> 'info Ast.instr -> unit
+(** [iter_instr f i] applies [f] to [i] and, recursively, to every instruction
+    nested within it. Unlike {!map_instr}, [f] receives the whole node (so it
+    can inspect the [desc]), not just the info field. *)
+
 val lower_dispatch :
   block_info:'info ->
   index:'info Ast.instr ->
@@ -61,6 +70,11 @@ val iter_fields :
   (('info Ast.modulefield, Ast.location) Ast.annotated -> unit) ->
   'info Ast.module_ ->
   unit
+
+val iter_module_instr : ('info Ast.instr -> unit) -> 'info Ast.module_ -> unit
+(** [iter_module_instr f m] applies [f] to every instruction in [m] — each
+    field's operands and bodies, and everything nested within them (including
+    through conditionals). *)
 
 type binop_kind = [ `Shift | `Arith | `Bitwise | `Comparison ]
 (** The precedence class of a binary operator, shared by the [precedence] lint

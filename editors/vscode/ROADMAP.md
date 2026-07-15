@@ -94,9 +94,15 @@ does not carry. Three distinct prerequisites:
   pass (which now also runs `f_infer`, since it emits the same diagnostics and
   yields the tree for free), so a repeat hover on an unchanged buffer is a pure
   tree walk (~0.4 ms on a 2400-line file) rather than a re-analysis (~20-60 ms).
-- [ ] **Inlay hints** (show inferred `: i32` on `let`s). The same indexing walk
-  on the same typed tree; a `let`-binding node's annotation carries the type.
-  Build on the hover export.
+- [x] **Inlay hints** (show inferred `: i32` on `let`s). *Indexing only.* Added
+  an `inlays` export that reads the same cached cell tree, walks it with the new
+  `Ast_utils.iter_module_instr` (which exposes each node's `desc`, unlike
+  `map_instr`), and for every un-annotated `let` binding emits `: <type>` at the
+  name's end — the binding's type being the matching result of its initializer.
+  A binding the user already annotated, the discard binding (`_ = e`), and one
+  whose type is unknown/error are skipped. An `InlayHintsProvider` in
+  `extension-common.ts` renders them (no padding, so `: i32` reads as written).
+  Wax only.
 - [ ] **Go to definition / find references / rename.** *Needs name resolution*
   (prereq 2): the typed tree has spans but not the binding target each identifier
   resolves to.
@@ -117,8 +123,8 @@ does not carry. Three distinct prerequisites:
 
 ## Suggested next step
 
-**Inlay hints** — hover types are done, and inlay hints are the same indexing
-walk over the same typed tree (`Typing.f`), so they extend the new `hover`
-export directly. The rest of Tier 3 is gated on name resolution (go-to-def /
-references / rename / semantic tokens) or error-tolerant parsing (completion /
-multi-error).
+The indexing-only features (hover types, inlay hints) are done. The rest of
+Tier 3 is gated on name resolution (go-to-def / references / rename / semantic
+tokens) or error-tolerant parsing (completion / multi-error); **go-to-definition**
+is the natural next target, needing the resolver to record each identifier's
+binding site.
