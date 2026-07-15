@@ -22,8 +22,16 @@
   "engines": {
     "vscode": "^1.60.0"
   },
-  "categories": ["Programming Languages", "Formatters"],
-  "keywords": ["wax", "webassembly", "wasm", "wat"],
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "keywords": [
+    "wax",
+    "webassembly",
+    "wasm",
+    "wat"
+  ],
   "main": "./dist/extension.node.js",
   "browser": "./dist/extension.web.js",
   "activationEvents": [
@@ -33,7 +41,9 @@
     "onCommand:wax.showWax"
   ],
   "capabilities": {
-    "untrustedWorkspaces": { "supported": true },
+    "untrustedWorkspaces": {
+      "supported": true
+    },
     "virtualWorkspaces": true
   },
   "scripts": {
@@ -63,14 +73,24 @@
     "languages": [
       {
         "id": "wax",
-        "aliases": ["Wax", "wax"],
-        "extensions": [".wax"],
+        "aliases": [
+          "Wax",
+          "wax"
+        ],
+        "extensions": [
+          ".wax"
+        ],
         "configuration": "./language-configuration.json"
       },
       {
         "id": "wat",
-        "aliases": ["WebAssembly Text", "wat"],
-        "extensions": [".wat"],
+        "aliases": [
+          "WebAssembly Text",
+          "wat"
+        ],
+        "extensions": [
+          ".wat"
+        ],
         "configuration": "./wat-language-configuration.json"
       }
     ],
@@ -115,9 +135,18 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "wax.showWat", "when": "resourceLangId == wax" },
-        { "command": "wax.showWax", "when": "resourceLangId == wat" },
-        { "command": "wax.configureDefines", "when": "resourceLangId == wax" }
+        {
+          "command": "wax.showWat",
+          "when": "resourceLangId == wax"
+        },
+        {
+          "command": "wax.showWax",
+          "when": "resourceLangId == wat"
+        },
+        {
+          "command": "wax.configureDefines",
+          "when": "resourceLangId == wax"
+        }
       ],
       "editor/title": [
         {
@@ -137,11 +166,16 @@
       "properties": {
         "wax.define": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "markdownDescription": "Conditional-compilation defines, as passed to `-D`/`--define` (e.g. `debug=true`, `arch=wasm64`, `version=2.1.0`). Branches of `#[if]`/`#[else]` that these bindings make unreachable are dimmed as dead code in `.wax` files."
         }
       }
     }
+  },
+  "dependencies": {
+    "vsce": "^2.15.0"
   }
 }

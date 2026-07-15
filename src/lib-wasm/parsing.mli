@@ -145,7 +145,24 @@ end) : sig
       accepted, so the construct the user is still typing reduces into the
       best-effort AST instead of being unwound away and dropped. The syntax
       error is still reported; only the recovered AST improves. Omit to keep the
-      unwind-and-discard behaviour. *)
+      unwind-and-discard behaviour.
+
+      [barrier] adapts recovery to a {e fully parenthesized} grammar (WAT),
+      which has no separator or leader token: a missing closer then surfaces not
+      as an unclosed construct but as a new field offered where an instruction
+      was expected. It is a triple — the [(] token to re-offer, a predicate for
+      a field keyword written after a bare [(] (offered as the pair [( ; kw]),
+      and a predicate for a fused [(type]/[(import]/[(export] opener the lexer
+      folds into one token (offered alone) — and lets recovery close the
+      enclosing field and restart at the new one instead of letting paren-depth
+      counting swallow the sibling; both predicates fire only at the enclosing
+      level, so a field-like opener nested in skipped content is not mistaken
+      for a field. Supplying [barrier] {e also} enables {e group-drop}: when a
+      closer cannot be shifted because an inner group's production is incomplete
+      and needs more than one token to repair (e.g. [(v128.const)]), the broken
+      group is dropped whole and its enclosing field kept. Omit (the default) in
+      a grammar with real separator/leader anchors (Wax), where neither applies.
+  *)
 end
 
 (** {!Make} plus a fast parser, whose only role is speed on the happy path:
