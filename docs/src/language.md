@@ -55,8 +55,6 @@ fn add(a: i32, b: i32,) -> i32 {
 ```wax
 42          // Decimal
 0x2A        // Hexadecimal
-0o52        // Octal
-0b101010    // Binary
 ```
 
 A numeric literal is **flexible**: it has no fixed type of its own but takes a

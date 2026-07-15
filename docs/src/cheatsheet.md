@@ -20,7 +20,7 @@ bottom types `none nofunc noextern noexn nocont`.
 ## Literals
 
 ```wax
-42  0x2A  0o52  0b101010  // integers (flexible: i32/i64/f32/f64 by context)
+42  0x2A  // integers (flexible: i32/i64/f32/f64 by context)
 3.14  1.0e10  0x1.5p3  inf  nan   // floats
 'A'  '\n'  '\u{1F600}'    // char, an i32 code point
 "text"  bytes # "text"    // string, an i8/i16 array
