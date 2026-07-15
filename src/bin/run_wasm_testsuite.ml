@@ -483,7 +483,7 @@ let runtest filename _ =
                         WaxParser.parse_from_string ~color ~filename text
                       in
                       Wax_utils.Diagnostic.run ~color
-                        ~palette:Wax_utils.Colors.wat_theme ~source:(Some text)
+                        ~palette:Wax_utils.Colors.wax_theme ~source:(Some text)
                         (fun d -> Wax_lang.Typing.check d m'))
                 in
                 if ok then
@@ -500,17 +500,17 @@ let runtest filename _ =
                          below exercise the [simplify] pass. *)
                       let _, m =
                         Wax_utils.Diagnostic.run ~color
-                          ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
+                          ~palette:Wax_utils.Colors.wax_theme ~source (fun d ->
                             Wax_lang.Typing.f ~simplify:true d m)
                       in
                       let types, m =
                         Wax_utils.Diagnostic.run ~color
-                          ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
+                          ~palette:Wax_utils.Colors.wax_theme ~source (fun d ->
                             Wax_lang.Typing.f d (Wax_lang.Typing.erase_types m))
                       in
                       let m' =
                         Wax_utils.Diagnostic.run ~color
-                          ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
+                          ~palette:Wax_utils.Colors.wax_theme ~source (fun d ->
                             Wax_conversion.To_wasm.module_ d types m)
                       in
                       let ok =
