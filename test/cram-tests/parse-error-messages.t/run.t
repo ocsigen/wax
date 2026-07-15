@@ -34,11 +34,11 @@ the raw `separated_nonempty_list_trailing(comma,on_clause)`:
 
   $ wax check onclause.wax
   Error: Expecting ']', or an on clause.
-   ──➤  onclause.wax:2:16
+   ──➤  onclause.wax:2:13
   1 │ fn f() {
-  2 │   resume cont [_ => switch 5] ()
-    ·                ^
-    ·               ^ This '[' might be unmatched.
+  2 │   resume k [_ => switch 5] ()
+    ·             ^
+    ·            ^ This '[' might be unmatched.
   3 │ }
   4 │ 
   [128]

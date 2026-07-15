@@ -85,7 +85,7 @@
 %token BR_ON_CAST BR_ON_CAST_FAIL
 %token BR_ON_NULL BR_ON_NON_NULL
 %token TRY CATCH
-%token CONT_NEW CONT_BIND
+%token CONT CONT_NEW CONT_BIND
 %token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token DISPATCH
 %token MATCH
@@ -137,7 +137,6 @@ let absheaptype_tbl =
      "nofunc", NoFunc;
      "exn", Exn;
      "noexn", NoExn;
-     "cont", Cont;
      "nocont", NoCont;
      "extern", Extern;
      "noextern", NoExtern;
@@ -379,6 +378,7 @@ ident_or_keyword:
 | BR_ON_NON_NULL { "br_on_non_null" }
 | TRY { "try" }
 | CATCH { "catch" }
+| CONT { "cont" }
 | CONT_NEW { "cont_new" }
 | CONT_BIND { "cont_bind" }
 | SUSPEND { "suspend" }
@@ -407,6 +407,7 @@ label_name:
 | "'" l = label_name { with_loc $sloc l }
 
 heap_type:
+| CONT { (Cont : heaptype) }
 | t = ident { try Hashtbl.find absheaptype_tbl t.desc with Not_found -> Type t }
 
 reference_type:
@@ -486,14 +487,8 @@ composite_type:
 | t = structtype { Struct t }
 | t = function_type_definition { Func t }
 | t = arraytype { Array t }
-(* [cont] is not a reserved word (it is used as an ordinary identifier, e.g.
-   user type names and labels), so a continuation type is recognised here by
-   matching the identifier [cont] followed by the function type name. *)
-| name = ident t = type_name
-  { if name.desc <> "cont" then
-      raise (Wax_wasm.Parsing.Syntax_error ($sloc,
-        Printf.sprintf "Expecting a composite type.\n"));
-    Cont t }
+(* A continuation type wraps a named function type: [cont ft]. *)
+| CONT t = type_name { Cont t }
 
 type_name:
 | i = ident { i }

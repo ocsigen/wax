@@ -29,6 +29,7 @@ let reserved =
       "br_table";
       "catch";
       "const";
+      "cont";
       "cont_bind";
       "cont_new";
       "data";
@@ -79,7 +80,6 @@ let reserved_heap_types =
        [
          "any";
          "array";
-         "cont";
          "eq";
          "exn";
          "extern";
