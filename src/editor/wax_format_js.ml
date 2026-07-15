@@ -36,11 +36,13 @@
      Wax only.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
-   - [completion src line ch] -> array of { name; kind }: completion candidates
-     at the (zero-based) position. After [name.] (a struct field access), the
-     receiver struct's field names; otherwise the names in scope — the module's
-     top-level definitions, the enclosing function's parameters and locals, and
-     the keywords. The editor filters by the typed prefix. Wax only.
+   - [completion src line ch] -> array of { name; kind; detail }: completion
+     candidates at the (zero-based) position. After [name.] (a struct field
+     access), the receiver struct's field names; otherwise the names in scope —
+     the module's top-level definitions, the enclosing function's parameters and
+     locals, and the keywords. [detail] is a one-line type / signature rendered
+     from the declaration (empty when none). The editor filters by the typed
+     prefix. Wax only.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
      side-by-side preview commands.
@@ -908,19 +910,90 @@ let symbols_string src =
    locals of the function the cursor is in, and the keywords. The editor filters
    by the typed prefix, so every candidate is offered. Precise per-point local
    scoping is a follow-up. *)
-type completion = { k_name : string; k_kind : string }
+(* [k_detail] is a one-line type / signature shown beside the item, or "". *)
+type completion = { k_name : string; k_kind : string; k_detail : string }
 
 (* The keywords come from [Wax_conversion.Namespace.reserved_words], the single
    list the keyword-consistency test keeps in step with the lexer, so this never
    drifts. *)
 let wax_keywords = Wax_conversion.Namespace.reserved_words
 
-(* Flatten the outline symbols (which already carry a name and kind) to
-   completion candidates; an import group contributes its members, not itself. *)
-let rec symbol_completions (s : sym) =
-  match s.s_children with
-  | [] -> [ { k_name = s.s_name; k_kind = s.s_kind } ]
-  | children -> List.concat_map symbol_completions children
+(* Render a declaration's type / signature for a completion item's detail,
+   straight from the parsed AST (no typing). A wide margin keeps it on one
+   line. *)
+let render_wax f =
+  let buf = Buffer.create 32 in
+  let fmt = Format.formatter_of_buffer buf in
+  Wax_utils.Printer.run ~width:1_000_000 fmt f;
+  Format.pp_print_flush fmt ();
+  Buffer.contents buf
+
+let render_valtype vt = render_wax (fun p -> Wax_lang.Output.valtype p vt)
+let render_typedef entry = render_wax (fun p -> Wax_lang.Output.subtype p entry)
+
+let render_signature typ (sign : Wax_lang.Ast.functype option) =
+  let open Wax_lang.Ast in
+  match sign with
+  | Some { params; results } -> (
+      let param p =
+        match p.desc with
+        | Some (id : ident), vt -> id.desc ^ ": " ^ render_valtype vt
+        | None, vt -> render_valtype vt
+      in
+      let ps = List.map param (Array.to_list params) in
+      let rs = List.map render_valtype (Array.to_list results) in
+      "fn(" ^ String.concat ", " ps ^ ")"
+      ^ match rs with [] -> "" | _ -> " -> " ^ String.concat ", " rs)
+  | None -> ( match typ with Some (t : ident) -> "fn " ^ t.desc | None -> "")
+
+let import_completion
+    (decl :
+      (Wax_lang.Ast.import_decl, Wax_utils.Ast.location) Wax_lang.Ast.annotated)
+    =
+  let open Wax_lang.Ast in
+  let d = decl.desc in
+  let detail =
+    match d.kind with
+    | Import_func { sign; typ; _ } -> render_signature typ sign
+    | Import_global { typ; _ } -> render_valtype typ
+    | Import_tag { sign; _ } -> render_signature None sign
+    | Import_memory _ | Import_table _ -> ""
+  in
+  { k_name = d.id.desc; k_kind = import_kind_str d.kind; k_detail = detail }
+
+(* A module field's completion candidates: its name(s), kind, and a detail
+   rendered from the declaration. Mirrors [field_symbols] (the outline) but
+   carries the type; an import group contributes its members. *)
+let field_completions
+    (field :
+      ( Wax_lang.Ast.location Wax_lang.Ast.modulefield,
+        Wax_utils.Ast.location )
+      Wax_lang.Ast.annotated) : completion list =
+  let open Wax_lang.Ast in
+  let one k_name k_kind k_detail = { k_name; k_kind; k_detail } in
+  match field.desc with
+  | Func { name; typ; sign; _ } ->
+      [ one name.desc "function" (render_signature typ sign) ]
+  | Global { name; typ; _ } ->
+      [
+        one name.desc "variable"
+          (match typ with Some vt -> render_valtype vt | None -> "");
+      ]
+  | Tag { name; sign; _ } ->
+      [ one name.desc "event" (render_signature None sign) ]
+  | Type rectype ->
+      Array.to_list rectype
+      |> List.map (fun entry ->
+          let id, _ = entry.desc in
+          one id.desc "type" (render_typedef entry))
+  | Memory { name; _ } -> [ one name.desc "memory" "" ]
+  | Table { name; _ } -> [ one name.desc "table" "" ]
+  | Elem { name; _ } -> [ one name.desc "array" "" ]
+  | Data { name = Some n; _ } -> [ one n.desc "data" "" ]
+  | Data { name = None; _ } -> []
+  | Import { decl; _ } -> [ import_completion decl ]
+  | Import_group { decls; _ } -> List.map import_completion decls
+  | Module_annotation _ | Conditional _ -> []
 
 (* Parameters and [let] locals of the function whose span covers the cursor
    (over-approximate: every local in the function, not only those in scope at the
@@ -945,9 +1018,15 @@ let function_locals ast target =
             | Some { params; _ } ->
                 Array.to_list params
                 |> List.filter_map (fun p ->
-                    match fst p.desc with
-                    | Some id -> Some { k_name = id.desc; k_kind = "parameter" }
-                    | None -> None)
+                    match p.desc with
+                    | Some id, vt ->
+                        Some
+                          {
+                            k_name = id.desc;
+                            k_kind = "parameter";
+                            k_detail = render_valtype vt;
+                          }
+                    | None, _ -> None)
             | None -> []
           in
           let lets = ref [] in
@@ -956,11 +1035,19 @@ let function_locals ast target =
                  match i.desc with
                  | Let (bindings, _) ->
                      List.iter
-                       (fun (id_opt, _) ->
+                       (fun (id_opt, vt_opt) ->
                          match id_opt with
                          | Some id ->
                              lets :=
-                               { k_name = id.desc; k_kind = "local" } :: !lets
+                               {
+                                 k_name = id.desc;
+                                 k_kind = "local";
+                                 k_detail =
+                                   (match vt_opt with
+                                   | Some vt -> render_valtype vt
+                                   | None -> "");
+                               }
+                               :: !lets
                          | None -> ())
                        bindings
                  | _ -> ()))
@@ -1015,7 +1102,10 @@ let member_fields_at src line ch members =
 let completion_string src line ch =
   if is_member_position src line ch then
     match member_fields_at src line ch (analyze src).a_members with
-    | Some names -> List.map (fun n -> { k_name = n; k_kind = "field" }) names
+    | Some names ->
+        List.map
+          (fun n -> { k_name = n; k_kind = "field"; k_detail = "" })
+          names
     | None -> (
         (* A bare [.]: the parser drops the field-less access, so nothing is
            recorded. Splice a sentinel field in so [recv.<sentinel>] parses and
@@ -1032,7 +1122,9 @@ let completion_string src line ch =
             (analyze_uncached repaired).a_members
         with
         | Some names ->
-            List.map (fun n -> { k_name = n; k_kind = "field" }) names
+            List.map
+              (fun n -> { k_name = n; k_kind = "field"; k_detail = "" })
+              names
         | None -> [])
   else
     let target = (line + 1, byte_column src line ch) in
@@ -1041,7 +1133,9 @@ let completion_string src line ch =
         ~insert:Wax_lang.Recover.insert src
     in
     let keywords =
-      List.map (fun k -> { k_name = k; k_kind = "keyword" }) wax_keywords
+      List.map
+        (fun k -> { k_name = k; k_kind = "keyword"; k_detail = "" })
+        wax_keywords
     in
     match ast_opt with
     | None -> keywords
@@ -1051,10 +1145,7 @@ let completion_string src line ch =
            included, not just the top-level fields. *)
         let module_ = ref [] in
         Wax_lang.Ast_utils.iter_fields
-          (fun field ->
-            module_ :=
-              !module_
-              @ List.concat_map symbol_completions (field_symbols field))
+          (fun field -> module_ := !module_ @ field_completions field)
           ast;
         let module_ = !module_ in
         let locals = function_locals ast target in
@@ -1188,6 +1279,7 @@ let js_completion c =
   object%js
     val name = Js.string c.k_name
     val kind = Js.string c.k_kind
+    val detail = Js.string c.k_detail
   end
 
 let completion_result src line ch =

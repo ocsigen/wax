@@ -581,7 +581,9 @@ function registerCompletion(
           c.name,
           completionKind(c.kind),
         );
-        item.detail = c.kind;
+        // The type / signature (icon already conveys the kind); nothing when
+        // there is no detail (e.g. a keyword).
+        if (c.detail) item.detail = c.detail;
         return item;
       });
     },

@@ -28,7 +28,8 @@
 - Completion for `.wax`: suggests the names in scope (module functions, globals,
   types, tags; the enclosing function's parameters and locals) and keywords, and
   after `.` the fields of a struct value (including chained accesses), working
-  even while the file is mid-edit.
+  even while the file is mid-edit. Each item shows its type / signature (e.g.
+  `fn(a: i32) -> i32`) where the declaration gives one.
 
 ## 0.2.2
 

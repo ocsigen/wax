@@ -62,8 +62,10 @@ export interface WaxEdit extends WaxRange {
 export interface WaxCompletion {
   name: string;
   // "function" | "variable" | "type" | "event" | "memory" | "table" | "array" |
-  // "data" | "namespace" | "parameter" | "local" | "keyword".
+  // "data" | "namespace" | "parameter" | "local" | "keyword" | "field".
   kind: string;
+  // A one-line type / signature (e.g. "fn(a: i32) -> i32", "i32"), or "".
+  detail: string;
 }
 
 export interface WaxSymbol {

@@ -156,10 +156,14 @@ does not carry. Three distinct prerequisites:
   (`member_completions`), and completion returns those when the cursor is on the
   (possibly partial) field. This relies on the parser's error recovery keeping
   the half-written access so the receiver still types — the earlier blocker,
-  since fixed. It handles chains (`l.a.x`) and inferred receivers. Follow-ups:
-  memory/table method completion after `.`, intrinsic namespaces after `::`,
+  since fixed. It handles chains (`l.a.x`) and inferred receivers. A bare `.`
+  (nothing typed yet) is handled by splicing a sentinel field so the receiver
+  types. Each item carries a type / signature rendered from the declaration
+  (`fn(a: i32) -> i32`, `i32`, the type's definition), from the parse alone;
+  inferred locals without an annotation show none. Follow-ups: memory/table
+  method and value-method completion after `.`, intrinsic namespaces after `::`,
   per-point local scoping (currently every local in the function is offered), and
-  type details on items.
+  struct-field type details in member completion.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -175,8 +179,10 @@ The core language-server features are all in: diagnostics, formatting, outline,
 hover, inlay hints, go-to-definition, find-references / document-highlight,
 rename, and completion (names and struct members). What is left refines them:
 
-- **Completion polish** — memory/table methods after `.`, intrinsics after `::`,
-  per-point local scoping, and type details on items.
+- **Completion polish** — value/memory/table method completion after `.` (needs
+  a curated method registry per receiver kind, since the method dispatch is
+  match-based, not enumerable), intrinsic namespaces after `::`, per-point local
+  scoping, and struct-field type details in member completion.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 
