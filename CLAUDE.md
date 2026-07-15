@@ -85,6 +85,7 @@ trusted and not validated. `--validate` forces validation in every case.
 | `-s` | `--strict-validate` | Strict reference validation (Wasm Text) |
 | `-D` | `--define` | Set a conditional-compilation variable (as for convert); specializes `#[if]`/`(@if)` before validating. A partial set leaves the rest for the path-sensitive check. Repeatable |
 | `-W` | `--warn` | Set a warning's level (as for convert) |
+|      | `--all-errors` | Report every syntax error via panic-mode recovery instead of stopping at the first (Wax input only; ignored for Wat/Wasm). A module with syntax errors is not type-checked. Routes through `Wax_conversion.Driver.wax_parse_recover` |
 |      | `--color` / `--debug` | As for convert |
 
 **Exit status** (shared by all commands; see `docs/src/cli.md`): `0` success;

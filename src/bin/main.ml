@@ -652,7 +652,7 @@ let format inplace check format_opt color fold_mode warnings debug error_format
    non-zero status if any file fails. [format_opt] forces the format; otherwise
    it is detected from the extension. *)
 let check format_opt strict color warnings features debug error_format defines
-    files =
+    all_errors files =
   Wax_wasm.Validation.validate_refs := strict;
   let policy = build_policy warnings in
   Wax_utils.Diagnostic.set_policy policy;
@@ -682,6 +682,29 @@ let check format_opt strict color warnings features debug error_format defines
         let d = Wax_utils.Diagnostic.collector ~source:text () in
         (try
            match fmt with
+           | Wax when all_errors -> (
+               (* Panic-mode recovery: collect every syntax error into [d]
+                  instead of stopping at the first, so they are all reported
+                  together below. Only a cleanly-parsed module is type-checked —
+                  a partial AST recovered past syntax errors would yield
+                  spurious type errors. [--all-errors] is Wax-only; a forced
+                  Wat/Wasm format falls through to the normal single-error
+                  path. *)
+               let ast_opt, syntax_errors, _ =
+                 Wax_conversion.Driver.wax_parse_recover ~filename:file text
+               in
+               List.iter
+                 (fun (e : Wax_wasm.Parsing.syntax_error) ->
+                   Wax_utils.Diagnostic.report d ~location:e.location
+                     ~severity:Wax_utils.Diagnostic.Error ~related:e.related
+                     ~message:(fun f () -> Format.fprintf f "%s" e.message)
+                     ())
+                 syntax_errors;
+               match (syntax_errors, ast_opt) with
+               | [], Some ast ->
+                   let ast = specialize_wax ~color ~text defines ast in
+                   Wax_lang.Typing.check ~warn_unused:true d ast
+               | _ -> ())
            | Wax ->
                let ast, _ =
                  Wax_parser.parse_from_string ~color ~filename:file text
@@ -1110,6 +1133,16 @@ let check_files =
   let doc = "Input files (.wat, .wasm or .wax) to validate." in
   Arg.(non_empty & pos_all file_conv [] & info [] ~docv:"FILE" ~doc)
 
+(* Define the --all-errors flag (check command) *)
+let all_errors_flag =
+  let doc =
+    "Report every syntax error instead of stopping at the first, using \
+     panic-mode error recovery. Wax input only (ignored for Wat/Wasm). A \
+     module that has syntax errors is not type-checked; only its syntax errors \
+     are reported."
+  in
+  Arg.(value & flag & info [ "all-errors" ] ~doc)
+
 (* Combine into command *)
 let convert_term =
   let+ input = input_file
@@ -1201,9 +1234,10 @@ let check_term =
   and+ debug = debug_option
   and+ error_format = error_format_option
   and+ defines = define_option
+  and+ all_errors = all_errors_flag
   and+ files = check_files in
   check format_opt strict color warnings features (List.concat debug)
-    error_format defines files
+    error_format defines all_errors files
 
 let check_cmd =
   let doc = "Validate WebAssembly files without producing output" in

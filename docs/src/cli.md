@@ -350,6 +350,14 @@ wax check [OPTIONS] FILE…
   an optional proposal, as for [`convert`](#options). Repeatable.
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
   above.
+- **`--all-errors`**: report *every* syntax error instead of stopping at the
+  first. Normally the parser gives up at the first unexpected token; with this
+  flag it uses panic-mode error recovery — resynchronizing at statement and
+  block boundaries (`;`, `}`, `)`, `]`, and the keywords that begin a new item
+  or statement) and continuing — so a single run lists all the syntax errors.
+  Wax input only (ignored for Wat/Wasm). A module that has syntax errors is not
+  type-checked; only its syntax errors are reported (fix those, then re-run to
+  type-check).
 - **`--color`** *WHEN*: as above.
 - **`--error-format`** *FORMAT*: `human`, `json`, or `short`, as above.
 - **`--debug`** *CATEGORY*: as above.
@@ -359,6 +367,11 @@ wax check [OPTIONS] FILE…
 **Type-check several Wax files (e.g. in CI):**
 ```sh
 wax check src/*.wax
+```
+
+**Report all syntax errors in a Wax file at once:**
+```sh
+wax check --all-errors src/foo.wax
 ```
 
 ## Exit status
