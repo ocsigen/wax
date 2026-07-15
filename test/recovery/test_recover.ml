@@ -14,8 +14,14 @@ let report name source =
   let ast, errors, _ctx =
     Wax_conversion.Driver.wax_parse_recover ~filename:"test.wax" source
   in
+  (* The definition count matters for the end-of-input auto-close cases: a
+     construct left open at EOF used to be unwound away, leaving [Some] but with
+     the unclosed item dropped, so the count distinguishes a genuine partial AST
+     from an empty shell. *)
   Printf.printf "AST: %s\n"
-    (match ast with Some _ -> "recovered" | None -> "none");
+    (match ast with
+    | Some m -> Printf.sprintf "recovered (%d defs)" (List.length m)
+    | None -> "none");
   Printf.printf "errors: %d\n" (List.length errors);
   List.iter
     (fun (e : Wax_wasm.Parsing.syntax_error) ->
@@ -65,4 +71,14 @@ let () =
      scan crosses the balanced group and resyncs at the *outer* ';', salvaging
      the rest as one error rather than cascading out to module level. *)
   report "skip crosses a nested group to the outer boundary"
-    "fn f() -> i32 {\n    let x = @ do { 1; 2 };\n    let y = 3;\n    y;\n}\n"
+    "fn f() -> i32 {\n    let x = @ do { 1; 2 };\n    let y = 3;\n    y;\n}\n";
+  (* Auto-close at end of input: a construct still open at EOF is completed by
+     inserting the closers (and a separator where a statement must be terminated
+     first) the parser will accept, so it reduces into the AST instead of being
+     unwound away. Without it the unclosed function would be dropped (0 defs). *)
+  report "unclosed fn body is auto-closed at EOF"
+    "fn f() -> i32 {\n    let x = 1;\n";
+  report "complete fn kept, unclosed one recovered too"
+    "fn a() -> i32 { 1; }\nfn b() -> i32 {\n    let y = 2;\n";
+  report "auto-close inserts ')' then ';' then '}' at EOF"
+    "fn f() -> i32 {\n    let x = (1 + 2\n"

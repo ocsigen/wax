@@ -253,7 +253,7 @@ struct
        to a state that [acceptable] confirms can shift it, [offer] it, and carry
        on. Every error is collected; the returned AST is whatever the parser
        reduces to, with holes where erroneous spans were skipped. *)
-    let parse_recover ~filename ~sync ?insert text =
+    let parse_recover ~filename ~sync ?insert ?(closers = []) text =
       let module MI = P.MenhirInterpreter in
       let lexbuf = initialize_lexing filename text in
       let errors = ref [] in
@@ -400,6 +400,56 @@ struct
             | _ -> None)
         | _ -> None
       in
+      (* At end of input inside an unclosed bracketed construct, the generic
+         [skip] would unwind the stack {e past} that construct to a state that
+         accepts EOF, discarding the very thing the user is in the middle of
+         typing (the function whose body is still open never reaches the AST). So
+         when the offending token is EOF ([last] holds its real value), first try
+         to {e auto-close}: repeatedly insert whichever [closers] token the
+         parser will accept until offering EOF is accepted, so the pending
+         construct reduces into the best-effort AST. Returns the accepted
+         checkpoint, or [None] to fall through to [skip]. The syntax error itself
+         is still recorded by the caller; only the recovered AST improves.
+
+         A closer is always preferred; the [insert] separator only steps in to
+         end a statement that must be terminated before its enclosing block can
+         close (e.g. ["let x = (1 + 2"] needs ")" then ";" then "}"). Termination:
+         every inserted closer shifts a closing bracket, which strictly reduces
+         the open-bracket nesting, so only finitely many are inserted. The
+         separator would otherwise self-loop — a bare ";" is a valid {e empty}
+         statement, so it stays acceptable in a statement list forever — so it is
+         allowed only when the previous insertion was not itself a separator
+         ([prev_sep]); no two separators run consecutively, and a closer or EOF
+         must follow. [fuel] is a final backstop, not the real bound. *)
+      let close_at_eof env last =
+        match (last, closers) with
+        | Some (eof, pos, _), _ :: _ when sync eof = Terminal ->
+            let rec loop checkpoint prev_sep fuel =
+              if fuel <= 0 then None
+              else if MI.acceptable checkpoint eof pos then
+                Some (settle (MI.offer checkpoint (eof, pos, pos)))
+              else
+                match
+                  List.find_opt
+                    (fun c -> MI.acceptable checkpoint c pos)
+                    closers
+                with
+                | Some c ->
+                    loop
+                      (settle (MI.offer checkpoint (c, pos, pos)))
+                      false (fuel - 1)
+                | None -> (
+                    match insert with
+                    | Some (sep, _)
+                      when (not prev_sep) && MI.acceptable checkpoint sep pos ->
+                        loop
+                          (settle (MI.offer checkpoint (sep, pos, pos)))
+                          true (fuel - 1)
+                    | _ -> None)
+            in
+            loop (MI.input_needed env) false 1000
+        | _ -> None
+      in
       (* Main loop: [last] is the most recently offered token, so at a
          [HandlingError] it is the token that provoked the error. *)
       let rec run checkpoint last =
@@ -414,11 +464,13 @@ struct
       and recover checkpoint env last =
         match try_insert env last with
         | Some checkpoint -> run checkpoint None
-        | None ->
-            (* Insertion did not apply: record the standard error and skip to a
-               boundary. *)
+        | None -> (
+            (* Insertion did not apply: record the standard error, then either
+               auto-close a construct left open at EOF or skip to a boundary. *)
             record checkpoint;
-            skip env last
+            match close_at_eof env last with
+            | Some checkpoint -> run checkpoint None
+            | None -> skip env last)
       and skip env last =
         let ((tok, _, _) as sync_tok) = find_sync 0 last in
         match unwind env sync_tok with
@@ -488,7 +540,7 @@ struct
     | Ok ast -> Ok (ast, ctx)
     | Error e -> Error e
 
-  let parse_recover ~filename ~sync ?insert text =
+  let parse_recover ~filename ~sync ?insert ?closers text =
     Wax_utils.Debug.timed "parse" @@ fun () ->
     let ctx = Wax_utils.Trivia.make () in
     let module Context = struct
@@ -497,7 +549,7 @@ struct
       let context = ctx
     end in
     let module I = Inner (Context) in
-    let ast, errors = I.parse_recover ~filename ~sync ?insert text in
+    let ast, errors = I.parse_recover ~filename ~sync ?insert ?closers text in
     (ast, errors, ctx)
 end
 

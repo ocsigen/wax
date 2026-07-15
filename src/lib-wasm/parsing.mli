@@ -108,6 +108,7 @@ end) : sig
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
     ?insert:Tokens.token * string ->
+    ?closers:Tokens.token list ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
   (** Parse with panic-mode error recovery, collecting {e every} syntax error
@@ -130,7 +131,16 @@ end) : sig
       answers whether the token fits directly, so no error-message parsing is
       needed. Insertion is attempted at most once per source position, so a
       wrong guess cannot loop; it falls back to skip-based recovery. Omit for
-      grammars with no such separator (e.g. WAT), leaving recovery skip-only. *)
+      grammars with no such separator (e.g. WAT), leaving recovery skip-only.
+
+      [closers] lists the closing-bracket tokens. At end of input inside an
+      unclosed bracketed construct, recovery auto-closes: it inserts whichever
+      of these the parser accepts (and, between them, the [insert] separator
+      when a statement must be terminated first), repeatedly, until EOF is
+      accepted, so the construct the user is still typing reduces into the
+      best-effort AST instead of being unwound away and dropped. The syntax
+      error is still reported; only the recovered AST improves. Omit to keep the
+      unwind-and-discard behaviour. *)
 end
 
 (** {!Make} plus a fast parser, whose only role is speed on the happy path:
@@ -200,6 +210,7 @@ end) : sig
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
     ?insert:Tokens.token * string ->
+    ?closers:Tokens.token list ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
   (** As {!Make.parse_recover}. (Recovery always uses the incremental engine;

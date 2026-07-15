@@ -190,7 +190,7 @@ type analysis = {
 let analyze_uncached src =
   let ast_opt, syntax_errors, _ctx =
     Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
-      ~insert:Wax_lang.Recover.insert src
+      ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
   in
   let a_syntax = List.map syntax_error_diag syntax_errors in
   match ast_opt with
@@ -641,7 +641,7 @@ let field_symbols
 let symbols_string src =
   let ast_opt, _syntax_errors, _ctx =
     Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
-      ~insert:Wax_lang.Recover.insert src
+      ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
   in
   match ast_opt with
   | None -> []

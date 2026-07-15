@@ -1,56 +1,71 @@
 === two broken statements, resync at ; ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 2
   2:12-2:13: Expecting an expression.
   3:12-3:13: Expecting an expression.
 
 === broken body, resync at } then clean re-entry ===
-AST: recovered
+AST: recovered (2 defs)
 errors: 1
   1:20-1:21: Expecting '(', or a simple pattern.
 
 === well-formed input has no errors ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 0
 
 === error at end of input ===
-AST: recovered
+AST: recovered (0 defs)
 errors: 1
   1:20-1:21: Expecting '(', or a simple pattern.
 
 === resync on leading 'fn' when no delimiter survives ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 1
   1:6-1:7: Expecting a parameter list.
 
 === error inside parens, resync at ) ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 1
   1:29-1:30: Expecting an expression.
 
 === error inside index, resync at ] ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 1
   1:32-1:33: Expecting an index expression.
 
 === lexer error is recorded and skipped ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 2
   1:24-1:25: Unexpected character '$'.
   1:25-1:26: Expecting an expression.
 
 === missing ';' is repaired by insertion ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 1
   3:4-3:4: Missing ';'
 
 === unhelpful insertion is rejected, not reported ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 1
   2:14-2:15: Assuming that the statement is complete, expecting ';'.
 
 === skip crosses a nested group to the outer boundary ===
-AST: recovered
+AST: recovered (1 defs)
 errors: 1
   2:12-2:13: Expecting an expression.
+
+=== unclosed fn body is auto-closed at EOF ===
+AST: recovered (1 defs)
+errors: 1
+  3:0-3:0: Expecting a raw statement list.
+
+=== complete fn kept, unclosed one recovered too ===
+AST: recovered (2 defs)
+errors: 1
+  4:0-4:0: Expecting a raw statement list.
+
+=== auto-close inserts ')' then ';' then '}' at EOF ===
+AST: recovered (1 defs)
+errors: 1
+  3:0-3:0: Assuming that the parenthesized expression is complete, expecting ')'.
 

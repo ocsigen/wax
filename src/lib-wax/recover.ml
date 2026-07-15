@@ -45,3 +45,9 @@ let sync : Tokens.token -> Wax_wasm.Parsing.sync_class = function
    can shift [SEMI], so [Parsing.parse_recover] inserts one there (reporting a
    "Missing ';'") rather than skipping to the next boundary. *)
 let insert = (Tokens.SEMI, ";")
+
+(* The closing brackets recovery may insert to auto-close a construct left open
+   at end of input, so the function/block the user is still typing reduces into
+   the best-effort AST (for the editor outline) instead of being unwound away.
+   See the [closers] argument of [Parsing.parse_recover]. *)
+let closers = [ Tokens.RBRACE; Tokens.RPAREN; Tokens.RBRACKET ]
