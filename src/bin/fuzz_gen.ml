@@ -1065,7 +1065,7 @@ let func k : Ast.location Ast.modulefield =
         match rnd 100 with
         | n when n < 22 -> [ tail_match res ]
         | n when n < 34 -> [ tail_dispatch res ]
-        | n when n < 42 -> [ nl (Ast.Throw (id "stop", None)) ]
+        | n when n < 42 -> [ nl (Ast.Throw (id "stop", [])) ]
         | _ -> [ gen res 2 ]
     in
     stmts @ poison @ tail

@@ -140,7 +140,7 @@ offending argument, not the whole throw:
   $ wax check throw-arg-type.wax
   Error: This instruction has type 'i64' but is expected to have type 'i32'.
    ──➤  throw-arg-type.wax:1:30
-  1 │ tag t(i32); fn f() { throw t 5 as i64; }
+  1 │ tag t(i32); fn f() { throw t(5 as i64); }
     ·                              ^^^^^^^^
   2 │ 
   [128]

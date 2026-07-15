@@ -72,7 +72,8 @@ import "marshal" {
         let a =
             'cont: do {
                 dispatch kind [
-                    'f32 'f64 'i8 'i8 'i16 'i16 'i32 'i64 'i32 'i32 'f32 'f64 'i8 else 'i16
+                    'f32, 'f64, 'i8, 'i8, 'i16, 'i16, 'i32, 'i64, 'i32, 'i32, 'f32, 'f64, 'i8, else
+                    'i16
                 ] {
                     'i64: {
                         // i64
@@ -520,8 +521,8 @@ fn bigarray_hash(vba: &eq) -> i32 {
     let h: i32;
     let i: i32;
     dispatch (b.ba_kind as i32_u) [
-        'float32 'float64 'int8 'int8 'int16 'int16 'int32 'int64 'int32 'int32 'complex32
-        'complex64 'int8 else 'float16
+        'float32, 'float64, 'int8, 'int8, 'int16, 'int16, 'int32, 'int64, 'int32, 'int32,
+        'complex32, 'complex64, 'int8, else 'float16
     ] {
         'float16: {
             // float16
@@ -584,7 +585,7 @@ fn bigarray_hash(vba: &eq) -> i32 {
                 h = caml_hash_mix_int(h, dv_get_i32_unaligned(view, i, 1));
             }
             let w = 0;
-            dispatch (len & 3) [ '_0_bytes '_1_byte '_2_bytes else '_3_bytes ] {
+            dispatch (len & 3) [ '_0_bytes, '_1_byte, '_2_bytes, else '_3_bytes ] {
                 '_3_bytes: {
                     w = dv_get_ui8(view, i + 2) << 16;
                 }
@@ -657,8 +658,8 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
         len = caml_ba_num_elts(b);
         i = 0;
         dispatch (b.ba_kind as i32_u) [
-            'float32 'float64 'int8 'int8 'int16 'int16 'int32 'int64 'int 'int 'complex32
-            'complex64 'int8 else 'int16
+            'float32, 'float64, 'int8, 'int8, 'int16, 'int16, 'int32, 'int64, 'int, 'int,
+            'complex32, 'complex64, 'int8, else 'int16
         ] {
             'complex64: {
                 // complex64
@@ -770,8 +771,8 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
     'done: do {
         i = 0;
         dispatch (b.ba_kind as i32_u) [
-            'float32 'float64 'int8 'int8 'int16 'int16 'int32 'int64 'int 'int 'complex32
-            'complex64 'int8 else 'int16
+            'float32, 'float64, 'int8, 'int8, 'int16, 'int16, 'int32, 'int64, 'int, 'int,
+            'complex32, 'complex64, 'int8, else 'int16
         ] {
             'complex64: {
                 // complex64
@@ -978,8 +979,8 @@ const ta_too_large = "Typed_array.to_genarray: too large";
 fn caml_ba_get_at_offset(ba: &bigarray, i: i32) -> &eq {
     let view = ba.ba_view;
     dispatch (ba.ba_kind as i32_u) [
-        'float32 'float64 'int8 'uint8 'int16 'uint16 'int32 'int64 'int 'nativeint 'complex32
-        'complex64 'uint8 else 'float16
+        'float32, 'float64, 'int8, 'uint8, 'int16, 'uint16, 'int32, 'int64, 'int, 'nativeint,
+        'complex32, 'complex64, 'uint8, else 'float16
     ] {
         'float16: {
             // float16
@@ -1050,8 +1051,8 @@ fn caml_ba_set_at_offset(ba: &bigarray, i: i32, v: &eq) {
     let view = ba.ba_view;
     let b: &float_array;
     dispatch (ba.ba_kind as i32_u) [
-        'float32 'float64 'int8 'int8 'int16 'int16 'int32 'int64 'int 'int32 'complex32 'complex64
-        'int8 else 'float16
+        'float32, 'float64, 'int8, 'int8, 'int16, 'int16, 'int32, 'int64, 'int, 'int32, 'complex32,
+        'complex64, 'int8, else 'float16
     ] {
         'float16: {
             // float16
@@ -1534,8 +1535,8 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
     let len: i32;
     let b: &float_array;
     dispatch (ba.ba_kind as i32_u) [
-        'float 'float 'int 'int 'int 'int 'int32 'int64 'int 'int32 'complex32 'complex64 'int else
-        'float16
+        'float, 'float, 'int, 'int, 'int, 'int, 'int32, 'int64, 'int, 'int32, 'complex32,
+        'complex64, 'int, else 'float16
     ] {
         'float16: {
             // float16
@@ -1729,8 +1730,8 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
     let f1: f64;
     let f2: f64;
     dispatch (b1.ba_kind as i32_u) [
-        'float32 'float64 'int8 'uint8 'int16 'uint16 'int32 'int64 'int32 'int32 'complex32
-        'complex64 'uint8 else 'float16
+        'float32, 'float64, 'int8, 'uint8, 'int16, 'uint16, 'int32, 'int64, 'int32, 'int32,
+        'complex32, 'complex64, 'uint8, else 'float16
     ] {
         'float16: {
             // float16

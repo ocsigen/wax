@@ -542,7 +542,7 @@ type bytes = [mut i8];
 
     #[export]
     fn caml_throw_js_exception(exn: &eq) -> &eq {
-        throw javascript_exception unwrap(exn) as &?extern;
+        throw javascript_exception(unwrap(exn) as &?extern);
     }
 
     #[export]

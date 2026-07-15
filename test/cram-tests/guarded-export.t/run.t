@@ -8,7 +8,7 @@ in one conditional branch decompiles to a guarded `#[export]`:
 
   $ wax reexport.wat -f wax
   #[export]
-  #[export = "fmt", if not(portable)]
+  #[export = "fmt", if(not(portable))]
   fn fmt32(v: &eq) -> &eq {
       v;
   }
@@ -40,7 +40,7 @@ so a redundant conjunct is dropped rather than re-accumulated on each round-trip
   #[if(a)]
   {
       #[export]
-      #[export = "g", if b]
+      #[export = "g", if(b)]
       fn f(v: &eq) -> &eq {
           v;
       }
@@ -49,7 +49,7 @@ so a redundant conjunct is dropped rather than re-accumulated on each round-trip
   #[if(a)]
   {
       #[export]
-      #[export = "g", if b]
+      #[export = "g", if(b)]
       fn f(v: &eq) -> &eq {
           v;
       }
@@ -65,7 +65,7 @@ but a guarded export overlapping an unconditional one does:
   $ wax check dup.wax
   Error: There is already an export of name 'e'.
    ──➤  dup.wax:3:12
-  1 │ #[export = "e", if portable]
+  1 │ #[export = "e", if(portable)]
   2 │ fn a(v: &eq) -> &eq { v; }
   3 │ #[export = "e"]
     ·            ^^^
@@ -98,7 +98,7 @@ A `start` is folded onto its function the same way, so a `(start …)` inside an
 than being silently dropped), and round-trips faithfully:
 
   $ wax cstart.wat -f wax
-  #[start, if debug]
+  #[start, if(debug)]
   fn init() {}
   $ wax cstart.wat -f wax | wax -i wax -f wat
   (func $init)
@@ -112,7 +112,7 @@ A guard is only meaningful on an export or start, not on other attributes:
     import.
    ──➤  badguard.wax:2:21
   1 │ import "m" {
-  2 │     #[import = "n", if debug]
+  2 │     #[import = "n", if(debug)]
     ·                     ^^
   3 │     fn f(&eq) -> &eq;
   4 │ }

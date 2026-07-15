@@ -64,6 +64,7 @@ let rec occurs name i =
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
   | Switch (_, _, l)
+  | Throw (_, l)
   | Sequence l ->
       in_list l
   | Dispatch { index; arms; _ } ->
@@ -73,7 +74,7 @@ let rec occurs name i =
       || List.exists (fun (_, b) -> in_list b.desc) arms
       || in_list default.desc
   | Let (_, body) -> in_opt body
-  | Br (_, o) | Throw (_, o) | Return o -> in_opt o
+  | Br (_, o) | Return o -> in_opt o
   | If_annotation { then_body; else_body; _ } -> (
       in_list then_body.desc
       || match else_body with Some b -> in_list b.desc | None -> false)
@@ -201,6 +202,7 @@ let rec first_access name i =
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
   | Switch (_, _, l)
+  | Throw (_, l)
   | Sequence l ->
       fl l
   | Dispatch { index; arms; _ } ->
@@ -216,7 +218,7 @@ let rec first_access name i =
            (fun acc (_, b) -> agree acc (fl b.desc))
            (fl default.desc) arms)
   | Let (_, body) -> fo body
-  | Br (_, o) | Throw (_, o) | Return o -> fo o
+  | Br (_, o) | Return o -> fo o
   | If_annotation { then_body; else_body; _ } ->
       agree (fl then_body.desc)
         (match else_body with Some b -> fl b.desc | None -> None)
@@ -507,7 +509,7 @@ let rec sink_into ((name, _) as decl) s =
       pick [ (e, fun e' -> Br_on_cast_fail (l, t, e')) ]
   | Br (l, Some e) -> pick [ (e, fun e' -> Br (l, Some e')) ]
   | Return (Some e) -> pick [ (e, fun e' -> Return (Some e')) ]
-  | Throw (idx, Some e) -> pick [ (e, fun e' -> Throw (idx, Some e')) ]
+  | Throw (idx, l) -> pick (in_list l (fun l' -> Throw (idx, l')))
   | ArrayFixed (idx, l) -> pick (in_list l (fun l' -> ArrayFixed (idx, l')))
   | ContBind (a, b, l) -> pick (in_list l (fun l' -> ContBind (a, b, l')))
   | Suspend (tag, l) -> pick (in_list l (fun l' -> Suspend (tag, l')))

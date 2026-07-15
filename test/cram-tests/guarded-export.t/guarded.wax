@@ -1,4 +1,4 @@
-#[export = "e", if portable]
+#[export = "e", if(portable)]
 fn a(v: &eq) -> &eq { v; }
-#[export = "e", if not(portable)]
+#[export = "e", if(not(portable))]
 fn b(v: &eq) -> &eq { v; }

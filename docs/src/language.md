@@ -680,11 +680,11 @@ Branch instructions:
 ```wax
 br 'label;                          // unconditional branch
 br_if 'label cond;                  // branch if cond (an i32) is non-zero
-br_table ['a 'b else 'default] i;   // branch to the i-th label, else 'default
+br_table ['a, 'b, else 'default] i;   // branch to the i-th label, else 'default
 ```
 
-The labels in a `br_table` are separated by spaces, and `else` gives the
-fallback for an out-of-range index. A branch also carries any values its target
+The labels in a `br_table` are separated by commas, and the mandatory final
+`else` gives the fallback for an out-of-range index. A branch also carries any values its target
 expects: a `do i32` target receives an `i32`, and so on.
 
 Four more branch instructions test a reference and branch on the result, passing
@@ -734,7 +734,7 @@ out-of-range index), and each arm gives that case's body:
 
 ```wax,check
 fn classify(x: i32) -> i32 {
-    dispatch x ['zero 'one 'two else 'big] {
+    dispatch x ['zero, 'one, 'two, else 'big] {
         'big:  { return 99; }
         'two:  { return 30; }
         'one:  { return 20; }
@@ -761,7 +761,7 @@ own result via `return`; to break out instead, branch to an enclosing label:
 ```wax
 let r: i32;
 'done: do {
-    dispatch x ['zero 'one else 'two] {
+    dispatch x ['zero, 'one, else 'two] {
         'two:  { r = 30; }
         'one:  { r = 20; br 'done; }
         'zero: { r = 10; br 'done; }
@@ -907,7 +907,7 @@ Like `#[export]`, `#[start]` can carry an `if <condition>` guard, so a function
 is the start only in some configurations (at most one start per configuration):
 
 ```wax,check
-#[start, if debug]
+#[start, if(debug)]
 fn init() {
     // only run under `-D debug=true`
 }
@@ -999,7 +999,7 @@ in some configurations:
 
 ```wax,check
 #[export]
-#[export = "add_alias", if not(bootstrap)]
+#[export = "add_alias", if(not(bootstrap))]
 fn add(x: i32, y: i32) -> i32 { x + y; }
 ```
 
@@ -1465,12 +1465,13 @@ data seg = "raw\x00bytes";               // top-level passive segment
 data init @ mem0 [0] = "hello";          // top-level active segment
 ```
 
-A segment's contents may mix string literals with **numeric runs** — a bracketed
-list `[type: values]` whose element type is stated once and whose values are
-packed little-endian — instead of hand-escaping every byte:
+A segment's contents may concatenate (with `++`) string literals and **numeric
+runs** — a bracketed list `[type: values]` whose element type is stated once
+and whose values are packed little-endian — instead of hand-escaping every
+byte:
 
 ```wax
-data table = "hdr", [f32: 0.2, 0.3, 0.4], [i16: -1, -2], [i8: 1, 2, 3, 4];
+data table = "hdr" ++ [f32: 0.2, 0.3, 0.4] ++ [i16: -1, -2] ++ [i8: 1, 2, 3, 4];
 ```
 
 The scalar element types are `i8`, `i16`, `i32`, `i64`, `f32`, and `f64`; values
@@ -1560,7 +1561,7 @@ tag yield(i32) -> i32;      // carries an i32; resumes with an i32
 `throw` raises a tag together with its payload:
 
 ```wax
-throw overflow 42;
+throw overflow(42);
 ```
 
 ### Try / Catch

@@ -157,7 +157,7 @@ operator with `x` as its *left* operand) and reconstructs the compound form
 | `if ... else ...` | `if cond { ... } else { ... }` |
 | `br $l` | `br 'l` |
 | `br_if $l` | `br_if 'l cond` |
-| `br_table $l* $ld` | `br_table ['l* else 'ld] val` |
+| `br_table $l* $ld` | `br_table ['l1, 'l2, else 'ld] val` |
 | `br_on_null $l` | `br_on_null 'l val` |
 | `br_on_non_null $l` | `br_on_non_null 'l val` |
 | `br_on_cast $l $t1 $t2` | `br_on_cast 'l t2 val` |
@@ -248,7 +248,7 @@ their blocks; a `br_table` matching that dense void-switch shape decompiles back
 to `dispatch`:
 
 ```
-(block $big (block $b (block $a           dispatch x ['zero 'one else 'big] {
+(block $big (block $b (block $a           dispatch x ['zero, 'one, else 'big] {
   (br_table $a $b $big (local.get $x)))     'big:  { … }
   … 'one body …) … 'big body …)             'one:  { … }
                                             'zero: { … } }
@@ -495,7 +495,7 @@ A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)
 
 | Wasm | Wax |
 |------|-----|
-| `throw $tag` | `throw tag` (no payload), `throw tag x` (one), `throw tag (x, y)` (several) |
+| `throw $tag` | `throw tag()` (no payload), `throw tag(x)` (one), `throw tag(x, y)` (several) |
 | `throw_ref` | `throw_ref` |
 | `try_table ... catch $tag $l ...` | `try { ... } catch [ tag -> 'l, ... ]` |
 | `try_table ... catch_ref $tag $l ...` | `try { ... } catch [ tag & -> 'l, ... ]` |

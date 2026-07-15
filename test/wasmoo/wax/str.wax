@@ -102,9 +102,10 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                         let arg: i32;
                         let l: i32;
                         dispatch (instr & 0xff) [
-                            'CHAR 'CHARNORM 'STRING 'STRINGNORM 'CHARCLASS 'BOL 'EOL 'WORDBOUNDARY
-                            'BEGGROUP 'ENDGROUP 'REFGROUP 'ACCEPT 'SIMPLEOPT 'SIMPLESTAR 'SIMPLEPLUS
-                            'GOTO 'PUSHBACK 'SETMARK else 'CHECKPROGRESS
+                            'CHAR, 'CHARNORM, 'STRING, 'STRINGNORM, 'CHARCLASS, 'BOL, 'EOL,
+                            'WORDBOUNDARY, 'BEGGROUP, 'ENDGROUP, 'REFGROUP, 'ACCEPT, 'SIMPLEOPT,
+                            'SIMPLESTAR, 'SIMPLEPLUS, 'GOTO, 'PUSHBACK, 'SETMARK, else
+                            'CHECKPROGRESS
                         ] {
                             'CHAR: {
                                 // CHAR

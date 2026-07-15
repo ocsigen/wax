@@ -22,7 +22,7 @@ The 'dispatch' keyword is preserved when formatting Wax:
 
   $ wax classify.wax -f wax
   fn classify(x: i32) -> i32 {
-      dispatch x [ 'zero 'one 'two else 'big ] {
+      dispatch x [ 'zero, 'one, 'two, else 'big ] {
           'big: {
               return 99;
           }
@@ -43,7 +43,7 @@ so it survives a round trip through WAT:
 
   $ wax classify.wax -f wat | wax -i wat -f wax
   fn classify(x: i32) -> i32 {
-      dispatch x [ 'zero 'one 'two else 'big ] {
+      dispatch x [ 'zero, 'one, 'two, else 'big ] {
           'big: {
               return 99;
           }
@@ -79,7 +79,7 @@ The index must be an 'i32':
    ──➤  err_index.wax:3:18
   1 │ fn g(x: f64) {
   2 │     'out: do {
-  3 │         dispatch x ['a else 'out] {
+  3 │         dispatch x ['a, else 'out] {
     ·                  ^
   4 │             'a: { nop; }
   5 │         }

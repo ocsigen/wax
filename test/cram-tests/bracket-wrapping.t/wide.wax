@@ -4,7 +4,7 @@ tag exc_c();
 tag exc_d();
 
 fn dispatch_wide(x: i32) {
-    dispatch x ['case_one 'case_two 'case_one 'case_two 'case_one 'case_two 'case_one 'case_two 'case_one else 'case_dflt] {
+    dispatch x ['case_one, 'case_two, 'case_one, 'case_two, 'case_one, 'case_two, 'case_one, 'case_two, 'case_one, else 'case_dflt] {
         'case_one: { return; }
         'case_two: { return; }
         'case_dflt: { return; }
@@ -14,7 +14,7 @@ fn dispatch_wide(x: i32) {
 fn br_table_wide(x: i32) {
     'label_aaaa: do {
         'label_bbbb: do {
-            br_table ['label_aaaa 'label_bbbb 'label_aaaa 'label_bbbb 'label_aaaa 'label_bbbb 'label_aaaa else 'label_bbbb] x;
+            br_table ['label_aaaa, 'label_bbbb, 'label_aaaa, 'label_bbbb, 'label_aaaa, 'label_bbbb, 'label_aaaa, else 'label_bbbb] x;
         }
     }
 }

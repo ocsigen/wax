@@ -37,12 +37,12 @@ tag ocaml_exception(&eq);
 
 #[export]
 fn caml_raise_constant(v: &eq) {
-    throw ocaml_exception v;
+    throw ocaml_exception(v);
 }
 
 #[export]
 fn caml_raise_with_arg(tg: &eq, arg: &eq) {
-    throw ocaml_exception [block|0 as &i31, tg, arg];
+    throw ocaml_exception([block|0 as &i31, tg, arg]);
 }
 
 // caml_global_data is a $block: index 0 is the tag, data starts at 1

@@ -197,10 +197,10 @@ data init @ mem0 [0] = "hello";
 
 Data bytes are ordinary [string literals](../language.md#strings); escapes such as `\x41` and `\x00` (two hex digits) decode to raw bytes.
 
-A segment's contents may also mix strings with **typed numeric runs** — `[type: values]`, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly *numeric values* text-format extension, and it round-trips through WAT:
+A segment's contents may also concatenate (with `++`) strings and **typed numeric runs** — `[type: values]`, whose element type is stated once and whose values are packed little-endian. This is the WebAssembly *numeric values* text-format extension, and it round-trips through WAT:
 
 ```wax
-data pixels = "hdr", [f32: 0.2, 0.3, 0.4], [i16: -1, -2, -3], [i8: 1, 2, 3, 4];
+data pixels = "hdr" ++ [f32: 0.2, 0.3, 0.4] ++ [i16: -1, -2, -3] ++ [i8: 1, 2, 3, 4];
 ```
 
 The scalar element types are `i8`, `i16`, `i32`, `i64`, `f32`, and `f64`; the values (including `nan`/`inf`) are ordinary literals. A `v128` run holds lane groups written `shape(lanes)`, e.g. `[v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)]`. The bytes are the same as if the values were written out as an escaped string.

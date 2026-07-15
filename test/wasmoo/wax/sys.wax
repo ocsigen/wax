@@ -90,7 +90,7 @@ tag ocaml_exit();
 fn caml_sys_exit(code: &eq) -> &eq {
     exit(code as i32_s);
     // Fallback: try to exit through an exception
-    throw ocaml_exit;
+    throw ocaml_exit();
 }
 
 #[if(wasi)]

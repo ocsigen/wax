@@ -345,7 +345,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
                     apply_pair(p as &pair);
                 } catch {
                     javascript_exception => {
-                        throw ocaml_exception caml_wrap_exception(_);
+                        throw ocaml_exception(caml_wrap_exception(_));
                     }
                 }
             } catch {
@@ -413,7 +413,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
     }
 
     fn raise_exception(exn: &eq, &eq) -> &eq {
-        throw ocaml_exception exn;
+        throw ocaml_exception(exn);
     }
 
     const raise_exception_closure: &eq = {closure| func: raise_exception };
@@ -541,7 +541,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
             }
         }
         cps_fiber_stack = saved_fiber_stack;
-        throw ocaml_exception exn;
+        throw ocaml_exception(exn);
     }
 
     fn caml_pop_fiber() -> &eq {
@@ -652,12 +652,12 @@ fn caml_assume_no_perform(f: &eq) -> &eq {
             ocaml_exception => {
                 exn = _;
                 effect_allowed = saved_effect_allowed;
-                throw ocaml_exception exn;
+                throw ocaml_exception(exn);
             }
             javascript_exception => {
                 exn = caml_wrap_exception(_);
                 effect_allowed = saved_effect_allowed;
-                throw ocaml_exception exn;
+                throw ocaml_exception(exn);
             }
         };
     effect_allowed = saved_effect_allowed;

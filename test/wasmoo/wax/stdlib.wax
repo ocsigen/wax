@@ -324,7 +324,7 @@ let uncaught_exception: &?extern = null;
 #[if(not(wasi))]
 {
     fn reraise_exception() -> &eq {
-        throw javascript_exception uncaught_exception;
+        throw javascript_exception(uncaught_exception);
         0 as &i31;
     }
 

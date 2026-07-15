@@ -71,7 +71,7 @@ fn f() { try { nop; } catch { e => { nop; } _ => { nop; } } }
 br_table
 ==================
 
-fn f() { br_table ['a 'b else 'c] x; }
+fn f() { br_table ['a, 'b, else 'c] x; }
 
 ---
 
@@ -93,7 +93,7 @@ fn f() { br_table ['a 'b else 'c] x; }
 dispatch
 ==================
 
-fn f() { dispatch x ['a else 'b] { 'a: { nop; } } }
+fn f() { dispatch x ['a, else 'b] { 'a: { nop; } } }
 
 ---
 
