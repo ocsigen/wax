@@ -14,16 +14,32 @@ type syntax_error = {
     opening delimiter). *)
 
 type sync_class =
+  | Open
+  | Close
   | Boundary
+  | Leader
   | Terminal
   | Skip
       (** How the panic-mode recovery of {!Make.parse_recover} treats a token
-          when it is scanning for a place to resynchronize.
+          when it is scanning for a place to resynchronize. The skip is
+          nesting-aware: it tracks the bracket depth entered {e while skipping}
+          so a boundary belonging to a group opened inside the skipped span does
+          not resynchronize the enclosing construct.
 
-          - [Boundary] — a resynchronization point (typically [";"] or ["}"]).
-            Recovery stops skipping when it reaches one, unwinds the parser
-            stack to the closest state that can shift it, shifts it, and resumes
-            parsing.
+          - [Open] — an opening bracket. Descends one nesting level; never
+            itself a resync point.
+          - [Close] — a closing bracket. At the outer level (depth 0) it is a
+            resync point closing an enclosing construct; otherwise it ascends
+            one level (matching an [Open] met while skipping) and scanning
+            continues.
+          - [Boundary] — a non-bracket resync point (typically a statement
+            separator), counted only at the outer level, like a [Close].
+            Recovery stops there, unwinds the parser stack to the closest state
+            that can shift it, shifts it, and resumes.
+          - [Leader] — a resync point valid at {e any} depth: an
+            item/statement-leading keyword. Recovery stops at one even inside an
+            unbalanced opener, so a stray bracket cannot swallow the next
+            top-level item.
           - [Terminal] — the end-of-input token. Recovery stops at it but never
             discards it; if no stacked state can accept it, parsing gives up
             (the best-effort AST is then absent).

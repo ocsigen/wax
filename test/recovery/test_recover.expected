@@ -49,3 +49,8 @@ AST: recovered
 errors: 1
   2:14-2:15: Assuming that the statement is complete, expecting ';'.
 
+=== skip crosses a nested group to the outer boundary ===
+AST: recovered
+errors: 1
+  2:12-2:13: Expecting an expression.
+

@@ -6,7 +6,7 @@ type syntax_error = {
   related : Wax_utils.Diagnostic.label list;
 }
 
-type sync_class = Boundary | Terminal | Skip
+type sync_class = Open | Close | Boundary | Leader | Terminal | Skip
 
 (* Internal marker raised by [fail_detailed] to carry a structured error out of
    [loop_handle] to [parse_diagnostics]; never escapes this module. *)
@@ -325,14 +325,28 @@ struct
          reached by discarding tokens from the supplier. [tok0] is the token
          already in hand (the one that triggered the error, if any); if it is
          itself a boundary we resynchronize on it directly rather than skipping
-         past it. Always terminates: every non-boundary pull advances toward the
-         end-of-input token, which is a [Terminal]. *)
-      let rec find_sync tok0 =
-        match tok0 with
-        | Some ((t, _, _) as tok) when sync t <> Skip -> tok
-        | _ -> (
-            let ((t, _, _) as tok) = supplier () in
-            match sync t with Skip -> find_sync None | _ -> tok)
+         past it.
+
+         [depth] tracks bracket nesting {e entered while skipping}, so a boundary
+         that belongs to a construct opened inside the skipped span does not
+         resynchronize the enclosing one: an [Open] descends a level, a [Close]
+         at depth 0 is a genuine enclosing boundary but otherwise just ascends a
+         level, and a [Boundary] (e.g. [";"]) counts only at depth 0. A [Leader]
+         (an item/statement-leading keyword) resynchronizes at any depth — an
+         unbalanced opener must never swallow the next top-level item, which is
+         the whole reason those keywords are boundaries. Always terminates: every
+         step that does not stop pulls one token, advancing toward the
+         end-of-input [Terminal]. *)
+      let rec find_sync depth tok0 =
+        let step ((t, _, _) as tok) =
+          match sync t with
+          | Skip -> find_sync depth None
+          | Open -> find_sync (depth + 1) None
+          | Close -> if depth > 0 then find_sync (depth - 1) None else tok
+          | Boundary -> if depth > 0 then find_sync depth None else tok
+          | Leader | Terminal -> tok
+        in
+        match tok0 with Some tok -> step tok | None -> step (supplier ())
       in
       (* Unwind the parser stack to the closest state that can shift [tok] and
          shift it there, returning the resumed checkpoint; [None] if no stacked
@@ -406,7 +420,7 @@ struct
             record checkpoint;
             skip env last
       and skip env last =
-        let ((tok, _, _) as sync_tok) = find_sync last in
+        let ((tok, _, _) as sync_tok) = find_sync 0 last in
         match unwind env sync_tok with
         | Some checkpoint -> run checkpoint None
         | None -> (

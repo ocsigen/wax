@@ -59,4 +59,10 @@ let () =
      one, so the repair is rejected and no spurious "Missing ';'" is added on top
      of the genuine error (only the standard diagnostic remains). *)
   report "unhelpful insertion is rejected, not reported"
-    "fn f() -> i32 {\n    let x = 1 @\n    x;\n}\n"
+    "fn f() -> i32 {\n    let x = 1 @\n    x;\n}\n";
+  (* Nesting-aware skip: the ';' and '}' inside the 'do { 1; 2 }' group opened
+     while skipping past the error do not resync the enclosing statement — the
+     scan crosses the balanced group and resyncs at the *outer* ';', salvaging
+     the rest as one error rather than cascading out to module level. *)
+  report "skip crosses a nested group to the outer boundary"
+    "fn f() -> i32 {\n    let x = @ do { 1; 2 };\n    let y = 3;\n    y;\n}\n"

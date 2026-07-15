@@ -6,27 +6,36 @@
    wax_format_js.ml).
 
    End-of-input stops recovery and everything not listed here is skipped while
-   scanning for one of these boundaries. Two kinds, both handled by the same
-   "unwind the stack to a state that can shift this token, then shift it" step
-   (see {!Wax_wasm.Parsing.Make.parse_recover}):
+   scanning for one of these boundaries. The kinds (all handled by the same
+   "unwind the stack to a state that can shift this token, then shift it" step,
+   see {!Wax_wasm.Parsing.Make.parse_recover}):
 
-   - Trailing closers ([";"], ["}"], [")"], ["]"]) — resync as the tail of the
-     broken construct; the paren/bracket closers give finer, expression-internal
-     recovery than the statement/block ones.
-   - Leading keywords that begin a new top-level item or statement. They let
-     recovery resync at the next construct even when the error consumed the
-     trailing closer. Only keywords that can never continue an expression are
-     included: the expression forms [if]/[loop]/[block]/[match]/[do]/[while] are
-     left out, since in this expression-oriented grammar they can occur
-     mid-expression and stopping at one would resync too early. *)
+   - Openers ([Open]: ["{"], ["("], ["["]) and closers ([Close]: ["}"], [")"],
+     ["]"]). The skip is nesting-aware: an opener met while skipping descends a
+     level and the matching closer ascends it again, so only a closer at the
+     {e outer} level resyncs — a closer or [";"] belonging to a group opened
+     inside the skipped span no longer resyncs the enclosing construct. The
+     paren/bracket closers give finer, expression-internal recovery than the
+     statement/block ones.
+   - The statement separator [";"] ([Boundary]) — a resync point, but only at
+     the outer nesting level (like a closer).
+   - Leading keywords that begin a new top-level item or statement ([Leader]).
+     They let recovery resync at the next construct even when the error consumed
+     the trailing closer, so they resync at {e any} depth (an unbalanced opener
+     must not swallow the next item). Only keywords that can never continue an
+     expression are included: the expression forms [if]/[loop]/[block]/[match]/
+     [do]/[while] are left out, since in this expression-oriented grammar they
+     can occur mid-expression and stopping at one would resync too early. *)
 let sync : Tokens.token -> Wax_wasm.Parsing.sync_class = function
-  | Tokens.SEMI | Tokens.RBRACE | Tokens.RPAREN | Tokens.RBRACKET -> Boundary
+  | Tokens.LBRACE | Tokens.LPAREN | Tokens.LBRACKET -> Open
+  | Tokens.RBRACE | Tokens.RPAREN | Tokens.RBRACKET -> Close
+  | Tokens.SEMI -> Boundary
   | Tokens.FN | Tokens.TYPE | Tokens.REC | Tokens.IMPORT | Tokens.MEMORY
   | Tokens.DATA | Tokens.TABLE | Tokens.ELEM | Tokens.TAG | Tokens.CONST
   | Tokens.LET | Tokens.RETURN | Tokens.BR | Tokens.BR_IF | Tokens.BR_TABLE
   | Tokens.THROW | Tokens.THROW_REF | Tokens.BECOME | Tokens.NOP
   | Tokens.UNREACHABLE ->
-      Boundary
+      Leader
   | Tokens.EOF -> Terminal
   | _ -> Skip
 
