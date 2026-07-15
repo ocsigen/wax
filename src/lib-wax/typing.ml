@@ -418,8 +418,17 @@ module Error = struct
               pp last)
 
   let unbound_name context ~location ?(suggestions = []) kind x =
-    report ?hint:(did_you_mean suggestions) context ~location
-      "The %s %a is not bound." kind print_name x
+    (* In error-recovery mode (type-checking a best-effort AST past syntax
+       errors) a name is often unbound only because the construct that would
+       bind it was dropped at a sync boundary — our recovery drops spans rather
+       than leaving a placeholder node, so the binding is simply absent. Such
+       "not bound" reports are cascades from the syntax error, so suppress them;
+       the caller has already reported the syntax errors, and real type errors
+       in the intact regions still surface. The value still recovers as [Error]
+       at the use site, so nothing downstream cascades either. *)
+    if not (Wax_utils.Diagnostic.in_recovery context) then
+      report ?hint:(did_you_mean suggestions) context ~location
+        "The %s %a is not bound." kind print_name x
 
   let unknown_intrinsic context ~location ns name =
     report context ~location "There is no %s::%s intrinsic." ns name

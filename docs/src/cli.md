@@ -355,9 +355,10 @@ wax check [OPTIONS] FILE…
   flag it uses panic-mode error recovery — resynchronizing at statement and
   block boundaries (`;`, `}`, `)`, `]`, and the keywords that begin a new item
   or statement) and continuing — so a single run lists all the syntax errors.
-  Wax input only (ignored for Wat/Wasm). A module that has syntax errors is not
-  type-checked; only its syntax errors are reported (fix those, then re-run to
-  type-check).
+  The recovered module is then type-checked too, so genuine type errors in the
+  intact regions surface alongside the syntax errors; the "not bound" errors
+  that a construct dropped during recovery would otherwise cascade are
+  suppressed. Wax input only (ignored for Wat/Wasm).
 - **`--color`** *WHEN*: as above.
 - **`--error-format`** *FORMAT*: `human`, `json`, or `short`, as above.
 - **`--debug`** *CATEGORY*: as above.

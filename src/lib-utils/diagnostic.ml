@@ -433,6 +433,14 @@ type context = {
          [collected] and re-reported. The policy is not applied while
          collecting; it is applied when the buffered entries are re-reported to
          a non-collecting context. *)
+  mutable recovery : bool;
+      (* Error-recovery mode: the input had syntax errors and a best-effort AST
+         was recovered past them (see [Wax_wasm.Parsing.parse_recover]). Name
+         resolution is then unreliable — a construct dropped at a sync boundary
+         leaves its bindings absent — so the "not bound" diagnostics are
+         suppressed (see [unbound_name] in lib-wax/typing.ml) as likely cascades
+         while genuine type errors in the intact regions still surface. Set by
+         the caller before type-checking a recovered module. *)
 }
 
 (* The default warning policy, set once from the command line (mirroring
@@ -457,6 +465,7 @@ let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
     output;
     policy;
     collecting;
+    recovery = false;
   }
 
 (* A formatter that discards everything, used by collecting contexts. *)
@@ -470,6 +479,9 @@ let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
 let collector ?source () =
   make ~source ~exit_on_error:false ~max:max_int ~output:null_formatter
     ~collecting:true ()
+
+let in_recovery context = context.recovery
+let set_recovery context v = context.recovery <- v
 
 type entry = t
 

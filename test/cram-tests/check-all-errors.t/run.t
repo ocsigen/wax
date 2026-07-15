@@ -40,3 +40,24 @@ operand on line 3):
 A file with no syntax errors passes silently, exactly as without the flag:
 
   $ wax check --all-errors clean.wax
+
+The recovered module is still type-checked, so a real type error in an intact
+function surfaces alongside the syntax error in a broken one. The spurious
+"x is not bound" that the dropped `let x` binding would otherwise cause is
+suppressed as a recovery cascade (only the genuine diagnostics remain):
+
+  $ wax check --all-errors mixed.wax
+  Error: Expecting an expression.
+  
+   ──➤  mixed.wax:1:25
+  1 │ fn f() -> i32 { let x = ; x + 1; }
+    ·                         ^
+  2 │ fn g() -> i32 { 1.0; }
+  3 │ 
+  Error: Expecting type i32 but got type float.
+   ──➤  mixed.wax:2:17
+  1 │ fn f() -> i32 { let x = ; x + 1; }
+  2 │ fn g() -> i32 { 1.0; }
+    ·                 ^^^
+  3 │ 
+  [128]

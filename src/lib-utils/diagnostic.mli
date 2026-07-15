@@ -92,6 +92,17 @@ val collector : ?source:string -> unit -> context
     ([color], [output]); pass [?source] only when a lint reads the original text
     via {!source} while reporting against this context. *)
 
+val set_recovery : context -> bool -> unit
+(** Put [context] into (or out of) error-recovery mode. In recovery mode a
+    consumer that type-checks a best-effort AST recovered past syntax errors
+    (see {!Wax_wasm.Parsing}'s [parse_recover]) has told the checker that name
+    resolution is unreliable — content dropped at a sync boundary leaves its
+    bindings absent — so "not bound" diagnostics are suppressed as likely
+    cascades while real type errors still surface. Off by default. *)
+
+val in_recovery : context -> bool
+(** Whether [context] is in error-recovery mode (see {!set_recovery}). *)
+
 type entry
 (** A collected diagnostic. *)
 

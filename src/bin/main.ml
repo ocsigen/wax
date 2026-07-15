@@ -684,12 +684,14 @@ let check format_opt strict color warnings features debug error_format defines
            match fmt with
            | Wax when all_errors -> (
                (* Panic-mode recovery: collect every syntax error into [d]
-                  instead of stopping at the first, so they are all reported
-                  together below. Only a cleanly-parsed module is type-checked —
-                  a partial AST recovered past syntax errors would yield
-                  spurious type errors. [--all-errors] is Wax-only; a forced
-                  Wat/Wasm format falls through to the normal single-error
-                  path. *)
+                     instead of stopping at the first, so they are all reported
+                     together below, then type-check the best-effort AST too so
+                     real type errors in the intact regions surface alongside
+                     them. In recovery mode (syntax errors present) the "not
+                     bound" cascades from constructs dropped at a sync boundary
+                     are suppressed (see [Diagnostic.set_recovery]).
+                     [--all-errors] is Wax-only; a forced Wat/Wasm format falls
+                     through to the normal single-error path. *)
                let ast_opt, syntax_errors, _ =
                  Wax_conversion.Driver.wax_parse_recover ~filename:file text
                in
@@ -700,11 +702,12 @@ let check format_opt strict color warnings features debug error_format defines
                      ~message:(fun f () -> Format.fprintf f "%s" e.message)
                      ())
                  syntax_errors;
-               match (syntax_errors, ast_opt) with
-               | [], Some ast ->
+               Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+               match ast_opt with
+               | Some ast ->
                    let ast = specialize_wax ~color ~text defines ast in
                    Wax_lang.Typing.check ~warn_unused:true d ast
-               | _ -> ())
+               | None -> ())
            | Wax ->
                let ast, _ =
                  Wax_parser.parse_from_string ~color ~filename:file text

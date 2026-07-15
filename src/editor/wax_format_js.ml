@@ -159,24 +159,30 @@ let collected_diags d =
 (* Diagnostics for Wax. Parse with panic-mode recovery ([parse_recover]) so a
    buffer with several syntax errors surfaces all of them as squiggles at once,
    not just the first — the editor is exactly the multi-error consumer recovery
-   exists for. A buffer that still has syntax errors is not type-checked (the
-   partial AST recovered past them would yield spurious type errors); only a
-   cleanly-parsed module goes on to the type-checker, whose errors and warnings
-   are collected without printing. (WAT keeps the single-error path below:
-   recovery over its paren-counted grammar cascades — see the [Recover] note.) *)
+   exists for. The best-effort AST is then type-checked too, so real type errors
+   in the intact regions still show while the user fixes the syntax: when it was
+   recovered past syntax errors the checker runs in recovery mode
+   ([set_recovery]), which suppresses the "not bound" cascades from the dropped
+   constructs. Type diagnostics are collected without printing and appended to
+   the syntax errors. (WAT keeps the single-error path below: recovery over its
+   paren-counted grammar cascades — see the [Recover] note.) *)
 let check_string src =
   let ast_opt, syntax_errors, _ctx =
     Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
       src
   in
-  match (syntax_errors, ast_opt) with
-  | _ :: _, _ -> List.map syntax_error_diag syntax_errors
-  | [], None -> []
-  | [], Some ast ->
-      let d = Wax_utils.Diagnostic.collector ~source:src () in
-      (try Wax_lang.Typing.check ~warn_unused:true d ast
-       with Wax_utils.Diagnostic.Aborted -> ());
-      collected_diags d
+  let syntax_diags = List.map syntax_error_diag syntax_errors in
+  let type_diags =
+    match ast_opt with
+    | None -> []
+    | Some ast ->
+        let d = Wax_utils.Diagnostic.collector ~source:src () in
+        Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+        (try Wax_lang.Typing.check ~warn_unused:true d ast
+         with Wax_utils.Diagnostic.Aborted -> ());
+        collected_diags d
+  in
+  syntax_diags @ type_diags
 
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
