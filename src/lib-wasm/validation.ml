@@ -268,8 +268,18 @@ module Error = struct
 
   let report context ~location ~severity ?warning ?universal ?hint ?related
       message =
-    D.report context ~location ~severity ?warning ?universal ?hint ?related
-      ~message ()
+    (* In error-recovery mode (see [Parsing.parse_recover], used by the editor
+       to validate a best-effort partial AST across syntax errors) the module's
+       whole-module analyses are unreliable, so suppress every warning — the same
+       policy the Wax typer applies in recovery. Errors still surface, so a real
+       defect in an intact region shows; the few error {e cascades} a dropped or
+       auto-closed construct triggers are suppressed at their own call sites (see
+       [empty_stack]/[non_empty_stack]/[leftover_values]). *)
+    match severity with
+    | D.Warning when D.in_recovery context -> ()
+    | _ ->
+        D.report context ~location ~severity ?warning ?universal ?hint ?related
+          ~message ()
 
   let did_you_mean = function
     | [] -> None
@@ -421,22 +431,35 @@ module Error = struct
     in
     report context ~location ~severity:Error ~related message
 
+  (* The stack-shape mismatches ([empty_stack], [non_empty_stack],
+     [leftover_values]) are the error cascades a partial AST triggers: an
+     auto-closed body ([(func (i32.const 1)] at EOF) or a dropped instruction
+     leaves the operand stack the wrong height through no fault of the intact
+     code. Suppress them in recovery mode — the analogue of the Wax typer
+     dropping leftover Error-typed values under [with_empty_stack]. *)
   let empty_stack context ~location =
-    report context ~location ~severity:Error
-      (text "Type mismatch: the stack is empty (a value is missing).")
+    if D.in_recovery context then ()
+    else
+      report context ~location ~severity:Error
+        (text "Type mismatch: the stack is empty (a value is missing).")
 
   let non_empty_stack context ~location render =
-    report context ~location ~severity:Error
-      (text "Type mismatch: unexpected values left on the stack:"
-      ^^ Message.raw render)
+    if D.in_recovery context then ()
+    else
+      report context ~location ~severity:Error
+        (text "Type mismatch: unexpected values left on the stack:"
+        ^^ Message.raw render)
 
   (* Report the values still on the stack by pointing a caret at each of them.
      [location] carries the topmost value; [related] the others. *)
   let leftover_values context ~location ~related =
-    report context ~location ~severity:Error ~related
-      (text
-         (if related = [] then "Type mismatch: this value is left on the stack."
-          else "Type mismatch: these values are left on the stack."))
+    if D.in_recovery context then ()
+    else
+      report context ~location ~severity:Error ~related
+        (text
+           (if related = [] then
+              "Type mismatch: this value is left on the stack."
+            else "Type mismatch: these values are left on the stack."))
 
   (* Print a list of source types, [\[a b c\]]. *)
   let print_sources pp source =
