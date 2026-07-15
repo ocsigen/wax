@@ -148,6 +148,17 @@ export async function run(): Promise<void> {
       throw new Error("web: signatureHelp (unclosed): " + JSON.stringify(s));
     }
   }
+  {
+    // A nested call resolves to the innermost callee under the cursor (the
+    // distinct return types make the inner-vs-outer choice observable).
+    const p = at(
+      "fn f(a: i32) -> i32 { a; }\nfn g(x: f64) -> f64 { x; }\nfn m() { _ = f(g(‸)); }\n",
+    );
+    const s = wax.signatureHelp(p.src, p.line, p.character);
+    if (!s || s.label !== "fn(x: f64) -> f64") {
+      throw new Error("web: signatureHelp (nested): " + JSON.stringify(s));
+    }
+  }
 
   // WAT support shares the same wasm module. Formatting is idempotent, a syntax
   // error is rejected, a clean module has no diagnostics, and an invalid one
