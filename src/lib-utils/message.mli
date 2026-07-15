@@ -61,17 +61,10 @@ val enumerate : ?conj:string -> t list -> t
 (** ["a, b or c"] — join with commas and [conj] (default ["or"]) before the last
     item. Used for did-you-mean lists. *)
 
-val of_format : (Format.formatter -> unit -> unit) -> t
-(** Wrap a legacy [Format]-based message printer verbatim. Rendered exactly as
-    the old code path (its own width and break hints), so a wrapped call site is
-    byte-for-byte unchanged. A migration shim: converting a builder means
-    replacing [of_format] with the combinators above. *)
-
 val render_into :
   theme:Colors.theme -> width:int -> Format.formatter -> t -> unit
-(** Emit [t] onto [fmt]. A structured message is laid out through the shared
-    pretty-printer at [width] using [theme]; an {!of_format} message runs its
-    legacy printer directly (ignoring [theme]/[width]). *)
+(** Emit [t] onto [fmt], laid out through the shared pretty-printer at [width]
+    using [theme]. *)
 
 val to_plain_string : t -> string
 (** Render at effectively-infinite width with {!Colors.no_color}, returning a

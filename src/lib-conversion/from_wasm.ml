@@ -64,17 +64,17 @@ module Sequence = struct
     let warning, message =
       if reserved then
         ( Wax_utils.Warning.Reserved_word_rename,
-          fun f () ->
-            Format.fprintf f
-              "'%s' is a reserved word; renaming this identifier to '%s'."
-              original renamed )
+          Wax_utils.Message.text
+            (Printf.sprintf
+               "'%s' is a reserved word; renaming this identifier to '%s'."
+               original renamed) )
       else
         ( Wax_utils.Warning.Naming_conflict,
-          fun f () ->
-            Format.fprintf f
-              "The name '%s' is already in use; renaming this occurrence to \
-               '%s'."
-              original renamed )
+          Wax_utils.Message.text
+            (Printf.sprintf
+               "The name '%s' is already in use; renaming this occurrence to \
+                '%s'."
+               original renamed) )
     in
     let related =
       match previous with
@@ -83,16 +83,14 @@ module Sequence = struct
             {
               Wax_utils.Diagnostic.location;
               message =
-                Wax_utils.Message.of_format (fun f () ->
-                    Format.fprintf f "'%s' first claimed here" original);
+                Wax_utils.Message.text
+                  (Printf.sprintf "'%s' first claimed here" original);
             };
           ]
       | None -> []
     in
     Wax_utils.Diagnostic.report diagnostics ~location ~severity:Warning ~warning
-      ~related
-      ~message:(Wax_utils.Message.of_format message)
-      ()
+      ~related ~message ()
 
   let register' ?hint ?claimed seq export_tbl (kind : Src.exportable option)
       (id : Src.name option) exports =
@@ -684,8 +682,7 @@ let register_type (type typ) ?hint ctx export_tbl (kind : typ kind) idx exports
    represent. Report such a case and abort the conversion rather than crashing
    on an [assert false]. *)
 let conversion_error ctx ~location message =
-  Wax_utils.Diagnostic.report ctx.diagnostics ~location ~severity:Error
-    ~message:(Wax_utils.Message.of_format message)
+  Wax_utils.Diagnostic.report ctx.diagnostics ~location ~severity:Error ~message
     ();
   Wax_utils.Diagnostic.abort ()
 
@@ -698,8 +695,8 @@ let struct_fields ctx type_name =
   match Hashtbl.find_opt ctx.struct_fields type_name.Ast.desc with
   | Some fields -> fields
   | None ->
-      conversion_error ctx ~location:type_name.Ast.info (fun f () ->
-          Format.fprintf f "This type should be a struct type.")
+      conversion_error ctx ~location:type_name.Ast.info
+        (Wax_utils.Message.text "This type should be a struct type.")
 
 (* Decompilation ergonomics: when a reconstructed struct's leading fields exactly
    match (name and type) its supertype's full field list, replace that prefix
@@ -793,8 +790,8 @@ let type_arity ctx idx =
       match (lookup_type ctx Type idx).typ with
       | Func ty -> functype_arity ty
       | Struct _ | Array _ | Cont _ ->
-          conversion_error ctx ~location:idx.Ast.info (fun f () ->
-              Format.fprintf f "This type should be a function type."))
+          conversion_error ctx ~location:idx.Ast.info
+            (Wax_utils.Message.text "This type should be a function type."))
 
 let typeuse_arity ctx (i, ty) =
   match (i, ty) with
@@ -823,12 +820,12 @@ let checked_arity ctx kind tbl what name_idx compatible =
       Wax_utils.Diagnostic.report ctx.diagnostics ~location:name_idx.Ast.info
         ~severity:Error
         ~message:
-          (Wax_utils.Message.of_format (fun f () ->
-               Format.fprintf f
-                 "%s $%s is declared with different arities in \
-                  mutually-exclusive conditional branches but referenced where \
-                  the branch is undetermined; this cannot be converted to Wax."
-                 what name))
+          (Wax_utils.Message.text
+             (Printf.sprintf
+                "%s $%s is declared with different arities in \
+                 mutually-exclusive conditional branches but referenced where \
+                 the branch is undetermined; this cannot be converted to Wax."
+                what name))
         ()
   | _ -> ());
   arity
@@ -861,8 +858,8 @@ let cont_arity ctx idx =
   match (lookup_type ctx Type idx).typ with
   | Cont ft -> type_arity ctx ft
   | Func _ | Struct _ | Array _ ->
-      conversion_error ctx ~location:idx.Ast.info (fun f () ->
-          Format.fprintf f "This type should be a continuation type.")
+      conversion_error ctx ~location:idx.Ast.info
+        (Wax_utils.Message.text "This type should be a continuation type.")
 
 (* Number of values a [switch] to continuation [ct] produces: the parameters of
    the continuation referenced by the last parameter of [ct]'s function type. *)
@@ -2791,8 +2788,9 @@ let single_expression ctx ~location l =
   match l with
   | [ e ] -> e
   | _ ->
-      conversion_error ctx ~location (fun f () ->
-          Format.fprintf f "A constant expression must produce a single value.")
+      conversion_error ctx ~location
+        (Wax_utils.Message.text
+           "A constant expression must produce a single value.")
 
 let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
   (* Sibling fields synthesised alongside [f] (e.g. an element segment for an
@@ -2865,11 +2863,11 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                           ~location:p.Ast.info ~severity:Warning
                           ~warning:Wax_utils.Warning.Generated_name
                           ~message:
-                            (Wax_utils.Message.of_format (fun fmt () ->
-                                 Format.fprintf fmt
-                                   "An unnamed parameter is used; generating \
-                                    the name '%s' for it."
-                                   name))
+                            (Wax_utils.Message.text
+                               (Printf.sprintf
+                                  "An unnamed parameter is used; generating \
+                                   the name '%s' for it."
+                                  name))
                           ();
                         Ast.no_loc name
                     | Some id -> { id with Ast.desc = name })
@@ -3761,18 +3759,16 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
   | Numeric_ref_in_conditional location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
         ~message:
-          (Wax_utils.Message.of_format (fun f () ->
-               Format.pp_print_string f
-                 "Numeric references to module fields are not supported in a \
-                  module with conditional annotations; use a symbolic $name."))
+          (Wax_utils.Message.text
+             "Numeric references to module fields are not supported in a \
+              module with conditional annotations; use a symbolic $name.")
         ();
       Wax_utils.Diagnostic.abort ()
   | Unresolved_reference location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
         ~message:
-          (Wax_utils.Message.of_format (fun f () ->
-               Format.pp_print_string f
-                 "This reference resolves to nothing: it is out of range or \
-                  names an undeclared entity."))
+          (Wax_utils.Message.text
+             "This reference resolves to nothing: it is out of range or names \
+              an undeclared entity.")
         ();
       Wax_utils.Diagnostic.abort ()

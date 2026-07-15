@@ -9,7 +9,6 @@ out-of-range-immediate crashes.
   > EOF
   $ wax -i wat -f wasm big.wat -o /dev/null
   Error: Constant 99999999999999999999 is out of range.
-  
    ──➤  big.wat:2:44
   1 │ (module (memory 1)
   2 │   (func (param i32) (result i32) (i32.load offset=99999999999999999999 (local.get 0))))

@@ -13,7 +13,6 @@ exit code 128 — the same message and location as any stray character:
 
   $ wax check bad.wax
   Error: Unexpected character '😀'.
-  
    ──➤  bad.wax:1:5
   1 │ fn a😀b() -> i32 { 1; }
     ·     ^^

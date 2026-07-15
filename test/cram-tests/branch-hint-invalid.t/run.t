@@ -6,7 +6,6 @@ A payload that is not `"\00"` / `"\01"` is rejected:
 
   $ wax check bad-payload.wat
   Error: A branch hint must be "\00" or "\01".
-  
    ──➤  bad-payload.wat:1:57
   1 │ (module (func i32.const 0 (@metadata.code.branch_hint "a") if end))
     ·                                                         ^

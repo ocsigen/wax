@@ -32,9 +32,7 @@ let error ?pos ch fmt =
     (fun msg ->
       Wax_utils.Diagnostic.report ch.diagnostics
         ~location:{ Ast.loc_start; loc_end } ~severity:Error
-        ~message:
-          (Wax_utils.Message.of_format (fun f () ->
-               Format.pp_print_string f msg))
+        ~message:(Wax_utils.Message.text msg)
         ();
       Wax_utils.Diagnostic.abort ())
     fmt

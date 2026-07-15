@@ -45,7 +45,8 @@ They cannot be lowered to the binary format.
   7 │   (func $f (result i32)
   8 │     (@if (and $oxcaml
   Hint:
-    Resolve the conditionals with -D/--define, or convert to a text format (wat or wax).
+    Resolve the conditionals with -D/--define, or convert to a text format (wat
+    or wax).
   [128]
 
 

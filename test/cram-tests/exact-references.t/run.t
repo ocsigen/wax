@@ -57,7 +57,6 @@ Only a concrete type can be exact; [&!any] is rejected.
 
   $ wax check -X custom-descriptors bad.wax
   Error: Only a concrete type can be exact.
-  
    ──➤  bad.wax:1:19
   1 │ fn f(x: &?any) -> &!any {
     ·                   ^^^^^

@@ -7,7 +7,6 @@ check). Regression: found auditing literal-parsing paths.
   > EOF
   $ wax -i wat -f wasm big.wat -o /dev/null
   Error: Malformed Unicode escape.
-  
    ──➤  big.wat:1:24
   1 │ (module (func (export "\u{ffffffffffffffff}")))
     ·                        ^^^^^^^^^^^^^^^^^^^^

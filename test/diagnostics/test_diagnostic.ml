@@ -45,14 +45,12 @@ let test_case1 () =
         [
           {
             Diagnostic.location = loc 12 7 12 14;
-            message =
-              Message.of_format (fun f () -> Format.fprintf f "defined here");
+            message = Message.text "defined here";
           };
         ]
       in
       Diagnostic.report d ~location:(loc 5 7 5 12) ~severity:Error ~related
-        ~message:
-          (Message.of_format (fun f () -> Format.fprintf f "main error message"))
+        ~message:(Message.text "main error message")
         ())
 
 let test_case2 () =
@@ -63,8 +61,7 @@ let test_case2 () =
   Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
     (fun d ->
       Diagnostic.report d ~location:(loc 2 7 4 15) ~severity:Error
-        ~message:
-          (Message.of_format (fun f () -> Format.fprintf f "multi-line error"))
+        ~message:(Message.text "multi-line error")
         ())
 
 let test_case3 () =
@@ -85,16 +82,12 @@ let test_case3 () =
         [
           {
             Diagnostic.location = loc 3 7 5 13;
-            message =
-              Message.of_format (fun f () ->
-                  Format.fprintf f "multi-line secondary");
+            message = Message.text "multi-line secondary";
           };
         ]
       in
       Diagnostic.report d ~location:(loc 7 7 7 12) ~severity:Error ~related
-        ~message:
-          (Message.of_format (fun f () ->
-               Format.fprintf f "error with multi-line secondary"))
+        ~message:(Message.text "error with multi-line secondary")
         ())
 
 let test_case4 () =
@@ -109,8 +102,7 @@ let test_case4 () =
   Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
     (fun d ->
       Diagnostic.report d ~location:(loc 10 7 90 12) ~severity:Error
-        ~message:
-          (Message.of_format (fun f () -> Format.fprintf f "long span error"))
+        ~message:(Message.text "long span error")
         ())
 
 let test_case5 () =
@@ -122,16 +114,30 @@ let test_case5 () =
         [
           {
             Diagnostic.location = loc 1 5 1 6;
-            message =
-              Message.of_format (fun f () ->
-                  Format.fprintf f "This '{' might be unmatched.");
+            message = Message.text "This '{' might be unmatched.";
           };
         ]
       in
       Diagnostic.report d ~location:(loc 3 0 3 0) ~severity:Error ~related
-        ~message:
-          (Message.of_format (fun f () -> Format.fprintf f "Expecting '}'."))
+        ~message:(Message.text "Expecting '}'.")
         ())
+
+(* Regression guard for the latent ANSI-in-JSON bug: a message carrying styled
+   atoms (an identifier, a type) must flatten to a plain, ANSI-free string —
+   this is the path the JSON and short output formats take, so a type embedded
+   there can never leak colour even on a colour terminal. Cram cannot simulate a
+   TTY, so this is asserted here. *)
+let test_case6 () =
+  let msg =
+    Message.(
+      text "expected type" ++ styled Colors.Type "i32" ++ text "for"
+      ++ ident "x")
+  in
+  let s = Message.to_plain_string msg in
+  if String.contains s '\027' then (
+    prerr_endline "to_plain_string leaked an ANSI escape";
+    exit 1);
+  Format.fprintf output "@.--- Case 6: plain render has no ANSI ---@.%s@." s
 
 let () =
   try
@@ -140,6 +146,7 @@ let () =
     test_case3 ();
     test_case4 ();
     test_case5 ();
+    test_case6 ();
     Format.pp_print_flush output ()
   with
   | Unix.Unix_error (Unix.EPIPE, _, _) -> ()

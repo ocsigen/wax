@@ -6,8 +6,8 @@ A block-shaped construct is "a block", not "a braced block" / "a blockinstr":
 
   $ wax check block.wax
   Error:
-    Assuming that the condition expression is complete, expecting '=>', or a block.
-  
+    Assuming that the condition expression is complete, expecting '=>', or a
+    block.
    ──➤  block.wax:2:22
   1 │ #[export = "f"]
   2 │ fn f() -> i32 { if 1 5 }
@@ -20,7 +20,6 @@ the page-size clause is spelled out:
 
   $ wax check limits.wax
   Error: Expecting ';', 'shared', a page-size clause, or memory limits.
-  
    ──➤  limits.wax:2:17
   1 │ import "env" {
   2 │   memory m: i32 5

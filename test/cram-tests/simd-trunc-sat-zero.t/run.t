@@ -16,7 +16,6 @@ The bare, non-spec name is rejected:
   $ echo '(module (func (param v128) (result v128) (i32x4.trunc_sat_f64x2_s (local.get 0))))' > bare.wat
   $ wax check -f wat bare.wat
   Error: Unknown keyword 'i32x4.trunc_sat_f64x2_s'.
-  
    ──➤  bare.wat:1:43
   1 │ (module (func (param v128) (result v128) (i32x4.trunc_sat_f64x2_s (local.get 0))))
     ·                                           ^^^^^^^^^^^^^^^^^^^^^^^

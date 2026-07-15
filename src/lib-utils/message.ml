@@ -1,45 +1,31 @@
 (* A structured diagnostic message. See message.mli. The tree carries the
    message's structure; the theme and width are supplied only at render time
    ([render_into]/[to_plain_string]), so one value renders three ways (themed
-   terminal, JSON, short). The [Format] leaf is a migration shim reproducing the
-   old Format-based rendering byte-for-byte. *)
+   terminal, JSON, short). *)
 
-type doc =
+type t =
   | Empty
-  | Words of string (* prose, reflowed on spaces *)
+  | Words of string (* prose, reflowed on spaces / hard-broken on newlines *)
   | Atom of
       Colors.style * bool * string (* style, quote when uncoloured?, text *)
   | Raw of (Styled_printer.t -> unit)
-  | Seq of doc * doc (* juxtapose, no space *)
-  | Sep of doc * doc (* juxtapose, soft space between *)
-  | Group of doc
+  | Seq of t * t (* juxtapose, no space *)
+  | Sep of t * t (* juxtapose, soft space between *)
+  | Group of t
 
-type t = Format of (Format.formatter -> unit -> unit) | Doc of doc
-
-let text s = Doc (Words s)
-let ident s = Doc (Atom (Colors.Identifier, true, s))
-let code s = Doc (Atom (Colors.Keyword, true, s))
-let styled style s = Doc (Atom (style, false, s))
-let int n = Doc (Atom (Colors.Constant, false, string_of_int n))
-let int64 n = Doc (Atom (Colors.Constant, false, Int64.to_string n))
-let bool b = Doc (Atom (Colors.Constant, false, string_of_bool b))
-let raw f = Doc (Raw f)
-let empty = Doc Empty
-
-(* Extract the underlying [doc] of a combinator-built message. The combinators
-   only ever produce [Doc], so the [Format] arm is unreachable in practice; fall
-   back to running the legacy printer into an atom string. *)
-let as_doc = function
-  | Doc d -> d
-  | Format f ->
-      Raw
-        (fun sp ->
-          Printer.string sp.Styled_printer.printer (Format.asprintf "%a" f ()))
-
-let ( ^^ ) a b = Doc (Seq (as_doc a, as_doc b))
-let ( ++ ) a b = Doc (Sep (as_doc a, as_doc b))
+let text s = Words s
+let ident s = Atom (Colors.Identifier, true, s)
+let code s = Atom (Colors.Keyword, true, s)
+let styled style s = Atom (style, false, s)
+let int n = Atom (Colors.Constant, false, string_of_int n)
+let int64 n = Atom (Colors.Constant, false, Int64.to_string n)
+let bool b = Atom (Colors.Constant, false, string_of_bool b)
+let raw f = Raw f
+let empty = Empty
+let ( ^^ ) a b = Seq (a, b)
+let ( ++ ) a b = Sep (a, b)
 let concat l = List.fold_left ( ^^ ) empty l
-let group t = Doc (Group (as_doc t))
+let group t = Group t
 
 let enumerate ?(conj = "or") items =
   match List.rev items with
@@ -58,17 +44,25 @@ let enumerate ?(conj = "or") items =
       in
       commad ++ text conj ++ last
 
-let of_format f = Format f
-
-(* Emit prose: words separated by soft breaks, so an enclosing fill box reflows
-   them. Runs of spaces (incl. leading/trailing) collapse to one soft break. *)
+(* Emit prose: lines separated by hard breaks ([\n]) and, within a line, words
+   separated by soft breaks (so an enclosing fill box reflows them). Runs of
+   spaces (incl. leading/trailing) collapse to one soft break. A trailing
+   newline is dropped rather than emitting a dangling blank line. *)
 let render_words sp s =
-  let toks = String.split_on_char ' ' s in
+  let p = sp.Styled_printer.printer in
+  let lines = String.split_on_char '\n' s in
+  let lines =
+    match List.rev lines with "" :: rest -> List.rev rest | _ -> lines
+  in
   List.iteri
-    (fun i tok ->
-      if i > 0 then Printer.space sp.Styled_printer.printer ();
-      if tok <> "" then Printer.string sp.Styled_printer.printer tok)
-    toks
+    (fun li line ->
+      if li > 0 then Printer.newline p ();
+      List.iteri
+        (fun i tok ->
+          if i > 0 then Printer.space p ();
+          if tok <> "" then Printer.string p tok)
+        (String.split_on_char ' ' line))
+    lines
 
 let rec render_doc sp d =
   let p = sp.Styled_printer.printer in
@@ -100,24 +94,17 @@ let styled_printer ~theme printer =
   Styled_printer.create ~printer ~theme ~trivia:(Hashtbl.create 0) ()
 
 let render_into ~theme ~width fmt t =
-  match t with
-  | Format f -> f fmt ()
-  | Doc d ->
-      Printer.run ~width fmt (fun p -> render_top (styled_printer ~theme p) d)
+  Printer.run ~width fmt (fun p -> render_top (styled_printer ~theme p) t)
 
-(* A wide margin so the legacy printer inserts no line breaks (a stray one is
-   harmless — yojson escapes it, keeping one JSON object per physical line). *)
+(* A wide margin so a hard-broken message still emits one physical line per
+   break (a stray break is harmless — yojson escapes it, keeping one JSON object
+   per physical line). *)
 let flat_margin = 1_000_000
 
 let to_plain_string t =
   let b = Buffer.create 128 in
   let fmt = Format.formatter_of_buffer b in
-  (match t with
-  | Format f ->
-      Format.pp_set_margin fmt flat_margin;
-      f fmt ()
-  | Doc d ->
-      Printer.run ~width:flat_margin fmt (fun p ->
-          render_top (styled_printer ~theme:Colors.no_color p) d));
+  Printer.run ~width:flat_margin fmt (fun p ->
+      render_top (styled_printer ~theme:Colors.no_color p) t);
   Format.pp_print_flush fmt ();
   Buffer.contents b

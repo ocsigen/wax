@@ -419,10 +419,9 @@ module Error = struct
          "A let binding is not allowed inside a conditional annotation; \
           declare the local before the conditional.")
 
-  let non_empty_stack context ~location output_stack =
+  let non_empty_stack context ~location render =
     report context ~location
-      (Message.of_format (fun f () ->
-           Format.fprintf f "Some values remain on the stack:%a" output_stack ()))
+      (text "Some values remain on the stack:" ^^ Message.raw render)
 
   (* Report the values still on the stack by pointing a caret at each of them.
      [location] carries the topmost value; [related] the others. *)
@@ -1959,15 +1958,26 @@ type stack =
   | Empty
   | Cons of location * inferred_type Cell.t * stack
 
-let rec output_stack f st =
+let rec output_stack pp st =
+  let module SP = Wax_utils.Styled_printer in
   match st with
   | Empty -> ()
-  | Unreachable -> Format.fprintf f "@ unreachable"
+  | Unreachable ->
+      Wax_utils.Printer.space pp.SP.printer ();
+      SP.print_styled pp Wax_utils.Colors.Keyword "unreachable"
   | Cons (_, ty, st) ->
-      Format.fprintf f "@ %a%a" output_inferred_type ty output_stack st
+      Wax_utils.Printer.space pp.SP.printer ();
+      output_inferred_type_styled pp ty;
+      output_stack pp st
 
 let print_stack st =
-  Format.eprintf "@[Stack:%a@]@." output_stack st;
+  Wax_utils.Printer.run Format.err_formatter (fun p ->
+      let pp =
+        Wax_utils.Styled_printer.create ~printer:p
+          ~theme:Wax_utils.Colors.no_color ~trivia:(Hashtbl.create 0) ()
+      in
+      Wax_utils.Printer.string p "Stack:";
+      output_stack pp st);
   (st, ())
 
 let _ = print_stack
@@ -2094,7 +2104,7 @@ let with_empty_stack ctx ~kind:_ ~location f =
               (fun location ->
                 {
                   Wax_utils.Diagnostic.location;
-                  message = Wax_utils.Message.of_format (fun _ () -> ());
+                  message = Wax_utils.Message.empty;
                 })
               rest
           in
@@ -2102,8 +2112,8 @@ let with_empty_stack ctx ~kind:_ ~location f =
       | false, [] ->
           (* Real values remain but none carries a usable location: name the
              construct and list what is on the stack. *)
-          Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
-              Format.fprintf f "@[%a@]" output_stack st)));
+          Error.non_empty_stack ctx.diagnostics ~location (fun pp ->
+              output_stack pp st)));
   res
 
 (*** Instruction-checking helpers ***)
@@ -8803,8 +8813,7 @@ and block_contents ctx results l =
                   {
                     Wax_utils.Diagnostic.location = i.info;
                     message =
-                      Wax_utils.Message.of_format (fun f () ->
-                          Format.fprintf f "Control never returns from here.");
+                      Wax_utils.Message.text "Control never returns from here.";
                   };
                 ]
         | _ -> ());

@@ -74,3 +74,6 @@ Error: Expecting '}'.
 2 │ let x = 10;
 3 │ 
     ^
+
+--- Case 6: plain render has no ANSI ---
+expected type i32 for 'x'

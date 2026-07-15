@@ -37,7 +37,6 @@ parameter list and no type reference) is a syntax error, not an empty signature.
 
   $ printf 'tag stop;\n' | wax -i wax -f wat
   Error: A parameter list is required; write '()' for none.
-  
    ──➤  -:1:1
   1 │ tag stop;
     · ^^^^^^^^
@@ -47,7 +46,6 @@ parameter list and no type reference) is a syntax error, not an empty signature.
 
   $ printf 'fn f { nop; }\n' | wax -i wax -f wat
   Error: A parameter list is required; write '()' for none.
-  
    ──➤  -:1:1
   1 │ fn f { nop; }
     · ^^^^

@@ -125,10 +125,9 @@ let check_all diagnostics ?truncation_location
         Diagnostic.report diagnostics ~location ~severity:Warning
           ~warning:Wax_utils.Warning.Truncated_coverage
           ~message:
-            (Wax_utils.Message.of_format (fun fmt () ->
-                 Format.fprintf fmt
-                   "Too many conditional configurations (over %d); coverage \
-                    was truncated."
-                   max_configurations))
+            Wax_utils.Message.(
+              text "Too many conditional configurations (over"
+              ++ int max_configurations
+              ^^ text "); coverage was truncated.")
           ()
     | None -> ()

@@ -68,8 +68,7 @@ let bool b = if b then True else False
 
 let report ctx (location : Ast.location) msg =
   Diagnostic.report ctx ~location ~severity:Error
-    ~message:
-      (Wax_utils.Message.of_format (fun f () -> Format.pp_print_string f msg))
+    ~message:(Wax_utils.Message.text msg)
     ()
 
 let rec eval ctx env (c : Ast.cond) : result =

@@ -15,79 +15,157 @@ let ( let>@ ) o f = Option.iter f o
 
 (*** Source types and printers ***)
 
-let print_string f s =
-  let s = s.Ast.desc in
-  let len, s = Wax_utils.Unicode.escape_string s in
-  Format.pp_print_as f len s
+(* WAT types and identifiers are rendered directly into a diagnostic's styled
+   printer (see {!Wax_utils.Styled_printer}), so an embedded type shares the
+   message's colour theme and width — rather than being pre-rendered to a flat
+   string. These helpers wrap the layout/colour primitives. *)
+let sp_space pp = Wax_utils.Printer.space pp.Wax_utils.Styled_printer.printer ()
 
-let print_ident f id =
-  if Lexer.is_valid_identifier id then Format.fprintf f "$%s" id
-  else Format.fprintf f "$\"%s\"" (snd (Wax_utils.Unicode.escape_string id))
+let sp_box pp f =
+  Wax_utils.Printer.box pp.Wax_utils.Styled_printer.printer ~indent:1 f
 
-let print_index f (idx : Ast.Text.idx) =
+let sp_type pp s =
+  Wax_utils.Styled_printer.print_styled pp Wax_utils.Colors.Type s
+
+let sp_kw pp s =
+  Wax_utils.Styled_printer.print_styled pp Wax_utils.Colors.Keyword s
+
+let sp_punct pp s =
+  Wax_utils.Styled_printer.print_styled pp Wax_utils.Colors.Punctuation s
+
+let print_string pp s =
+  let len, escaped = Wax_utils.Unicode.escape_string s.Ast.desc in
+  Wax_utils.Styled_printer.print_styled pp Wax_utils.Colors.String
+    ~len:(Some len) escaped
+
+let print_ident pp id =
+  let s =
+    if Lexer.is_valid_identifier id then "$" ^ id
+    else "$\"" ^ snd (Wax_utils.Unicode.escape_string id) ^ "\""
+  in
+  Wax_utils.Styled_printer.print_styled pp Wax_utils.Colors.Identifier s
+
+let print_index pp (idx : Ast.Text.idx) =
   match idx.desc with
-  | Num n -> Format.fprintf f "%s" (Uint32.to_string n)
-  | Id id -> print_ident f id
+  | Num n ->
+      Wax_utils.Styled_printer.print_styled pp Wax_utils.Colors.Constant
+        (Uint32.to_string n)
+  | Id id -> print_ident pp id
 
 (* Render a type as the source wrote it, naming an indexed type by its source
    reference ($foo or a number) rather than an interned canonical index. *)
-let print_text_heaptype f (ty : Ast.Text.heaptype) =
+let print_text_heaptype pp (ty : Ast.Text.heaptype) =
   match Ast.Text.heaptype_keyword ty with
-  | Some kw -> Format.pp_print_string f kw
+  | Some kw -> sp_type pp kw
   | None -> (
       match ty with
-      | Type idx -> print_index f idx
-      | Exact idx -> Format.fprintf f "@[<1>(exact@ %a)@]" print_index idx
+      | Type idx -> print_index pp idx
+      | Exact idx ->
+          sp_box pp (fun () ->
+              sp_punct pp "(";
+              sp_kw pp "exact";
+              sp_space pp;
+              print_index pp idx;
+              sp_punct pp ")")
       | _ -> assert false)
 
-let print_text_valtype f (ty : Ast.Text.valtype) =
+let print_text_valtype pp (ty : Ast.Text.valtype) =
   match ty with
-  | I32 -> Format.fprintf f "i32"
-  | I64 -> Format.fprintf f "i64"
-  | F32 -> Format.fprintf f "f32"
-  | F64 -> Format.fprintf f "f64"
-  | V128 -> Format.fprintf f "v128"
+  | I32 -> sp_type pp "i32"
+  | I64 -> sp_type pp "i64"
+  | F32 -> sp_type pp "f32"
+  | F64 -> sp_type pp "f64"
+  | V128 -> sp_type pp "v128"
   | Ref { nullable; typ } ->
-      if nullable then
-        Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_text_heaptype typ
-      else Format.fprintf f "@[<1>(ref@ %a)@]" print_text_heaptype typ
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "ref";
+          sp_space pp;
+          if nullable then (
+            sp_kw pp "null";
+            sp_space pp);
+          print_text_heaptype pp typ;
+          sp_punct pp ")")
 
-let print_text_storagetype f (ty : Ast.Text.storagetype) =
+let print_text_storagetype pp (ty : Ast.Text.storagetype) =
   match ty with
-  | Value v -> print_text_valtype f v
-  | Packed I8 -> Format.pp_print_string f "i8"
-  | Packed I16 -> Format.pp_print_string f "i16"
+  | Value v -> print_text_valtype pp v
+  | Packed I8 -> sp_type pp "i8"
+  | Packed I16 -> sp_type pp "i16"
 
-let print_text_fieldtype f ({ mut; typ } : Ast.Text.fieldtype) =
-  if mut then Format.fprintf f "@[<1>(mut@ %a)@]" print_text_storagetype typ
-  else print_text_storagetype f typ
+let print_text_fieldtype pp ({ mut; typ } : Ast.Text.fieldtype) =
+  if mut then
+    sp_box pp (fun () ->
+        sp_punct pp "(";
+        sp_kw pp "mut";
+        sp_space pp;
+        print_text_storagetype pp typ;
+        sp_punct pp ")")
+  else print_text_storagetype pp typ
 
-let print_text_functype f ({ params; results } : Ast.Text.functype) =
+let print_text_functype pp ({ params; results } : Ast.Text.functype) =
   Array.iter
     (fun p ->
-      Format.fprintf f "@ @[<1>(param@ %a)@]" print_text_valtype
-        (snd p.Ast.desc))
+      sp_space pp;
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "param";
+          sp_space pp;
+          print_text_valtype pp (snd p.Ast.desc);
+          sp_punct pp ")"))
     params;
   Array.iter
-    (fun t -> Format.fprintf f "@ @[<1>(result@ %a)@]" print_text_valtype t)
+    (fun t ->
+      sp_space pp;
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "result";
+          sp_space pp;
+          print_text_valtype pp t;
+          sp_punct pp ")"))
     results
 
 (* Render a composite type as its source signature, for a reference to a type
    the user did not name (an implicit [ref.func] type, the internal string
    type). *)
-let print_text_comptype f (ty : Ast.Text.comptype) =
+let print_text_comptype pp (ty : Ast.Text.comptype) =
   match ty with
-  | Func ft -> Format.fprintf f "@[<1>(func%a)@]" print_text_functype ft
-  | Array ft -> Format.fprintf f "@[<1>(array@ %a)@]" print_text_fieldtype ft
+  | Func ft ->
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "func";
+          print_text_functype pp ft;
+          sp_punct pp ")")
+  | Array ft ->
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "array";
+          sp_space pp;
+          print_text_fieldtype pp ft;
+          sp_punct pp ")")
   | Struct fields ->
-      Format.fprintf f "@[<1>(struct";
-      Array.iter
-        (fun e ->
-          let _, ft = e.Ast.desc in
-          Format.fprintf f "@ @[<1>(field@ %a)@]" print_text_fieldtype ft)
-        fields;
-      Format.fprintf f ")@]"
-  | Cont idx -> Format.fprintf f "@[<1>(cont@ %a)@]" print_index idx
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "struct";
+          Array.iter
+            (fun e ->
+              let _, ft = e.Ast.desc in
+              sp_space pp;
+              sp_box pp (fun () ->
+                  sp_punct pp "(";
+                  sp_kw pp "field";
+                  sp_space pp;
+                  print_text_fieldtype pp ft;
+                  sp_punct pp ")"))
+            fields;
+          sp_punct pp ")")
+  | Cont idx ->
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "cont";
+          sp_space pp;
+          print_index pp idx;
+          sp_punct pp ")")
 
 (* The source rendering of a stack value: either a value type the user wrote
    (or that names a type the user declared), or — for a reference whose type has
@@ -100,11 +178,22 @@ type source_type =
      diagnostic (e.g. when such a value reaches a numeric context). *)
   | Bottom_ref
 
-let print_source_type f = function
-  | Plain v -> print_text_valtype f v
+let print_source_type pp = function
+  | Plain v -> print_text_valtype pp v
   | Inline_ref comptype ->
-      Format.fprintf f "@[<1>(ref@ %a)@]" print_text_comptype comptype
-  | Bottom_ref -> Format.fprintf f "@[<1>(ref@ bot)@]"
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "ref";
+          sp_space pp;
+          print_text_comptype pp comptype;
+          sp_punct pp ")")
+  | Bottom_ref ->
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "ref";
+          sp_space pp;
+          sp_type pp "bot";
+          sp_punct pp ")")
 
 (* Reconstruct a source type from an interned one. Used as the source type of a
    pushed value when no truer reference is available, so every concrete stack
@@ -155,20 +244,24 @@ module Error = struct
   let ( ++ ) = Message.( ++ )
   let ( ^^ ) = Message.( ^^ )
 
-  let atom style s =
+  (* Render an AST fragment ([render], drawing into the styled printer) as one
+     emphasized atom: coloured when the theme is coloured, wrapped in ['…'] when
+     it is not. [style] is the representative style whose colour decides the
+     quoting. *)
+  let styled_atom style render =
     Message.raw (fun pp ->
         let p = pp.Styled_printer.printer in
         let quote = Colors.escape_sequence pp.Styled_printer.theme style = "" in
         if quote then Printer.string p "'";
-        Styled_printer.print_styled pp style s;
+        render pp;
         if quote then Printer.string p "'")
 
   let styp source =
-    atom Colors.Type (Format.asprintf "%a" print_source_type source)
+    styled_atom Colors.Type (fun pp -> print_source_type pp source)
 
-  let index idx = atom Colors.Identifier (Format.asprintf "%a" print_index idx)
-  let ident id = atom Colors.Identifier (Format.asprintf "%a" print_ident id)
-  let str s = atom Colors.String (Format.asprintf "%a" print_string s)
+  let index idx = styled_atom Colors.Identifier (fun pp -> print_index pp idx)
+  let ident id = styled_atom Colors.Identifier (fun pp -> print_ident pp id)
+  let str s = styled_atom Colors.String (fun pp -> print_string pp s)
   let num s = Message.styled Colors.Constant s
 
   let report context ~location ~severity ?warning ?universal ?hint ?related
@@ -330,12 +423,10 @@ module Error = struct
     report context ~location ~severity:Error
       (text "Type mismatch: the stack is empty (a value is missing).")
 
-  let non_empty_stack context ~location output_stack =
+  let non_empty_stack context ~location render =
     report context ~location ~severity:Error
-      (Message.of_format (fun f () ->
-           Format.fprintf f
-             "Type mismatch: unexpected values left on the stack:%a"
-             output_stack ()))
+      (text "Type mismatch: unexpected values left on the stack:"
+      ^^ Message.raw render)
 
   (* Report the values still on the stack by pointing a caret at each of them.
      [location] carries the topmost value; [related] the others. *)
@@ -345,16 +436,19 @@ module Error = struct
          (if related = [] then "Type mismatch: this value is left on the stack."
           else "Type mismatch: these values are left on the stack."))
 
-  (* Print a list of source types. *)
-  let print_sources f source =
-    Format.fprintf f "@[<1>[%a]@]"
-      (Format.pp_print_list
-         ~pp_sep:(fun f () -> Format.pp_print_space f ())
-         print_source_type)
-      (Array.to_list source)
+  (* Print a list of source types, [\[a b c\]]. *)
+  let print_sources pp source =
+    sp_box pp (fun () ->
+        sp_punct pp "[";
+        Array.iteri
+          (fun i s ->
+            if i > 0 then sp_space pp;
+            print_source_type pp s)
+          source;
+        sp_punct pp "]")
 
   let sources source =
-    atom Colors.Type (Format.asprintf "%a" print_sources source)
+    styled_atom Colors.Type (fun pp -> print_sources pp source)
 
   let argument_count_mismatch context ~location ~descr ~provided_source
       ~expected_source =
@@ -1680,19 +1774,35 @@ let push_results ~source results =
   in
   loop 0
 
-let rec output_stack ~full f st =
+let rec output_stack ~full pp st =
   match st with
   | Empty -> ()
-  | Unreachable -> if full then Format.fprintf f "@ unreachable"
+  | Unreachable ->
+      if full then (
+        sp_space pp;
+        sp_kw pp "unreachable")
   | Cons (_, ty, st) ->
+      sp_space pp;
       (match ty with
-      | Val (_, source) -> Format.fprintf f "@ %a" print_source_type source
-      | Bot -> Format.fprintf f "@ bot"
-      | Bot_ref -> Format.fprintf f "@ (ref bot)");
-      output_stack ~full f st
+      | Val (_, source) -> print_source_type pp source
+      | Bot -> sp_type pp "bot"
+      | Bot_ref ->
+          sp_box pp (fun () ->
+              sp_punct pp "(";
+              sp_kw pp "ref";
+              sp_space pp;
+              sp_type pp "bot";
+              sp_punct pp ")"));
+      output_stack ~full pp st
 
 let print_stack st =
-  Format.eprintf "@[<2>Stack:%a@]@." (output_stack ~full:true) st;
+  Wax_utils.Printer.run Format.err_formatter (fun p ->
+      let pp =
+        Wax_utils.Styled_printer.create ~printer:p
+          ~theme:Wax_utils.Colors.no_color ~trivia:(Hashtbl.create 0) ()
+      in
+      Wax_utils.Printer.string p "Stack:";
+      output_stack ~full:true pp st);
   (st, ())
 
 let _ = print_stack
@@ -1720,7 +1830,7 @@ let with_empty_stack ctx location f =
               (fun location ->
                 {
                   Wax_utils.Diagnostic.location;
-                  message = Wax_utils.Message.of_format (fun _ () -> ());
+                  message = Wax_utils.Message.empty;
                 })
               rest
           in
@@ -1729,8 +1839,8 @@ let with_empty_stack ctx location f =
           (* No value carries a usable location: point at the construct and
              list the values that remain, since the location alone does not
              show them. *)
-          Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
-              Format.fprintf f "@[%a@]" (output_stack ~full:false) st))
+          Error.non_empty_stack ctx.diagnostics ~location (fun pp ->
+              output_stack ~full:false pp st))
 
 (*** Instruction-checking helpers ***)
 
@@ -4417,8 +4527,7 @@ let lint_body ctx instrs =
                   {
                     Wax_utils.Diagnostic.location = a.info;
                     message =
-                      Wax_utils.Message.of_format (fun f () ->
-                          Format.fprintf f "Control never returns from here.");
+                      Wax_utils.Message.text "Control never returns from here.";
                   };
                 ]
           else dead rest

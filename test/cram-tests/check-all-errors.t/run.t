@@ -3,7 +3,6 @@ up at the first unexpected token):
 
   $ wax check multi.wax
   Error: Expecting an expression.
-  
    ──➤  multi.wax:2:13
   1 │ fn f() -> i32 {
   2 │     let x = ;
@@ -19,7 +18,6 @@ operand on line 3):
 
   $ wax check --all-errors multi.wax
   Error: Expecting an expression.
-  
    ──➤  multi.wax:2:13
   1 │ fn f() -> i32 {
   2 │     let x = ;
@@ -27,7 +25,6 @@ operand on line 3):
   3 │     let y = * 2;
   4 │     x + y;
   Error: Expecting an expression.
-  
    ──➤  multi.wax:3:13
   1 │ fn f() -> i32 {
   2 │     let x = ;
@@ -44,7 +41,6 @@ shift a `;` (it can, right after a complete statement), so it reports a precise
 
   $ wax check --all-errors missing-semi.wax
   Error: Missing ';'
-  
    ──➤  missing-semi.wax:3:5
   1 │ fn f() -> i32 {
   2 │     let x = 1
@@ -65,7 +61,6 @@ suppressed as a recovery cascade (only the genuine diagnostics remain):
 
   $ wax check --all-errors mixed.wax
   Error: Expecting an expression.
-  
    ──➤  mixed.wax:1:25
   1 │ fn f() -> i32 { let x = ; x + 1; }
     ·                         ^

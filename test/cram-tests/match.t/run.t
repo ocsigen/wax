@@ -106,7 +106,6 @@ The default arm is required (like a `dispatch`'s `else`):
 
   $ wax err_no_default.wax -f wat -v
   Error: Expecting a match default.
-  
    ──➤  err_no_default.wax:4:5
   2 │     match v {
   3 │         &eq => { return; }

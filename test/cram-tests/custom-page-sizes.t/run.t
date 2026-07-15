@@ -31,7 +31,6 @@ A value that is not a power of two is rejected while parsing.
 
   $ wax check bad-pow2.wax
   Error: The page size must be a power of two.
-  
    ──➤  bad-pow2.wax:1:28
   1 │ memory m: i32 [1] pagesize 3;
     ·                            ^

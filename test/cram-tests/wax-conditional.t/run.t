@@ -36,7 +36,6 @@ which it is reachable.
 
   $ wax --validate bad.wax -o checked_bad.wax
   Error: Expecting braced fields.
-  
    ──➤  bad.wax:2:1
   1 │ #[if(debug)]
   2 │ const x: i32 = 1;
@@ -107,5 +106,6 @@ conditionals).
    9 │ 
   10 │ #[if(feature = "gc")]
   Hint:
-    Resolve the conditionals with -D/--define, or convert to a text format (wat or wax).
+    Resolve the conditionals with -D/--define, or convert to a text format (wat
+    or wax).
   [128]
