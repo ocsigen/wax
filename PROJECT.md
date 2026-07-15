@@ -227,6 +227,17 @@ becomes `(func)` + sibling, and `(import "m")` drops cleanly without absorbing t
 following `(func …)` as its descriptor. No snapshot stack (the reviewer was
 right). Tests in `test/recovery-wat/`; WAT recovery fuzz-clean at 240k.
 
+A later review (commit 6692218e) found and fixed four "recovery destroys more
+than it saves" regressions in this machinery: group-drop misfiring on a stray
+`)` after a complete construct (now gated on a source `paren_depth`); `place_pair`
+popping reduced fields (removed — `place_field` only inserts closers); the
+barrier firing at any depth (now depth-0 only, restoring the invariant that
+skipped nested content is not reinterpreted); and the barrier not seeing the
+fused `(type`/`(import`/`(export` openers (now single-token barriers). Plus:
+`try_barrier` reads the previously-offered token instead of scanning raw source
+(commit `6692218e`); `unwind`/`close_pending` share helpers with `pop_to`/
+barrier placement (`2fb90624`); `?barrier` documented (`555d3f4a`).
+
 Aside (fixed, commit 910ee5bc): `wax_parse_recover` used to raise
 `Failure "Int64.of_string"` on an overlong integer literal (a huge `memory`/table
 limit, page size, or `#[if]` version component — the literals the Wax parser
