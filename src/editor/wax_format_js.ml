@@ -11,8 +11,11 @@
      (type-check for Wax, validate for Wasm text), returning diagnostics for the
      editor. [warning] is the [-W] name of a lint warning, or null.
    - [hover src line ch] -> { type; startLine; startChar; endLine; endChar } or
-     null: the type of the innermost typed expression under the (zero-based)
-     position, with its span, for editor hover. [null] over a statement or an
+     null: for editor hover at the (zero-based) position. The type of the
+     innermost expression under the cursor, or — for a name that is not an
+     expression and so is more specific than any expression enclosing it (a type
+     reference, an assignment target, a bare global) — what that name resolves to
+     (a type's definition, a variable's type). [null] over a statement or an
      unresolved node, so those stay quiet. Wax only (WAT builds no typed tree).
    - [inlays src] -> array of { line; char; label }: the inferred type on each
      un-annotated [let] binding ([: i32] after [x] in [let x = 3]), for inlay
@@ -289,48 +292,96 @@ let byte_column src line char =
     (String.sub src start (stop - start))
     char
 
+let slice src (loc : Wax_utils.Ast.location) =
+  String.sub src loc.loc_start.pos_cnum
+    (loc.loc_end.pos_cnum - loc.loc_start.pos_cnum)
+
+(* Render what a name reference resolves to (recorded by the typer as data, so
+   only the one hovered is ever formatted): a variable's type, or a referenced
+   type's definition ([name] is the referenced type's own name, needed to render
+   [type name = …]). *)
+let render_hover_target ~name = function
+  | Wax_lang.Typing.Value_type ity ->
+      cell_to_string (Wax_lang.Infer.valtype_cell ity)
+  | Wax_lang.Typing.Type_def st ->
+      let field = Wax_lang.Ast.no_loc (Wax_lang.Ast.no_loc name, st) in
+      let buf = Buffer.create 64 in
+      let fmt = Format.formatter_of_buffer buf in
+      Wax_utils.Printer.run ~width:Wax_lang.Output.width fmt (fun p ->
+          Wax_lang.Output.subtype p field);
+      Format.pp_print_flush fmt ();
+      String.trim (Buffer.contents buf)
+
 let hover_string src line ch =
-  match (analyze src).a_typed with
-  | None -> None
-  | Some typed -> (
-      (* Lexing lines are one-based and its columns are byte offsets; [ch] is a
-         zero-based UTF-16 column, so convert it against the buffer. *)
-      let target = (line + 1, byte_column src line ch) in
-      let pos (p : Lexing.position) =
-        (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-      in
-      let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-      (* Track the smallest span that still contains the cursor; a child's
-             span is contained in its parent's, so the smallest is the innermost
-             node. Ties keep the first (deeper) one seen. *)
-      let best = ref None in
-      let observe ((tys, loc) : Wax_lang.Typing.inferred_module_annotation) =
-        (if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
-           let span =
-             loc.loc_end.Lexing.pos_cnum - loc.loc_start.Lexing.pos_cnum
-           in
-           match !best with
-           | Some (best_span, _, _) when best_span <= span -> ()
-           | _ -> best := Some (span, tys, loc));
-        (tys, loc)
-      in
-      List.iter
-        (fun (field :
-               ( Wax_lang.Typing.inferred_module_annotation
-                 Wax_lang.Ast.modulefield,
-                 Wax_utils.Ast.location )
-               Wax_lang.Ast.annotated) ->
-          ignore (Wax_lang.Ast_utils.map_modulefield observe field.desc))
-        typed;
-      (* Show a hover only for the innermost node; do not fall back to an
-             enclosing one, so a suppressed statement / unknown node stays quiet
-             rather than surfacing its parent's type. *)
-      match !best with
-      | None -> None
-      | Some (_, tys, loc) -> (
-          match render_result_types tys with
-          | None -> None
-          | Some h_type -> Some { h_type; h_range = loc }))
+  let a = analyze src in
+  (* Lexing lines are one-based and its columns are byte offsets; [ch] is a
+     zero-based UTF-16 column, so convert it against the buffer. *)
+  let target = (line + 1, byte_column src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let span (loc : Wax_utils.Ast.location) =
+    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+  in
+  (* The innermost expression node under the cursor and its rendered type. Track
+     the smallest span containing the cursor; a child's span is contained in its
+     parent's, so the smallest is the innermost node. Renders [None] for a
+     statement / unknown node, so those stay quiet. *)
+  let expression =
+    match a.a_typed with
+    | None -> None
+    | Some typed ->
+        let best = ref None in
+        let observe ((tys, loc) : Wax_lang.Typing.inferred_module_annotation) =
+          (if contains loc then
+             match !best with
+             | Some (best_loc, _) when span best_loc <= span loc -> ()
+             | _ -> best := Some (loc, tys));
+          (tys, loc)
+        in
+        List.iter
+          (fun (field :
+                 ( Wax_lang.Typing.inferred_module_annotation
+                   Wax_lang.Ast.modulefield,
+                   Wax_utils.Ast.location )
+                 Wax_lang.Ast.annotated) ->
+            ignore (Wax_lang.Ast_utils.map_modulefield observe field.desc))
+          typed;
+        Option.bind !best (fun (loc, tys) ->
+            Option.map (fun h_type -> (loc, h_type)) (render_result_types tys))
+  in
+  (* The smallest name reference covering the cursor (a type reference, an
+     assignment target, a bare global): a name that is usually not an expression
+     node. *)
+  let reference =
+    List.fold_left
+      (fun best (r : Wax_lang.Typing.reference) ->
+        match r.hover with
+        | Some tgt when contains r.use -> (
+            match best with
+            | Some (bloc, _) when span bloc <= span r.use -> best
+            | _ -> Some (r.use, tgt))
+        | _ -> best)
+      None a.a_defs
+  in
+  (* An identifier reference is more specific than the expression enclosing it,
+     so the smaller span wins; a tie prefers the reference — e.g. the type name
+     in [e as &t] resolves to the type, not the cast's result. *)
+  match (expression, reference) with
+  | Some (eloc, h_type), Some (rloc, _) when span eloc < span rloc ->
+      Some { h_type; h_range = eloc }
+  | _, Some (rloc, tgt) ->
+      Some
+        {
+          h_type = render_hover_target ~name:(slice src rloc) tgt;
+          h_range = rloc;
+        }
+  | Some (eloc, h_type), None -> Some { h_type; h_range = eloc }
+  | None, None -> None
 
 (* Inlay hints (Wax only): the inferred type on each un-annotated [let] binding,
    so [let x = 3] shows a virtual [: i32] after [x]. Reads the same cached cell

@@ -1963,3 +1963,4 @@ let instr printer i = instr Instruction (diagnostic_ctx printer) i
 let valtype printer i = valtype (diagnostic_ctx printer) i
 let comptype printer i = comptype (diagnostic_ctx printer) i
 let storagetype printer i = storagetype (diagnostic_ctx printer) i
+let subtype printer field = subtype (diagnostic_ctx printer) field

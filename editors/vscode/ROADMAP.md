@@ -87,9 +87,13 @@ does not carry. Three distinct prerequisites:
   unresolved cell `any` (rather than the resolved form's bare valtype and ugly
   synthetic `<…>` names). A single value shows as the bare type, several as a
   tuple. A statement (no value) and a fully unknown/error node (`is_unknown_or_error`)
-  show no hover at all, so hovering blank or broken regions stays quiet; there is
-  no fall-back to an enclosing node. A `HoverProvider` in `extension-common.ts`
-  shows it in a `wax` code block. Wax only: WAT's validator builds no typed tree.
+  show no hover at all, so hovering blank or broken regions stays quiet. A name
+  that is not an expression node (a type reference like `&point`, an assignment
+  target, a bare global) falls back to what its resolved reference recorded — the
+  type's definition or the variable's type; when both an expression node and a
+  name reference cover the cursor the smaller span wins (so the type in `e as &t`
+  beats the cast's result). A `HoverProvider` in `extension-common.ts` shows it
+  in a `wax` code block. Wax only: WAT's validator builds no typed tree.
   Recovery (not a last-good-tree cache) keeps it alive through most mid-edit
   states; a buffer the recovering parser cannot salvage shows no hover. The
   parse + type-check is cached by source content and shared with the diagnostics

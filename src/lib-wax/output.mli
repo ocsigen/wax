@@ -10,6 +10,13 @@ val valtype : Wax_utils.Printer.t -> Ast.valtype -> unit
 val comptype : Wax_utils.Printer.t -> Ast.comptype -> unit
 val storagetype : Wax_utils.Printer.t -> Ast.storagetype -> unit
 
+val subtype :
+  Wax_utils.Printer.t ->
+  (Ast.ident * Ast.subtype, Ast.location) Ast.annotated ->
+  unit
+(** Print a named type definition, [type name = …;]. Small definitions stay on
+    one line. *)
+
 val module_ :
   ?color:Wax_utils.Colors.flag ->
   ?out_channel:out_channel ->

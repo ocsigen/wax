@@ -13,8 +13,11 @@ Syntax highlighting, formatting, diagnostics, and snippets for
 - **Diagnostics** as you type: syntax errors, type errors, and lints from the
   same toolchain are shown inline (squiggles) and in the Problems panel.
 - **Hover types** (`.wax`): hover over an expression to see its inferred type,
-  read straight off the type-checker's typed tree. Works mid-edit through the
-  recovering parser even while other parts of the file have errors.
+  read straight off the type-checker's typed tree. Hovering a name that is not
+  an expression shows what it resolves to instead — a type reference shows the
+  type's definition, an assignment target or global shows its type. Works
+  mid-edit through the recovering parser even while other parts of the file have
+  errors.
 - **Inlay hints** (`.wax`): the inferred type is shown inline on each
   un-annotated `let` binding (e.g. `let x = 3` displays `x: i32`). Toggle them
   with the `editor.inlayHints.enabled` setting.

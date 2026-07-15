@@ -14,13 +14,28 @@ open Infer
    which resolution discards). *)
 type inferred_module_annotation = inferred_type Cell.t array * Ast.location
 
-(* A resolved name or label reference: the source span of a *use*, and the
-   span(s) of the *definition(s)* it binds to. There is more than one definition
-   only under conditional compilation (a name declared in several mutually
-   exclusive branches). Accumulated during type checking into a [reference list
-   ref] when the caller supplies one, for the editor's go-to-definition; nil
-   otherwise, so an ordinary compile pays nothing. *)
-type reference = { use : Ast.location; definitions : Ast.location list }
+(* A resolved name or label reference: the source span of a *use*, the span(s)
+   of the *definition(s)* it binds to, and a rendered one-line summary of what it
+   resolves to (the referenced type's structure, or a variable's type) for a
+   hover on a name that is not itself an expression. There is more than one
+   definition only under conditional compilation (a name declared in several
+   mutually exclusive branches). Accumulated during type checking into a
+   [reference list ref] when the caller supplies one, for the editor's
+   go-to-definition and hover; nil otherwise, so an ordinary compile pays
+   nothing. *)
+(* What a resolved reference summarises for a hover on a name that is not itself
+   an expression: a variable's type, or a referenced type's definition. Kept as
+   data, not a rendered string — nothing is formatted until a hover actually
+   asks (the editor renders the one it needs), so a check pays only a boxing per
+   reference. *)
+type hover_target = Value_type of inferred_valtype | Type_def of subtype
+
+type reference = {
+  use : Ast.location;
+  definitions : Ast.location list;
+  hover : hover_target option;
+}
+
 type resolve_sink = reference list ref option
 
 (* A synthesized node (an interned function type looked up for a call, a
@@ -32,7 +47,7 @@ let same_span (a : location) (b : location) =
   a.loc_start.Lexing.pos_cnum = b.loc_start.Lexing.pos_cnum
   && a.loc_end.Lexing.pos_cnum = b.loc_end.Lexing.pos_cnum
 
-let record_reference (sink : resolve_sink) use definitions =
+let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
   match sink with
   | Some r when is_source use -> (
       (* Drop synthesized definitions and the self-reference a name's own
@@ -42,7 +57,7 @@ let record_reference (sink : resolve_sink) use definitions =
         List.filter (fun d -> is_source d && not (same_span d use)) definitions
       with
       | [] -> ()
-      | definitions -> r := { use; definitions } :: !r)
+      | definitions -> r := { use; definitions; hover } :: !r)
   | _ -> ()
 
 (*** Diagnostics ***)
@@ -711,10 +726,20 @@ module Tbl = struct
        never referenced can be reported as unused. Populated by [resolve];
        queried by [is_used]. *)
     used : (string, unit) Hashtbl.t;
+    hover : 'a -> hover_target option;
+        (* A summary of a resolved value (its type / definition), attached to
+           the reference [resolve] records, for editor hover on a name that is
+           not an expression. [fun _ -> None] leaves the reference hover-less. *)
   }
 
-  let make namespace kind =
-    { kind; namespace; tbl = Hashtbl.create 16; used = Hashtbl.create 16 }
+  let make ?(hover = fun _ -> None) namespace kind =
+    {
+      kind;
+      namespace;
+      tbl = Hashtbl.create 16;
+      used = Hashtbl.create 16;
+      hover;
+    }
 
   (* Whether a name declared in this table has been referenced. *)
   let is_used env name = Hashtbl.mem env.used name
@@ -755,12 +780,12 @@ module Tbl = struct
               | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
     in
     (match r with
-    | Some _ ->
+    | Some v ->
         Hashtbl.replace env.used x.desc ();
         (* Link this use to every definition of the name (several only across
            conditional branches); [resolve] handles only references, so [x.info]
-           is a use site. *)
-        record_reference env.namespace.links x.info
+           is a use site. The resolved value's summary rides along for hover. *)
+        record_reference ~hover:(env.hover v) env.namespace.links x.info
           (List.map
              (fun (_, loc, _) -> loc)
              (Namespace.entries env.namespace x))
@@ -1943,6 +1968,17 @@ let local_suggestions ctx name =
     (fun f -> StringMap.iter (fun k _ -> f k) ctx.locals)
     name
 
+(* One-line summaries of a resolved reference, rendered the way diagnostics do,
+   for a hover on a name that is not itself an expression (a type reference, a
+   [Set]/[Tee] target, a bare global). A poison value ([None]) has no summary. *)
+let hover_of_valtype ty = Option.map (fun ity -> Value_type ity) ty
+
+let hover_of_global ((_, ty) : bool * inferred_valtype option) =
+  hover_of_valtype ty
+
+let hover_of_type ((_, st) : Wax_wasm.Types.ref_index * subtype) =
+  Some (Type_def st)
+
 (* A name in value position resolves, in order, to a local, then a global, then
    a function (as a non-null reference); [Get]/[Set]/[Tee] share this ladder and
    only differ in what they do with each outcome. *)
@@ -1955,7 +1991,8 @@ type resolved_var =
 let resolve_variable ctx idx =
   match StringMap.find_opt idx.desc ctx.locals with
   | Some (ty, def) ->
-      record_reference ctx.resolve_links idx.info [ def ];
+      record_reference ~hover:(hover_of_valtype ty) ctx.resolve_links idx.info
+        [ def ];
       Local ty
   | None -> (
       match Tbl.find_opt ctx.globals idx with
@@ -9322,7 +9359,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   let type_context =
     {
       internal_types = Wax_wasm.Types.create ();
-      types = Tbl.make (Namespace.make ~links cond) "type";
+      types = Tbl.make ~hover:hover_of_type (Namespace.make ~links cond) "type";
       features;
       subtyping_info_cache = None;
     }
@@ -9381,8 +9418,8 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       types = type_context.types;
       structs_by_fields;
       functions = Tbl.make namespace "function";
-      globals = Tbl.make namespace "global";
-      import_globals = Tbl.make namespace "global";
+      globals = Tbl.make ~hover:hover_of_global namespace "global";
+      import_globals = Tbl.make ~hover:hover_of_global namespace "global";
       memories = Tbl.make namespace "memory";
       datas = Tbl.make (Namespace.make ~links cond) "data segment";
       tables = Tbl.make namespace "table";

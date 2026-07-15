@@ -25,6 +25,19 @@ let span (l : Wax_utils.Ast.location) =
 let slice src (l : Wax_utils.Ast.location) =
   String.sub src l.loc_start.pos_cnum (l.loc_end.pos_cnum - l.loc_start.pos_cnum)
 
+(* The hover summary a reference carries (the editor renders it the same way). *)
+let render_hover ~name = function
+  | Typing.Value_type ity ->
+      Format.asprintf "%a" Infer.output_inferred_type (Infer.valtype_cell ity)
+  | Typing.Type_def st ->
+      let field = Ast.no_loc (Ast.no_loc name, st) in
+      let buf = Buffer.create 32 in
+      let f = Format.formatter_of_buffer buf in
+      Wax_utils.Printer.run ~width:Output.width f (fun p ->
+          Output.subtype p field);
+      Format.pp_print_flush f ();
+      String.trim (Buffer.contents buf)
+
 let resolve name src =
   Printf.printf "=== %s ===\n" name;
   match P.parse_diagnostics ~filename:"t.wax" src with
@@ -36,10 +49,14 @@ let resolve name src =
        with Wax_utils.Diagnostic.Aborted -> ());
       !links
       |> List.map (fun (r : Typing.reference) ->
-          Printf.sprintf "%-8s @ %-9s -> %s"
+          Printf.sprintf "%-8s @ %-9s -> %s%s"
             (Printf.sprintf "%S" (slice src r.use))
             (span r.use)
-            (String.concat ", " (List.map span r.definitions)))
+            (String.concat ", " (List.map span r.definitions))
+            (match r.hover with
+            | Some t ->
+                Printf.sprintf "  [%s]" (render_hover ~name:(slice src r.use) t)
+            | None -> ""))
       (* The typer may resolve a name more than once; a use -> def link is the
          same each time, so present the distinct ones, ordered. *)
       |> List.sort_uniq compare

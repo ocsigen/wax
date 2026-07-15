@@ -13,6 +13,9 @@
 - Go to definition for `.wax`: jump from a use to its definition (function,
   global, type, tag, `let`/parameter, or block/loop label), resolving through
   shadowing to the binding actually in scope.
+- Hover extended to names that are not expressions: a type reference (e.g.
+  `&point`) shows the type's definition, and an assignment target or global
+  shows its type.
 
 ## 0.2.2
 

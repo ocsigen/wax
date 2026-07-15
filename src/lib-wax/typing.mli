@@ -34,10 +34,24 @@ val f :
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
 
-type reference = { use : Ast.location; definitions : Ast.location list }
-(** A resolved name or label reference: the source span of a *use* and the
-    span(s) of the *definition(s)* it binds to — several only under conditional
-    compilation. Collected by {!f_infer} for go-to-definition. *)
+type hover_target =
+  | Value_type of Infer.inferred_valtype
+  | Type_def of Ast.subtype
+      (** What a resolved reference summarises for a hover on a name that is not
+          itself an expression: a variable's type, or a referenced type's
+          definition. Kept as data so the consumer renders only the one it needs
+          (a check formats nothing). *)
+
+type reference = {
+  use : Ast.location;
+  definitions : Ast.location list;
+  hover : hover_target option;
+}
+(** A resolved name or label reference: the source span of a *use*, the span(s)
+    of the *definition(s)* it binds to — several only under conditional
+    compilation — and, for a name that is not itself an expression (a type
+    reference, an assignment target, a bare global), what it resolves to for a
+    hover. Collected by {!f_infer} for go-to-definition and hover. *)
 
 val f_infer :
   ?simplify:bool ->
