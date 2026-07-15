@@ -20,6 +20,7 @@ On top of that, it enables these further proposals by default:
 | Wide arithmetic | 128-bit integer ops (e.g. `i64::add128`) |
 | Branch hinting | `#[likely]` / `#[unlikely]` |
 | Custom page sizes | `pagesize` |
+| [Extended name section](https://github.com/WebAssembly/extended-name-section) | `$`-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip |
 
 ## Enabled with `-X`
 

@@ -474,7 +474,54 @@ let collect_labels instrs ctr map =
                 map catches
             in
             match catch_all with Some b -> go b.Ast.desc ctr map | None -> map)
-        | _ -> map)
+        | Folded (head, operands) ->
+            (* The binary emits a folded node's operands before its head, so
+               number labels in that order to match the encoder and the
+               [binary_to_text] readback walk. Reusing [go] on the head lets the
+               control-instruction arms above attach its label and recurse its
+               body. *)
+            let map = go operands ctr map in
+            go [ head ] ctr map
+        | Hinted (_, inner) ->
+            (* A branch hint is a transparent wrapper around one instruction
+               (e.g. a labelled [if]); recurse into it. *)
+            go [ inner ] ctr map
+        | If_annotation _ ->
+            (* An unresolved [(@if ...)] conditional never reaches the binary
+               name section: emission rejects it ([Conditional_in_binary]). Its
+               labels can therefore never be emitted, and recursing would
+               double-count and misalign the counter. *)
+            map
+        (* Leaf instructions: no label, no nested instructions. Listed
+           exhaustively (no [_] wildcard) so that any future instruction that
+           carries nested instructions is flagged here at compile time rather
+           than silently dropping the labels inside it. *)
+        | Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _
+        | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+        | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
+        | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+        | Br_on_cast_desc_eq_fail _ | Return | Call _ | CallRef _
+        | CallIndirect _ | ReturnCall _ | ReturnCallRef _ | ReturnCallIndirect _
+        | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _ | GlobalGet _
+        | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
+        | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _
+        | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _
+        | TableSize _ | TableGrow _ | TableFill _ | TableCopy _ | TableInit _
+        | ElemDrop _ | RefNull _ | RefFunc _ | RefIsNull | RefAsNonNull | RefEq
+        | RefTest _ | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructNew _
+        | StructNewDefault _ | StructNewDesc _ | StructNewDefaultDesc _
+        | StructGet _ | StructSet _ | ArrayNew _ | ArrayNewDefault _
+        | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _ | ArrayGet _
+        | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _ | ArrayInitData _
+        | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | BinOp _ | UnOp _
+        | Add128 | Sub128 | MulWide _ | VecConst _ | VecUnOp _ | VecBinOp _
+        | VecTest _ | VecShift _ | VecBitmask _ | VecTernOp _ | VecBitselect
+        | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
+        | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _
+        | VecShuffle _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64
+        | F64PromoteF32 | ExternConvertAny | AnyConvertExtern | String _
+        | Char _ ->
+            map)
       map instrs
   in
   go instrs ctr map
