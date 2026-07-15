@@ -150,6 +150,19 @@ let source_of_valtype (ty : valtype) : source_type =
 
 module Error = struct
   open Wax_utils
+  module D = Diagnostic
+
+  (* Migration shim: accept the legacy [Format]-closure message/hint and wrap
+     them into [Message.t] verbatim, so the inline call sites need no change
+     beyond dropping the [Diagnostic.] qualifier. Converting a builder to the
+     structured combinators means passing a real [Message.t] here instead. *)
+  let report context ~location ~severity ?warning ?universal ?hint ?related
+      ~message () =
+    D.report context ~location ~severity ?warning ?universal
+      ?hint:(Option.map Message.of_format hint)
+      ?related
+      ~message:(Message.of_format message)
+      ()
 
   let did_you_mean lst =
     match List.rev lst with
@@ -168,20 +181,20 @@ module Error = struct
               pp last)
 
   let unbound_label context ~location id lst =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Unknown label: %a is not bound." print_index id)
       ?hint:(did_you_mean lst) ()
 
   let unbound_index context ~location kind id lst =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Unknown %s: index %a is not bound." kind print_index
           id)
       ?hint:(did_you_mean lst) ()
 
   let packed_array_access context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "This instruction cannot be used on packed arrays. Use array.get_s \
@@ -189,14 +202,14 @@ module Error = struct
       ()
 
   let unpacked_array_access context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "This instruction is only valid for packed arrays. Use array.get.")
       ()
 
   let packed_struct_access context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "This instruction cannot be used on packed fields. Use struct.get_s \
@@ -204,7 +217,7 @@ module Error = struct
       ()
 
   let unpacked_struct_access context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "This instruction is only valid for packed fields. Use struct.get.")
@@ -231,12 +244,14 @@ module Error = struct
           [
             {
               Wax_utils.Diagnostic.location = loc;
-              message = (fun f () -> Format.pp_print_string f "expected here");
+              message =
+                Message.of_format (fun f () ->
+                    Format.pp_print_string f "expected here");
             };
           ]
       | _ -> []
     in
-    Diagnostic.report context ~location ~severity:Error ~related
+    report context ~location ~severity:Error ~related
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: this produces a value of type@ @[<2>%a@],@ but type@ \
@@ -247,14 +262,14 @@ module Error = struct
   let expected_ref_type context ~location ~src_loc ~source =
     match src_loc with
     | None ->
-        Diagnostic.report context ~location ~severity:Error
+        report context ~location ~severity:Error
           ~message:(fun f () ->
             Format.fprintf f
               "Type mismatch: expected reference type but got type@ @[<2>%a@]."
               print_source_type source)
           ()
     | Some location ->
-        Diagnostic.report context ~location ~severity:Error
+        report context ~location ~severity:Error
           ~message:(fun f () ->
             Format.fprintf f
               "Type mismatch: this instruction should return a reference type \
@@ -263,7 +278,7 @@ module Error = struct
           ()
 
   let table_type_mismatch context ~location ~source idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type mismatch: the table %a@ %a@ @[%a@]." print_index
           idx print_wrapped
@@ -272,7 +287,7 @@ module Error = struct
       ()
 
   let elem_segment_type_mismatch context ~location ~elem_source ~table_source =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: the element segment has type@ @[<2>%a@],@ which is \
@@ -281,13 +296,13 @@ module Error = struct
       ()
 
   let duplicate_local context ~location name =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The local $%s is already defined." name)
       ()
 
   let type_mismatch context ~location ~provided_source ~expected_source =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
@@ -295,14 +310,14 @@ module Error = struct
       ()
 
   let br_cast_type_mismatch context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: the first type must be a supertype of the second one.")
       ()
 
   let br_on_non_null_no_ref context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: br_on_non_null requires the target label to end in a \
@@ -320,8 +335,8 @@ module Error = struct
             {
               Wax_utils.Diagnostic.location = loc;
               message =
-                (fun f () ->
-                  Format.fprintf f "@[<2>%a@]" print_source_type source);
+                Message.of_format (fun f () ->
+                    Format.fprintf f "@[<2>%a@]" print_source_type source);
             }
       | _ -> None
     in
@@ -329,7 +344,7 @@ module Error = struct
       List.filter_map Fun.id
         [ branch_label loc1 source1; branch_label loc2 source2 ]
     in
-    Diagnostic.report context ~location ~severity:Error ~related
+    report context ~location ~severity:Error ~related
       ~message:(fun f () ->
         (* When both carets are shown they carry the types; otherwise name the
            two types in the message so they are not lost. *)
@@ -345,14 +360,14 @@ module Error = struct
       ()
 
   let empty_stack context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: the stack is empty (a value is missing).")
       ()
 
   let non_empty_stack context ~location output_stack =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type mismatch: unexpected values left on the stack:%a"
           output_stack ())
@@ -361,7 +376,7 @@ module Error = struct
   (* Report the values still on the stack by pointing a caret at each of them.
      [location] carries the topmost value; [related] the others. *)
   let leftover_values context ~location ~related =
-    Diagnostic.report context ~location ~severity:Error ~related
+    report context ~location ~severity:Error ~related
       ~message:(fun f () ->
         Format.pp_print_string f
           (if related = [] then
@@ -379,7 +394,7 @@ module Error = struct
 
   let argument_count_mismatch context ~location ~descr ~provided_source
       ~expected_source =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
@@ -389,7 +404,7 @@ module Error = struct
 
   let argument_type_mismatch context ~location ~descr ~provided_source
       ~expected_source =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
@@ -399,7 +414,7 @@ module Error = struct
       ()
 
   let branch_parameter_count_mismatch context ~location label len label' len' =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: the default branch target@ %a@ expects@ %d@ \
@@ -408,14 +423,14 @@ module Error = struct
       ()
 
   let memory_offset_too_large context ~location max_offset =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The memory offset should be less than 0x%Lx."
           (Uint64.to_int64 max_offset))
       ()
 
   let memory_align_too_large context ~location natural =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The memory alignment is larger than the natural alignment %d."
@@ -423,13 +438,13 @@ module Error = struct
       ()
 
   let bad_memory_align context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The memory alignment should be a power of two.")
       ()
 
   let atomic_alignment context ~location natural =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The alignment of an atomic access must be its natural alignment %d."
@@ -437,33 +452,33 @@ module Error = struct
       ()
 
   let invalid_lane_index context ~location max_lane =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The lane index should be less than %d." max_lane)
       ()
 
   let inline_function_type_mismatch context ~location _ =
     (*ZZZ print expected type *)
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The inline function type does not match the type definition.")
       ()
 
   let constant_expression_required context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Only constant expressions are allowed here.")
       ()
 
   let immutable_global context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The global %a should be mutable." print_index idx)
       ()
 
   let limit_too_large context ~location kind max =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The %s size is too large. It should be less than 0x%Lx." kind
@@ -471,13 +486,13 @@ module Error = struct
       ()
 
   let invalid_page_size context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The custom page size must be 1 or 65536.")
       ()
 
   let branch_hint_invalid_target context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "A branch hint may only prefix a conditional branch (if, br_if, or \
@@ -485,53 +500,53 @@ module Error = struct
       ()
 
   let shared_memory_without_max context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "A shared memory must have a maximum size.")
       ()
 
   let limit_mismatch context ~location kind =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The %s maximum size should be larger than the minimal size." kind)
       ()
 
   let duplicated_export context ~location name =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "There is already an export of name \"%a\"."
           print_string name)
       ()
 
   let import_after_definition context ~location kind =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "This import is after a %s definition." kind)
       ()
 
   let supertype_mismatch context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The supertype is not of the same kind as this type.")
       ()
 
   let invalid_subtype context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "This type is not a valid subtype of its declared supertype.")
       ()
 
   let descriptor_outside_rec_group context ~location ~described =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The %s type must be in the same recursion group."
           (if described then "described" else "descriptor"))
       ()
 
   let descriptor_not_reciprocal context ~location ~described =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         if described then
           Format.fprintf f
@@ -542,39 +557,39 @@ module Error = struct
       ()
 
   let forward_use_of_described context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "A described type must be declared before its descriptor.")
       ()
 
   let descriptor_not_struct context ~location ~described =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "A %s type must be a struct type."
           (if described then "described" else "descriptor"))
       ()
 
   let not_function_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () -> Format.fprintf f "This should be a function type.")
       ()
 
   let exception_tag_with_results context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The type of an exception tag must have no results.")
       ()
 
   let select_result_count context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "A typed select must be annotated with exactly one result type.")
       ()
 
   let non_nullable_table_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: the type of the elements of this table must be \
@@ -582,7 +597,7 @@ module Error = struct
       ()
 
   let uninitialized_local context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The local variable %a has not been initialized."
           print_index idx)
@@ -591,8 +606,8 @@ module Error = struct
   (* A local that is declared but never read. Prefix its name with [_] to
      silence the warning. *)
   let unused_local context ~location name =
-    Diagnostic.report context ~location ~severity:Warning
-      ~warning:Warning.Unused_local ~universal:true
+    report context ~location ~severity:Warning ~warning:Warning.Unused_local
+      ~universal:true
       ~message:(fun f () ->
         match name with
         | Some id ->
@@ -605,8 +620,8 @@ module Error = struct
      exported, or used as the start function. Prefix its name with [_] to
      silence the warning. *)
   let unused_field context ~location kind name =
-    Diagnostic.report context ~location ~severity:Warning
-      ~warning:Warning.Unused_field ~universal:true
+    report context ~location ~severity:Warning ~warning:Warning.Unused_field
+      ~universal:true
       ~message:(fun f () ->
         match name with
         | Some id ->
@@ -617,8 +632,8 @@ module Error = struct
   (* An imported function or global never referenced, exported, or used as the
      start function. Prefix its name with [_] to silence the warning. *)
   let unused_import context ~location kind name =
-    Diagnostic.report context ~location ~severity:Warning
-      ~warning:Warning.Unused_import ~universal:true
+    report context ~location ~severity:Warning ~warning:Warning.Unused_import
+      ~universal:true
       ~message:(fun f () ->
         match name with
         | Some id ->
@@ -630,8 +645,8 @@ module Error = struct
   (* A block label declared but never branched to. Prefix its name with [_] to
      silence the warning. *)
   let unused_label context ~location name =
-    Diagnostic.report context ~location ~severity:Warning
-      ~warning:Warning.Unused_label ~universal:true
+    report context ~location ~severity:Warning ~warning:Warning.Unused_label
+      ~universal:true
       ~message:(fun f () ->
         Format.fprintf f "The label %a is never used." print_ident name)
       ()
@@ -642,8 +657,8 @@ module Error = struct
   let warn_lint context ~location ?hint ?related warning fmt =
     Format.kdprintf
       (fun msg ->
-        Diagnostic.report context ~location ~severity:Warning ~warning
-          ~universal:true ?hint ?related
+        report context ~location ~severity:Warning ~warning ~universal:true
+          ?hint ?related
           ~message:(fun f () -> msg f)
           ())
       fmt
@@ -712,68 +727,69 @@ module Error = struct
           {
             Wax_utils.Diagnostic.location = select;
             message =
-              (fun f () ->
-                Format.fprintf f "This 'select' evaluates both of its operands.");
+              Message.of_format (fun f () ->
+                  Format.fprintf f
+                    "This 'select' evaluates both of its operands.");
           };
         ]
       "This operation is evaluated even when the condition selects the other \
        operand."
 
   let index_already_bound context ~location kind index =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The %s index %a is already bound." kind print_ident
           index.Ast.desc)
       ()
 
   let expected_func_type context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type %a should be a function type." print_index idx)
       ()
 
   let expected_struct_type context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type %a should be a struct type." print_index idx)
       ()
 
   let expected_array_type context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type %a should be an array type." print_index idx)
       ()
 
   let expected_cont_type context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type %a should be a continuation type." print_index
           idx)
       ()
 
   let stack_switching_type_mismatch context ~location ~descr =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch in this stack switching instruction:@ %s." descr)
       ()
 
   let invalid_cast_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Continuation types cannot be used in a cast instruction.")
       ()
 
   let type_without_descriptor context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "This descriptor instruction requires a type that has a descriptor.")
       ()
 
   let feature_disabled context ~location feature =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "This uses the %s feature, which is not enabled; pass @[--feature \
@@ -783,7 +799,7 @@ module Error = struct
       ()
 
   let descriptor_allocation_required context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "A type with a descriptor must be allocated with a descriptor \
@@ -791,7 +807,7 @@ module Error = struct
       ()
 
   let expected_number_or_vec context ~location ~source =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: expecting a numeric or vector type but got type@ \
@@ -800,18 +816,18 @@ module Error = struct
       ()
 
   let immutable context ~location what =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () -> Format.fprintf f "This %s is immutable." what)
       ()
 
   let not_defaultable context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "This type has no default value for all its fields.")
       ()
 
   let field_index_out_of_bounds context ~location ~index ~count =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The field index %d is out of bounds: the structure has %d field(s)."
@@ -819,37 +835,37 @@ module Error = struct
       ()
 
   let unknown_field context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () -> Format.fprintf f "There is no such field.")
       ()
 
   let numeric_array_required context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "This operation requires an array of numeric elements.")
       ()
 
   let string_array_required context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "A string can only build an i8 or i16 array.")
       ()
 
   let string_not_unicode context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "A string building an i16 array must be a valid Unicode string.")
       ()
 
   let incompatible_array_element context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The array element type is incompatible.")
       ()
 
   let ref_func_inaccessible context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The function %a is not declared as referenceable (ref.func)."
@@ -857,7 +873,7 @@ module Error = struct
       ()
 
   let non_constant_global context ~location idx =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Only an immutable global may be used in a constant expression: %a."
@@ -865,14 +881,14 @@ module Error = struct
       ()
 
   let start_function_signature context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "The start function must have no parameters and no results.")
       ()
 
   let multiple_start context ~location =
-    Diagnostic.report context ~location ~severity:Error
+    report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "A module can have at most one start function.")
       ()
@@ -1865,7 +1881,10 @@ let with_empty_stack ctx location f =
           let related =
             List.map
               (fun location ->
-                { Wax_utils.Diagnostic.location; message = (fun _ () -> ()) })
+                {
+                  Wax_utils.Diagnostic.location;
+                  message = Wax_utils.Message.of_format (fun _ () -> ());
+                })
               rest
           in
           Error.leftover_values ctx.diagnostics ~location ~related
@@ -4558,8 +4577,8 @@ let lint_body ctx instrs =
                   {
                     Wax_utils.Diagnostic.location = a.info;
                     message =
-                      (fun f () ->
-                        Format.fprintf f "Control never returns from here.");
+                      Wax_utils.Message.of_format (fun f () ->
+                          Format.fprintf f "Control never returns from here.");
                   };
                 ]
           else dead rest

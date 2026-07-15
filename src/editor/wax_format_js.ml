@@ -164,7 +164,7 @@ type diag = {
       (* a message and the source span it points at (e.g. the matching opener) *)
 }
 
-let render f = Format.asprintf "%a" f ()
+let render m = Wax_utils.Message.to_plain_string m
 
 let render_labels labels =
   List.map

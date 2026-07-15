@@ -214,7 +214,7 @@ module Error = struct
     Format.kdprintf
       (fun msg ->
         Diagnostic.report context ~location ~severity:Error ?hint ?related
-          ~message:(fun f () -> msg f)
+          ~message:(Message.of_format (fun f () -> msg f))
           ())
       fmt
 
@@ -238,7 +238,7 @@ module Error = struct
         (fun msg ->
           Diagnostic.report context ~location ~severity:Warning ?warning
             ?universal ?hint ?related
-            ~message:(fun f () -> msg f)
+            ~message:(Message.of_format (fun f () -> msg f))
             ())
         fmt
 
@@ -299,10 +299,11 @@ module Error = struct
   let shift_overflow context ~location ~width count =
     warn ~warning:Wax_utils.Warning.Shift_overflow ~universal:true context
       ~location
-      ~hint:(fun f () ->
-        Format.fprintf f
-          "Wasm masks the count modulo %d, shifting by %Ld instead." width
-          (Int64.rem count (Int64.of_int width)))
+      ~hint:
+        (Message.of_format (fun f () ->
+             Format.fprintf f
+               "Wasm masks the count modulo %d, shifting by %Ld instead." width
+               (Int64.rem count (Int64.of_int width))))
       "The shift count %Ld is at least the operand width (%d bits)." count width
 
   (* An integer division or remainder by a constant zero: it always traps. *)
@@ -353,15 +354,16 @@ module Error = struct
           {
             Wax_utils.Diagnostic.location = select;
             message =
-              (fun f () ->
-                Format.fprintf f
-                  "This '?:' evaluates both branches (it compiles to a \
-                   'select').");
+              Message.of_format (fun f () ->
+                  Format.fprintf f
+                    "This '?:' evaluates both branches (it compiles to a \
+                     'select').");
           };
         ]
-      ~hint:(fun f () ->
-        Format.fprintf f
-          "Use an 'if' expression to evaluate only the chosen branch.")
+      ~hint:
+        (Message.of_format (fun f () ->
+             Format.fprintf f
+               "Use an 'if' expression to evaluate only the chosen branch."))
       "This operation is evaluated even when the condition selects the other \
        branch."
 
@@ -376,14 +378,15 @@ module Error = struct
           {
             Wax_utils.Diagnostic.location = inner;
             message =
-              (fun f () ->
-                Format.fprintf f
-                  "This %s operator binds tighter than the %s operator."
-                  inner_kind outer_kind);
+              Message.of_format (fun f () ->
+                  Format.fprintf f
+                    "This %s operator binds tighter than the %s operator."
+                    inner_kind outer_kind);
           };
         ]
-      ~hint:(fun f () ->
-        Format.fprintf f "Add parentheses to make the grouping explicit.")
+      ~hint:
+        (Message.of_format (fun f () ->
+             Format.fprintf f "Add parentheses to make the grouping explicit."))
       "Operator precedence here is easy to misread."
 
   let empty_stack context ~location =
@@ -591,7 +594,8 @@ module Error = struct
     {
       Wax_utils.Diagnostic.location;
       message =
-        (fun f () -> Format.fprintf f "@[<2>%a@]" output_inferred_type ty);
+        Message.of_format (fun f () ->
+            Format.fprintf f "@[<2>%a@]" output_inferred_type ty);
     }
 
   let select_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
@@ -631,14 +635,14 @@ module Error = struct
         let rest = List.rev rest in
         let pp f = Format.fprintf f "%s" in
         Some
-          (fun f () ->
-            Format.fprintf f "Did@ you@ mean@ %a%s%a?"
-              (Format.pp_print_list
-                 ~pp_sep:(fun f () -> Format.fprintf f ",@ ")
-                 pp)
-              rest
-              (if rest = [] then "" else " or ")
-              pp last)
+          (Message.of_format (fun f () ->
+               Format.fprintf f "Did@ you@ mean@ %a%s%a?"
+                 (Format.pp_print_list
+                    ~pp_sep:(fun f () -> Format.fprintf f ",@ ")
+                    pp)
+                 rest
+                 (if rest = [] then "" else " or ")
+                 pp last))
 
   let unbound_name context ~location ?(suggestions = []) kind x =
     (* In error-recovery mode (type-checking a best-effort AST past syntax
@@ -2025,7 +2029,10 @@ let with_empty_stack ctx ~kind:_ ~location f =
           let related =
             List.map
               (fun location ->
-                { Wax_utils.Diagnostic.location; message = (fun _ () -> ()) })
+                {
+                  Wax_utils.Diagnostic.location;
+                  message = Wax_utils.Message.of_format (fun _ () -> ());
+                })
               rest
           in
           Error.leftover_values ctx.diagnostics ~location ~related
@@ -8731,8 +8738,8 @@ and block_contents ctx results l =
                   {
                     Wax_utils.Diagnostic.location = i.info;
                     message =
-                      (fun f () ->
-                        Format.fprintf f "Control never returns from here.");
+                      Wax_utils.Message.of_format (fun f () ->
+                          Format.fprintf f "Control never returns from here.");
                   };
                 ]
         | _ -> ());

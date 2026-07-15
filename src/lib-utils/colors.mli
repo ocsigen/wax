@@ -70,5 +70,9 @@ val escape_sequence : theme -> style -> string
 (** [escape_sequence theme style] returns the ANSI escape code for the given
     [style] from the provided [theme]. *)
 
+val default_theme : theme
+(** The canonical colored theme used for AST fragments (identifiers, types)
+    embedded in diagnostic messages. *)
+
 val no_color : theme
 (** A theme that produces no color output, used when coloring is disabled. *)

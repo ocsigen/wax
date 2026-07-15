@@ -87,7 +87,8 @@ let report_ill_formed env ctx (location : Ast.location) msg =
   if not (Hashtbl.mem env.reported key) then (
     Hashtbl.add env.reported key ();
     Diagnostic.report ctx ~location ~severity:Error
-      ~message:(fun f () -> Format.pp_print_string f msg)
+      ~message:
+        (Wax_utils.Message.of_format (fun f () -> Format.pp_print_string f msg))
       ())
 
 let check_kind env ctx location name kind =

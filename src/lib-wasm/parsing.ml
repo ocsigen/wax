@@ -26,8 +26,8 @@ let show text positions =
 let report_syntax_error ?(related = []) ~color source (loc_start, loc_end) msg =
   let theme = Wax_utils.Diagnostic.get_theme ?color () in
   Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
-    ~location:{ loc_start; loc_end } ~related (fun f () ->
-      Format.fprintf f "%s" msg);
+    ~location:{ loc_start; loc_end } ~related
+    (Wax_utils.Message.of_format (fun f () -> Format.fprintf f "%s" msg));
   (* The diagnostic has been printed; re-raise so the caller decides how to
      terminate rather than exiting the process here. The CLI maps this to exit
      code 128 (rejected input, like a validation or type error, not the
@@ -183,7 +183,9 @@ struct
                   related :=
                     {
                       Wax_utils.Diagnostic.location = loc;
-                      message = (fun f () -> Format.fprintf f "%s" msg);
+                      message =
+                        Wax_utils.Message.of_format (fun f () ->
+                            Format.fprintf f "%s" msg);
                     }
                     :: !related
               | None -> main_message := line :: !main_message

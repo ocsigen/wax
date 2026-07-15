@@ -86,7 +86,9 @@ let make_cond_ctx report =
    diagnostic rather than crash the process on an uncaught exception. *)
 let error report ~location message =
   Wax_utils.Diagnostic.report report ~location ~severity:Error
-    ~message:(fun f () -> Format.pp_print_string f message)
+    ~message:
+      (Wax_utils.Message.of_format (fun f () ->
+           Format.pp_print_string f message))
     ();
   Wax_utils.Diagnostic.abort ()
 

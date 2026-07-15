@@ -6,10 +6,15 @@ type theme = {
   warning_label : string;
   secondary_label : string;
   line_numbers : string;
+  body : Colors.theme;
+      (* The theme for message bodies: identifiers, types and other emphasized
+         atoms embedded in a message (see [Message]). Coloured or [no_color] in
+         lockstep with the header colours above, both from the one [color] flag. *)
 }
 
 let get_theme ?(color = Colors.Auto) () =
   let use_color = Colors.should_use_color ~color ~out_channel:(Some stderr) in
+  let body = if use_color then Colors.default_theme else Colors.no_color in
   let open Colors in
   if use_color then
     {
@@ -20,6 +25,7 @@ let get_theme ?(color = Colors.Auto) () =
       warning_label = Ansi.yellow;
       secondary_label = Ansi.bold ^ Ansi.blue;
       line_numbers = Ansi.cyan;
+      body;
     }
   else
     {
@@ -30,6 +36,7 @@ let get_theme ?(color = Colors.Auto) () =
       warning_label = "";
       secondary_label = "";
       line_numbers = "";
+      body;
     }
 
 let with_style color g f x =
@@ -37,11 +44,7 @@ let with_style color g f x =
   Format.fprintf f "%a%a%a" pr_color color g x pr_color
     (if color = "" then "" else Colors.Ansi.reset)
 
-type label = {
-  location : Ast.location;
-  message : Format.formatter -> unit -> unit;
-}
-
+type label = { location : Ast.location; message : Message.t }
 type severity = Error | Warning
 
 type t = {
@@ -50,8 +53,8 @@ type t = {
   warning : Warning.t option;
       (* The named warning this diagnostic came from, if any, so the policy can
          be applied when it is finally reported (see [report]). *)
-  message : Format.formatter -> unit -> unit;
-  hint : (Format.formatter -> unit -> unit) option;
+  message : Message.t;
+  hint : Message.t option;
   related : label list;
   universal : bool;
       (* Reported during path-sensitive exploration only if it holds in every
@@ -67,17 +70,6 @@ type output_format = Human | Json | Short
 
 let global_format = ref Human
 let set_format f = global_format := f
-
-(* Render a [Format]-printed message to a string with a wide margin, so the
-   printer inserts no line breaks (a stray one is harmless — yojson escapes it
-   as \n, keeping one JSON object per physical line). *)
-let pp_to_string pp =
-  let b = Buffer.create 128 in
-  let f = Format.formatter_of_buffer b in
-  Format.pp_set_margin f 1_000_000;
-  pp f ();
-  Format.pp_print_flush f ();
-  Buffer.contents b
 
 (* Emit one diagnostic as a single-line JSON object. Line/column are the usual
    1-based line / 0-based column; byte offsets ([pos_cnum]) index into the
@@ -106,14 +98,14 @@ let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
        ]
       @ span location
       @ [
-          ("message", `String (pp_to_string msg));
+          ("message", `String (Message.to_plain_string msg));
           ( "warning",
             match warning with
             | Some w -> `String (Warning.name w)
             | None -> `Null );
           ( "hint",
             match hint with
-            | Some pp -> `String (pp_to_string pp)
+            | Some m -> `String (Message.to_plain_string m)
             | None -> `Null );
           ( "related",
             `List
@@ -121,7 +113,9 @@ let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
                  (fun (l : label) : Yojson.Safe.t ->
                    `Assoc
                      (span l.location
-                     @ [ ("message", `String (pp_to_string l.message)) ]))
+                     @ [
+                         ("message", `String (Message.to_plain_string l.message));
+                       ]))
                  related) );
         ])
   in
@@ -134,9 +128,11 @@ let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
    human location line. A named warning's name is appended as [ [name]], as
    clang/eslint do. The message is flattened to one physical line. *)
 let output_error_short ~output ~location ~severity ?warning msg =
-  let one_line pp =
+  let one_line m =
     String.trim
-      (String.map (fun c -> if c = '\n' then ' ' else c) (pp_to_string pp))
+      (String.map
+         (fun c -> if c = '\n' then ' ' else c)
+         (Message.to_plain_string m))
   in
   let sev = match severity with Error -> "error" | Warning -> "warning" in
   let suffix =
@@ -153,23 +149,32 @@ let output_error_short ~output ~location ~severity ?warning msg =
       (p.Lexing.pos_cnum - p.Lexing.pos_bol + 1)
       sev (one_line msg) suffix
 
+(* The width to lay a message body out at: honor the formatter's margin, less
+   the 2-column hanging indent of the enclosing "@[<2> … @]" box. *)
+let msg_width output = max 20 (Format.pp_get_margin output () - 2)
+
+let render_body ~theme output m =
+  Message.render_into ~theme:theme.body ~width:(msg_width output) output m
+
 let print_hint ?(output = Format.err_formatter) ~theme hint =
   match hint with
   | None -> ()
-  | Some pp ->
-      Format.fprintf output "@[<2>%a:@ %a@]@."
+  | Some m ->
+      Format.fprintf output "@[<2>%a:@ %t@]@."
         (with_style theme.hint_header (fun f () -> Format.fprintf f "Hint"))
-        () pp ()
+        ()
+        (fun f -> render_body ~theme f m)
 
 let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity ~hint
     msg =
-  Format.fprintf output "@[<2>%a:@ %a@]@."
+  Format.fprintf output "@[<2>%a:@ %t@]@."
     (match severity with
     | Error ->
         with_style theme.error_header (fun f () -> Format.fprintf f "Error")
     | Warning ->
         with_style theme.warning_header (fun f () -> Format.fprintf f "Warning"))
-    () msg ();
+    ()
+    (fun f -> render_body ~theme f msg);
   print_hint ~output ~theme hint
 
 let output_error_no_source ?(output = Format.err_formatter) ~theme
@@ -198,7 +203,7 @@ type annotation = {
   start_col : int;
   end_col : int;
   color : string;
-  label : (Format.formatter -> unit -> unit) option;
+  label : Message.t option;
 }
 
 let get_annotations ~theme ~severity ~location ~related =
@@ -389,9 +394,15 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
                            Format.fprintf f "%s" underline))
                       ();
                     match a.label with
-                    | Some pp when is_end ->
+                    | Some m when is_end ->
+                        (* Labels are short; render flattened (no colour of their
+                           own) so they sit on the caret's line in the caret
+                           colour, not nested inside body ANSI. *)
                         Format.fprintf f " ";
-                        with_style a.color pp f ()
+                        with_style a.color
+                          (fun f () ->
+                            Format.pp_print_string f (Message.to_plain_string m))
+                          f ()
                     | _ -> ()))
               line_annotations;
             curr_pos := min (String.length source) (next_eol + 1);

@@ -58,9 +58,7 @@ let check_all diagnostics ?truncation_location
             let key =
               Printf.sprintf "%d:%d:%s" loc.loc_start.pos_cnum
                 loc.loc_end.pos_cnum
-                (Format.asprintf "%a"
-                   (fun f () -> Diagnostic.entry_message e f ())
-                   ())
+                (Wax_utils.Message.to_plain_string (Diagnostic.entry_message e))
             in
             let reach =
               match Hashtbl.find_opt errors key with
@@ -104,14 +102,13 @@ let check_all diagnostics ?truncation_location
         with
         | None -> base_hint
         | Some s ->
+            let reach =
+              Wax_utils.Message.text (Printf.sprintf "reachable when %s" s)
+            in
             Some
-              (fun f () ->
-                (match base_hint with
-                | Some h ->
-                    h f ();
-                    Format.pp_print_space f ()
-                | None -> ());
-                Format.fprintf f "reachable when %s" s)
+              (match base_hint with
+              | Some h -> Wax_utils.Message.(h ++ reach)
+              | None -> reach)
       in
       Diagnostic.report diagnostics
         ~location:(Diagnostic.entry_location e)
@@ -127,10 +124,11 @@ let check_all diagnostics ?truncation_location
     | Some location ->
         Diagnostic.report diagnostics ~location ~severity:Warning
           ~warning:Wax_utils.Warning.Truncated_coverage
-          ~message:(fun fmt () ->
-            Format.fprintf fmt
-              "Too many conditional configurations (over %d); coverage was \
-               truncated."
-              max_configurations)
+          ~message:
+            (Wax_utils.Message.of_format (fun fmt () ->
+                 Format.fprintf fmt
+                   "Too many conditional configurations (over %d); coverage \
+                    was truncated."
+                   max_configurations))
           ()
     | None -> ()

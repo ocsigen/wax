@@ -70,19 +70,23 @@ let to_binary ~color ~source ast =
       try Wax_wasm.Text_to_binary.module_ ast with
       | Wax_wasm.Text_to_binary.Conditional_in_binary location ->
           Wax_utils.Diagnostic.report d ~location ~severity:Error
-            ~message:(fun f () ->
-              Format.pp_print_string f
-                "Conditional annotations cannot be emitted to the WebAssembly \
-                 binary format.")
-            ~hint:(fun f () ->
-              Format.pp_print_string f
-                "Resolve the conditionals with -D/--define, or convert to a \
-                 text format (wat or wax).")
+            ~message:
+              (Wax_utils.Message.of_format (fun f () ->
+                   Format.pp_print_string f
+                     "Conditional annotations cannot be emitted to the \
+                      WebAssembly binary format."))
+            ~hint:
+              (Wax_utils.Message.of_format (fun f () ->
+                   Format.pp_print_string f
+                     "Resolve the conditionals with -D/--define, or convert to \
+                      a text format (wat or wax)."))
             ();
           Wax_utils.Diagnostic.abort ()
       | Wax_wasm.Text_to_binary.Unresolved_reference (location, message) ->
           Wax_utils.Diagnostic.report d ~location ~severity:Error
-            ~message:(fun f () -> Format.pp_print_string f message)
+            ~message:
+              (Wax_utils.Message.of_format (fun f () ->
+                   Format.pp_print_string f message))
             ();
           Wax_utils.Diagnostic.abort ())
 
@@ -95,13 +99,15 @@ let desugar_wat ~color ~source ast =
       try Wax_wasm.Desugar.module_ ast
       with Wax_wasm.Desugar.Conditional_remains location ->
         Wax_utils.Diagnostic.report d ~location ~severity:Error
-          ~message:(fun f () ->
-            Format.pp_print_string f
-              "A conditional annotation cannot be desugared to plain \
-               WebAssembly text.")
-          ~hint:(fun f () ->
-            Format.pp_print_string f
-              "Resolve the conditionals with -D/--define.")
+          ~message:
+            (Wax_utils.Message.of_format (fun f () ->
+                 Format.pp_print_string f
+                   "A conditional annotation cannot be desugared to plain \
+                    WebAssembly text."))
+          ~hint:
+            (Wax_utils.Message.of_format (fun f () ->
+                 Format.pp_print_string f
+                   "Resolve the conditionals with -D/--define."))
           ();
         Wax_utils.Diagnostic.abort ())
 
@@ -699,7 +705,9 @@ let check format_opt strict color warnings features debug error_format defines
                  (fun (e : Wax_wasm.Parsing.syntax_error) ->
                    Wax_utils.Diagnostic.report d ~location:e.location
                      ~severity:Wax_utils.Diagnostic.Error ~related:e.related
-                     ~message:(fun f () -> Format.fprintf f "%s" e.message)
+                     ~message:
+                       (Wax_utils.Message.of_format (fun f () ->
+                            Format.fprintf f "%s" e.message))
                      ())
                  syntax_errors;
                Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);

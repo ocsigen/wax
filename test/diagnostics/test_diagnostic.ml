@@ -45,12 +45,14 @@ let test_case1 () =
         [
           {
             Diagnostic.location = loc 12 7 12 14;
-            message = (fun f () -> Format.fprintf f "defined here");
+            message =
+              Message.of_format (fun f () -> Format.fprintf f "defined here");
           };
         ]
       in
       Diagnostic.report d ~location:(loc 5 7 5 12) ~severity:Error ~related
-        ~message:(fun f () -> Format.fprintf f "main error message")
+        ~message:
+          (Message.of_format (fun f () -> Format.fprintf f "main error message"))
         ())
 
 let test_case2 () =
@@ -61,7 +63,8 @@ let test_case2 () =
   Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
     (fun d ->
       Diagnostic.report d ~location:(loc 2 7 4 15) ~severity:Error
-        ~message:(fun f () -> Format.fprintf f "multi-line error")
+        ~message:
+          (Message.of_format (fun f () -> Format.fprintf f "multi-line error"))
         ())
 
 let test_case3 () =
@@ -82,13 +85,16 @@ let test_case3 () =
         [
           {
             Diagnostic.location = loc 3 7 5 13;
-            message = (fun f () -> Format.fprintf f "multi-line secondary");
+            message =
+              Message.of_format (fun f () ->
+                  Format.fprintf f "multi-line secondary");
           };
         ]
       in
       Diagnostic.report d ~location:(loc 7 7 7 12) ~severity:Error ~related
-        ~message:(fun f () ->
-          Format.fprintf f "error with multi-line secondary")
+        ~message:
+          (Message.of_format (fun f () ->
+               Format.fprintf f "error with multi-line secondary"))
         ())
 
 let test_case4 () =
@@ -103,7 +109,8 @@ let test_case4 () =
   Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
     (fun d ->
       Diagnostic.report d ~location:(loc 10 7 90 12) ~severity:Error
-        ~message:(fun f () -> Format.fprintf f "long span error")
+        ~message:
+          (Message.of_format (fun f () -> Format.fprintf f "long span error"))
         ())
 
 let test_case5 () =
@@ -116,12 +123,14 @@ let test_case5 () =
           {
             Diagnostic.location = loc 1 5 1 6;
             message =
-              (fun f () -> Format.fprintf f "This '{' might be unmatched.");
+              Message.of_format (fun f () ->
+                  Format.fprintf f "This '{' might be unmatched.");
           };
         ]
       in
       Diagnostic.report d ~location:(loc 3 0 3 0) ~severity:Error ~related
-        ~message:(fun f () -> Format.fprintf f "Expecting '}'.")
+        ~message:
+          (Message.of_format (fun f () -> Format.fprintf f "Expecting '}'."))
         ())
 
 let () =

@@ -76,6 +76,26 @@ let escape_sequence theme style =
   | Comment -> theme.comment
   | Punctuation -> theme.punctuation
 
+(* The canonical coloured theme for message bodies (identifiers, types, …) in
+   diagnostics. The per-language source printers ([Wax_lang.Output],
+   [Wax_wasm.Output]) keep their own themes for rendering whole modules; this is
+   the one used when an AST fragment is embedded in a diagnostic message. *)
+let default_theme =
+  {
+    keyword = Ansi.bold ^ Ansi.magenta;
+    operator = Ansi.bold ^ Ansi.white;
+    annotation = Ansi.blue;
+    attribute = Ansi.magenta;
+    type_ = Ansi.cyan;
+    identifier = Ansi.yellow;
+    constant = Ansi.bold ^ Ansi.blue;
+    string = Ansi.green;
+    comment = Ansi.grey;
+    punctuation = Ansi.white;
+    instruction = "";
+    reset = Ansi.reset;
+  }
+
 let no_color =
   {
     keyword = "";

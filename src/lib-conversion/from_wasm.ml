@@ -83,14 +83,16 @@ module Sequence = struct
             {
               Wax_utils.Diagnostic.location;
               message =
-                (fun f () ->
-                  Format.fprintf f "'%s' first claimed here" original);
+                Wax_utils.Message.of_format (fun f () ->
+                    Format.fprintf f "'%s' first claimed here" original);
             };
           ]
       | None -> []
     in
     Wax_utils.Diagnostic.report diagnostics ~location ~severity:Warning ~warning
-      ~related ~message ()
+      ~related
+      ~message:(Wax_utils.Message.of_format message)
+      ()
 
   let register' ?hint ?claimed seq export_tbl (kind : Src.exportable option)
       (id : Src.name option) exports =
@@ -682,7 +684,8 @@ let register_type (type typ) ?hint ctx export_tbl (kind : typ kind) idx exports
    represent. Report such a case and abort the conversion rather than crashing
    on an [assert false]. *)
 let conversion_error ctx ~location message =
-  Wax_utils.Diagnostic.report ctx.diagnostics ~location ~severity:Error ~message
+  Wax_utils.Diagnostic.report ctx.diagnostics ~location ~severity:Error
+    ~message:(Wax_utils.Message.of_format message)
     ();
   Wax_utils.Diagnostic.abort ()
 
@@ -819,12 +822,13 @@ let checked_arity ctx kind tbl what name_idx compatible =
     ->
       Wax_utils.Diagnostic.report ctx.diagnostics ~location:name_idx.Ast.info
         ~severity:Error
-        ~message:(fun f () ->
-          Format.fprintf f
-            "%s $%s is declared with different arities in mutually-exclusive \
-             conditional branches but referenced where the branch is \
-             undetermined; this cannot be converted to Wax."
-            what name)
+        ~message:
+          (Wax_utils.Message.of_format (fun f () ->
+               Format.fprintf f
+                 "%s $%s is declared with different arities in \
+                  mutually-exclusive conditional branches but referenced where \
+                  the branch is undetermined; this cannot be converted to Wax."
+                 what name))
         ()
   | _ -> ());
   arity
@@ -2860,11 +2864,12 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                         Wax_utils.Diagnostic.report ctx.diagnostics
                           ~location:p.Ast.info ~severity:Warning
                           ~warning:Wax_utils.Warning.Generated_name
-                          ~message:(fun fmt () ->
-                            Format.fprintf fmt
-                              "An unnamed parameter is used; generating the \
-                               name '%s' for it."
-                              name)
+                          ~message:
+                            (Wax_utils.Message.of_format (fun fmt () ->
+                                 Format.fprintf fmt
+                                   "An unnamed parameter is used; generating \
+                                    the name '%s' for it."
+                                   name))
                           ();
                         Ast.no_loc name
                     | Some id -> { id with Ast.desc = name })
@@ -3755,17 +3760,19 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
   with
   | Numeric_ref_in_conditional location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
-        ~message:(fun f () ->
-          Format.pp_print_string f
-            "Numeric references to module fields are not supported in a module \
-             with conditional annotations; use a symbolic $name.")
+        ~message:
+          (Wax_utils.Message.of_format (fun f () ->
+               Format.pp_print_string f
+                 "Numeric references to module fields are not supported in a \
+                  module with conditional annotations; use a symbolic $name."))
         ();
       Wax_utils.Diagnostic.abort ()
   | Unresolved_reference location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
-        ~message:(fun f () ->
-          Format.pp_print_string f
-            "This reference resolves to nothing: it is out of range or names \
-             an undeclared entity.")
+        ~message:
+          (Wax_utils.Message.of_format (fun f () ->
+               Format.pp_print_string f
+                 "This reference resolves to nothing: it is out of range or \
+                  names an undeclared entity."))
         ();
       Wax_utils.Diagnostic.abort ()

@@ -11,10 +11,7 @@ type output_format =
           gcc/rustc style, for editors with a simple line-based error parser).
       *)
 
-type label = {
-  location : Ast.location;
-  message : Format.formatter -> unit -> unit;
-}
+type label = { location : Ast.location; message : Message.t }
 
 val run :
   ?color:Colors.flag ->
@@ -54,9 +51,9 @@ val report :
   severity:severity ->
   ?warning:Warning.t ->
   ?universal:bool ->
-  ?hint:(Format.formatter -> unit -> unit) ->
+  ?hint:Message.t ->
   ?related:label list ->
-  message:(Format.formatter -> unit -> unit) ->
+  message:Message.t ->
   unit ->
   unit
 (** [report context ~location ~severity ?warning ?universal ?hint ?related
@@ -117,8 +114,8 @@ val entry_location : entry -> Ast.location
 val entry_severity : entry -> severity
 val entry_warning : entry -> Warning.t option
 val entry_universal : entry -> bool
-val entry_message : entry -> Format.formatter -> unit -> unit
-val entry_hint : entry -> (Format.formatter -> unit -> unit) option
+val entry_message : entry -> Message.t
+val entry_hint : entry -> Message.t option
 val entry_related : entry -> label list
 
 type theme
@@ -130,9 +127,9 @@ val output_error_with_source :
   source:string ->
   location:Ast.location ->
   severity:severity ->
-  ?hint:(Format.formatter -> unit -> unit) ->
+  ?hint:Message.t ->
   ?related:label list ->
-  (Format.formatter -> unit -> unit) ->
+  Message.t ->
   unit
 (** [output_error_with_source ?output ~theme ~source ~location ~severity ?hint
      ?related message] prints an error message with a source code snippet. *)
