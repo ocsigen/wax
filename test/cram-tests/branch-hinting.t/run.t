@@ -59,6 +59,26 @@ A WAT annotation decompiles to the Wax attribute:
       unreachable;
   }
 
+A hint on a statement-position (void) [if] is advisory: it must not shift the
+[if] into expression typing, which would demand a value from each branch
+(regression: the else's trailing loop was then asked for a value it does not
+produce, failing with "The stack is empty"):
+
+  $ wax check stmt.wax
+
+  $ wax -i wax -f wasm stmt.wax -o stmt.wasm && wax -i wasm stmt.wasm -f wax
+  type t = fn(i32);
+  fn f(a: i32) {
+      #[likely]
+      if a {
+          nop;
+      } else {
+          'l: loop {
+              br_if 'l a;
+          }
+      }
+  }
+
 The WAT annotation round-trips through the binary unchanged:
 
   $ wax -i wat -f wat hints.wat

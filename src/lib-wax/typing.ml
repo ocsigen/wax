@@ -4745,6 +4745,8 @@ let rec classify_trailing ctx desc =
          self-resolving nested block. *)
       ( fst (classify_trailing ctx a.desc) || fst (classify_trailing ctx b.desc),
         false )
+  (* A branch hint is advisory: classify the wrapped branch itself. *)
+  | Hinted (_, i) -> classify_trailing ctx i.desc
   | _ -> (false, false)
 
 (*** The instruction type-checker ***)
@@ -8167,6 +8169,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       let* node = return_expression i (Select (i1', i2', i3')) ty in
       return (node, needed2 || needed3)
+  | Hinted (h, inner) ->
+      (* The hint is advisory: check the wrapped branch against the same
+         expectation — so a trailing hinted [if] still receives the context's
+         result type and can drop a redundant annotation — and carry the result
+         and keep-bool through unchanged. *)
+      let* inner', needed =
+        check_instruction ~drop_supertype ctx expected inner
+      in
+      let* node = return_statement i (Hinted (h, inner')) (fst inner'.info) in
+      return (node, needed)
   | _ ->
       let* i' = instruction ctx i in
       (* Capture the value's own standalone-resolved type BEFORE [check_type]
@@ -8555,6 +8567,13 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
             None
       in
       return_statement i (If { label; typ; cond; if_block; else_block }) results
+  | Hinted (h, inner) ->
+      (* The hint is advisory: type the wrapped branch in the same statement
+         position — so a hinted statement [if] stays void rather than being
+         inferred as an expression — and carry its result through unchanged
+         (the expression-position counterpart is in [type_branch]). *)
+      let* inner = toplevel_instruction ctx inner in
+      return_statement i (Hinted (h, inner)) (fst inner.info)
   | TryTable { label; typ; block = { desc = body; _ } as blkloc; catches } ->
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params

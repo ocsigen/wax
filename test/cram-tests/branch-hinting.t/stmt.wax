@@ -1,0 +1,10 @@
+fn f(a: i32) {
+    #[likely]
+    if a {
+        nop;
+    } else {
+        'l: loop {
+            br_if 'l a;
+        }
+    }
+}
