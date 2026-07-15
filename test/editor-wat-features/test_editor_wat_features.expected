@@ -85,3 +85,7 @@
   in first arg -> func (i32, i32) -> i32 | active=0 params=[6-9;11-14]
   in second arg -> func (i32, i32) -> i32 | active=1 params=[6-9;11-14]
 
+=== type definition ($t defined at line 2) ===
+  on local.get $x (value of ref $t) -> (2,8)
+  on local.get $p -> (2,8)
+

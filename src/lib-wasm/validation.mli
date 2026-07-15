@@ -20,6 +20,11 @@ val signature_labels : recorded_type -> (string list * string list) option
     its parameter and result types rendered individually, for signature help;
     [None] for any other recorded entry. *)
 
+val type_def_location : recorded_type -> Ast.location option
+(** The definition span of the type a recorded entry refers to, for
+    go-to-type-definition: a value's named reference type, or the type a type
+    identifier names; [None] for entries with no such type. *)
+
 val f :
   ?warn_unused:bool ->
   ?features:Wax_utils.Feature.set ->

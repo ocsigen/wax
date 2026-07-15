@@ -177,9 +177,9 @@ let definition_result definition src line ch =
   let defs = try definition s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) defs))
 
-let type_definition_result src line ch =
+let type_definition_result type_definition src line ch =
   let s = Js.to_string src in
-  let defs = try type_definition_string s line ch with _ -> [] in
+  let defs = try type_definition s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) defs))
 
 let references_result references src line ch =
@@ -368,7 +368,8 @@ let () =
       method definition src line ch =
         definition_result definition_string src line ch
 
-      method typeDefinition src line ch = type_definition_result src line ch
+      method typeDefinition src line ch =
+        type_definition_result type_definition_string src line ch
 
       method references src line ch =
         references_result references_string src line ch
@@ -421,4 +422,7 @@ let () =
 
       method signatureHelpWat src line ch =
         signature_result signature_help_wat_string src line ch
+
+      method typeDefinitionWat src line ch =
+        type_definition_result type_definition_wat_string src line ch
     end

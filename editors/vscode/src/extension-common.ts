@@ -144,6 +144,8 @@ const LANGUAGES: LanguageSpec[] = [
     hover: (wax, src, line, character) => wax.hoverWat(src, line, character),
     definition: (wax, src, line, character) =>
       wax.definitionWat(src, line, character),
+    typeDefinition: (wax, src, line, character) =>
+      wax.typeDefinitionWat(src, line, character),
     references: (wax, src, line, character) =>
       wax.referencesWat(src, line, character),
     renamePrepare: (wax, src, line, character) =>

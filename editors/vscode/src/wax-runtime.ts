@@ -188,6 +188,7 @@ export interface Wax {
   // WAT name-resolution table; folding/selection are structural.
   hoverWat(src: string, line: number, character: number): WaxHover | null;
   definitionWat(src: string, line: number, character: number): WaxRange[];
+  typeDefinitionWat(src: string, line: number, character: number): WaxRange[];
   referencesWat(src: string, line: number, character: number): WaxRange[];
   renamePrepareWat(
     src: string,

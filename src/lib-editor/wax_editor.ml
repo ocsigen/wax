@@ -579,6 +579,36 @@ let hover_wat_string ?(encoding = UTF16) src line ch =
       | [] -> None
       | _ -> Some { h_type = String.concat " " tys; h_range = loc })
 
+(* As [type_definition_string], but for WAT: from the value or type identifier
+   under the cursor, the definition of its type — a local/parameter/result of a
+   named reference type jumps to that type's definition, and a type reference
+   jumps to the type. The validator records the target type's definition span at
+   each such value/reference span. *)
+let type_definition_wat_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let span (loc : Wax_utils.Ast.location) =
+    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+  in
+  let best =
+    List.fold_left
+      (fun best (loc, rt) ->
+        match Wax_wasm.Validation.type_def_location rt with
+        | Some def when contains loc -> (
+            match best with
+            | Some (bloc, _) when span bloc <= span loc -> best
+            | _ -> Some (loc, def))
+        | _ -> best)
+      None (wat_type_map src)
+  in
+  match best with Some (_, def) -> [ def ] | None -> []
+
 (* Inlay hints (Wax only): the inferred type on each un-annotated [let] binding,
    so [let x = 3] shows a virtual [: i32] after [x]. Reads the same cached cell
    tree as hover; a binding's type is the corresponding result of its
