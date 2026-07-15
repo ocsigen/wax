@@ -3497,6 +3497,28 @@ let receiver_is_array ctx recv =
       | _ -> false)
   | _ -> false
 
+(* Whether the receiver of a scalar-intrinsic-method call [recv.min(..)] names a
+   reference (e.g. a struct) rather than a numeric value. Decided purely, by
+   looking the name up in the locals / globals — no typing, so the dispatch can
+   gate on it without recording a spurious use. A reference receiver means
+   [recv.min] loads a function-pointer field (an indirect call), not the scalar
+   [min] intrinsic; only a numeric receiver reaches [type_binary_intrinsic_call].
+   A non-name receiver (a literal, a nested expression) is not a reference. *)
+let receiver_is_ref ctx recv =
+  let is_ref = function
+    | Some ({ typ = Ref _; _ } : inferred_valtype) -> true
+    | _ -> false
+  in
+  match recv.Ast.desc with
+  | Get name -> (
+      match StringMap.find_opt name.desc ctx.locals with
+      | Some (ity, _) -> is_ref ity
+      | None -> (
+          match Tbl.entries ctx.globals name with
+          | (_, (_, ity)) :: _ -> is_ref ity
+          | [] -> false))
+  | _ -> false
+
 (* A cast is transparent to the hole-order check exactly when [to_wasm] lowers it
    to no instruction (so it occupies its operand's position and produces nothing):
    an operand with no value type — unreachable / failed code, where the cast emits
@@ -7007,37 +7029,49 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
        ({ desc = StructGet (a', meth); info = ([||], func.info) }, seg' :: rest'))
     [||]
 
-and type_binary_intrinsic_call ctx i func i1 meth op i2 =
+and type_binary_intrinsic_call ctx i func i1 meth op args =
   let* i1' = instruction ctx i1 in
-  let* i2' = instruction ctx i2 in
-  let ty1 = expression_type ctx i1' in
-  let ty2 = expression_type ctx i2' in
+  let* args' = instructions ctx args in
   let is_int = match op with "rotl" | "rotr" -> true | _ -> false in
-  let check ty1 ty2 =
-    if is_int then check_int_bin_op ctx ~location:meth.info ty1 ty2
-    else check_float_bin_op ctx ~location:meth.info ty1 ty2
+  let call args'' =
+    Ast.Call ({ desc = StructGet (i1', meth); info = ([||], func.info) }, args'')
   in
-  (* An abstract operand (a hole on the polymorphic stack of unreachable / branch
-     code) is unified onto the other operand's type; two abstract operands take the
-     operator's family default (int for [rotl]/[rotr], float for
-     [copysign]/[min]/[max]). [check_int_bin_op]/[check_float_bin_op] leave the
-     [Unknown]/[Error] arms to their caller, as the [BinOp] arms of [type_arith] do. *)
-  let ty =
-    match (Cell.get ty1, Cell.get ty2) with
-    | (Unknown | Error), (Unknown | Error) ->
-        Cell.merge ty1 ty2 (if is_int then Int else Float);
-        ty1
-    | (Unknown | Error), _ ->
-        Cell.merge ty1 ty2 (Cell.get ty2);
-        check ty1 ty2
-    | _, (Unknown | Error) ->
-        Cell.merge ty1 ty2 (Cell.get ty1);
-        check ty1 ty2
-    | _ -> check ty1 ty2
-  in
-  return_expression i
-    (Call ({ desc = StructGet (i1', meth); info = ([||], func.info) }, [ i2' ]))
-    ty
+  match args' with
+  | [ i2' ] ->
+      let ty1 = expression_type ctx i1' in
+      let ty2 = expression_type ctx i2' in
+      let check ty1 ty2 =
+        if is_int then check_int_bin_op ctx ~location:meth.info ty1 ty2
+        else check_float_bin_op ctx ~location:meth.info ty1 ty2
+      in
+      (* An abstract operand (a hole on the polymorphic stack of unreachable /
+         branch code) is unified onto the other operand's type; two abstract
+         operands take the operator's family default (int for [rotl]/[rotr],
+         float for [copysign]/[min]/[max]). [check_int_bin_op]/
+         [check_float_bin_op] leave the [Unknown]/[Error] arms to their caller,
+         as the [BinOp] arms of [type_arith] do. *)
+      let ty =
+        match (Cell.get ty1, Cell.get ty2) with
+        | (Unknown | Error), (Unknown | Error) ->
+            Cell.merge ty1 ty2 (if is_int then Int else Float);
+            ty1
+        | (Unknown | Error), _ ->
+            Cell.merge ty1 ty2 (Cell.get ty2);
+            check ty1 ty2
+        | _, (Unknown | Error) ->
+            Cell.merge ty1 ty2 (Cell.get ty1);
+            check ty1 ty2
+        | _ -> check ty1 ty2
+      in
+      return_expression i (call [ i2' ]) ty
+  | _ ->
+      (* Wrong arity (e.g. the empty [x.min()] an auto-closed call being typed
+         leaves): report it, but still produce the method node with the receiver
+         typed — its result is the receiver's type — so recovery keeps the call
+         (editor features like signature help see it). *)
+      Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:1
+        ~provided:(List.length args');
+      return_expression i (call args') (expression_type ctx i1')
 
 and type_unary_intrinsic_call ctx i func recv meth =
   let* recv' = instruction ctx recv in
@@ -8197,22 +8231,26 @@ and call_instruction ctx i =
       ( ({ desc = StructGet (a, ({ desc = "init"; _ } as meth)); _ } as func),
         { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ) ->
       type_array_init_call ctx i func a meth seg sinfo rest
-  | Call
-      ( ({
-           desc = StructGet (i1, ({ desc = ("rotl" | "rotr") as op; _ } as meth));
-           _;
-         } as func),
-        [ i2 ] ) ->
-      type_binary_intrinsic_call ctx i func i1 meth op i2
+  (* A scalar binary intrinsic method, [x.min(y)] — reached only when the
+     receiver is numeric, not a reference: [s.min(a, b)] on a struct with a
+     function-pointer field [min] is an indirect call (below), disambiguated by
+     the receiver's type, not the argument count. Any argument count is accepted
+     so the empty form an auto-closed call leaves ([x.min()]) still yields the
+     method node (with an arity error) for recovery and editor features. *)
   | Call
       ( ({
            desc =
              StructGet
-               (i1, ({ desc = ("copysign" | "min" | "max") as op; _ } as meth));
+               ( i1,
+                 ({
+                    desc = ("rotl" | "rotr" | "copysign" | "min" | "max") as op;
+                    _;
+                  } as meth) );
            _;
          } as func),
-        [ i2 ] ) ->
-      type_binary_intrinsic_call ctx i func i1 meth op i2
+        args )
+    when not (receiver_is_ref ctx i1) ->
+      type_binary_intrinsic_call ctx i func i1 meth op args
   (* No-argument instruction methods on a value: [x.sqrt()], [x.clz()],
      [x.to_bits()], [arr.length()]. Kept in call form so they print back with
      their parentheses; the result type is read from the receiver. *)
