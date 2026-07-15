@@ -8,10 +8,11 @@ val sync : Tokens.token -> Wax_wasm.Parsing.sync_class
     scanning for the next boundary. Shared by the CLI and the editor. *)
 
 val insert : (Tokens.token * Wax_utils.Message.t) list
-(** The token {!Wax_wasm.Parsing.Make.parse_recover} may insert in front of an
-    offending token — the statement separator [";"] with its display string — so
-    a dropped [;] is recovered by inserting one (reported as "Missing ';'")
-    rather than by skipping to a boundary. Passed as its [?insert] argument. *)
+(** Candidate tokens {!Wax_wasm.Parsing.Make.parse_recover} may insert in front
+    of an offending token, each paired with the diagnostic to report. For Wax
+    the sole candidate is the statement separator [";"]: a dropped [;] is
+    recovered by inserting one (reported as "Missing ';'") rather than by
+    skipping to a boundary. Passed as its [?insert] argument. *)
 
 val closers : Tokens.token list
 (** The closing-bracket tokens that {!Wax_wasm.Parsing.Make.parse_recover} may
