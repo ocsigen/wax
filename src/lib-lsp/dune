@@ -1,0 +1,7 @@
+; The native Wax language server: a JSON-RPC/LSP protocol layer over the shared
+; {!Wax_editor} analysis. Backs the [wax lsp] subcommand. Depends on the [lsp]
+; and [jsonrpc] packages (protocol types and framing) plus wax_editor.
+
+(library
+ (name wax_lsp)
+ (libraries wax_utils wax_editor lsp jsonrpc))

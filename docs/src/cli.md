@@ -9,13 +9,15 @@ wax [OPTIONS] [INPUT]         # convert (the default command)
 wax convert [OPTIONS] [INPUT] # the same, named explicitly
 wax format [OPTIONS] FILE…    # reformat files
 wax check [OPTIONS] FILE…     # validate files
+wax lsp                       # run the language server (over stdin/stdout)
 ```
 
 By default `wax` converts between formats; this command is also available under
 its explicit name, `wax convert` (useful when an input filename could be
 mistaken for a subcommand). The `format` subcommand reformats files (see
-[Formatting](#formatting)) and `check` validates them (see
-[Checking](#checking)).
+[Formatting](#formatting)), `check` validates them (see [Checking](#checking)),
+and `lsp` starts a Language Server Protocol server for editors (see [Language
+server](#language-server)).
 
 ## Positional Arguments
 
@@ -373,6 +375,65 @@ wax check src/*.wax
 **Report all syntax errors in a Wax file at once:**
 ```sh
 wax check --all-errors src/foo.wax
+```
+
+## Language server
+
+The `lsp` subcommand starts a [Language Server
+Protocol](https://microsoft.github.io/language-server-protocol/) server for Wax
+and WebAssembly text, speaking JSON-RPC over stdin/stdout. It runs the same
+analysis the VS Code extension runs in-process, exposed to any LSP-capable
+editor (Neovim, Emacs with Eglot or lsp-mode, Helix, Kakoune, Zed, and others).
+
+```sh
+wax lsp
+```
+
+It reads no files of its own and takes no configuration; the editor tells it
+which documents are open. Supported requests: diagnostics (pushed on
+open/change), hover, go-to-definition, go-to-type-definition, find-references,
+document highlight, rename (with prepare), document symbols (outline),
+completion, signature help, inlay hints, folding ranges, selection ranges,
+semantic tokens, and document formatting. The hover, navigation and completion
+features that need the typed tree are Wax-only, while formatting, diagnostics
+and the outline work for `.wat` too (dispatched by the document's URI
+extension).
+
+Documents are synchronized in full (each change carries the whole buffer) and
+positions are negotiated as UTF-16, the LSP default that every client supports.
+The `--stdio` flag is accepted (and ignored) for the editors that pass it by
+convention.
+
+### Editor setup
+
+Most editors just need the launch command `wax lsp` bound to the `wax` (and, if
+desired, `wat`) file types. For example, Helix (`languages.toml`):
+
+```toml
+[language-server.wax]
+command = "wax"
+args = ["lsp"]
+
+[[language]]
+name = "wax"
+file-types = ["wax"]
+language-servers = ["wax"]
+```
+
+Neovim (0.11+), in `init.lua`:
+
+```lua
+vim.filetype.add({ extension = { wax = "wax" } })
+vim.lsp.config("wax", { cmd = { "wax", "lsp" }, filetypes = { "wax" } })
+vim.lsp.enable("wax")
+```
+
+Emacs (Eglot):
+
+```elisp
+(add-to-list 'auto-mode-alist '("\\.wax\\'" . prog-mode))
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs '(prog-mode . ("wax" "lsp"))))
 ```
 
 ## Exit status

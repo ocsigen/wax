@@ -88,6 +88,32 @@ trusted and not validated. `--validate` forces validation in every case.
 |      | `--all-errors` | Report every syntax error via panic-mode recovery instead of stopping at the first (Wax input only; ignored for Wat/Wasm). Routes through `Wax_conversion.Driver.wax_parse_recover`, then type-checks the recovered module with `Diagnostic.set_recovery` on (suppresses the `unbound_name` cascade from dropped constructs) so real type errors in intact regions still surface |
 |      | `--color` / `--debug` | As for convert |
 
+**lsp** — `dune exec wax -- lsp`. Runs a Language Server Protocol server over
+stdin/stdout (JSON-RPC), for editors other than VS Code (Neovim, Emacs, Helix,
+…). It is a thin protocol layer (`src/lib-lsp/wax_lsp.ml`, on the `lsp` +
+`jsonrpc` opam packages) over `Wax_editor` (`src/lib-editor/`), the pure
+analysis extracted from the VS Code wasm wrapper `src/editor/wax_format_js.ml`
+so both consumers share it — every language feature is a `Wax_editor.*_string`
+function; the LSP server and the JS wrapper only marshal their results. The loop
+is synchronous (one request at a time), document sync is `Full` (each change
+carries the whole buffer, which is what `Wax_editor`'s source-keyed analysis
+cache expects), and positions are negotiated as UTF-16 (the mandatory LSP
+baseline, matching the (line, UTF-16 char) coordinates the `*_string` functions
+take; picking UTF-8 would need the analysis to accept byte columns). Requests
+map 1:1 to `Wax_editor` functions (hover, definition, type-definition,
+references, document-highlight, prepare-rename/rename, document-symbol,
+completion, signature-help, inlay-hint, folding, selection-range,
+semantic-tokens, formatting); diagnostics are pushed via `publishDiagnostics` on
+open/change. Wax-only features return empty for a `.wat` URI; `.wat` gets
+formatting, diagnostics and the outline. `--stdio` is accepted and ignored. The
+`wax` binary builds in both `exe` and `wasm` modes, and `lsp`/`jsonrpc` compile
+under wasm_of_ocaml, so the npm wasm CLI still builds with the subcommand linked
+in.
+
+| Flag | Long | Description |
+|------|------|-------------|
+|      | `--stdio` | Accepted and ignored (stdin/stdout is the only transport); present so editors that pass it by convention do not error |
+
 **Exit status** (shared by all commands; see `docs/src/cli.md`): `0` success;
 `123` a usage error (bad flag combination) or a `format --check` run that found
 files needing formatting; `124` a command-line parse error (cmdliner); `125` an

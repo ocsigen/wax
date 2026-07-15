@@ -37,5 +37,9 @@
     ; 2.0 for the Conv.make/Arg.Completion API and the completion protocol in
     ; Cmd.eval, plus `cmdliner install tool-support` at build time.
     (cmdliner (>= 2.0.0))
+    ; The `wax lsp` language server (src/lib-lsp): protocol types and framing.
+    ; 1.17 has the 3.17 `positionEncoding` capability the server advertises.
+    (lsp (>= 1.17.0))
+    (jsonrpc (>= 1.17.0))
   )
 )

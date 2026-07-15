@@ -1274,6 +1274,40 @@ let check_cmd =
   in
   Cmd.v (Cmd.info "check" ~doc ~man ~exits ~envs:[ warn_env_info ]) check_term
 
+let lsp_term =
+  (* [--stdio] is accepted (and ignored) so the many editors that pass it by
+     convention do not error; stdin/stdout is the only transport. *)
+  let+ (_ : bool) =
+    Arg.(
+      value & flag
+      & info [ "stdio" ]
+          ~doc:"Communicate over stdin/stdout (the default and only transport).")
+  in
+  Wax_lsp.run ()
+
+let lsp_cmd =
+  let doc = "Run the Wax language server (LSP) over stdin/stdout" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Start a Language Server Protocol server for Wax and Wasm text, \
+         communicating over stdin/stdout. Point an LSP-capable editor (Neovim, \
+         Emacs, Helix, and others) at this command to get diagnostics, hover, \
+         go-to-definition, find-references, rename, completion, signature \
+         help, inlay hints, document symbols, folding, selection ranges, \
+         semantic tokens, and formatting.";
+      `P
+        "The server reuses the same analysis as the VS Code extension; it adds \
+         no configuration of its own.";
+      `S Manpage.s_examples;
+      `P "Most editors are configured with the command to launch:";
+      `Pre "  $(mname) $(tname)";
+      `S Manpage.s_options;
+    ]
+  in
+  Cmd.v (Cmd.info "lsp" ~doc ~man ~exits ~envs:[ warn_env_info ]) lsp_term
+
 let convert_cmd =
   let doc = "Convert between WebAssembly formats (the default command)" in
   Cmd.v (Cmd.info "convert" ~doc ~exits ~envs:[ warn_env_info ]) convert_term
@@ -1314,7 +1348,7 @@ let main_cmd =
   Cmd.group
     (Cmd.info "wax" ~doc ~man ~exits ~envs:[ warn_env_info ])
     ~default:convert_term
-    [ convert_cmd; format_cmd; check_cmd ]
+    [ convert_cmd; format_cmd; check_cmd; lsp_cmd ]
 
 (* cmdliner reads the first token as a subcommand name and, even with a default
    command, errors on an unrecognised one rather than falling through. So that

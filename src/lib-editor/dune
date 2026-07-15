@@ -1,0 +1,9 @@
+; The Wax editor analysis (formatting, checking, and the language-server
+; features) as pure functions over source text. Shared by the JavaScript
+; wrapper (src/editor/wax_format_js.ml, for the VS Code extension) and the
+; native LSP server (src/lib-lsp). No js_of_ocaml dependency: it compiles for
+; both native and wasm so both consumers build.
+
+(library
+ (name wax_editor)
+ (libraries wax_utils wax_wasm wax_lang wax_conversion))
