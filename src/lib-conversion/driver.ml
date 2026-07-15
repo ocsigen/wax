@@ -25,7 +25,8 @@ module Wax_parser =
     (Wax_lang.Lexer)
 
 let wax_parse_recover ~filename text =
-  Wax_parser.parse_recover ~filename ~sync:Wax_lang.Recover.sync text
+  Wax_parser.parse_recover ~filename ~sync:Wax_lang.Recover.sync
+    ~insert:Wax_lang.Recover.insert text
 
 let wat_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(name_functions = false)

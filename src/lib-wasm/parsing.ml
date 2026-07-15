@@ -253,10 +253,15 @@ struct
        to a state that [acceptable] confirms can shift it, [offer] it, and carry
        on. Every error is collected; the returned AST is whatever the parser
        reduces to, with holes where erroneous spans were skipped. *)
-    let parse_recover ~filename ~sync text =
+    let parse_recover ~filename ~sync ?insert text =
       let module MI = P.MenhirInterpreter in
       let lexbuf = initialize_lexing filename text in
       let errors = ref [] in
+      (* Byte offset of the last position at which a token was inserted (see
+         [try_insert]); guards against inserting twice at the same spot, which
+         would otherwise loop when the insertion does not actually unblock the
+         parse. *)
+      let last_insert = ref (-1) in
       (* Raised when the lexer cannot make progress past a malformed byte; the
          error is already recorded, so the top-level handler just stops. *)
       let exception Lexing_gave_up in
@@ -305,6 +310,17 @@ struct
           { location = { Wax_utils.Ast.loc_start; loc_end }; message; related }
           :: !errors
       in
+      (* A missing token, reported as a zero-width caret just before the
+         offending token (where the inserted token belongs). *)
+      let record_missing label (pos : Lexing.position) =
+        errors :=
+          {
+            location = { Wax_utils.Ast.loc_start = pos; loc_end = pos };
+            message = Printf.sprintf "Missing '%s'\n" label;
+            related = [];
+          }
+          :: !errors
+      in
       (* Return the token to resynchronize on: the next boundary (or terminal)
          reached by discarding tokens from the supplier. [tok0] is the token
          already in hand (the one that triggered the error, if any); if it is
@@ -330,6 +346,31 @@ struct
           | Some env' -> unwind env' sync_tok
           | None -> None
       in
+      (* Try to recover by inserting a missing token (typically a statement
+         separator [";"]) in front of the offending token, rather than skipping
+         to a boundary. When the erroring state can shift [insert] — [acceptable]
+         answers this directly, no need to read the error message — offer a
+         zero-width [insert] there, then re-offer the held token. Returns the
+         resumed checkpoint, with the held token already re-offered, or [None] to
+         fall through to skip-based recovery. Insertion is attempted at most once
+         per source position ([last_insert]) so a mis-guess cannot loop: on the
+         retry the held token errors again at the same spot and we skip instead. *)
+      let try_insert env last =
+        match (insert, last) with
+        | Some (tok, label), Some ((_, startp, _) as held)
+          when !last_insert <> startp.Lexing.pos_cnum
+               && MI.acceptable (MI.input_needed env) tok startp ->
+            last_insert := startp.Lexing.pos_cnum;
+            record_missing label startp;
+            let rec drive checkpoint =
+              match checkpoint with
+              | MI.InputNeeded _ -> MI.offer checkpoint held
+              | MI.Shifting _ | MI.AboutToReduce _ -> drive (MI.resume checkpoint)
+              | MI.HandlingError _ | MI.Accepted _ | MI.Rejected -> checkpoint
+            in
+            Some (drive (MI.offer (MI.input_needed env) (tok, startp, startp)))
+        | _ -> None
+      in
       (* Main loop: [last] is the most recently offered token, so at a
          [HandlingError] it is the token that provoked the error. *)
       let rec run checkpoint last =
@@ -338,22 +379,26 @@ struct
             let tok = supplier () in
             run (MI.offer checkpoint tok) (Some tok)
         | MI.Shifting _ | MI.AboutToReduce _ -> run (MI.resume checkpoint) last
-        | MI.HandlingError env ->
-            record checkpoint;
-            recover env last
+        | MI.HandlingError env -> recover checkpoint env last
         | MI.Accepted v -> Some v
         | MI.Rejected -> None
-      and recover env last =
+      and recover checkpoint env last =
+        match try_insert env last with
+        | Some checkpoint -> run checkpoint last
+        | None ->
+            (* Insertion did not apply: record the standard error and skip to a
+               boundary. *)
+            record checkpoint;
+            skip env last
+      and skip env last =
         let ((tok, _, _) as sync_tok) = find_sync last in
         match unwind env sync_tok with
         | Some checkpoint -> run checkpoint None
         | None -> (
-            (* No stacked state can shift this boundary. At end of input there
-               is nothing left to try; otherwise drop this boundary and scan on
-               for the next one, keeping the same error state to unwind from. *)
-            match sync tok with
-            | Terminal -> None
-            | _ -> recover env None)
+            (* No stacked state can shift this boundary. At end of input there is
+               nothing left to try; otherwise drop this boundary and scan on for
+               the next one, keeping the same error state to unwind from. *)
+            match sync tok with Terminal -> None | _ -> skip env None)
       in
       (* Lexer errors are handled by [recovering_supplier] above (recorded, then
          skipped). [Lexing_gave_up] means it could not make progress, so stop —
@@ -412,7 +457,7 @@ struct
     | Ok ast -> Ok (ast, ctx)
     | Error e -> Error e
 
-  let parse_recover ~filename ~sync text =
+  let parse_recover ~filename ~sync ?insert text =
     Wax_utils.Debug.timed "parse" @@ fun () ->
     let ctx = Wax_utils.Trivia.make () in
     let module Context = struct
@@ -421,7 +466,7 @@ struct
       let context = ctx
     end in
     let module I = Inner (Context) in
-    let ast, errors = I.parse_recover ~filename ~sync text in
+    let ast, errors = I.parse_recover ~filename ~sync ?insert text in
     (ast, errors, ctx)
 end
 

@@ -29,3 +29,10 @@ let sync : Tokens.token -> Wax_wasm.Parsing.sync_class = function
       Boundary
   | Tokens.EOF -> Terminal
   | _ -> Skip
+
+(* The token recovery may insert in front of an offending token: a statement
+   separator [";"]. A dropped [;] between two statements is by far the most
+   common Wax syntax slip, and the parser state that follows a complete statement
+   can shift [SEMI], so [Parsing.parse_recover] inserts one there (reporting a
+   "Missing ';'") rather than skipping to the next boundary. *)
+let insert = (Tokens.SEMI, ";")

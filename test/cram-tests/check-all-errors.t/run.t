@@ -37,6 +37,23 @@ operand on line 3):
   5 │ }
   [128]
 
+A dropped statement separator is recovered by *inserting* a `;` rather than
+skipping to a boundary: recovery asks the parser whether the erroring state can
+shift a `;` (it can, right after a complete statement), so it reports a precise
+"Missing ';'" at that point and parses on with the rest intact:
+
+  $ wax check --all-errors missing-semi.wax
+  Error: Missing ';'
+  
+   ──➤  missing-semi.wax:3:5
+  1 │ fn f() -> i32 {
+  2 │     let x = 1
+  3 │     let y = 2;
+    ·     ^
+  4 │     x + y;
+  5 │ }
+  [128]
+
 A file with no syntax errors passes silently, exactly as without the flag:
 
   $ wax check --all-errors clean.wax

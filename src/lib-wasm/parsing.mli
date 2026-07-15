@@ -91,6 +91,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
+    ?insert:Tokens.token * string ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
   (** Parse with panic-mode error recovery, collecting {e every} syntax error
@@ -104,7 +105,16 @@ end) : sig
       state, [None] if recovery could not), the errors in source order, and the
       trivia context. Nothing is printed. Intended for in-process consumers such
       as a language server that must report all errors and keep a partial AST
-      across them. *)
+      across them.
+
+      [insert] names a token (with its display string, e.g. a statement
+      separator [(SEMI, ";")]) that recovery may {e insert} in front of an
+      offending token instead of skipping to a boundary, when the erroring state
+      can shift it — the common "missing [;]" case. The engine's [acceptable]
+      answers whether the token fits directly, so no error-message parsing is
+      needed. Insertion is attempted at most once per source position, so a
+      wrong guess cannot loop; it falls back to skip-based recovery. Omit for
+      grammars with no such separator (e.g. WAT), leaving recovery skip-only. *)
 end
 
 (** {!Make} plus a fast parser, whose only role is speed on the happy path:
@@ -173,6 +183,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
+    ?insert:Tokens.token * string ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
   (** As {!Make.parse_recover}. (Recovery always uses the incremental engine;
