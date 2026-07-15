@@ -1404,6 +1404,22 @@ Constants are `v128::` free functions, one argument per lane:
 const ones: v128 = v128::i32x4(1, 1, 1, 1);
 ```
 
+Memory accesses are methods on a [memory](#memories), named like the scalar
+accesses with the access shape in the name (a widening load keeps its
+`_s`/`_u` suffix, as the value ops do); the full-width pair takes the family
+letter, `loadv128`/`storev128` (like `loadf32`/`storef32`):
+
+```wax,check
+memory buf: i32 [1];
+
+fn sum2(p: i32) -> v128 {
+    let v = buf.loadv128(p);                // v128.load
+    let w = buf.load32x2_s(p, offset: 16);  // v128.load32x2_s
+    buf.storev128(p, v);                    // v128.store
+    v.add_i64x2(w);
+}
+```
+
 See [Instructions › SIMD](./correspondence/instructions.md#simd-vector-instructions) for the full
 mnemonic mapping (`extract_lane`/`replace_lane`/`shuffle`, comparisons, shifts,
 and the whole-vector `*_v128` operations).
@@ -1436,22 +1452,36 @@ memory pool: i32 [1, 16] shared;
 
 ### Atomics
 
-Atomic memory operations are methods on a memory, named after the WebAssembly
-mnemonic with `.` rewritten as `_` (the value type is part of the name):
+Atomic memory operations are methods on a memory, following the same naming
+convention as the plain [loads and stores](#load-and-store): the access width
+is in the method name, the `i32`/`i64` value type comes from the operand and
+result types, and a narrow load returns raw bits, resolved by an `as iN_u`
+cast:
 
-```wax
-mem.i32_atomic_load(p)              // atomic load
-mem.i32_atomic_store(p, v);         // atomic store
-mem.i32_atomic_rmw_add(p, v)        // read-modify-write, returns the old value
-mem.i64_atomic_rmw16_add_u(p, v)    // narrow (16-bit) RMW on an i64
-mem.i32_atomic_rmw_cmpxchg(p, expected, replacement)
-mem.atomic_notify(p, count)         // wake waiters
-mem.atomic_wait32(p, expected, timeout)
+```wax,check
+memory mem: i32 [1, 2] shared;
+
+fn atomics(p: i32, v: i32, w: i64) -> i32 {
+    _ = mem.atomic_load32(p);              // i32.atomic.load
+    _ = mem.atomic_load8(p) as i32_u;      // i32.atomic.load8_u (zero-extend)
+    _ = mem.atomic_load32(p) as i64_u;     // i64.atomic.load32_u
+    mem.atomic_store16(p, v);              // i32.atomic.store16 (v is i32)
+    mem.atomic_store16(p, w);              // i64.atomic.store16 (w is i64)
+    _ = mem.atomic_rmw_add32(p, v);        // read-modify-write: the old value
+    _ = mem.atomic_rmw_add16(p, w);        // i64.atomic.rmw16.add_u
+    _ = mem.atomic_rmw_cmpxchg32(p, v, v); // compare-and-exchange
+    _ = mem.atomic_wait32(p, v, w);        // wait: expected value and timeout
+    mem.atomic_notify(p, 1);               // wake waiters: how many woke
+}
 ```
 
-An atomic access must use its natural alignment. `atomic.fence`, which has no
-memory operand, is written as the [`atomic::fence()`](#qualified-intrinsics)
-intrinsic.
+A narrow atomic load zero-extends: there is no sign-extending form, so
+`as iN_s` is rejected on it (use `as iN_u`, then `.extend8_s()`/`.extend16_s()`
+if you need the sign; `atomic_load32(p) as i64_s` compiles as the plain
+`i32.atomic.load` followed by `i64.extend_i32_s`). An atomic access must use
+its natural alignment, the access width from the name. `atomic.fence`, which
+has no memory operand, is written as the
+[`atomic::fence()`](#qualified-intrinsics) intrinsic.
 
 ### Data Segments
 

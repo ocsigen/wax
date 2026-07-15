@@ -326,7 +326,7 @@ module.exports = grammar({
       sepByTrailing(',', choice($.labelled_argument, $._expression)), ')'),
 
     // A labelled immediate argument of a memory access:
-    // m.store32(p, v, offset: 16, align: 1), m.v128_load8_lane(p, v, lane: 3).
+    // m.store32(p, v, offset: 16, align: 1), m.load8_lane(p, v, lane: 3).
     labelled_argument: $ => seq(
       field('label', $.identifier), ':', field('value', $._expression)),
 

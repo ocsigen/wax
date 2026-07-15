@@ -72,30 +72,84 @@ let () = List.iter (fun (code, op) -> Hashtbl.replace by_opcode code op) table
 let opcode op = fst (List.find (fun (_, o) -> o = op) table)
 let of_opcode code = Hashtbl.find_opt by_opcode code
 
-(* The Wax method spelling on a memory receiver: the WAT mnemonic with a leading
-   [memory.] dropped (the receiver is the memory) and [.] rewritten as [_], e.g.
-   [i64.atomic.rmw16.add_u -> i64_atomic_rmw16_add_u], [memory.atomic.notify ->
-   atomic_notify]. *)
-let method_name op =
-  let n = name op in
-  let prefix = "memory." in
-  let n =
-    if
-      String.length n >= String.length prefix
-      && String.sub n 0 (String.length prefix) = prefix
-    then
-      String.sub n (String.length prefix)
-        (String.length n - String.length prefix)
-    else n
-  in
-  String.map (fun c -> if c = '.' then '_' else c) n
+(* The Wax surface: a method name carries the *access width* only
+   ([atomic_load16], [atomic_rmw_add8]); the i32/i64 value type is resolved from
+   the operand and result types during typing, mirroring the plain scalar
+   accesses ([load16(p) as i64_u]). A name therefore denotes a *family* of
+   concrete ops; [atomic_wait32]/[atomic_wait64] and [atomic_notify] resolve
+   from the name alone. *)
 
-let by_method = Hashtbl.create 128
+type width = [ `W8 | `W16 | `W32 | `W64 ]
+
+type family =
+  | Load of width
+  | Store of width
+  | Rmw of atomic_rmwop * width
+  | Wait of [ `I32 | `I64 ]
+  | Notify
+
+let widths : width list = [ `W8; `W16; `W32; `W64 ]
+
+let width_name : width -> string = function
+  | `W8 -> "8"
+  | `W16 -> "16"
+  | `W32 -> "32"
+  | `W64 -> "64"
+
+(* Number of bytes a family accesses — the width from the name, independent of
+   which i32/i64 value type the operands select; its base-2 logarithm is the
+   required (exact) alignment. *)
+let width_bytes : width -> int = function
+  | `W8 -> 1
+  | `W16 -> 2
+  | `W32 -> 4
+  | `W64 -> 8
+
+let family_bytes = function
+  | Load w | Store w | Rmw (_, w) -> width_bytes w
+  | Wait `I32 -> 4
+  | Wait `I64 -> 8
+  | Notify -> 4
+
+(* Every Wax method family, in completion order: loads, stores, RMWs, then
+   wait/notify. *)
+let families =
+  List.map (fun w -> Load w) widths
+  @ List.map (fun w -> Store w) widths
+  @ List.concat_map (fun op -> List.map (fun w -> Rmw (op, w)) widths) rmw_ops
+  @ [ Wait `I32; Wait `I64; Notify ]
+
+(* The Wax method spelling on a memory receiver: [atomic_<op><width>]. *)
+let method_name = function
+  | Load w -> "atomic_load" ^ width_name w
+  | Store w -> "atomic_store" ^ width_name w
+  | Rmw (op, w) -> "atomic_rmw_" ^ rmw_str op ^ width_name w
+  | Wait `I32 -> "atomic_wait32"
+  | Wait `I64 -> "atomic_wait64"
+  | Notify -> "atomic_notify"
+
+let by_method = Hashtbl.create 64
 
 let () =
-  List.iter (fun (_, op) -> Hashtbl.replace by_method (method_name op) op) table
+  List.iter (fun f -> Hashtbl.replace by_method (method_name f) f) families
 
 let of_method_name n = Hashtbl.find_opt by_method n
+
+(* The family a concrete op belongs to (its width is the access width). *)
+let family op =
+  let width t w : width =
+    match w with
+    | Some `I8 -> `W8
+    | Some `I16 -> `W16
+    | Some `I32 -> `W32
+    | None -> ( match t with `I32 -> `W32 | `I64 -> `W64)
+  in
+  match op with
+  | AtomicNotify -> Notify
+  | AtomicWait t -> Wait t
+  | AtomicLoad (t, w) -> Load (width t w)
+  | AtomicStore (t, w) -> Store (width t w)
+  | AtomicRmw (op, t, w) -> Rmw (op, width t w)
 
 (* Number of bytes accessed, whose base-2 logarithm is the required (exact)
    alignment. *)

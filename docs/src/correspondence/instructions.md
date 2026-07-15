@@ -384,17 +384,17 @@ Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `
 | `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::f32x4(1.5, 2.5, 3.5, 4.5)` |
 | `v128.const i8x16 0 1 ... 15` | `v128::i8x16(0, 1, ..., 15)` |
 
-Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional labelled `offset:`/`align:` arguments work the same way). The lane index of a lane access is the labelled `lane:` argument, mandatory and in any order with `offset:`/`align:`:
+Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional labelled `offset:`/`align:` arguments work the same way): the `v128.` mnemonic prefix is dropped and the access shape stays in the name, `_s`/`_u` included; the full-width pair takes the family letter, `loadv128`/`storev128` (extending the `loadf32` convention). The lane index of a lane access is the labelled `lane:` argument, mandatory and in any order with `offset:`/`align:`:
 
 | Wasm | Wax |
 |------|-----|
-| `v128.load` | `m.v128_load(p)` |
-| `v128.store` | `m.v128_store(p, v)` |
-| `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) | `m.v128_load8x8_s(p)` |
-| `v128.load32_zero` (and `64_zero`) | `m.v128_load32_zero(p)` |
-| `v128.load8_splat` (and `16`/`32`/`64`) | `m.v128_load8_splat(p)` |
-| `v128.load8_lane` (and `16`/`32`/`64`) | `m.v128_load8_lane(p, v, lane: l)` |
-| `v128.store8_lane` (and `16`/`32`/`64`) | `m.v128_store8_lane(p, v, lane: l)` |
+| `v128.load` | `m.loadv128(p)` |
+| `v128.store` | `m.storev128(p, v)` |
+| `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) | `m.load8x8_s(p)` |
+| `v128.load32_zero` (and `64_zero`) | `m.load32_zero(p)` |
+| `v128.load8_splat` (and `16`/`32`/`64`) | `m.load8_splat(p)` |
+| `v128.load8_lane` (and `16`/`32`/`64`) | `m.load8_lane(p, v, lane: l)` |
+| `v128.store8_lane` (and `16`/`32`/`64`) | `m.store8_lane(p, v, lane: l)` |
 
 Relaxed-SIMD operations follow the same scheme:
 
@@ -450,15 +450,19 @@ The remaining memory operations are also methods on the memory (a data segment i
 
 ### Atomics
 
-Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with `.` rewritten as `_` (the value type stays in the name). They take the same labelled `offset:` argument as the other accesses; an `align:` argument is accepted but must be exactly the natural alignment, which is also the default. `atomic.fence` has no memory operand and is the [`atomic::fence()`](language.md#qualified-intrinsics) intrinsic.
+Atomic accesses (the threads proposal) are methods on a memory, following the scalar-access naming convention: the access width is in the method name (`atomic_load16`, `atomic_rmw_add8`), the `i32`/`i64` value type comes from the operand and result types, and a narrow load is resolved by an `as iN_u` cast. The narrow accesses are the zero-extending `_u` forms, the only kind that exists, so no suffix or cast signedness choice arises (`as iN_s` on a narrow atomic load is rejected; `atomic_load32(p) as i64_s` has no fused form and compiles as `i32.atomic.load` then `i64.extend_i32_s`). They take the same labelled `offset:` argument as the other accesses; an `align:` argument is accepted but must be exactly the natural alignment (the access width from the name), which is also the default. `atomic.fence` has no memory operand and is the [`atomic::fence()`](language.md#qualified-intrinsics) intrinsic.
 
 | Wasm | Wax |
 |---|---|
-| `i32.atomic.load` | `m.i32_atomic_load(p)` |
-| `i64.atomic.store8` | `m.i64_atomic_store8(p, v)` |
-| `i32.atomic.rmw.add` | `m.i32_atomic_rmw_add(p, v)` |
-| `i64.atomic.rmw16.add_u` | `m.i64_atomic_rmw16_add_u(p, v)` |
-| `i32.atomic.rmw.cmpxchg` | `m.i32_atomic_rmw_cmpxchg(p, expected, replacement)` |
+| `i32.atomic.load` | `m.atomic_load32(p)` |
+| `i64.atomic.load` | `m.atomic_load64(p)` |
+| `i32.atomic.load8_u` | `m.atomic_load8(p) as i32_u` |
+| `i64.atomic.load32_u` | `m.atomic_load32(p) as i64_u` |
+| `i32.atomic.store` (`v: i32`) or `i64.atomic.store32` (`v: i64`) | `m.atomic_store32(p, v)` |
+| `i64.atomic.store8` (`v: i64`) | `m.atomic_store8(p, v)` |
+| `i32.atomic.rmw.add` (`v: i32`) | `m.atomic_rmw_add32(p, v)` |
+| `i64.atomic.rmw16.add_u` (`v: i64`) | `m.atomic_rmw_add16(p, v)` |
+| `i32.atomic.rmw.cmpxchg` | `m.atomic_rmw_cmpxchg32(p, expected, replacement)` |
 | `memory.atomic.notify` | `m.atomic_notify(p, count)` |
 | `memory.atomic.wait32` | `m.atomic_wait32(p, expected, timeout)` |
 | `atomic.fence` | `atomic::fence()` |

@@ -590,6 +590,40 @@ let memarg_of_labels ~natural labels : Ast.memarg =
 let mem_memarg meth args : Ast.memarg =
   memarg_of_labels ~natural:(mem_natural_align meth) (snd (split_labelled args))
 
+(* Resolve the concrete atomic op of a method family: the name carries the
+   access width, and a store/RMW picks the i32/i64 op by its (first) value
+   operand's type — unknown (unreachable code) defaults to i32, as for the
+   plain narrow stores. A narrow load with no resolving cast defaults to the
+   zero-extended i32 form, like a bare [load8]; its fused i64 forms are
+   produced by the [Cast] case. *)
+let atomic_op (family : Atomics.family) stack_args : Ast.atomicop =
+  let narrow w t : [ `I32 | `I64 ] * [ `I8 | `I16 | `I32 ] option =
+    match w with
+    | `W8 -> (t, Some `I8)
+    | `W16 -> (t, Some `I16)
+    | `W32 -> ( match t with `I64 -> (`I64, Some `I32) | `I32 -> (`I32, None))
+    | `W64 -> (`I64, None)
+  in
+  let value_type () =
+    match stack_args with
+    | _addr :: v :: _ -> (
+        match expr_opt_valtype v with Some I64 -> `I64 | _ -> `I32)
+    | _ -> `I32
+  in
+  match family with
+  | Atomics.Notify -> Ast.AtomicNotify
+  | Atomics.Wait t -> Ast.AtomicWait t
+  | Atomics.Load `W32 -> Ast.AtomicLoad (`I32, None)
+  | Atomics.Load `W64 -> Ast.AtomicLoad (`I64, None)
+  | Atomics.Load `W8 -> Ast.AtomicLoad (`I32, Some `I8)
+  | Atomics.Load `W16 -> Ast.AtomicLoad (`I32, Some `I16)
+  | Atomics.Store w ->
+      let t, pw = narrow w (value_type ()) in
+      Ast.AtomicStore (t, pw)
+  | Atomics.Rmw (op, w) ->
+      let t, pw = narrow w (value_type ()) in
+      Ast.AtomicRmw (op, t, pw)
+
 (* Literal value of a [v128::<shape>] lane argument, as a string for
    [Wax_utils.V128.t]; a negative literal is [UnOp (Neg, _)]. *)
 let rec literal_string a =
@@ -832,20 +866,22 @@ and instruction_desc ret ctx i : location Text.instr list =
           else
             let code = instruction ret ctx f in
             folded loc (CallRef (index (expr_type_name f))) (arg_code @ code)
-      (* Atomic access: mem.iN_atomic_*(addr [, val…] [, offset: N]). *)
+      (* Atomic access: mem.atomic_*(addr [, val…] [, offset: N]). The method
+         name carries the access width (also the natural alignment); the value
+         operand's type picks the i32/i64 op. A narrow load's resolving [as
+         iN_u] cast is fused in the Cast case; bare, it defaults to the
+         zero-extended i32 form. *)
       | StructGet ({ desc = Get memname; _ }, meth)
         when memory_receiver ctx memname.desc
              && Atomics.of_method_name meth.desc <> None ->
-          let op = Option.get (Atomics.of_method_name meth.desc) in
+          let family = Option.get (Atomics.of_method_name meth.desc) in
           let memidx = index memname in
           let stack_args, labels = split_labelled args in
           let memarg =
-            memarg_of_labels
-              ~natural:(1 lsl Atomics.natural_align_log2 op)
-              labels
+            memarg_of_labels ~natural:(Atomics.family_bytes family) labels
           in
           let code = List.concat_map (instruction ret ctx) stack_args in
-          folded loc (Atomic (memidx, op, memarg)) code
+          folded loc (Atomic (memidx, atomic_op family stack_args, memarg)) code
       (* Memory access: mem.loadN/storeN(addr [, offset: N] [, align: N]).
          Signed narrow loads are handled (under an [as iN_s] cast) in the Cast
          case. *)
@@ -884,8 +920,8 @@ and instruction_desc ret ctx i : location Text.instr list =
               | _ -> Text.Load (memidx, memarg, NumF64)
             in
             folded loc desc addr_code
-      (* SIMD memory accesses: mem.v128_load(addr [, offset: N] [, align: N]),
-         mem.v128_store(addr, v, ...), mem.v128_load8_lane(addr, v, lane: N,
+      (* SIMD memory accesses: mem.loadv128(addr [, offset: N] [, align: N]),
+         mem.storev128(addr, v, ...), mem.load8_lane(addr, v, lane: N,
          ...). The stack operands are positional; the lane (mandatory on lane
          accesses) and align/offset immediates are labelled. *)
       | StructGet ({ desc = Get memname; _ }, meth)
@@ -1337,6 +1373,77 @@ and instruction_desc ret ctx i : location Text.instr list =
               emit `I64 `I16 signage
           | "load32", Signedtype { typ = `I64; signage; _ } ->
               emit `I64 `I32 signage
+          | _ -> default_cast ())
+      (* (mem.atomic_load8/16(p) as i32_u) as i64_u  ->  i64.atomic.load8/16_u
+         (the two-step decompiled spelling of the fused instruction, as for the
+         plain narrow loads above). *)
+      | Cast
+          ( {
+              desc =
+                Call
+                  ( { desc = StructGet ({ desc = Get memname; _ }, meth); _ },
+                    args );
+              _;
+            },
+            Signedtype { typ = `I32; signage = Unsigned; _ } )
+        when memory_receiver ctx memname.desc
+             &&
+             match Atomics.of_method_name meth.desc with
+             | Some (Atomics.Load (`W8 | `W16)) -> true
+             | _ -> false -> (
+          match cast_ty with
+          | Signedtype { typ = `I64; signage = Unsigned; _ } ->
+              let w, pw =
+                match Atomics.of_method_name meth.desc with
+                | Some (Atomics.Load `W8) -> (`W8, `I8)
+                | _ -> (`W16, `I16)
+              in
+              let stack_args, labels = split_labelled args in
+              let memarg =
+                memarg_of_labels ~natural:(Atomics.width_bytes w) labels
+              in
+              let addr_code =
+                List.concat_map (instruction ret ctx) stack_args
+              in
+              folded (snd expr.info)
+                (Atomic (index memname, Ast.AtomicLoad (`I64, Some pw), memarg))
+                addr_code
+          | _ -> default_cast ())
+      (* mem.atomic_load8/16(p) as iN_u -> iN.atomic.load8/16_u ;
+         mem.atomic_load32(p) as i64_u -> i64.atomic.load32_u. Only the
+         zero-extending forms exist: [atomic_load32(p) as i64_s] falls through
+         to the plain i32 atomic load followed by [i64.extend_i32_s] (and
+         typing rejects [as iN_s] on the 8/16-bit loads). *)
+      | Call ({ desc = StructGet ({ desc = Get memname; _ }, meth); _ }, args)
+        when memory_receiver ctx memname.desc
+             &&
+             match Atomics.of_method_name meth.desc with
+             | Some (Atomics.Load (`W8 | `W16 | `W32)) -> true
+             | _ -> false -> (
+          let w =
+            match Atomics.of_method_name meth.desc with
+            | Some (Atomics.Load w) -> w
+            | _ -> assert false
+          in
+          let emit t pw =
+            let stack_args, labels = split_labelled args in
+            let memarg =
+              memarg_of_labels ~natural:(Atomics.width_bytes w) labels
+            in
+            let addr_code = List.concat_map (instruction ret ctx) stack_args in
+            folded (snd expr.info)
+              (Atomic (index memname, Ast.AtomicLoad (t, Some pw), memarg))
+              addr_code
+          in
+          match (w, cast_ty) with
+          | `W8, Signedtype { typ = (`I32 | `I64) as t; signage = Unsigned; _ }
+            ->
+              emit t `I8
+          | `W16, Signedtype { typ = (`I32 | `I64) as t; signage = Unsigned; _ }
+            ->
+              emit t `I16
+          | `W32, Signedtype { typ = `I64; signage = Unsigned; _ } ->
+              emit `I64 `I32
           | _ -> default_cast ())
       | StructGet (instr_val, field_idx) -> (
           match (expr_type expr, cast_ty) with

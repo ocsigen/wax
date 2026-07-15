@@ -1,0 +1,16 @@
+memory mem: i32 [1, 1] shared;
+fn missing_cast(p: i32) -> i32 {
+    mem.atomic_load8(p);
+}
+fn signed8(p: i32) -> i32 {
+    mem.atomic_load8(p) as i32_s;
+}
+fn signed16(p: i32) -> i64 {
+    mem.atomic_load16(p) as i64_s;
+}
+fn narrow64(p: i32, v: i32) {
+    mem.atomic_store64(p, v);
+}
+fn mixed_cmpxchg(p: i32, e: i32, r: i64) -> i32 {
+    mem.atomic_rmw_cmpxchg16(p, e, r);
+}

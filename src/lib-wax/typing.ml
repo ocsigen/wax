@@ -767,6 +767,13 @@ module Error = struct
        ++ Message.int natural
       ^^ text ".")
 
+  let atomic_signed_load context ~location ~cast ~extend =
+    report context ~location
+      (text "An atomic load zero-extends; use"
+      ++ (kw cast ^^ text ",")
+      ++ text "then" ++ kw extend
+      ++ text "if you need the sign.")
+
   let invalid_lane_index context ~location max_lane =
     report context ~location
       ((text "The lane index should be less than" ++ Message.int max_lane)
@@ -2306,6 +2313,18 @@ let table_receiver ctx name =
 let segment_receiver ctx name =
   (not (StringMap.mem name.desc ctx.locals))
   && (Tbl.find_opt ctx.datas name <> None || Tbl.find_opt ctx.elems name <> None)
+
+(* When [e] is an atomic narrow-load call [mem.atomic_load8/16(p)] (whose
+   raw-bits result a cast resolves), its access width. Used to reject an
+   [as iN_s] cast on it: only the zero-extending [_u] atomic loads exist. *)
+let atomic_narrow_load_width ctx e =
+  match e.desc with
+  | Call ({ desc = StructGet ({ desc = Get memname; _ }, meth); _ }, _)
+    when memory_receiver ctx memname -> (
+      match Wax_wasm.Atomics.of_method_name meth.desc with
+      | Some (Wax_wasm.Atomics.Load ((`W8 | `W16) as w)) -> Some w
+      | _ -> None)
+  | _ -> None
 
 (* Check the operands of an integer (resp. float) binary operator and return
    the unified result-type cell — the two operand cells are merged on success,
@@ -4250,27 +4269,49 @@ let render_signature params result =
   in
   Printf.sprintf "fn(%s) -> %s" (String.concat ", " params) result
 
-(* The atomic memory accesses ([mem.i32_atomic_load(addr)],
-   [mem.i32_atomic_rmw_add(addr, v)], …), enumerated from {!Wax_wasm.Atomics};
-   the address takes [addr_name], the remaining operands and the results their
-   own types. *)
+(* The atomic memory accesses ([mem.atomic_load32(addr)],
+   [mem.atomic_rmw_add8(addr, v)], …), enumerated from the
+   {!Wax_wasm.Atomics.families} the typer dispatches on; the address takes
+   [addr_name]. The name carries the access width only: a narrow load returns
+   the raw-bits [i8]/[i16] (resolved by a surrounding [as iN_u] cast) and a
+   narrow store/RMW value picks the i32/i64 family by its type (rendered
+   [int]); the 64-bit accesses are necessarily [i64]. *)
 let atomic_method_candidates ~addr_name =
-  let ty_name = function `I32 -> "i32" | `I64 -> "i64" in
+  let value : Wax_wasm.Atomics.width -> string = function
+    | `W8 | `W16 | `W32 -> "int"
+    | `W64 -> "i64"
+  in
+  let load_result : Wax_wasm.Atomics.width -> string = function
+    | `W8 -> "i8"
+    | `W16 -> "i16"
+    | `W32 -> "i32"
+    | `W64 -> "i64"
+  in
   List.map
-    (fun op ->
-      let operands, results = Wax_wasm.Atomics.signature op in
+    (fun f ->
+      let operands, results =
+        match (f : Wax_wasm.Atomics.family) with
+        | Load w -> ([], [ load_result w ])
+        | Store w -> ([ value w ], [])
+        | Rmw (Wax_wasm.Ast.AtomicCmpxchg, w) ->
+            ([ value w; value w ], [ value w ])
+        | Rmw (_, w) -> ([ value w ], [ value w ])
+        | Wait `I32 -> ([ "i32"; "i64" ], [ "i32" ])
+        | Wait `I64 -> ([ "i64"; "i64" ], [ "i32" ])
+        | Notify -> ([ "i32" ], [ "i32" ])
+      in
       {
-        member_name = Wax_wasm.Atomics.method_name op;
+        member_name = Wax_wasm.Atomics.method_name f;
         member_kind = Method;
         member_detail =
           render_signature
-            ((addr_name :: List.map ty_name operands) @ [ "offset?: int" ])
-            (List.map ty_name results);
+            ((addr_name :: operands) @ [ "offset?: int" ])
+            results;
       })
-    Wax_wasm.Atomics.all
+    Wax_wasm.Atomics.families
 
-(* The SIMD memory accesses ([mem.v128_load(addr)],
-   [mem.v128_load8_lane(addr, v, lane)], …), enumerated from
+(* The SIMD memory accesses ([mem.loadv128(addr)],
+   [mem.load8_lane(addr, v, lane)], …), enumerated from
    {!Wax_wasm.Simd.mem_method_names}; the first operand is the address. *)
 let simd_mem_method_candidates ~addr_name =
   List.map
@@ -6054,9 +6095,26 @@ and type_cast ctx i =
               Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) ty'
         | None -> (
             match typ with
-            | Signedtype { typ; _ } ->
-                if not (signed_cast ctx ty' typ) then
-                  Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) ty'
+            | Signedtype { typ = target; signage; _ } -> (
+                (* An atomic narrow load has no sign-extending form (only the
+                   zero-extending [_u] instructions exist), so reject [as iN_s]
+                   on one outright — with the [_u]-then-extend spelling to use —
+                   rather than quietly compiling a load + sign-extend pair. *)
+                match (signage, target, atomic_narrow_load_width ctx i') with
+                | Signed, ((`I32 | `I64) as t), Some w ->
+                    Error.atomic_signed_load ctx.diagnostics ~location:i.info
+                      ~cast:
+                        ("as "
+                        ^ (match t with `I32 -> "i32" | `I64 -> "i64")
+                        ^ "_u")
+                      ~extend:
+                        (match w with
+                        | `W8 -> ".extend8_s()"
+                        | `W16 -> ".extend16_s()")
+                | _ ->
+                    if not (signed_cast ctx ty' target) then
+                      Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
+                        ty')
             | Valtype _ | Functype _ -> assert false)
       in
       (* Lint the cast against its operand's natural type (snapshotted before
@@ -6946,15 +7004,18 @@ and type_mem_method_call ctx i func recv memname meth args =
          args' ))
     result
 
-and type_atomic_method_call ctx i func recv memname meth op args =
+and type_atomic_method_call ctx i func recv memname meth family args =
+  let module A = Wax_wasm.Atomics in
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
-  let vt_cell = function
-    | `I32 -> valtype_cell i32_valtype
-    | `I64 -> valtype_cell i64_valtype
-  in
-  let operands, results = Wax_wasm.Atomics.signature op in
   (* The address, then the value operands; then optional labelled immediates. *)
-  let nstack = 1 + List.length operands in
+  let n_values =
+    match family with
+    | A.Load _ -> 0
+    | A.Store _ | A.Notify -> 1
+    | A.Rmw (Wax_wasm.Ast.AtomicCmpxchg, _) | A.Wait _ -> 2
+    | A.Rmw _ -> 1
+  in
+  let nstack = 1 + n_values in
   let* args' = mem_call_arguments ctx args in
   let positional, labelled = split_labelled_args ctx args' in
   let find = take_labels ctx ~allowed:[ "offset"; "align" ] labelled in
@@ -6963,19 +7024,74 @@ and type_atomic_method_call ctx i func recv memname meth op args =
     mem_immediates ctx ~location:i.info ~example ~nstack ~has_lane:false find
       positional
   in
-  (match positional with
-  | addr' :: rest ->
-      check_type ctx addr' (address_cell address_type);
-      List.iteri
-        (fun k t ->
-          match List.nth_opt rest k with
-          | Some a -> check_type ctx a (vt_cell t)
-          | None -> ())
-        operands
-  | [] -> ());
-  let natural = 1 lsl Wax_wasm.Atomics.natural_align_log2 op in
+  let rest =
+    match positional with
+    | addr' :: rest ->
+        check_type ctx addr' (address_cell address_type);
+        rest
+    | [] -> []
+  in
+  (* The value operand of a narrow (8/16/32-bit) store or RMW picks the i32/i64
+     family by its type, so it accepts either — pinned to the integer group,
+     with a still-flexible literal defaulting to i32 as usual; the merged cell
+     is the RMW's result (the returned old value). A 64-bit access is
+     necessarily i64. [Unknown]/[Error] (dead code / recovery) pass through. *)
+  let check_value v =
+    let vty = expression_type ctx v in
+    match Cell.get vty with
+    | Unknown | Error -> vty
+    | _ -> check_int_bin_op ctx ~location:(snd v.info) vty (Cell.make Int)
+  in
+  let result =
+    match family with
+    | A.Load `W8 -> [| Cell.make Int8 |]
+    | A.Load `W16 -> [| Cell.make Int16 |]
+    | A.Load `W32 -> [| i32_cell |]
+    | A.Load `W64 -> [| i64_cell |]
+    | A.Store `W64 ->
+        List.iter (fun v -> check_type ctx v i64_cell) rest;
+        [||]
+    | A.Store _ ->
+        List.iter (fun v -> ignore (check_value v)) rest;
+        [||]
+    | A.Rmw (op, w) -> (
+        match rest with
+        | [] -> [| Cell.make Error |]
+        | v :: more -> (
+            match w with
+            | `W64 ->
+                List.iter (fun v -> check_type ctx v i64_cell) rest;
+                [| i64_cell |]
+            | _ ->
+                let vty = check_value v in
+                (match (op, more) with
+                | Wax_wasm.Ast.AtomicCmpxchg, r :: _ -> (
+                    (* The expected and replacement values must agree on the
+                       family; merge their cells (as a binary operator does). *)
+                    let rty = expression_type ctx r in
+                    match (Cell.get vty, Cell.get rty) with
+                    | (Unknown | Error), _ | _, (Unknown | Error) -> ()
+                    | _ ->
+                        ignore
+                          (check_int_bin_op ctx ~location:(snd r.info) vty rty))
+                | _ -> ());
+                [| vty |]))
+    | A.Wait t ->
+        (match rest with
+        | e :: more ->
+            check_type ctx e
+              (match t with `I32 -> i32_cell | `I64 -> i64_cell);
+            List.iter (fun v -> check_type ctx v i64_cell) more
+        | [] -> ());
+        [| i32_cell |]
+    | A.Notify ->
+        List.iter (fun v -> check_type ctx v i32_cell) rest;
+        [| i32_cell |]
+  in
+  let natural = A.family_bytes family in
   (* Only the offset immediate is range-checked here; an atomic access requires
-     exactly its natural alignment, not merely at most, so check that below. *)
+     exactly its natural alignment (the access width from the name, independent
+     of the i32/i64 family), not merely at most, so check that below. *)
   check_memarg ctx ~address_type ~natural ~align:None ~offset;
   (match align with
   | Some a -> (
@@ -6986,7 +7102,6 @@ and type_atomic_method_call ctx i func recv memname meth op args =
       | _ ->
           Error.atomic_alignment ctx.diagnostics ~location:(snd a.info) natural)
   | None -> ());
-  let result = match results with [] -> [||] | t :: _ -> [| vt_cell t |] in
   return_statement i
     (Call
        ( {
@@ -8495,16 +8610,16 @@ and call_instruction ctx i =
         args )
     when Wax_wasm.Atomics.of_method_name meth.desc <> None
          && memory_receiver ctx memname ->
-      let op = Option.get (Wax_wasm.Atomics.of_method_name meth.desc) in
-      type_atomic_method_call ctx i func recv memname meth op args
+      let family = Option.get (Wax_wasm.Atomics.of_method_name meth.desc) in
+      type_atomic_method_call ctx i func recv memname meth family args
   | Call
       ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
          func),
         args )
     when is_mem_method meth.desc && memory_receiver ctx memname ->
       type_mem_method_call ctx i func recv memname meth args
-  (* SIMD memory accesses: mem.v128_load(addr), mem.v128_store(addr, v),
-     mem.v128_load8_lane(addr, v, lane), etc. Stack operands first, then the
+  (* SIMD memory accesses: mem.loadv128(addr), mem.storev128(addr, v),
+     mem.load8_lane(addr, v, lane), etc. Stack operands first, then the
      constant lane immediate (if any), then the usual align/offset literals. *)
   | Call
       ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
