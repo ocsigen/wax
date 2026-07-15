@@ -157,7 +157,9 @@ does not carry. Three distinct prerequisites:
   (`Cond_specialize.eval` per branch), and a per-editor decoration greys them
   out — like a preprocessor dimming dead `#ifdef` regions. The parser now keeps
   each branch's own `#[if]/#[else] { … }` span (marker and braces) on its
-  located body, so a single dead branch can be located precisely. Follow-ups:
+  located body, so a single dead branch can be located precisely. A status-bar
+  item shows the active defines when a `.wax` file is focused and edits them (the
+  `wax.configureDefines` command). Follow-ups:
   feeding the defines into diagnostics/completion so they specialise to the
   configuration too. Wax only.
 - [x] **Completion.** A `completion` export offers the names in scope at a

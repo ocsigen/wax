@@ -136,6 +136,7 @@ export function activateWith(
   }
   registerDiagnostics(context, opts);
   registerInactiveDimming(context, opts);
+  registerDefineStatusBar(context);
   registerConvert(context, opts);
 
   // Warm the runtime now (loadWax caches its promise) so the first format or
@@ -883,6 +884,63 @@ function registerInactiveDimming(
     }),
   );
   refreshAll();
+}
+
+// A status-bar item showing the active `wax.define` configuration when a `.wax`
+// editor is focused; clicking it edits the set. Makes the conditional-compilation
+// lens visible and quick to change, without opening settings.json.
+function registerDefineStatusBar(context: vscode.ExtensionContext): void {
+  const item = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100,
+  );
+  item.command = "wax.configureDefines";
+  context.subscriptions.push(item);
+  const defines = () =>
+    vscode.workspace.getConfiguration("wax").get<string[]>("define", []);
+
+  const update = () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.languageId !== "wax") {
+      item.hide();
+      return;
+    }
+    const defs = defines();
+    item.text = "$(settings-gear) " + (defs.length ? defs.join(", ") : "no defines");
+    item.tooltip = new vscode.MarkdownString(
+      (defs.length
+        ? "Conditional-compilation defines:\n" +
+          defs.map((d) => "- `" + d + "`").join("\n")
+        : "No conditional-compilation defines set.") +
+        "\n\nClick to configure. Inactive `#[if]`/`#[else]` branches are dimmed.",
+    );
+    item.show();
+  };
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("wax.configureDefines", async () => {
+      const current = defines();
+      const input = await vscode.window.showInputBox({
+        title: "Wax conditional-compilation defines",
+        prompt: "Space-separated -D bindings, e.g. debug=true arch=wasm64",
+        value: current.join(" "),
+        ignoreFocusOut: true,
+      });
+      if (input === undefined) return; // cancelled
+      const defs = input.split(/\s+/).filter((s) => s.length > 0);
+      const target = vscode.workspace.workspaceFolders
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global;
+      await vscode.workspace
+        .getConfiguration("wax")
+        .update("define", defs, target);
+    }),
+    vscode.window.onDidChangeActiveTextEditor(update),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("wax.define")) update();
+    }),
+  );
+  update();
 }
 
 // --- Convert / preview -----------------------------------------------------

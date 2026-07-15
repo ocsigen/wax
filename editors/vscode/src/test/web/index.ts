@@ -269,7 +269,7 @@ export async function run(): Promise<void> {
 
   // The preview commands are registered.
   const commands = await vscode.commands.getCommands(true);
-  for (const id of ["wax.showWat", "wax.showWax"]) {
+  for (const id of ["wax.showWat", "wax.showWax", "wax.configureDefines"]) {
     if (!commands.includes(id)) {
       throw new Error("web: command not registered: " + id);
     }

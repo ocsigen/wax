@@ -106,12 +106,18 @@
         "command": "wax.showWax",
         "title": "Show as Wax",
         "category": "Wax"
+      },
+      {
+        "command": "wax.configureDefines",
+        "title": "Configure conditional-compilation defines",
+        "category": "Wax"
       }
     ],
     "menus": {
       "commandPalette": [
         { "command": "wax.showWat", "when": "resourceLangId == wax" },
-        { "command": "wax.showWax", "when": "resourceLangId == wat" }
+        { "command": "wax.showWax", "when": "resourceLangId == wat" },
+        { "command": "wax.configureDefines", "when": "resourceLangId == wax" }
       ],
       "editor/title": [
         {

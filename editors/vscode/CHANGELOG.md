@@ -70,7 +70,9 @@
   can distinguish.
 - Conditional-compilation dimming for `.wax`: set `wax.define` (mirroring `-D`,
   e.g. `["debug=true"]`) and the `#[if]`/`#[else]` branches that configuration
-  makes unreachable are greyed out as dead code.
+  makes unreachable are greyed out as dead code. A status-bar item shows the
+  active defines when a `.wax` file is focused; clicking it (or the "Wax:
+  Configure conditional-compilation defines" command) edits them.
 
 ## 0.2.2
 
