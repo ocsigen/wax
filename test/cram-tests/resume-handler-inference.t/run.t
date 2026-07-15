@@ -12,7 +12,7 @@ results:
   fn u3() {
       _ =
           'h: do &k1 {
-              resume k1 [e2 -> 'h](cont_new k1(f1));
+              k1::new(f1).resume() on [e2 -> 'h];
               unreachable;
           };
   }

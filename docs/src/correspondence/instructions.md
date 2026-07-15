@@ -284,6 +284,9 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 | `ref.test (ref (exact $t))` | `val is &!t` |
 | `ref.cast_desc_eq $t` | `val as descriptor(d)` |
 | `ref.cast_desc_eq (ref null …) $t` | `val as ?descriptor(d)` |
+| (no instruction) | `val as &k` (`k` a continuation type: a compile-time ascription) |
+
+There is no `ref.cast` (or `ref.test`/`br_on_cast`) to a continuation type: `as` with a continuation target is a compile-time ascription, accepted only when the operand's static type is already a subtype of the target (or the operand is a `null` literal / stack-polymorphic), and it emits nothing — its use is pinning the type immediate of a [`resume` through a supertype signature](#stack-switching-instructions).
 
 A bare function name used as a value, `f` rather than the call `f(args)`, is `ref.func $f`: it produces a reference to the function. This works in a global initializer and anywhere a `&func` reference is expected (for example the callee of an [indirect call](../language.md#indirect-calls)).
 
@@ -514,18 +517,20 @@ The `try { ... } catch [ ... ]` syntax compiles to WebAssembly's `try_table` ins
 
 These correspond to the WebAssembly [stack-switching proposal](https://github.com/WebAssembly/stack-switching). A continuation type is declared with `type k = cont ft;` (see [Types](types.md)); `<k>` and `<tag>` below are the names of a continuation type and a tag respectively.
 
+The resume family and `switch` are methods on the continuation reference `c`; `cont.new` and `cont.bind` are the `T::new` / `T::bind` constructors of the declared continuation type (the `T::` namespace constructs a `&T`). The type immediates are not written: the `$k` of `resume`/`resume_throw`/`resume_throw_ref`/`switch`, and the *source* type of `bind`, are inferred from the static type of the continuation expression, exactly as `call_ref`'s type immediate comes from the callee's — so the receiver must have a *declared* continuation type (an abstract `&cont` is rejected; a cast can never narrow a continuation, so give the value its precise type where it is introduced). An identity/upcast ascription `(c as &k0).resume(x)` selects the supertype's immediate (`resume $k0`) and emits no instruction; decompilation inserts exactly this ascription when an instruction's type immediate is a strict supertype of its continuation operand's own type, so the immediate survives the round trip.
+
 | Wasm | Wax |
 |------|-----|
-| `cont.new $k` | `cont_new k (func)` |
-| `cont.bind $k1 $k2` | `cont_bind k1 k2 (args, cont)` |
-| `suspend $tag` | `suspend tag (args)` |
-| `resume $k` | `resume k [] (args, cont)` |
-| `resume $k (on $tag $l) ...` | `resume k [ tag -> 'l, ... ] (args, cont)` |
-| `resume $k (on $tag switch) ...` | `resume k [ tag -> switch, ... ] (args, cont)` |
-| `resume_throw $k $tag ...` | `resume_throw k tag [ ... ] (args, cont)` |
-| `resume_throw_ref $k ...` | `resume_throw_ref k [ ... ] (exn, cont)` |
-| `switch $k $tag` | `switch k tag (args, cont)` |
+| `cont.new $k` | `k::new(func)` |
+| `cont.bind $k1 $k2` | `k2::bind(args, cont)` |
+| `suspend $tag` | `suspend tag(args)` |
+| `resume $k` | `c.resume(args)` |
+| `resume $k (on $tag $l) ...` | `c.resume(args) on [tag -> 'l, ...]` |
+| `resume $k (on $tag switch) ...` | `c.resume(args) on [tag -> switch, ...]` |
+| `resume_throw $k $tag ...` | `c.resume_throw(tag(payload)) on [...]` |
+| `resume_throw_ref $k ...` | `c.resume_throw_ref(exn) on [...]` |
+| `switch $k $tag` | `c.switch(args, tag: tag)` |
 
-Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in `[ ... ]` mirrors the `try ... catch [ ... ]` syntax: `tag -> 'l` is an `(on $tag $l)` clause and `tag -> switch` is an `(on $tag switch)` clause.
+Operands compile in WebAssembly stack order: for continuations — as for `call_ref` — that puts the receiver *last*, so `c.resume(x)` evaluates `x` before `c` even though `c` is written first (this diverges from receiver-first methods like `arr.fill`, whose instruction takes the receiver first on the stack). The handler list of a postfix `on [...]` clause mirrors the `try ... catch [...]` syntax — a keyword-led handler bracket after the guarded operation: `tag -> 'l` is an `(on $tag $l)` clause and `tag -> switch` an `(on $tag switch)` clause; the clause is omitted when empty. `resume_throw` raises its tag applied to the payload, `tag(payload)`, exactly as `throw tag(payload)` spells it, and `switch`'s enabling tag is the required labelled `tag:` immediate.
 
-Tags used with `suspend`/`resume` may have result types (unlike exception tags); see [Tags](module_fields.md#tags). When a function reference is passed to `cont_new` for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (`fn f: ft (...) { ... }`) so its type matches the continuation's.
+Tags used with `suspend`/`resume` may have result types (unlike exception tags); see [Tags](module_fields.md#tags). When a function reference is passed to `T::new` for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (`fn f: ft (...) { ... }`) so its type matches the continuation's.

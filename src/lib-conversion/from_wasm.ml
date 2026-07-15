@@ -1639,6 +1639,16 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Ast.desc = Ast.Cast (recv, Valtype (Ref { nullable = true; typ }));
     }
   in
+  (* Ascribe the continuation operand — the last of [args] — with the
+     instruction's type immediate, [(c as &?ct)], so a resume/switch/bind
+     through a supertype signature keeps its exact immediate on the round
+     trip. The ascription lowers to no instruction; re-typing drops it again
+     when it merely names the operand's own type. *)
+  let ascribe_cont ct args =
+    match List.rev args with
+    | c :: rest -> List.rev (cast_ref c (Type ct) :: rest)
+    | [] -> []
+  in
   match i.desc with
   | Block { label; typ; block } ->
       let label, ctx =
@@ -2239,8 +2249,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let sp, _ = cont_arity ctx src in
       let dp, _ = cont_arity ctx dst in
       let* args = Stack.grab (sp - dp + 1) in
+      let src = idx ctx `Type src in
       Stack.push 1
-        (with_loc (ContBind (idx ctx `Type src, idx ctx `Type dst, args)))
+        (with_loc (ContBind (src, idx ctx `Type dst, ascribe_cont src args)))
   | Suspend t ->
       let input, output = tag_arity ctx t in
       let* args = Stack.grab input in
@@ -2248,33 +2259,37 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Resume (ct, handlers) ->
       let input, output = cont_arity ctx ct in
       let* args = Stack.grab (input + 1) in
+      let ct = idx ctx `Type ct in
       Stack.push output
         (with_loc
-           (Resume (idx ctx `Type ct, List.map (on_clause ctx) handlers, args)))
+           (Resume (ct, List.map (on_clause ctx) handlers, ascribe_cont ct args)))
   | ResumeThrow (ct, tag, handlers) ->
       let tinput, _ = tag_arity ctx tag in
       let _, output = cont_arity ctx ct in
       let* args = Stack.grab (tinput + 1) in
+      let ct = idx ctx `Type ct in
       Stack.push output
         (with_loc
            (ResumeThrow
-              ( idx ctx `Type ct,
+              ( ct,
                 idx ctx `Tag tag,
                 List.map (on_clause ctx) handlers,
-                args )))
+                ascribe_cont ct args )))
   | ResumeThrowRef (ct, handlers) ->
       let _, output = cont_arity ctx ct in
       let* args = Stack.grab 2 in
+      let ct = idx ctx `Type ct in
       Stack.push output
         (with_loc
            (ResumeThrowRef
-              (idx ctx `Type ct, List.map (on_clause ctx) handlers, args)))
+              (ct, List.map (on_clause ctx) handlers, ascribe_cont ct args)))
   | Switch (ct, tag) ->
       let input, _ = cont_arity ctx ct in
       let output = switch_output ctx ct in
       let* args = Stack.grab input in
+      let ct = idx ctx `Type ct in
       Stack.push output
-        (with_loc (Switch (idx ctx `Type ct, idx ctx `Tag tag, args)))
+        (with_loc (Switch (ct, idx ctx `Tag tag, ascribe_cont ct args)))
   | RefAsNonNull ->
       let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (NonNull e))

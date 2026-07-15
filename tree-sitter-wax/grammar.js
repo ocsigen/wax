@@ -35,8 +35,7 @@ const KEYWORDS = [
   'unreachable', 'do', 'while', 'loop', 'if', 'else', 'let', 'const', 'as',
   'is', 'become', 'br', 'br_if', 'br_table', 'dispatch', 'match', 'br_on_null',
   'br_on_non_null', 'br_on_cast', 'br_on_cast_fail', 'return', 'try', 'catch',
-  'throw', 'throw_ref', 'cont', 'cont_new', 'cont_bind', 'suspend', 'resume',
-  'resume_throw', 'resume_throw_ref', 'switch', 'memory', 'import', 'pagesize',
+  'throw', 'throw_ref', 'cont', 'suspend', 'on', 'memory', 'import', 'pagesize',
   'shared', 'descriptor', 'describes', 'data', 'table', 'elem',
 ];
 
@@ -287,13 +286,8 @@ module.exports = grammar({
       $.array_get_expression,
       $.select_expression,
       $.branch_expression,
-      $.cont_new_expression,
-      $.cont_bind_expression,
       $.suspend_expression,
-      $.resume_expression,
-      $.resume_throw_expression,
-      $.resume_throw_ref_expression,
-      $.switch_expression,
+      $.on_expression,
     ),
 
     null: $ => 'null',
@@ -328,7 +322,10 @@ module.exports = grammar({
     // A labelled immediate argument of a memory access:
     // m.store32(p, v, offset: 16, align: 1), m.load8_lane(p, v, lane: 3).
     labelled_argument: $ => seq(
-      field('label', $.identifier), ':', field('value', $._expression)),
+      // `tag` is a keyword (tag declarations) but also the label of a
+      // switch's tag immediate (parser.mly argument).
+      field('label', choice($.identifier, alias('tag', $.identifier))),
+      ':', field('value', $._expression)),
 
     typed_string_expression: $ => prec(PREC.postfix, seq(
       field('type', $.identifier),
@@ -486,24 +483,19 @@ module.exports = grammar({
       ),
     )),
 
-    // Stack-switching / continuation ops (parser.mly:887-900).
-    cont_new_expression: $ => seq('cont_new', field('type', $._type_name),
-      '(', $._expression, ')'),
-    cont_bind_expression: $ => seq('cont_bind', field('source', $._type_name),
-      field('target', $._type_name), $.argument_list),
+    // Stack-switching / continuation ops. The resume family and switch are
+    // method calls on the continuation reference and cont.new/cont.bind are
+    // T:: paths (both parse via the generic call/path rules); only suspend
+    // keeps a keyword form, plus the postfix `on` handler clause, which binds
+    // like as/is (parser.mly on_clause / expression ON).
     suspend_expression: $ => seq('suspend', field('tag', $._type_name), $.argument_list),
-    resume_expression: $ => seq('resume', field('type', $._type_name),
-      $.on_clauses, $.argument_list),
-    resume_throw_expression: $ => seq('resume_throw', field('type', $._type_name),
-      field('tag', $._type_name), $.on_clauses, $.argument_list),
-    resume_throw_ref_expression: $ => seq('resume_throw_ref', field('type', $._type_name),
-      $.on_clauses, $.argument_list),
-    switch_expression: $ => seq('switch', field('type', $._type_name),
-      field('tag', $._type_name), $.argument_list),
+    on_expression: $ => prec.left(PREC.cast, seq(
+      $._expression, 'on', $.on_clauses)),
 
     on_clauses: $ => seq('[', sepByTrailing(',', $.on_clause), ']'),
     on_clause: $ => choice(
       seq(field('tag', $.identifier), '->', field('label', $.label)),
+      // `switch` is a contextual identifier here (no longer a keyword).
       seq(field('tag', $.identifier), '->', 'switch'),
     ),
 

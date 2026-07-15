@@ -182,6 +182,7 @@ let module_ ctx env (fields : location Ast.module_) :
     | ResumeThrow (ct, tag, h, l) -> ResumeThrow (ct, tag, h, List.map sone l)
     | ResumeThrowRef (ct, h, l) -> ResumeThrowRef (ct, h, List.map sone l)
     | Switch (ct, tag, l) -> Switch (ct, tag, List.map sone l)
+    | On (e, h) -> On (sone e, h)
     | Return v -> Return (Option.map sone v)
     | Sequence l -> Sequence (sinstrs l)
     | Select (c, t, e) -> Select (sone c, sone t, sone e)

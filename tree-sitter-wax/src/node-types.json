@@ -78,14 +78,6 @@
         "named": true
       },
       {
-        "type": "cont_bind_expression",
-        "named": true
-      },
-      {
-        "type": "cont_new_expression",
-        "named": true
-      },
-      {
         "type": "float_literal",
         "named": true
       },
@@ -122,23 +114,15 @@
         "named": true
       },
       {
+        "type": "on_expression",
+        "named": true
+      },
+      {
         "type": "parenthesized_expression",
         "named": true
       },
       {
         "type": "path_expression",
-        "named": true
-      },
-      {
-        "type": "resume_expression",
-        "named": true
-      },
-      {
-        "type": "resume_throw_expression",
-        "named": true
-      },
-      {
-        "type": "resume_throw_ref_expression",
         "named": true
       },
       {
@@ -171,10 +155,6 @@
       },
       {
         "type": "suspend_expression",
-        "named": true
-      },
-      {
-        "type": "switch_expression",
         "named": true
       },
       {
@@ -256,14 +236,6 @@
         "named": true
       },
       {
-        "type": "cont_bind_expression",
-        "named": true
-      },
-      {
-        "type": "cont_new_expression",
-        "named": true
-      },
-      {
         "type": "discard_statement",
         "named": true
       },
@@ -312,23 +284,15 @@
         "named": true
       },
       {
+        "type": "on_expression",
+        "named": true
+      },
+      {
         "type": "parenthesized_expression",
         "named": true
       },
       {
         "type": "path_expression",
-        "named": true
-      },
-      {
-        "type": "resume_expression",
-        "named": true
-      },
-      {
-        "type": "resume_throw_expression",
-        "named": true
-      },
-      {
-        "type": "resume_throw_ref_expression",
         "named": true
       },
       {
@@ -365,10 +329,6 @@
       },
       {
         "type": "suspend_expression",
-        "named": true
-      },
-      {
-        "type": "switch_expression",
         "named": true
       },
       {
@@ -1571,68 +1531,6 @@
     }
   },
   {
-    "type": "cont_bind_expression",
-    "named": true,
-    "fields": {
-      "source": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      },
-      "target": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "argument_list",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "cont_new_expression",
-    "named": true,
-    "fields": {
-      "type": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "_expression",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "data_definition",
     "named": true,
     "fields": {
@@ -2825,14 +2723,6 @@
             "named": false
           },
           {
-            "type": "cont_bind",
-            "named": false
-          },
-          {
-            "type": "cont_new",
-            "named": false
-          },
-          {
             "type": "data",
             "named": false
           },
@@ -2917,6 +2807,10 @@
             "named": false
           },
           {
+            "type": "on",
+            "named": false
+          },
+          {
             "type": "open",
             "named": false
           },
@@ -2929,18 +2823,6 @@
             "named": false
           },
           {
-            "type": "resume",
-            "named": false
-          },
-          {
-            "type": "resume_throw",
-            "named": false
-          },
-          {
-            "type": "resume_throw_ref",
-            "named": false
-          },
-          {
             "type": "return",
             "named": false
           },
@@ -2950,10 +2832,6 @@
           },
           {
             "type": "suspend",
-            "named": false
-          },
-          {
-            "type": "switch",
             "named": false
           },
           {
@@ -3626,6 +3504,25 @@
     }
   },
   {
+    "type": "on_expression",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "_expression",
+          "named": true
+        },
+        {
+          "type": "on_clauses",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "page_size",
     "named": true,
     "fields": {},
@@ -3790,106 +3687,6 @@
           }
         ]
       }
-    }
-  },
-  {
-    "type": "resume_expression",
-    "named": true,
-    "fields": {
-      "type": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "argument_list",
-          "named": true
-        },
-        {
-          "type": "on_clauses",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "resume_throw_expression",
-    "named": true,
-    "fields": {
-      "tag": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      },
-      "type": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "argument_list",
-          "named": true
-        },
-        {
-          "type": "on_clauses",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "resume_throw_ref_expression",
-    "named": true,
-    "fields": {
-      "type": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "argument_list",
-          "named": true
-        },
-        {
-          "type": "on_clauses",
-          "named": true
-        }
-      ]
     }
   },
   {
@@ -4194,42 +3991,6 @@
     "named": true,
     "fields": {
       "tag": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "argument_list",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "switch_expression",
-    "named": true,
-    "fields": {
-      "tag": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type_identifier",
-            "named": true
-          }
-        ]
-      },
-      "type": {
         "multiple": false,
         "required": true,
         "types": [
@@ -5180,14 +4941,6 @@
     "named": false
   },
   {
-    "type": "cont_bind",
-    "named": false
-  },
-  {
-    "type": "cont_new",
-    "named": false
-  },
-  {
     "type": "data",
     "named": false
   },
@@ -5293,6 +5046,10 @@
     "named": false
   },
   {
+    "type": "on",
+    "named": false
+  },
+  {
     "type": "open",
     "named": false
   },
@@ -5302,18 +5059,6 @@
   },
   {
     "type": "rec",
-    "named": false
-  },
-  {
-    "type": "resume",
-    "named": false
-  },
-  {
-    "type": "resume_throw",
-    "named": false
-  },
-  {
-    "type": "resume_throw_ref",
     "named": false
   },
   {

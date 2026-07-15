@@ -2,4 +2,4 @@ type ft2 = fn(i64, i32) -> i32;
 type ct2 = cont ft2;
 type ft1_alt = fn(i64) -> i32;
 type ct1_alt = cont ft1_alt;
-fn error(p: &ct2) { _ = cont_bind ct2 ct1_alt(123 as i64, p); }
+fn error(p: &ct2) { _ = ct1_alt::bind(123 as i64, p); }

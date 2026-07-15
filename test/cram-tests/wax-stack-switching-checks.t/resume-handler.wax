@@ -4,7 +4,7 @@ tag foo();
 fn f() {
     _ =
         'on_foo: do &ft {
-            resume ct [foo -> 'on_foo](null as &?ct);
+            (null as &?ct).resume() on [foo -> 'on_foo];
             unreachable;
         };
 }

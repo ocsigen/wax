@@ -101,6 +101,7 @@ let rec map_instr f instr =
     | Br (label, v) -> Br (label, Option.map (map_instr f) v)
     | Br_if (label, v) -> Br_if (label, map_instr f v)
     | Hinted (h, i) -> Hinted (h, map_instr f i)
+    | On (i, h) -> On (map_instr f i, h)
     | Br_table (labels, v) -> Br_table (labels, map_instr f v)
     | Dispatch { index; cases; default; arms } ->
         Dispatch
@@ -220,6 +221,7 @@ let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
   | ArrayDefault (_, i)
   | Br_if (_, i)
   | Hinted (_, i)
+  | On (i, _)
   | Br_table (_, i)
   | Br_on_null (_, i)
   | Br_on_non_null (_, i)

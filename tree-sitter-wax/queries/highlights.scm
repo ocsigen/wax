@@ -23,8 +23,7 @@
 
 [
   "throw" "throw_ref" "tag"
-  "cont" "cont_new" "cont_bind" "suspend"
-  "resume" "resume_throw" "resume_throw_ref" "switch"
+  "cont" "suspend" "on"
 ] @keyword
 
 [

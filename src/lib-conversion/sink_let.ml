@@ -34,6 +34,7 @@ let rec occurs name i =
   | UnOp (_, e)
   | Br_if (_, e)
   | Hinted (_, e)
+  | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
   | Br_on_non_null (_, e)
@@ -170,6 +171,7 @@ let rec first_access name i =
   | UnOp (_, e)
   | Br_if (_, e)
   | Hinted (_, e)
+  | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
   | Br_on_non_null (_, e)
@@ -501,6 +503,7 @@ let rec sink_into ((name, _) as decl) s =
   | ContNew (ct, e) -> pick [ (e, fun e' -> ContNew (ct, e')) ]
   | Br_if (l, e) -> pick [ (e, fun e' -> Br_if (l, e')) ]
   | Hinted (h, e) -> pick [ (e, fun e' -> Hinted (h, e')) ]
+  | On (e, h) -> pick [ (e, fun e' -> On (e', h)) ]
   | Br_table (ls, e) -> pick [ (e, fun e' -> Br_table (ls, e')) ]
   | Br_on_null (l, e) -> pick [ (e, fun e' -> Br_on_null (l, e')) ]
   | Br_on_non_null (l, e) -> pick [ (e, fun e' -> Br_on_non_null (l, e')) ]

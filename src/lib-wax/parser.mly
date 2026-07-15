@@ -86,8 +86,8 @@
 %token BR_ON_CAST BR_ON_CAST_FAIL
 %token BR_ON_NULL BR_ON_NON_NULL
 %token TRY CATCH
-%token CONT CONT_NEW CONT_BIND
-%token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
+%token CONT
+%token SUSPEND ON
 %token DISPATCH
 %token MATCH
 %token MEMORY DATA TABLE ELEM PAGESIZE SHARED
@@ -127,7 +127,7 @@
 %left "<<" ">>u" ">>s"
 %left "+" "-"
 %left "*" "/" "/u" "/s" "%u" "%s"
-%left AS IS
+%left AS IS ON
 %nonassoc prec_unary
 %nonassoc "!"
 %left "." "(" "["
@@ -525,13 +525,8 @@ ident_or_keyword:
 | TRY { "try" }
 | CATCH { "catch" }
 | CONT { "cont" }
-| CONT_NEW { "cont_new" }
-| CONT_BIND { "cont_bind" }
 | SUSPEND { "suspend" }
-| RESUME { "resume" }
-| RESUME_THROW { "resume_throw" }
-| RESUME_THROW_REF { "resume_throw_ref" }
-| SWITCH { "switch" }
+| ON { "on" }
 | MEMORY { "memory" }
 | IMPORT { "import" }
 | PAGESIZE { "pagesize" }
@@ -790,7 +785,16 @@ catch:
 
 on_clause:
 | t = ident "->" l = label { OnLabel (t, l) }
-| t = ident "->" SWITCH { OnSwitch t }
+(* [switch] is a contextual identifier here (no longer a keyword). *)
+| t = ident "->" s = ident
+  { if s.desc = "switch" then OnSwitch t
+    else
+      raise
+        (Wax_wasm.Parsing.Syntax_error
+           ($loc(s),
+            Wax_utils.Message.(
+              text "Expected a label or" ++ code "switch"
+              ++ text "as the handler target.\n"))) }
 
 on_clauses:
 | "[" l = separated_list_trailing(",", on_clause) "]" { l }
@@ -917,6 +921,10 @@ expression_list:
 argument:
 | e = expression { e }
 | l = ident ":" e = expression { with_loc $sloc (Labelled (l, e)) }
+(* [tag] is a keyword (tag declarations), so the [tag: t] immediate of a
+   [switch] needs its own arm. *)
+| t = TAG ":" e = expression
+  { ignore t; with_loc $sloc (Labelled (with_loc $loc(t) "tag", e)) }
 
 argument_list:
 | l = separated_list_trailing(",", argument) { l }
@@ -1000,20 +1008,13 @@ plaininstr:
    that follows; a hinted [if] is a [blockinstr] (above). *)
 | h = branch_hint_attr b = branch_expr
   { with_loc $sloc (Hinted (h, b)) }
-| CONT_NEW t = type_name "(" i = expression ")"
-  { with_loc $sloc (ContNew (t, i)) }
-| CONT_BIND src = type_name dst = type_name "(" l = expression_list ")"
-  { with_loc $sloc (ContBind (src, dst, l)) }
 | SUSPEND t = tag_name "(" l = expression_list ")"
   { with_loc $sloc (Suspend (t, l)) }
-| RESUME t = type_name h = on_clauses "(" l = expression_list ")"
-  { with_loc $sloc (Resume (t, h, l)) }
-| RESUME_THROW t = type_name tag = tag_name h = on_clauses "(" l = expression_list ")"
-  { with_loc $sloc (ResumeThrow (t, tag, h, l)) }
-| RESUME_THROW_REF t = type_name h = on_clauses "(" l = expression_list ")"
-  { with_loc $sloc (ResumeThrowRef (t, h, l)) }
-| SWITCH t = type_name tag = tag_name "(" l = expression_list ")"
-  { with_loc $sloc (Switch (t, tag, l)) }
+(* The postfix handler clause of a [resume]-family method call, binding tightly
+   like [as]/[is]: [c.resume(x) on [t -> 'l, t2 -> switch]]. Grammatically it
+   attaches to any expression; the typer accepts it only on the resume forms. *)
+| i = expression ON h = on_clauses
+  { with_loc $sloc (On (i, h)) }
 | i1 = expression "[" i2 = index_expression "]"
   { with_loc $sloc (ArrayGet (i1, i2)) }
 | i1 = expression "?" i2 = then_branch ":" i3 = expression

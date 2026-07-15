@@ -176,6 +176,30 @@ from wasm:
   (func $type-externref-implicit (param $r externref)
     (drop (select (local.get $r) (local.get $r) (i32.const 1)))
   )
+==== core/stack-switching/validation.wast ====
+Wax type-checking should have failed (invalid cast):
+  fn f() {
+      unreachable;
+      _ = _ as &?cont;
+  }
+from wasm: (func (drop (ref.cast contref (unreachable))))
+Wax type-checking should have failed (invalid cast):
+  fn f() {
+      unreachable;
+      _ = _ as &?nocont;
+  }
+from wasm: (func (drop (ref.cast nullcontref (unreachable))))
+Wax type-checking should have failed (invalid cast):
+  type f = fn();
+  type c = cont f;
+  fn f() {
+      unreachable;
+      _ = _ as &c;
+  }
+from wasm:
+  (type $f (func))
+  (type $c (cont $f))
+  (func (drop (ref.cast (ref $c) (unreachable))))
 ==== core/unreached-invalid.wast ====
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {

@@ -1,8 +1,8 @@
 ==================
-cont.new
+cont.new (T:: constructor)
 ==================
 
-fn f() { cont_new t(g); }
+fn f() { k::new(g); }
 
 ---
 
@@ -11,15 +11,18 @@ fn f() { cont_new t(g); }
     name: (identifier)
     parameters: (parameter_list)
     body: (block
-      (cont_new_expression
-        type: (type_identifier)
-        (identifier)))))
+      (call_expression
+        function: (path_expression
+          root: (identifier)
+          member: (identifier))
+        arguments: (argument_list
+          (identifier))))))
 
 ==================
-cont.bind
+cont.bind (T:: constructor)
 ==================
 
-fn f() { cont_bind s t(x); }
+fn f() { k0::bind(x, c); }
 
 ---
 
@@ -28,10 +31,12 @@ fn f() { cont_bind s t(x); }
     name: (identifier)
     parameters: (parameter_list)
     body: (block
-      (cont_bind_expression
-        source: (type_identifier)
-        target: (type_identifier)
-        (argument_list
+      (call_expression
+        function: (path_expression
+          root: (identifier)
+          member: (identifier))
+        arguments: (argument_list
+          (identifier)
           (identifier))))))
 
 ==================
@@ -56,7 +61,7 @@ fn f() { suspend e(v); }
 resume with on-clauses
 ==================
 
-fn f() { resume t [e -> 'h, x -> switch](c); }
+fn f() { c.resume(x) on [e -> 'h, x -> switch]; }
 
 ---
 
@@ -65,23 +70,26 @@ fn f() { resume t [e -> 'h, x -> switch](c); }
     name: (identifier)
     parameters: (parameter_list)
     body: (block
-      (resume_expression
-        type: (type_identifier)
+      (on_expression
+        (call_expression
+          function: (struct_get_expression
+            value: (identifier)
+            field: (identifier))
+          arguments: (argument_list
+            (identifier)))
         (on_clauses
           (on_clause
             tag: (identifier)
             label: (label
               name: (identifier)))
           (on_clause
-            tag: (identifier)))
-        (argument_list
-          (identifier))))))
+            tag: (identifier)))))))
 
 ==================
-resume_throw empty on-clauses
+resume_throw with tag payload, empty on-clauses
 ==================
 
-fn f() { resume_throw t e [](c); }
+fn f() { c.resume_throw(e(p)) on []; }
 
 ---
 
@@ -90,18 +98,23 @@ fn f() { resume_throw t e [](c); }
     name: (identifier)
     parameters: (parameter_list)
     body: (block
-      (resume_throw_expression
-        type: (type_identifier)
-        tag: (type_identifier)
-        (on_clauses)
-        (argument_list
-          (identifier))))))
+      (on_expression
+        (call_expression
+          function: (struct_get_expression
+            value: (identifier)
+            field: (identifier))
+          arguments: (argument_list
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (identifier)))))
+        (on_clauses)))))
 
 ==================
-switch
+switch with tag immediate
 ==================
 
-fn f() { switch t e(c); }
+fn f() { c.switch(x, tag: e); }
 
 ---
 
@@ -110,9 +123,12 @@ fn f() { switch t e(c); }
     name: (identifier)
     parameters: (parameter_list)
     body: (block
-      (switch_expression
-        type: (type_identifier)
-        tag: (type_identifier)
-        (argument_list
-          (identifier))))))
-
+      (call_expression
+        function: (struct_get_expression
+          value: (identifier)
+          field: (identifier))
+        arguments: (argument_list
+          (identifier)
+          (labelled_argument
+            label: (identifier)
+            value: (identifier)))))))

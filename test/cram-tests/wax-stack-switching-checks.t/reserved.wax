@@ -1,0 +1,6 @@
+// extending T:: to declared types makes the :: namespace shared with the
+// built-in type names, so those are reserved
+type i64 = [i8];
+type any = { x: i32 };
+type atomic = [mut i32];
+rec { type func = fn(); type k = cont func; }

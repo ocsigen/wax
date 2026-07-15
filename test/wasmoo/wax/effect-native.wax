@@ -90,13 +90,13 @@
     }
 
     fn unhandled_effect_wrapper(start: &thunk) {
-        let continuation = cont_new continuation(wrapper_cont);
+        let continuation = continuation::new(wrapper_cont);
         let f: &eq = {func_closure| func: start };
         let v: &eq = 0 as &i31;
         'loop: loop {
             let (resume_res_0, resume_res_1) =
                 'handle_effect: do () -> (&eq, &continuation) {
-                    resume continuation [effect -> 'handle_effect](f, v, continuation);
+                    continuation.resume(f, v) on [effect -> 'handle_effect];
                     return;
                 };
             continuation = resume_res_1;
@@ -127,8 +127,7 @@
                     'handle_effect: do () -> (&eq, &continuation) {
                         let res =
                             try {
-                                resume continuation [effect -> 'handle_effect]
-                                    (f, v, fiber.continuation);
+                                fiber.continuation.resume(f, v) on [effect -> 'handle_effect];
                             } catch {
                                 javascript_exception => {
                                     br 'handle_exception caml_wrap_exception(_);
@@ -182,13 +181,13 @@
 
     #[export]
     fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
-        { value: hv, exn: hx, effect: hf, continuation: cont_new continuation(initial_cont) };
+        { value: hv, exn: hx, effect: hf, continuation: continuation::new(initial_cont) };
     }
 
     #[export = "%with_stack"]
     fn f_3(hv: &eq, hx: &eq, hf: &eq, f: &eq, v: &eq) -> &eq {
         become resume_fiber(
-            { value: hv, exn: hx, effect: hf, continuation: cont_new continuation(initial_cont) },
+            { value: hv, exn: hx, effect: hf, continuation: continuation::new(initial_cont) },
             f,
             v,
             0 as &i31,
@@ -198,7 +197,7 @@
     #[export = "%with_stack_bind"]
     fn f_4(hv: &eq, hx: &eq, hf: &eq, dyn: &eq, bind: &eq, f: &eq, v: &eq) -> &eq {
         become resume_fiber(
-            { value: hv, exn: hx, effect: hf, continuation: cont_new continuation(initial_cont) },
+            { value: hv, exn: hx, effect: hf, continuation: continuation::new(initial_cont) },
             f,
             v,
             0 as &i31,

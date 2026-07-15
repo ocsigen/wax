@@ -34,6 +34,12 @@ val f :
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
 
+val reserved_type_names : string list
+(** The built-in type names a [type] declaration (or a [rec] member) may not
+    take: the value types ([i32] … [v128]), the abstract heap types, and the
+    [atomic] intrinsic namespace. The typer rejects such a declaration;
+    [From_wasm] renames a colliding [$type] name. *)
+
 type member_kind = Field | Method | Function
 
 type member_candidate = {
@@ -106,7 +112,21 @@ val namespace_members : string -> member_candidate list
 (** The free functions completion offers after an intrinsic namespace path
     [ns::]: [v128::] (SIMD const constructors and [bitselect]), [i64::]
     (wide-arithmetic ops) and [atomic::] ([fence]), each with its signature.
-    Empty for any other [ns]. *)
+    Empty for any other [ns] — a declared continuation type's [new]/[bind]
+    members need the module's declarations (the editor resolves them from the
+    buffer's AST). *)
+
+val cont_method_candidates :
+  params:string list ->
+  results:string list ->
+  switch_results:string list ->
+  member_candidate list
+(** The methods member completion offers on a continuation-typed receiver — the
+    resume family and [switch] — from the rendered parameter/result types of the
+    continuation's function type ([switch_results] the last parameter's own
+    continuation parameters, when it has one). Recorded prebuilt as {!R_cont};
+    also used by the editor's signature help, which renders the types from the
+    buffer's declarations. *)
 
 type member_receiver =
   | R_numeric of Infer.inferred_type
@@ -114,6 +134,7 @@ type member_receiver =
   | R_array of Ast.fieldtype
   | R_memory of [ `I32 | `I64 ]
   | R_table of [ `I32 | `I64 ] * Ast.reftype
+  | R_cont of member_candidate list
       (** What a member access [recv.<here>] is on, recorded by {!f_infer} (via
           [member_completions]) so completion can derive its candidates with
           {!member_candidates} only for the access under the cursor — the list,

@@ -1652,27 +1652,55 @@ fn worker(x: i32) -> i32 {
 }
 ```
 
-Continuations are created and driven with `cont_new`, `cont_bind`, `resume`,
-`resume_throw`, and `resume_throw_ref`. `cont` wraps a *named* function type, so
-each continuation shape is a `type`. `resume` takes a list of handlers mapping a
-suspended tag to a label (empty here):
+A continuation is created with the `T::new` constructor of its declared type
+(the `T::` namespace constructs a `&T`, extending the `v128::`/`i64::`
+qualified-intrinsic pattern), and driven with the `resume`, `resume_throw` and
+`resume_throw_ref` methods on the continuation reference. `T::bind` binds
+leading arguments away, yielding a `&T`; its source type, like the type
+immediate of the resume methods, is inferred from the continuation operand's
+static type — the call_ref model, so the receiver must have a *declared*
+continuation type.
+
+Continuations carry no runtime type information, so `as` with a continuation
+target is a *compile-time ascription*, not a cast: it is accepted exactly when
+it is a provable no-op — the operand's type is already a subtype of the target
+(`(c as &k0).resume(x)` resumes through the supertype signature, selecting the
+`resume $k0` immediate), a `null` literal with a nullable target, or dead code
+the ascription pins — and it compiles to no instruction. A `&cont` can never
+be *narrowed*: an abstract reference cannot be resumed, and no cast can fix it,
+so give the value its precise type where it is introduced (a parameter, local
+or block-result annotation). `is` and `br_on_cast` reject continuation targets
+outright (they are inherently runtime tests).
 
 ```wax
 type unit_task = fn() -> i32;
 type k0 = cont unit_task;
 
-fn spawn() -> &k { cont_new k (worker); }          // wrap `worker` (a task)
-fn prime(c: &k) -> &k0 { cont_bind k k0 (7, c); }  // bind the argument
-fn go(c: &k0) -> i32 { resume k0 [] (c); }         // run until it suspends
+fn spawn() -> &k { k::new(worker); }        // wrap `worker` (a task)
+fn prime(c: &k) -> &k0 { k0::bind(7, c); }  // bind the argument
+fn go(c: &k0) -> i32 { c.resume(); }        // run until it suspends
+```
+
+Handlers routing a suspended tag to a label are a postfix `on` clause on the
+call, a bracket of `tag -> 'label` or `tag -> switch` arms (the same shape and
+placement as `try { … } catch [t -> 'l]`), omitted when empty:
+
+```wax
+c.resume(x) on [yield -> 'on_yield]
 ```
 
 The abstract continuation heap types are written `&cont` and `&nocont` (with
 `&?cont` for the nullable form).
 
-`switch` hands control straight to another continuation instead of suspending
-back to a handler. Written `switch k tag (args, cont)`, it passes `args` and the
-current continuation to `cont`, tagged by `tag`; the `resume` that drives things
-enables it with a `tag -> switch` arm in its handler list.
+`c.switch(args, tag: t)` hands control straight to another continuation `c`
+instead of suspending back to a handler, passing `args` and the current
+continuation; the enabling tag is the required labelled `tag:` immediate, and
+the `resume` that drives things enables it with a `t -> switch` arm in its
+handler list.
+
+The receiver of these methods compiles *last*: operands compile in the
+instruction's stack order, which for continuations — as for `call_ref` — puts
+the receiver after the arguments.
 
 ## Holes
 

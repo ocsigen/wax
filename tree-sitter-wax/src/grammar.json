@@ -494,31 +494,11 @@
         },
         {
           "type": "STRING",
-          "value": "cont_new"
-        },
-        {
-          "type": "STRING",
-          "value": "cont_bind"
-        },
-        {
-          "type": "STRING",
           "value": "suspend"
         },
         {
           "type": "STRING",
-          "value": "resume"
-        },
-        {
-          "type": "STRING",
-          "value": "resume_throw"
-        },
-        {
-          "type": "STRING",
-          "value": "resume_throw_ref"
-        },
-        {
-          "type": "STRING",
-          "value": "switch"
+          "value": "on"
         },
         {
           "type": "STRING",
@@ -1429,31 +1409,11 @@
         },
         {
           "type": "SYMBOL",
-          "name": "cont_new_expression"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "cont_bind_expression"
-        },
-        {
-          "type": "SYMBOL",
           "name": "suspend_expression"
         },
         {
           "type": "SYMBOL",
-          "name": "resume_expression"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "resume_throw_expression"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "resume_throw_ref_expression"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "switch_expression"
+          "name": "on_expression"
         }
       ]
     },
@@ -1693,8 +1653,22 @@
           "type": "FIELD",
           "name": "label",
           "content": {
-            "type": "SYMBOL",
-            "name": "identifier"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "STRING",
+                  "value": "tag"
+                },
+                "named": true,
+                "value": "identifier"
+              }
+            ]
           }
         },
         {
@@ -3103,64 +3077,6 @@
         ]
       }
     },
-    "cont_new_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "cont_new"
-        },
-        {
-          "type": "FIELD",
-          "name": "type",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "STRING",
-          "value": "("
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_expression"
-        },
-        {
-          "type": "STRING",
-          "value": ")"
-        }
-      ]
-    },
-    "cont_bind_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "cont_bind"
-        },
-        {
-          "type": "FIELD",
-          "name": "source",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "FIELD",
-          "name": "target",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "argument_list"
-        }
-      ]
-    },
     "suspend_expression": {
       "type": "SEQ",
       "members": [
@@ -3182,117 +3098,26 @@
         }
       ]
     },
-    "resume_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "resume"
-        },
-        {
-          "type": "FIELD",
-          "name": "type",
-          "content": {
+    "on_expression": {
+      "type": "PREC_LEFT",
+      "value": 12,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
             "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "on_clauses"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "argument_list"
-        }
-      ]
-    },
-    "resume_throw_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "resume_throw"
-        },
-        {
-          "type": "FIELD",
-          "name": "type",
-          "content": {
+            "name": "_expression"
+          },
+          {
+            "type": "STRING",
+            "value": "on"
+          },
+          {
             "type": "SYMBOL",
-            "name": "_type_name"
+            "name": "on_clauses"
           }
-        },
-        {
-          "type": "FIELD",
-          "name": "tag",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "on_clauses"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "argument_list"
-        }
-      ]
-    },
-    "resume_throw_ref_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "resume_throw_ref"
-        },
-        {
-          "type": "FIELD",
-          "name": "type",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "on_clauses"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "argument_list"
-        }
-      ]
-    },
-    "switch_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "switch"
-        },
-        {
-          "type": "FIELD",
-          "name": "type",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "FIELD",
-          "name": "tag",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_type_name"
-          }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "argument_list"
-        }
-      ]
+        ]
+      }
     },
     "on_clauses": {
       "type": "SEQ",

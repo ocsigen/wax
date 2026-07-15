@@ -1,0 +1,26 @@
+type ft = fn() -> i32;
+type k = cont ft;
+tag t() -> i32;
+tag exc(i32);
+
+// an `on` clause is only accepted on the resume family
+fn bad_on(x: i32) -> i32 { (x + 1) on [t -> switch]; }
+
+// the receiver's declared continuation type is the type immediate; an
+// abstract &cont cannot supply it (and cannot be cast into one)
+fn abstract_recv(c: &?cont) -> i32 { c.resume(); }
+
+// switch requires its enabling tag as a labelled immediate
+fn no_tag(c: &k) -> i32 { c.switch(); }
+
+// resume_throw takes its tag call-style, grouping the payload with the tag
+fn bad_throw(c: &k, x: i32) -> i32 { c.resume_throw(x); }
+
+// T:: members exist only on continuation types, and only new/bind
+fn unknown_member(c: &k) -> &k { k::renew(c); }
+
+// arity of the constructors is checked
+fn wrong_arity() -> &k { k::new(); }
+
+// the operand count follows from the inferred types
+fn missing_arg(c: &k) -> i32 { c.resume(1); }

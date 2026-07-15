@@ -222,6 +222,7 @@ type 'info instr_desc =
   | ResumeThrow of ident * ident * on_clause list * 'info instr list
   | ResumeThrowRef of ident * on_clause list * 'info instr list
   | Switch of ident * ident * 'info instr list
+  | On of 'info instr * on_clause list
   | Return of 'info instr option
   | Sequence of 'info instr list
   | Select of 'info instr * 'info instr * 'info instr
