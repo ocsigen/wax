@@ -20,6 +20,9 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 REF="${REF:-$HOME/sources/Wasm/interpreter/wasm}"
+# Without REF every file's baseline "fails" and is skipped, so the oracle would
+# report clean while testing nothing. Skip loudly instead.
+[ -x "$REF" ] || { echo "reference interpreter not found at $REF (set REF)" >&2; exit 2; }
 REWRITE="$(dirname "${BASH_SOURCE[0]}")/wast-rewrite.js"
 export MODE="${MODE:-codec}" WAX WASM_TOOLS
 # Files are processed in parallel across cores (override with JOBS); each runs in

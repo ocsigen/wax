@@ -27,6 +27,9 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 REF="${REF:-$HOME/sources/Wasm/interpreter/wasm}"
+# REF is the ground truth here — without it every module reads as reference-
+# rejected and the campaign silently differences nothing. Skip loudly instead.
+[ -x "$REF" ] || { echo "reference interpreter not found at $REF (set REF)" >&2; exit 2; }
 COUNT="${1:-2000}"
 BYTES="${2:-2048}"
 # The per-module oracle is latency-bound — smith + two reference-interpreter runs
