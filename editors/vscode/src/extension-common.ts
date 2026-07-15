@@ -535,6 +535,8 @@ function completionKind(kind: string): vscode.CompletionItemKind {
     case "array":
     case "data":
       return vscode.CompletionItemKind.Field;
+    case "field":
+      return vscode.CompletionItemKind.Field;
     case "parameter":
     case "local":
       return vscode.CompletionItemKind.Variable;
@@ -586,7 +588,8 @@ function registerCompletion(
   };
 
   context.subscriptions.push(
-    vscode.languages.registerCompletionItemProvider(lang.id, provider),
+    // "." triggers member completion; identifier typing triggers the rest.
+    vscode.languages.registerCompletionItemProvider(lang.id, provider, "."),
   );
 }
 

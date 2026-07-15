@@ -148,10 +148,18 @@ does not carry. Three distinct prerequisites:
   enclosing function's parameters and locals, and the keywords — each tagged with
   a kind for its icon. It works off the recovered parse alone (no typing), so it
   survives the half-written buffer completion is invoked in, and the editor
-  filters by the typed prefix. A `CompletionItemProvider` maps the kinds to
-  `CompletionItemKind`. Follow-ups: member completion after `.` (needs the
-  receiver's type), intrinsic namespaces after `::`, per-point local scoping
-  (currently every local in the function is offered), and type details on items.
+  filters by the typed prefix. A `CompletionItemProvider` (with `.` as a trigger)
+  maps the kinds to `CompletionItemKind`.
+
+  Member completion after `.` **is** done: at a struct field access `recv.field`
+  the typer records the receiver struct's field names keyed by the field span
+  (`member_completions`), and completion returns those when the cursor is on the
+  (possibly partial) field. This relies on the parser's error recovery keeping
+  the half-written access so the receiver still types — the earlier blocker,
+  since fixed. It handles chains (`l.a.x`) and inferred receivers. Follow-ups:
+  memory/table method completion after `.`, intrinsic namespaces after `::`,
+  per-point local scoping (currently every local in the function is offered), and
+  type details on items.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -165,12 +173,10 @@ does not carry. Three distinct prerequisites:
 
 The core language-server features are all in: diagnostics, formatting, outline,
 hover, inlay hints, go-to-definition, find-references / document-highlight,
-rename, and (name-based) completion. What is left refines them:
+rename, and completion (names and struct members). What is left refines them:
 
-- **Member completion after `.`** — the highest-value gap. It needs the
-  receiver's type (so the typed tree, resolved at the possibly-incomplete point),
-  which is the harder mid-edit problem the name-based completion sidesteps.
-- **Per-point local scoping + type details** on completion items.
+- **Completion polish** — memory/table methods after `.`, intrinsics after `::`,
+  per-point local scoping, and type details on items.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 

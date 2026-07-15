@@ -22,8 +22,9 @@
   through shadowing. A punned struct field is expanded (`{p| x}` to `{p| x: new}`)
   so the field is preserved; rename is declined off a renameable symbol.
 - Completion for `.wax`: suggests the names in scope (module functions, globals,
-  types, tags; the enclosing function's parameters and locals) and keywords,
-  working even while the file is mid-edit.
+  types, tags; the enclosing function's parameters and locals) and keywords, and
+  after `.` the fields of a struct value (including chained accesses), working
+  even while the file is mid-edit.
 
 ## 0.2.2
 

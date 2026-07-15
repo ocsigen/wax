@@ -46,10 +46,11 @@ let resolve name src =
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       let links = ref [] in
       let puns = ref [] in
+      let members = ref [] in
       (try
          ignore
-           (Typing.f_infer ~resolve_links:(Some links) ~pun_spans:(Some puns) d
-              ast)
+           (Typing.f_infer ~resolve_links:(Some links) ~pun_spans:(Some puns)
+              ~member_completions:(Some members) d ast)
        with Wax_utils.Diagnostic.Aborted -> ());
       !links
       |> List.map (fun (r : Typing.reference) ->
@@ -69,6 +70,12 @@ let resolve name src =
       List.iter
         (fun l -> Printf.printf "pun %S @ %s\n" (slice src l) (span l))
         (List.sort_uniq compare !puns);
+      (* Member-completion candidates at each struct field access. *)
+      List.iter
+        (fun (l, names) ->
+          Printf.printf "member @ %s -> %s\n" (span l)
+            (String.concat ", " names))
+        (List.sort_uniq compare !members);
       print_newline ()
 
 let () =
@@ -83,4 +90,6 @@ let () =
   resolve "label" "fn f() {\n  'outer: loop { br 'outer; }\n}\n";
   resolve "struct pun"
     "type point = { x: i32, y: i32 };\n\
-     fn mk(x: i32, y: i32) -> &point { {point| x, y: y }; }\n"
+     fn mk(x: i32, y: i32) -> &point { {point| x, y: y }; }\n";
+  resolve "member access"
+    "type point = { x: i32, y: i32 };\nfn get_x(p: &point) -> i32 { p.x; }\n"

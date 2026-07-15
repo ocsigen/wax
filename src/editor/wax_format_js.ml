@@ -36,11 +36,11 @@
      Wax only.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
-   - [completion src line ch] -> array of { name; kind }: the names in scope at
-     the (zero-based) position — the module's top-level definitions, the enclosing
-     function's parameters and locals, and the keywords — for completion. Works
-     off the recovered parse alone; the editor filters by the typed prefix. Wax
-     only.
+   - [completion src line ch] -> array of { name; kind }: completion candidates
+     at the (zero-based) position. After [name.] (a struct field access), the
+     receiver struct's field names; otherwise the names in scope — the module's
+     top-level definitions, the enclosing function's parameters and locals, and
+     the keywords. The editor filters by the typed prefix. Wax only.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
      side-by-side preview commands.
@@ -211,6 +211,9 @@ type analysis = {
       (* use -> definition(s) references, for go-to-definition. *)
   a_puns : Wax_utils.Ast.location list;
       (* punned struct-literal field spans, which rename must expand. *)
+  a_members : (Wax_utils.Ast.location * string list) list;
+      (* at each struct field access, the field span and the receiver's field
+         names, for member completion. *)
 }
 
 let analyze_uncached src =
@@ -220,7 +223,15 @@ let analyze_uncached src =
   in
   let a_syntax = List.map syntax_error_diag syntax_errors in
   match ast_opt with
-  | None -> { a_syntax; a_type = []; a_typed = None; a_defs = []; a_puns = [] }
+  | None ->
+      {
+        a_syntax;
+        a_type = [];
+        a_typed = None;
+        a_defs = [];
+        a_puns = [];
+        a_members = [];
+      }
   | Some ast ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
@@ -231,12 +242,14 @@ let analyze_uncached src =
          sink, records the use -> definition references go-to-definition needs. *)
       let links = ref [] in
       let puns = ref [] in
+      let members = ref [] in
       let a_typed =
         try
           Some
             (snd
                (Wax_lang.Typing.f_infer ~warn_unused:true
-                  ~resolve_links:(Some links) ~pun_spans:(Some puns) d ast))
+                  ~resolve_links:(Some links) ~pun_spans:(Some puns)
+                  ~member_completions:(Some members) d ast))
         with Wax_utils.Diagnostic.Aborted -> None
       in
       {
@@ -245,6 +258,7 @@ let analyze_uncached src =
         a_typed;
         a_defs = !links;
         a_puns = !puns;
+        a_members = !members;
       }
 
 (* Cache the analysis, keyed by the exact source, so hover — invoked repeatedly
@@ -886,12 +900,14 @@ let symbols_string src =
   | None -> []
   | Some ast -> List.concat_map field_symbols ast
 
-(* Completion (Wax only). Works off the recovered parse alone — no typing — so it
-   survives the half-written buffer completion is invoked in: the module's
-   top-level names (reusing the outline walk), the parameters and [let] locals of
-   the function the cursor is in, and the keywords. The editor filters by the
-   typed prefix, so every candidate is offered. Member completion after [.] and
-   precise per-point local scoping are follow-ups. *)
+(* Completion (Wax only). After [name.] (a struct field access), the receiver
+   struct's field names — recorded by the typer, which the improved parser
+   recovery lets it resolve even from the half-written access. Otherwise, off the
+   recovered parse alone (no typing, so ordinary completion stays cheap): the
+   module's top-level names (reusing the outline walk), the parameters and [let]
+   locals of the function the cursor is in, and the keywords. The editor filters
+   by the typed prefix, so every candidate is offered. Precise per-point local
+   scoping is a follow-up. *)
 type completion = { k_name : string; k_kind : string }
 
 (* The keywords come from [Wax_conversion.Namespace.reserved_words], the single
@@ -951,33 +967,79 @@ let function_locals ast target =
       | _ -> [])
     ast
 
+let is_ident_char c =
+  (c >= 'a' && c <= 'z')
+  || (c >= 'A' && c <= 'Z')
+  || (c >= '0' && c <= '9')
+  || c = '_'
+  || Char.code c >= 128
+
+let line_start_offset src line =
+  let len = String.length src in
+  let rec f i n =
+    if n <= 0 || i >= len then i
+    else f (i + 1) (if src.[i] = '\n' then n - 1 else n)
+  in
+  f 0 line
+
+(* Whether the cursor is completing a struct field: it follows [name.] — an
+   identifier prefix (possibly empty) whose preceding non-identifier character is
+   a [.]. A cheap text test, so ordinary name completion never runs the typed
+   pass member completion needs. *)
+let is_member_position src line ch =
+  let off = line_start_offset src line + byte_column src line ch in
+  let i = ref (off - 1) in
+  while !i >= 0 && is_ident_char src.[!i] do
+    decr i
+  done;
+  !i >= 0 && src.[!i] = '.'
+
 let completion_string src line ch =
-  let ast_opt, _syntax_errors, _ctx =
-    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
-      src
-  in
-  let keywords =
-    List.map (fun k -> { k_name = k; k_kind = "keyword" }) wax_keywords
-  in
-  match ast_opt with
-  | None -> keywords
-  | Some ast ->
-      let target = (line + 1, byte_column src line ch) in
-      let module_ =
-        List.concat_map field_symbols ast |> List.concat_map symbol_completions
-      in
-      let locals = function_locals ast target in
-      (* Locals shadow module names of the same name; keep the first occurrence
-         of each (name, kind). *)
-      let seen = Hashtbl.create 64 in
-      List.filter
-        (fun c ->
-          let k = (c.k_name, c.k_kind) in
-          if Hashtbl.mem seen k then false
-          else (
-            Hashtbl.add seen k ();
-            true))
-        (locals @ module_ @ keywords)
+  let target = (line + 1, byte_column src line ch) in
+  if is_member_position src line ch then
+    (* The field names of the struct access whose (possibly partial) field span
+       covers the cursor; none for a bare [.] the parser could not keep, or a
+       non-struct receiver (member position offers only members, never names). *)
+    let pos (p : Lexing.position) =
+      (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+    in
+    let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+    let covers (loc : Wax_utils.Ast.location) =
+      le (pos loc.loc_start) target && le target (pos loc.loc_end)
+    in
+    match
+      List.find_opt (fun (loc, _) -> covers loc) (analyze src).a_members
+    with
+    | Some (_, names) ->
+        List.map (fun n -> { k_name = n; k_kind = "field" }) names
+    | None -> []
+  else
+    let ast_opt, _syntax_errors, _ctx =
+      Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+        ~insert:Wax_lang.Recover.insert src
+    in
+    let keywords =
+      List.map (fun k -> { k_name = k; k_kind = "keyword" }) wax_keywords
+    in
+    match ast_opt with
+    | None -> keywords
+    | Some ast ->
+        let module_ =
+          List.concat_map field_symbols ast
+          |> List.concat_map symbol_completions
+        in
+        let locals = function_locals ast target in
+        (* Locals shadow module names of the same name; keep the first
+           occurrence of each (name, kind). *)
+        let seen = Hashtbl.create 64 in
+        List.filter
+          (fun c ->
+            let k = (c.k_name, c.k_kind) in
+            if Hashtbl.mem seen k then false
+            else (
+              Hashtbl.add seen k ();
+              true))
+          (locals @ module_ @ keywords)
 
 (* The same outline for a Wasm-text module. Its fields differ from Wax's: the
    [$id] name is optional, and a definition carries its exports separately, so an

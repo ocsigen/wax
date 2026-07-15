@@ -54,6 +54,14 @@ let record_pun (sink : location list ref option) (name_info : location) =
   | Some r when is_source name_info -> r := name_info :: !r
   | _ -> ()
 
+(* Record, at a struct field access, the (possibly partial) field's span and the
+   receiver struct's field names, for member completion. *)
+let record_members (sink : (location * string list) list ref option) field names
+    =
+  match sink with
+  | Some r when is_source field -> r := (field, names) :: !r
+  | _ -> ()
+
 let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
   match sink with
   | Some r when is_source use -> (
@@ -1273,6 +1281,11 @@ type module_context = {
          both a field name and a variable use, so the editor must expand it
          ([x] -> [x: new]) rather than replace it on rename. [None] outside the
          editor. *)
+  member_completions : (location * string list) list ref option;
+      (* At each struct field access [recv.field], the field-name span paired
+         with the receiver struct's field names, for member completion. The
+         editor offers those names when the cursor is on the (possibly partial)
+         field. [None] outside the editor. *)
 }
 
 (* The subtyping info for the current type space, memoised on [type_context] and
@@ -5485,6 +5498,8 @@ and type_aggregate_access ctx i =
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
             match def.typ with
             | Struct fields -> (
+                record_members ctx.member_completions field.info
+                  (Array.to_list fields |> List.map (fun f -> (fst f.desc).desc));
                 match
                   Array.find_map
                     (fun f ->
@@ -5568,6 +5583,8 @@ and type_aggregate_access ctx i =
             match lookup_struct_type ctx ty with
             | None -> None
             | Some fields -> (
+                record_members ctx.member_completions field.info
+                  (Array.to_list fields |> List.map (fun f -> (fst f.desc).desc));
                 match
                   Array.find_map
                     (fun f ->
@@ -9367,7 +9384,7 @@ let check_attributes diagnostics field =
 (*** Type-checking a configuration ***)
 
 let type_configuration ?(warn_unused = false) ?(build = true)
-    ?(resolve_links = None) ?(pun_spans = None)
+    ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
     ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
@@ -9455,6 +9472,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       cond_env;
       resolve_links = links;
       pun_spans;
+      member_completions;
       simplify;
     }
   in
@@ -10166,13 +10184,13 @@ let check_configurations ~warn_unused ~features ~simplify diagnostics fields =
     ()
 
 let f_infer ?(simplify = false) ?(warn_unused = false) ?(resolve_links = None)
-    ?(pun_spans = None) ?(features = Wax_utils.Feature.default ()) diagnostics
-    fields =
+    ?(pun_spans = None) ?(member_completions = None)
+    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   check_let_bindings diagnostics fields;
   if not (List.exists field_has_conditional fields) then
-    type_configuration ~warn_unused ~resolve_links ~pun_spans ~features
-      ~simplify diagnostics fields
+    type_configuration ~warn_unused ~resolve_links ~pun_spans
+      ~member_completions ~features ~simplify diagnostics fields
   else begin
     check_configurations ~warn_unused ~features ~simplify diagnostics fields;
     (* Build the typed module (consumed only by the deferred WAT conversion and
@@ -10182,7 +10200,8 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(resolve_links = None)
        typed under its own assumption. Diagnostics are discarded —
        [check_configurations] above did the real checking; references are
        recorded here, off the single tree the editor consumes. *)
-    type_configuration ~resolve_links ~pun_spans ~features ~simplify
+    type_configuration ~resolve_links ~pun_spans ~member_completions ~features
+      ~simplify
       (Wax_utils.Diagnostic.collector ())
       fields
   end
