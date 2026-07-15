@@ -52,8 +52,9 @@
      from the innermost [Call] node containing the cursor in the typed tree, so
      a method call's receiver type is available: it covers a named function or
      import, an [ns::] intrinsic, and a method ([x.min(_)], [mem.load8(_)]) whose
-     signature comes from the receiver's inferred type. Needs the call to parse
-     and type — a balanced, auto-closed [f(|)] does. Wax only.
+     signature comes from the receiver's inferred type. Error recovery
+     auto-closes a call still being typed (an unclosed [f(1,] or a bare [f(]), so
+     it works mid-edit, not only when the parentheses are balanced. Wax only.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
      side-by-side preview commands.
@@ -1277,7 +1278,8 @@ let completion_string src line ch =
         let target = (line + 1, byte_column src line ch) in
         let ast_opt, _syntax_errors, _ctx =
           Wax_parser.parse_recover ~filename:"<buffer>"
-            ~sync:Wax_lang.Recover.sync ~insert:Wax_lang.Recover.insert src
+            ~sync:Wax_lang.Recover.sync ~insert:Wax_lang.Recover.insert
+            ~closers:Wax_lang.Recover.closers src
         in
         let keywords =
           List.map

@@ -239,10 +239,11 @@ does not carry. Three distinct prerequisites:
 
   The active parameter is the number of arguments ending before the cursor. A
   `SignatureHelpProvider` in `extension-common.ts` (triggers `(` and `,`)
-  highlights the active parameter by its label offsets. Because it keys off the
-  parsed+typed `Call`, it needs the call to parse and type — a balanced,
-  auto-closed `f(|)` does; a genuinely unclosed `f(1,` is dropped by recovery
-  until that synthesises the missing `)`. Wax only.
+  highlights the active parameter by its label offsets. It keys off the
+  parsed+typed `Call`, and error recovery auto-closes a call still being typed
+  (passing `Recover.closers` to `parse_recover` inserts the missing brackets),
+  so an unclosed `f(1,` or a bare `f(` gets a `Call` node too — signature help
+  works mid-edit, not only when the parentheses are balanced. Wax only.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
