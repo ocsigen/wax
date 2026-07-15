@@ -2,9 +2,10 @@
  (name check_keywords)
  (libraries str))
 
-; Every bare-word Wax keyword must appear in [ident_or_keyword] and in the
-; [from_wasm] reserved-name set; this fails the build (naming the keyword) if a
-; new one is added without updating both.
+; Every bare-word Wax keyword must appear in [ident_or_keyword], the [from_wasm]
+; reserved-name set, the editor grammar, and the tree-sitter grammar's KEYWORDS
+; list; this fails the build (naming the keyword) if a new one is added without
+; updating them.
 
 (rule
  (alias runtest)
@@ -13,11 +14,13 @@
   %{project_root}/src/lib-wax/lexer.ml
   %{project_root}/src/lib-wax/parser.mly
   %{project_root}/src/lib-conversion/namespace.ml
-  %{project_root}/editors/vscode/syntaxes/wax.tmLanguage.json)
+  %{project_root}/editors/vscode/syntaxes/wax.tmLanguage.json
+  %{project_root}/tree-sitter-wax/grammar.js)
  (action
   (run
    ./check_keywords.exe
    %{project_root}/src/lib-wax/lexer.ml
    %{project_root}/src/lib-wax/parser.mly
    %{project_root}/src/lib-conversion/namespace.ml
-   %{project_root}/editors/vscode/syntaxes/wax.tmLanguage.json)))
+   %{project_root}/editors/vscode/syntaxes/wax.tmLanguage.json
+   %{project_root}/tree-sitter-wax/grammar.js)))

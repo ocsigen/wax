@@ -7,6 +7,8 @@
                                     generated entity that would collide with it
    - [editors/vscode/syntaxes/wax.tmLanguage.json] a keyword-highlighting rule,
                                     so the editor grammar colours it
+   - [tree-sitter-wax/grammar.js]  the [KEYWORDS] list, so a keyword still works
+                                    as a label name in the tree-sitter grammar
 
    This test extracts the keyword set from the lexer and checks each one appears
    in the other lists, so adding a keyword without updating them fails the build
@@ -40,12 +42,13 @@ let region ~start ~stop text =
   String.sub text i (j - i)
 
 let () =
-  let lexer, parser_, namespace, grammar =
+  let lexer, parser_, namespace, grammar, ts_grammar =
     match Sys.argv with
-    | [| _; a; b; c; d |] -> (a, b, c, d)
+    | [| _; a; b; c; d; e |] -> (a, b, c, d, e)
     | _ ->
         failwith
-          "usage: check_keywords lexer.ml parser.mly namespace.ml grammar.json"
+          "usage: check_keywords lexer.ml parser.mly namespace.ml \
+           tmLanguage.json grammar.js"
   in
   (* Bare lowercase keyword arms [| "word" -> TOKEN], excluding the [_] hole. *)
   let keywords =
@@ -67,6 +70,13 @@ let () =
     |> List.concat_map (String.split_on_char '|')
     |> List.sort_uniq compare
   in
+  (* The single-quoted words in the tree-sitter grammar's [const KEYWORDS = [ … ]]
+     list. Like [ident_or_keyword], this is exactly the bare-word keyword set (it
+     is what a [label] name may be), so it is checked both ways. *)
+  let ts_keywords =
+    region ~start:"const KEYWORDS = [" ~stop:"];" (read_file ts_grammar)
+    |> all_group1 (Str.regexp {|'\([a-z_]+\)'|})
+  in
   (* A keyword the lexer defines but a list forgets (adding a keyword without
      registering it). *)
   let missing_from name set =
@@ -84,14 +94,17 @@ let () =
   in
   let ident_or_keyword_name = "ident_or_keyword (src/lib-wax/parser.mly)" in
   let reserved_name = "reserved (src/lib-conversion/namespace.ml)" in
+  let ts_keywords_name = "KEYWORDS (tree-sitter-wax/grammar.js)" in
   let problems =
     missing_from ident_or_keyword_name ident_or_keyword
     @ missing_from reserved_name reserved
     @ missing_from
         "keyword highlighting (editors/vscode/syntaxes/wax.tmLanguage.json)"
         grammar_words
+    @ missing_from ts_keywords_name ts_keywords
     @ stale_in ident_or_keyword_name ident_or_keyword
     @ stale_in reserved_name reserved
+    @ stale_in ts_keywords_name ts_keywords
   in
   match problems with
   | [] -> ()
