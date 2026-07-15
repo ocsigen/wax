@@ -400,34 +400,41 @@ struct
             | _ -> None)
         | _ -> None
       in
-      (* At end of input inside an unclosed bracketed construct, the generic
-         [skip] would unwind the stack {e past} that construct to a state that
-         accepts EOF, discarding the very thing the user is in the middle of
-         typing (the function whose body is still open never reaches the AST). So
-         when the offending token is EOF ([last] holds its real value), first try
-         to {e auto-close}: repeatedly insert whichever [closers] token the
-         parser will accept until offering EOF is accepted, so the pending
-         construct reduces into the best-effort AST. Returns the accepted
-         checkpoint, or [None] to fall through to [skip]. The syntax error itself
-         is still recorded by the caller; only the recovered AST improves.
+      (* When the offending token is itself a structural boundary — a closing
+         bracket, the statement separator, or EOF — but is rejected because an
+         inner construct in front of it is still open, the generic [skip] would
+         unwind {e past} that inner construct to a state that accepts the
+         boundary, dropping it. E.g. in ["fn f() { add(1, 2 }"] the unclosed
+         [add(1, 2] is discarded so [f]'s body is empty, and at EOF the whole
+         function the user is still typing is lost. So first try to {e auto-close}
+         the inner construct: repeatedly insert whichever [closers] token (or, in
+         between, the [insert] separator) the parser will accept until the
+         offending token itself becomes acceptable, then offer it — so the inner
+         construct reduces into the best-effort AST before the boundary consumes
+         it. Returns the resumed checkpoint, or [None] to fall through to [skip].
+         The syntax error itself is still recorded by the caller; only the
+         recovered AST improves.
 
-         A closer is always preferred; the [insert] separator only steps in to
-         end a statement that must be terminated before its enclosing block can
-         close (e.g. ["let x = (1 + 2"] needs ")" then ";" then "}"). Termination:
-         every inserted closer shifts a closing bracket, which strictly reduces
-         the open-bracket nesting, so only finitely many are inserted. The
-         separator would otherwise self-loop — a bare ";" is a valid {e empty}
-         statement, so it stays acceptable in a statement list forever — so it is
-         allowed only when the previous insertion was not itself a separator
-         ([prev_sep]); no two separators run consecutively, and a closer or EOF
-         must follow. [fuel] is a final backstop, not the real bound. *)
-      let close_at_eof env last =
+         A closer is always preferred; the separator only steps in to end a
+         statement that must be terminated before its block can close (e.g.
+         ["add(1, 2 }"] needs ")" then ";" then "}"). Termination: every inserted
+         closer shifts a closing bracket, which strictly reduces the open-bracket
+         nesting, so only finitely many are inserted. The separator would
+         otherwise self-loop — a bare ";" is a valid {e empty} statement, so it
+         stays acceptable in a statement list forever — so it is allowed only when
+         the previous insertion was not itself a separator ([prev_sep]); no two
+         separators run consecutively, and a closer or the target must follow.
+         [fuel] is a final backstop, not the real bound. *)
+      let close_pending env last =
         match (last, closers) with
-        | Some (eof, pos, _), _ :: _ when sync eof = Terminal ->
+        | Some ((t, pos, _) as target), _ :: _
+          when match sync t with
+               | Close | Boundary | Terminal -> true
+               | Open | Leader | Skip -> false ->
             let rec loop checkpoint prev_sep fuel =
               if fuel <= 0 then None
-              else if MI.acceptable checkpoint eof pos then
-                Some (settle (MI.offer checkpoint (eof, pos, pos)))
+              else if MI.acceptable checkpoint t pos then
+                Some (settle (MI.offer checkpoint target))
               else
                 match
                   List.find_opt
@@ -466,9 +473,10 @@ struct
         | Some checkpoint -> run checkpoint None
         | None -> (
             (* Insertion did not apply: record the standard error, then either
-               auto-close a construct left open at EOF or skip to a boundary. *)
+               auto-close an inner construct still open in front of the boundary
+               or skip to a boundary. *)
             record checkpoint;
-            match close_at_eof env last with
+            match close_pending env last with
             | Some checkpoint -> run checkpoint None
             | None -> skip env last)
       and skip env last =

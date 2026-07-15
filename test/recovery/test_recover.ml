@@ -9,6 +9,32 @@ let pos (p : Lexing.position) =
 let first_line s =
   match String.index_opt s '\n' with Some i -> String.sub s 0 i | None -> s
 
+(* Re-emit the recovered best-effort AST as Wax source, so a test can show
+   exactly what was salvaged (e.g. an unclosed call auto-closed into the body,
+   rather than the whole statement being dropped). Mirrors the CLI's wax output
+   path: a dry pass records which trivia the printer looks up, then the real pass
+   prints. The trailing flush matters — [Printer.run] leaves it to the caller. *)
+let report_ast name source =
+  Printf.printf "=== %s ===\n" name;
+  let ast, _errors, ctx =
+    Wax_conversion.Driver.wax_parse_recover ~filename:"test.wax" source
+  in
+  (match ast with
+  | None -> print_string "none\n"
+  | Some m ->
+      let used = Hashtbl.create 64 in
+      let null = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ()) in
+      Wax_utils.Printer.run null (fun p ->
+          Wax_lang.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used m);
+      let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
+      let buf = Buffer.create 128 in
+      let f = Format.formatter_of_buffer buf in
+      Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+          Wax_lang.Output.module_ p ~trivia ~tail m);
+      Format.pp_print_flush f ();
+      print_string (Buffer.contents buf));
+  print_newline ()
+
 let report name source =
   Printf.printf "=== %s ===\n" name;
   let ast, errors, _ctx =
@@ -81,4 +107,12 @@ let () =
   report "complete fn kept, unclosed one recovered too"
     "fn a() -> i32 { 1; }\nfn b() -> i32 {\n    let y = 2;\n";
   report "auto-close inserts ')' then ';' then '}' at EOF"
-    "fn f() -> i32 {\n    let x = (1 + 2\n"
+    "fn f() -> i32 {\n    let x = (1 + 2\n";
+  (* Auto-close before a *closer*, not just at EOF: an unclosed call in front of
+     the function's '}' is completed (')' then ';') so it reduces into the body,
+     instead of being unwound past and dropped with the whole statement. *)
+  report_ast "unclosed call before '}'" "fn f() { add(1, 2\n}\n";
+  report_ast "unclosed call, no args before '}'" "fn f() { add(\n}\n";
+  report_ast "unclosed call in a let before '}'" "fn f() { let x = add(1,\n}\n";
+  report_ast "complete stmt survives, unclosed call salvaged too"
+    "fn f() { g(); add(1,\n}\n"
