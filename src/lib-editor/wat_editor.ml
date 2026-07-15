@@ -38,24 +38,80 @@ let format_string src =
       Format.fprintf fmt "%a@." print_wat ast;
       Ok (Buffer.contents buf)
 
-(* Validate a WAT buffer with the type sink on, returning [(span, rendered
-   type)] for every value the validator pushes — the raw material for WAT hover.
-   Warnings are off (this pass exists only to harvest types, not to report). *)
-let wat_type_map src =
+(* Everything a WAT buffer's language features read, computed by one recovered
+   parse followed by one validation pass (with the type sink on) and one
+   name-resolution pass. A single pass serves hover, navigation, diagnostics and
+   the structural features alike, so an unchanged buffer is analysed once no
+   matter which feature fires. *)
+type analysis = {
+  a_ast : Wax_utils.Ast.location Wax_wasm.Ast.Text.module_ option;
+  a_syntax : diag list;  (** Syntax errors from the recovered parse. *)
+  a_diagnostics : diag list;  (** Validation / lint diagnostics. *)
+  a_types :
+    (Wax_utils.Ast.location * int * Wax_wasm.Validation.recorded_type) list;
+      (** The validator's recorded [(span, configuration, type)] entries. *)
+  a_bindings : Wax_wasm.Resolve.binding list;
+      (** The name-resolution use -> definition table. *)
+}
+
+(* Parse with the WAT recovery config (so a broken buffer still yields a
+   best-effort AST), then validate it in recovery mode — [set_recovery] makes
+   [Validation] suppress the warnings and stack-shape cascades a dropped or
+   auto-closed construct triggers, while real errors in the intact regions still
+   show — harvesting the type sink as we go, and resolve names. Validation may
+   abort mid-pass; whatever it recorded and collected up to that point still
+   stands, so read the sink and the collector regardless (as the Wax side does). *)
+let analyze_uncached src =
   let ast_opt, syntax_errors, _ =
     Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
       ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
       ~barrier:Wax_wasm.Recover.barrier src
   in
+  let a_syntax = List.map syntax_error_diag syntax_errors in
   match ast_opt with
-  | None -> []
+  | None ->
+      {
+        a_ast = None;
+        a_syntax;
+        a_diagnostics = [];
+        a_types = [];
+        a_bindings = [];
+      }
   | Some ast ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
       let types = ref [] in
-      (try Wax_wasm.Validation.f ~warn_unused:false ~record_types:types d ast
+      (try Wax_wasm.Validation.f ~warn_unused:true ~record_types:types d ast
        with Wax_utils.Diagnostic.Aborted -> ());
-      !types
+      {
+        a_ast = Some ast;
+        a_syntax;
+        a_diagnostics = collected_diags d;
+        a_types = !types;
+        a_bindings = Wax_wasm.Resolve.f ast;
+      }
+
+(* Cache the analysis, keyed by the exact source, so a feature invoked
+   repeatedly on an unchanged buffer (hover, once per mouse-hover) does not
+   re-parse and re-validate each time, and all features share the one pass. A
+   handful of recent buffers are kept; an edit changes the source and so is a
+   fresh entry, evicting the oldest. Mirrors {!Wax_editor}'s [analyze]. *)
+let analysis_cache_size = 4
+let analysis_cache : (string * analysis) list ref = ref []
+
+let analyze src =
+  match List.assoc_opt src !analysis_cache with
+  | Some a -> a
+  | None ->
+      let a = analyze_uncached src in
+      analysis_cache :=
+        (src, a)
+        :: List.filteri (fun i _ -> i < analysis_cache_size - 1) !analysis_cache;
+      a
+
+(* The validator's recorded [(span, configuration, type)] entries — the raw
+   material for WAT hover, type-definition and signature help. *)
+let wat_type_map src = (analyze src).a_types
 
 (* As [hover_string], but for WAT: the type the innermost instruction under the
    cursor leaves on the stack, from the validator's recorded types. A
@@ -161,13 +217,7 @@ let type_definition_string ?(encoding = UTF16) src line ch =
 
 (* The WAT name-resolution bindings for the buffer, from the recovered parse (so
    navigation works mid-edit). *)
-let wat_bindings src =
-  let ast_opt, _syntax, _ =
-    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
-      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
-      ~barrier:Wax_wasm.Recover.barrier src
-  in
-  match ast_opt with None -> [] | Some ast -> Wax_wasm.Resolve.f ast
+let wat_bindings src = (analyze src).a_bindings
 
 (* The binding whose definition or one of whose uses covers the cursor (smallest
    span winning), together with that covering occurrence's span. *)
@@ -241,26 +291,11 @@ let rename_string ?(encoding = UTF16) src line ch newname =
         (wat_occurrences b)
   | _ -> []
 
-(* As [check_string] but for WAT: parse with the WAT recovery config so all
-   syntax errors surface at once, then validate the best-effort AST in recovery
-   mode ([set_recovery]) so [Wax_wasm.Validation] suppresses the warnings and the
-   stack-shape cascades a dropped or auto-closed construct would otherwise
-   trigger, while real errors in the intact regions still show. *)
+(* As [check_string] but for WAT: the recovered parse's syntax errors together
+   with the validation / lint diagnostics, both from the shared analysis. *)
 let check_string src =
-  let ast_opt, syntax_errors, _ctx =
-    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
-      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
-      ~barrier:Wax_wasm.Recover.barrier src
-  in
-  let syntax = List.map syntax_error_diag syntax_errors in
-  match ast_opt with
-  | None -> syntax
-  | Some ast ->
-      let d = Wax_utils.Diagnostic.collector ~source:src () in
-      Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
-      (try Wax_wasm.Validation.f ~warn_unused:true d ast
-       with Wax_utils.Diagnostic.Aborted -> ());
-      syntax @ collected_diags d
+  let a = analyze src in
+  a.a_syntax @ a.a_diagnostics
 
 let to_wax_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
@@ -382,12 +417,7 @@ let wat_field_symbols
    collapsing to an empty outline. Syntax errors are ignored here; the intact
    fields of the best-effort AST are outlined. *)
 let symbols_string src =
-  let ast_opt, _syntax_errors, _ctx =
-    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
-      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
-      ~barrier:Wax_wasm.Recover.barrier src
-  in
-  match ast_opt with
+  match (analyze src).a_ast with
   | None -> []
   | Some (_name, fields) -> List.concat_map wat_field_symbols fields
 
@@ -450,12 +480,8 @@ let signature_help_string ?(encoding = UTF16) src line ch =
     a.loc_start.pos_cnum = b.loc_start.pos_cnum
     && a.loc_end.pos_cnum = b.loc_end.pos_cnum
   in
-  let ast_opt, _, _ =
-    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
-      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
-      ~barrier:Wax_wasm.Recover.barrier src
-  in
-  match ast_opt with
+  let a = analyze src in
+  match a.a_ast with
   | None -> None
   | Some (_name, fields) -> (
       (* The innermost folded direct call whose span covers the cursor. *)
@@ -481,7 +507,7 @@ let signature_help_string ?(encoding = UTF16) src line ch =
                 if same_span loc idx.Wax_wasm.Ast.info then
                   Wax_wasm.Validation.signature_labels rt
                 else None)
-              (wat_type_map src)
+              a.a_types
           in
           match signature with
           | None -> None
@@ -530,12 +556,7 @@ let selection_range_string ?(encoding = UTF16) src line ch =
   let contains (loc : Wax_utils.Ast.location) =
     le (pos loc.loc_start) target && le target (pos loc.loc_end)
   in
-  let ast_opt, _, _ =
-    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
-      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
-      ~barrier:Wax_wasm.Recover.barrier src
-  in
-  match ast_opt with
+  match (analyze src).a_ast with
   | None -> []
   | Some (_name, fields) ->
       let spans = ref [ (0, String.length src) ] in
@@ -619,11 +640,6 @@ let wat_block_comment_folds src =
    [(@if …)] annotation, and the multi-line [(; ;)] comments. From the recovered
    parse so it works mid-edit. *)
 let folding_string src =
-  let ast_opt, _, _ =
-    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
-      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
-      ~barrier:Wax_wasm.Recover.barrier src
-  in
   let tbl = Hashtbl.create 64 in
   let add start_line end_line kind =
     if end_line > start_line then
@@ -635,7 +651,7 @@ let folding_string src =
     if loc.loc_start.pos_cnum >= 0 then
       add (loc.loc_start.pos_lnum - 1) (loc.loc_end.pos_lnum - 1) kind
   in
-  (match ast_opt with
+  (match (analyze src).a_ast with
   | None -> ()
   | Some (_name, fields) ->
       let open Wax_wasm.Ast in
