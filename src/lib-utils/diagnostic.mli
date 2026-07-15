@@ -15,7 +15,7 @@ type label = { location : Ast.location; message : Message.t }
 
 val run :
   color:Colors.flag ->
-  ?palette:Colors.theme ->
+  palette:Colors.theme ->
   source:string option ->
   ?related:label list ->
   ?exit:bool ->
@@ -23,15 +23,15 @@ val run :
   ?policy:Warning.policy ->
   (context -> 'a) ->
   'a
-(** [run ~color ?palette ~source ?related ?exit ?output ?policy f] runs the
+(** [run ~color ~palette ~source ?related ?exit ?output ?policy f] runs the
     diagnostic context [f], a {e rendering} context that prints its diagnostics.
-    [color] is mandatory: a rendering context must decide up front whether to
-    emit ANSI colour, so a caller cannot silently fall back to the [Auto]
-    default (which sniffs stderr) — contrast {!collector}, which renders nothing
-    and takes no [color]. [palette] (default {!Colors.wax_theme}) is the source
-    palette used to colour AST fragments embedded in messages; pass
-    {!Colors.wat_theme} for a checker whose diagnostics embed WebAssembly-text
-    types (e.g. {!Wax_wasm.Validation}), so they match WAT source colouring.
+    [color] and [palette] are both mandatory: a rendering context must decide up
+    front whether to emit ANSI colour, and which source palette to colour AST
+    fragments embedded in messages with — so a caller cannot silently fall back
+    to a default. Pass {!Colors.wat_theme} for a checker whose diagnostics embed
+    WebAssembly-text types (e.g. {!Wax_wasm.Validation}) and {!Colors.wax_theme}
+    for one embedding Wax types, so they match that language's source colouring.
+    (Contrast {!collector}, which renders nothing and so takes neither.)
     [source] is the source code for the diagnostics (if available). [policy]
     sets the level — hidden, displayed, or promoted to an error — of each
     {e named} warning reported with [report]'s [warning] argument; it defaults

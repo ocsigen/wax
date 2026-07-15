@@ -580,10 +580,10 @@ exception Aborted
 
 let abort () = raise Aborted
 
-let run ~color ?palette ~source ?related ?(exit = true) ?output ?policy f =
+let run ~color ~palette ~source ?related ?(exit = true) ?output ?policy f =
   let render =
     {
-      theme = get_theme ~color ?palette ();
+      theme = get_theme ~color ~palette ();
       output = Option.value output ~default:Format.err_formatter;
       exit_on_error = exit;
     }

@@ -55,16 +55,18 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
   let ast =
     if Wax_wasm.Cond_specialize.is_empty defines then ast
     else
-      Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+      Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+        ~source:(Some text) (fun d ->
           fst (Wax_lang.Cond_specialize.module_ d defines ast))
   in
   let types, ast =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d ->
         Wax_lang.Typing.f ~warn_unused:validate d ast)
   in
   let wasm_ast =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        To_wasm.module_ d types ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> To_wasm.module_ d types ast)
   in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme

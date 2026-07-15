@@ -39,8 +39,8 @@ let test_case1 () =
      line 14\n"
   in
   Format.fprintf output "--- Case 1: Simple secondary label ---@.";
-  Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
-    (fun d ->
+  Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
+    ~source:(Some source) (fun d ->
       let related =
         [
           {
@@ -58,8 +58,8 @@ let test_case2 () =
     "line 1\nline 2 start here\nline 3 middle\nline 4 end here\nline 5\n"
   in
   Format.fprintf output "@.--- Case 2: Multi-line primary error ---@.";
-  Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
-    (fun d ->
+  Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
+    ~source:(Some source) (fun d ->
       Diagnostic.report d ~location:(loc 2 7 4 15) ~severity:Error
         ~message:(Message.text "multi-line error")
         ())
@@ -76,8 +76,8 @@ let test_case3 () =
      line 8\n"
   in
   Format.fprintf output "@.--- Case 3: Multi-line secondary label ---@.";
-  Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
-    (fun d ->
+  Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
+    ~source:(Some source) (fun d ->
       let related =
         [
           {
@@ -99,8 +99,8 @@ let test_case4 () =
     gen 1 ""
   in
   Format.fprintf output "@.--- Case 4: Long multi-line span ---@.";
-  Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
-    (fun d ->
+  Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
+    ~source:(Some source) (fun d ->
       Diagnostic.report d ~location:(loc 10 7 90 12) ~severity:Error
         ~message:(Message.text "long span error")
         ())
@@ -108,8 +108,8 @@ let test_case4 () =
 let test_case5 () =
   let source = "fn x {\nlet x = 10;\n" in
   Format.fprintf output "@.--- Case 5: Error at end of file (EOF) ---@.";
-  Diagnostic.run ~output ~exit:false ~color:Never ~source:(Some source)
-    (fun d ->
+  Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
+    ~source:(Some source) (fun d ->
       let related =
         [
           {

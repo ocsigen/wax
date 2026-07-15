@@ -272,7 +272,8 @@ let parse_binary ~color ?filename txt =
   let buf = Buffer.create 256 in
   let output = Format.formatter_of_buffer buf in
   match
-    Wax_utils.Diagnostic.run ~color ~source:None ~exit:false ~output (fun d ->
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+      ~source:None ~exit:false ~output (fun d ->
         Wax_wasm.Wasm_parser.module_ d ?filename txt)
   with
   | m -> Ok m
@@ -317,8 +318,9 @@ let runtest filename _ =
                   let ast, _ctx =
                     ModuleParser.parse_from_string ~color ~filename txt
                   in
-                  Wax_utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                      Wax_wasm.Validation.f ~warn_unused:false d ast);
+                  Wax_utils.Diagnostic.run ~color
+                    ~palette:Wax_utils.Colors.wat_theme ~source:(Some txt)
+                    (fun d -> Wax_wasm.Validation.f ~warn_unused:false d ast);
                   if false then
                     Format.printf "@[<2>Result:@ %a@]@." (print_module ~color)
                       ast)
@@ -342,7 +344,8 @@ let runtest filename _ =
                 let ast = Wax_wasm.Binary_to_text.module_ binary_ast in
                 let ok =
                   in_child_process ~quiet (fun () ->
-                      Wax_utils.Diagnostic.run ~color ~source:(Some txt)
+                      Wax_utils.Diagnostic.run ~color
+                        ~palette:Wax_utils.Colors.wat_theme ~source:(Some txt)
                         (fun d ->
                           Wax_wasm.Validation.f ~warn_unused:false d ast);
                       if false then
@@ -408,8 +411,8 @@ let runtest filename _ =
       match (status, m) with
       | `Valid, m ->
           if false then Format.eprintf "@[%a@]@." (print_module ~color) m;
-          Wax_utils.Diagnostic.run ~color ~source (fun d ->
-              Wax_wasm.Validation.f ~warn_unused:false d m)
+          Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
+            ~source (fun d -> Wax_wasm.Validation.f ~warn_unused:false d m)
       | `Invalid reason, m ->
           let ok =
             in_child_process ~quiet (fun () ->
@@ -419,7 +422,8 @@ let runtest filename _ =
                    capture and check it in the parent the way we do for malformed
                    binaries). *)
                 if not quiet then Format.eprintf "Expected reason: %s@." reason;
-                Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                Wax_utils.Diagnostic.run ~color
+                  ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
                     Wax_wasm.Validation.f ~warn_unused:false d m);
                 if false then
                   Format.printf "@[<2>Result:@ %a@]@." (print_module ~color) m)
@@ -478,7 +482,8 @@ let runtest filename _ =
                       let m', _ctx =
                         WaxParser.parse_from_string ~color ~filename text
                       in
-                      Wax_utils.Diagnostic.run ~color ~source:(Some text)
+                      Wax_utils.Diagnostic.run ~color
+                        ~palette:Wax_utils.Colors.wat_theme ~source:(Some text)
                         (fun d -> Wax_lang.Typing.check d m'))
                 in
                 if ok then
@@ -494,20 +499,25 @@ let runtest filename _ =
                          wasm->wax path does, so the round-trip and validation
                          below exercise the [simplify] pass. *)
                       let _, m =
-                        Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                        Wax_utils.Diagnostic.run ~color
+                          ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
                             Wax_lang.Typing.f ~simplify:true d m)
                       in
                       let types, m =
-                        Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                        Wax_utils.Diagnostic.run ~color
+                          ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
                             Wax_lang.Typing.f d (Wax_lang.Typing.erase_types m))
                       in
                       let m' =
-                        Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                        Wax_utils.Diagnostic.run ~color
+                          ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
                             Wax_conversion.To_wasm.module_ d types m)
                       in
                       let ok =
                         in_child_process (fun () ->
-                            Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                            Wax_utils.Diagnostic.run ~color
+                              ~palette:Wax_utils.Colors.wat_theme ~source
+                              (fun d ->
                                 Wax_wasm.Validation.f ~warn_unused:false d m'))
                       in
                       if not ok then (
@@ -526,6 +536,7 @@ let runtest filename _ =
                         let ok =
                           in_child_process (fun () ->
                               Wax_utils.Diagnostic.run ~color
+                                ~palette:Wax_utils.Colors.wax_theme
                                 ~source:(Some text) (fun d ->
                                   Wax_lang.Typing.check d m'))
                         in

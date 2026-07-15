@@ -46,7 +46,8 @@ let specialize_wax ?ctx ~color ~text defines ast =
   if Wax_wasm.Cond_specialize.is_empty defines then ast
   else
     let ast, dropped =
-      Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+      Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+        ~source:(Some text) (fun d ->
           Wax_lang.Cond_specialize.module_ d defines ast)
     in
     Option.iter (fun ctx -> Wax_utils.Trivia.drop_in_ranges ctx dropped) ctx;
@@ -67,7 +68,8 @@ let specialize_wat ?ctx ~color ~text defines ast =
    cannot be represented in binary; report it as a located diagnostic (rather
    than an uncaught exception) and suggest resolving it. *)
 let to_binary ~color ~source ast =
-  Wax_utils.Diagnostic.run ~color ~source (fun d ->
+  Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme ~source
+    (fun d ->
       try Wax_wasm.Text_to_binary.module_ ast with
       | Wax_wasm.Text_to_binary.Conditional_in_binary location ->
           Wax_utils.Diagnostic.report d ~location ~severity:Error
@@ -92,7 +94,8 @@ let to_binary ~color ~source ast =
    core-wasm form; report it as a located diagnostic (rather than an uncaught
    exception) and suggest resolving it. *)
 let desugar_wat ~color ~source ast =
-  Wax_utils.Diagnostic.run ~color ~source (fun d ->
+  Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme ~source
+    (fun d ->
       try Wax_wasm.Desugar.module_ ast
       with Wax_wasm.Desugar.Conditional_remains location ->
         Wax_utils.Diagnostic.report d ~location ~severity:Error
@@ -115,8 +118,8 @@ let fold_module ~fold_mode ~color ~source ast =
   match fold_mode with
   | Auto -> ast
   | Fold ->
-      Wax_utils.Diagnostic.run ~color ~source (fun d ->
-          Wax_wasm.Folding.fold d ast)
+      Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+        ~source (fun d -> Wax_wasm.Folding.fold d ast)
   | Unfold -> Wax_wasm.Folding.unfold ast
 
 let output_wat ?(tail = []) ~output_file ~color ~trivia ast =
@@ -207,12 +210,12 @@ let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
   let wax_ast =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_conversion.From_wasm.module_ d ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> Wax_conversion.From_wasm.module_ d ast)
   in
   let wax_ast =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_lang.Typing.f ~simplify:true d wax_ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> Wax_lang.Typing.f ~simplify:true d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
   (* The converted Wax nodes carry the source Wat locations, so the source
@@ -242,12 +245,12 @@ let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   in
   let ast = specialize_wax ~ctx ~color ~text defines ast in
   let types, ast =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_lang.Typing.f ~warn_unused d ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> Wax_lang.Typing.f ~warn_unused d ast)
   in
   let wasm_ast =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_conversion.To_wasm.module_ d types ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> Wax_conversion.To_wasm.module_ d types ast)
   in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
@@ -280,8 +283,8 @@ let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
   in
   let ast = specialize_wax ~ctx ~color ~text defines ast in
   if validate then
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_lang.Typing.check ~warn_unused d ast);
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> Wax_lang.Typing.check ~warn_unused d ast);
   let trivia, tail = wax_trivia ctx ast in
   with_open_out output_file (fun oc ->
       let print_wax f m =
@@ -303,12 +306,12 @@ let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
   in
   let ast = specialize_wax ~color ~text defines ast in
   let types, ast =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_lang.Typing.f ~warn_unused d ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> Wax_lang.Typing.f ~warn_unused d ast)
   in
   let wasm_ast_text =
-    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_conversion.To_wasm.module_ d types ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:(Some text) (fun d -> Wax_conversion.To_wasm.module_ d types ast)
   in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
@@ -345,8 +348,8 @@ let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
 (* Parse a Wasm binary, reporting malformed input as a diagnostic (and exiting)
    through the standard diagnostics machinery. *)
 let parse_wasm ~color ?filename text =
-  Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
-      Wax_wasm.Wasm_parser.module_ d ?filename text)
+  Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+    ~source:None (fun d -> Wax_wasm.Wasm_parser.module_ d ?filename text)
 
 let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~warn_unused:_
     ~color ~output_color:_ ~fold_mode:_ ~defines:_ ~desugar:_
@@ -379,14 +382,14 @@ let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
   let wax_ast =
-    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wax_conversion.From_wasm.module_ d text_ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:None (fun d -> Wax_conversion.From_wasm.module_ d text_ast)
   in
   (* Type the converted module to drop casts the precise types make redundant
      and tighten [&?extern]/[&?any] casts, as the WAT-to-Wax path does. *)
   let wax_ast =
-    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wax_lang.Typing.f ~simplify:true d wax_ast)
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+      ~source:None (fun d -> Wax_lang.Typing.f ~simplify:true d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
   with_open_out output_file (fun oc ->
