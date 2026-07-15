@@ -45,7 +45,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 | Flag | Long | Description |
 |------|------|-------------|
 | `-i` | `--input-format` | Input format: `wax`, `wat`, `wasm` (default: auto from extension, else `wax`) |
-| `-f` | `--format` / `--output-format` | Output format: `wax`, `wat`, `wasm` (default: `wasm`) |
+| `-f` | `--format` / `--output-format` | Output format: `wax`, `wat`, `wasm` (default: `wax`) |
 | `-o` | `--output` | Output file (default: stdout) |
 | `-v` | `--validate` | Force validation everywhere and report unused locals. Text input (wax/wat) converted to a *different* format is validated by default already; this additionally validates a same-format conversion and a trusted wasm binary input |
 | `-s` | `--strict-validate` | Stricter validation |

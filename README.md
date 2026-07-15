@@ -100,15 +100,15 @@ fn sum(l: &?list) -> i32 {
 ## Quick start
 
 ```sh
-wax input.wax -o output.wasm      # compile Wax to a Wasm binary (the default output)
-wax -i wat -f wax input.wat       # convert WAT to Wax (to stdout)
-wax program.wasm -f wax           # decompile a binary to Wax
-wax check input.wax               # type-check only, no output
-wax format -i input.wax           # reformat in place
+wax input.wax -o output.wasm    # compile Wax to a Wasm binary (auto-detected from .wasm)
+wax input.wat                   # convert WAT to Wax (to stdout)
+wax program.wasm                # decompile a binary to Wax
+wax check input.wax             # type-check only, no output
+wax format -i input.wax         # reformat in place
 ```
 
 The input format is detected from the file extension (override with `-i`); the
-default output format is `wasm` (override with `-f`). `wax` reads from `stdin`
+default output format is `wax` (override with `-f`). `wax` reads from `stdin`
 when no input file is given and writes to `stdout` when `-o` is omitted.
 
 See the [CLI reference](https://ocsigen.org/wax/cli.html) for the

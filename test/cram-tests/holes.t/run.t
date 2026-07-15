@@ -1,10 +1,10 @@
 Well placed holes
 
-  $ wax good.wax -o /dev/null
+  $ wax good.wax -f wasm -o /dev/null
 
 A constant before the last hole
 
-  $ wax bad1.wax -o /dev/null
+  $ wax bad1.wax -f wasm -o /dev/null
   Error: This expression occurs before a hole '_'.
    ──➤  bad1.wax:3:15
   1 │ 
@@ -17,7 +17,7 @@ A constant before the last hole
 
 A binary operation before the last hole
 
-  $ wax bad2.wax -o /dev/null
+  $ wax bad2.wax -f wasm -o /dev/null
   Error: This expression occurs before a hole '_'.
    ──➤  bad2.wax:3:13
   1 │ 
@@ -30,7 +30,7 @@ A binary operation before the last hole
 
 Struct fields are ordered according to the type
 
-  $ wax bad3.wax -o /dev/null
+  $ wax bad3.wax -f wasm -o /dev/null
   Error: This expression occurs before a hole '_'.
    ──➤  bad3.wax:4:18
   2 │ 
@@ -44,7 +44,7 @@ Struct fields are ordered according to the type
 
 Function arguments are before the function itself
 
-  $ wax bad4.wax -o /dev/null
+  $ wax bad4.wax -f wasm -o /dev/null
   Error: This expression occurs before a hole '_'.
    ──➤  bad4.wax:7:8
   5 │ 
@@ -71,7 +71,7 @@ stopping at the first) is reported, not a crash:
 
 Select condition is considered after the two branches
 
-  $ wax bad5.wax -o /dev/null
+  $ wax bad5.wax -f wasm -o /dev/null
   Error: This expression occurs before a hole '_'.
    ──➤  bad5.wax:2:8
   1 │ fn k (x: i32) -> i32 {
