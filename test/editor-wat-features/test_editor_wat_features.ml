@@ -1,4 +1,4 @@
-(* Exercises the WAT editor features ([Wax_editor.*_wat_string]) that bring
+(* Exercises the WAT editor features ([Wat_editor.*]) that bring
    Wasm-text buffers to parity with Wax in the LSP server and VS Code extension.
    Each section drives one feature against a small module and prints a compact
    summary checked against the golden output. *)
@@ -22,7 +22,7 @@ let () =
   Printf.printf "=== folding ===\n";
   List.iter
     (fun (s, e, k) -> Printf.printf "  %d-%d %s\n" s e k)
-    (List.sort compare (Wax_editor.folding_wat_string src));
+    (List.sort compare (Wat_editor.folding_string src));
   print_newline ();
 
   (* Selection-range at the cursor inside [local.get $a] on line 4 (0-based line
@@ -30,15 +30,15 @@ let () =
   Printf.printf "=== selection-range (in `local.get $a`, line 4) ===\n";
   List.iter
     (fun (sl, sc, el, ec) -> Printf.printf "  (%d,%d)-(%d,%d)\n" sl sc el ec)
-    (Wax_editor.selection_range_wat_string src 3 30);
+    (Wat_editor.selection_range_string src 3 30);
   print_newline ();
 
   (* Hover: the type each instruction leaves on the stack. Probe a few cursors.
      Line/char are 0-based. *)
   Printf.printf "=== hover ===\n";
   let hover name line ch =
-    match Wax_editor.hover_wat_string src line ch with
-    | Some h -> Printf.printf "  %s -> %s\n" name h.Wax_editor.h_type
+    match Wat_editor.hover_string src line ch with
+    | Some h -> Printf.printf "  %s -> %s\n" name h.Editor_common.h_type
     | None -> Printf.printf "  %s -> (none)\n" name
   in
   hover "i32.add (line 4)" 3 21;
@@ -64,23 +64,23 @@ let () =
   Printf.printf "=== definition (on `$add` use, line 11) ===\n";
   List.iter
     (fun loc -> Printf.printf "  %s\n" (show_loc loc))
-    (Wax_editor.definition_wat_string src 10 11);
+    (Wat_editor.definition_string src 10 11);
   Printf.printf "=== references ($add) ===\n";
   List.iter
     (fun loc -> Printf.printf "  %s\n" (show_loc loc))
-    (Wax_editor.references_wat_string src 10 11);
+    (Wat_editor.references_string src 10 11);
   Printf.printf "=== rename $add -> $sum2 ===\n";
   List.iter
     (fun (loc, repl) -> Printf.printf "  %s := %s\n" (show_loc loc) repl)
-    (Wax_editor.rename_wat_string src 10 11 "sum2");
+    (Wat_editor.rename_string src 10 11 "sum2");
   Printf.printf "=== references (local $sum, line 3) ===\n";
   List.iter
     (fun loc -> Printf.printf "  %s\n" (show_loc loc))
-    (Wax_editor.references_wat_string src 2 12);
+    (Wat_editor.references_string src 2 12);
   Printf.printf "=== references (label $done, line 5) ===\n";
   List.iter
     (fun loc -> Printf.printf "  %s\n" (show_loc loc))
-    (Wax_editor.references_wat_string src 4 12);
+    (Wat_editor.references_string src 4 12);
   print_newline ();
 
   (* A struct type, a struct-field access, a symbolic call and a numeric call to
@@ -119,15 +119,14 @@ let () =
   (* $mk references: definition, the symbolic `call $mk`, and the numeric
      `call 0`. Rename rewrites only the symbolic ones. *)
   probe "=== references $mk (incl. numeric call 0) ==="
-    Wax_editor.references_wat_string "$mk" 0;
+    Wat_editor.references_string "$mk" 0;
   let l, c = find "$mk" 0 in
   Printf.printf "=== rename $mk -> $make (numeric call 0 untouched) ===\n";
   List.iter
     (fun (loc, repl) -> Printf.printf "  %s := %s\n" (show_loc loc) repl)
-    (Wax_editor.rename_wat_string src2 l c "make");
-  probe "=== references type $point ===" Wax_editor.references_wat_string
-    "$point" 0;
-  probe "=== references field $x ===" Wax_editor.references_wat_string "$x" 0;
+    (Wat_editor.rename_string src2 l c "make");
+  probe "=== references type $point ===" Wat_editor.references_string "$point" 0;
+  probe "=== references field $x ===" Wat_editor.references_string "$x" 0;
   print_newline ();
 
   (* Type on identifiers: a call's callee shows its signature; local.set /
@@ -154,8 +153,8 @@ let () =
   in
   let hov3 label sub off =
     let l, c = find3 sub off in
-    match Wax_editor.hover_wat_string src3 l c with
-    | Some h -> Printf.printf "  %s -> %s\n" label h.Wax_editor.h_type
+    match Wat_editor.hover_string src3 l c with
+    | Some h -> Printf.printf "  %s -> %s\n" label h.Editor_common.h_type
     | None -> Printf.printf "  %s -> (none)\n" label
   in
   Printf.printf "=== type on identifiers ===\n";
@@ -189,8 +188,8 @@ let () =
   in
   let hov4 label sub off =
     let l, c = find4 sub off in
-    match Wax_editor.hover_wat_string src4 l c with
-    | Some h -> Printf.printf "  %s -> %s\n" label h.Wax_editor.h_type
+    match Wat_editor.hover_string src4 l c with
+    | Some h -> Printf.printf "  %s -> %s\n" label h.Editor_common.h_type
     | None -> Printf.printf "  %s -> (none)\n" label
   in
   Printf.printf "=== branch-cast result (single value) ===\n";
@@ -222,8 +221,8 @@ let () =
   in
   let hov5 label sub off =
     let l, c = find5 sub off in
-    match Wax_editor.hover_wat_string src5 l c with
-    | Some h -> Printf.printf "  %s -> %s\n" label h.Wax_editor.h_type
+    match Wat_editor.hover_string src5 l c with
+    | Some h -> Printf.printf "  %s -> %s\n" label h.Editor_common.h_type
     | None -> Printf.printf "  %s -> (none)\n" label
   in
   Printf.printf "=== subtype on type identifier (dedup-safe) ===\n";
@@ -248,9 +247,9 @@ let () =
   in
   Printf.printf "=== semantic tokens ===\n";
   List.iter
-    (fun (t : Wax_editor.sem_token) ->
+    (fun (t : Editor_common.sem_token) ->
       Printf.printf "  (%d,%d)+%d %s\n" t.st_line t.st_char t.st_len t.st_type)
-    (Wax_editor.semantic_tokens_wat_string src6);
+    (Wat_editor.semantic_tokens_string src6);
   print_newline ();
 
   (* Signature help inside a folded call: the callee's signature and the active
@@ -274,7 +273,7 @@ let () =
   in
   let sig_help label sub off =
     let l, c = find7 sub off in
-    match Wax_editor.signature_help_wat_string src7 l c with
+    match Wat_editor.signature_help_string src7 l c with
     | Some (lbl, ranges, active) ->
         Printf.printf "  %s -> %s | active=%d params=[%s]\n" label lbl active
           (String.concat ";"
@@ -310,7 +309,7 @@ let () =
   let type_def label sub off =
     let l, c = find8 sub off in
     Printf.printf "  %s ->" label;
-    (match Wax_editor.type_definition_wat_string src8 l c with
+    (match Wat_editor.type_definition_string src8 l c with
     | [] -> Printf.printf " (none)"
     | ls ->
         List.iter

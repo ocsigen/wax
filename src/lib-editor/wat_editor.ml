@@ -1,0 +1,707 @@
+(* The Wasm-text (WAT) editor analysis: formatting, checking, and the
+   language-server features for [.wat] buffers, as pure functions over source
+   text. The Wax counterpart is {!Wax_editor}; the shared value types and helpers
+   are in {!Editor_common}. Every feature is a [*_string] function returning a
+   plain OCaml value; the JS marshalling and the LSP protocol mapping live in the
+   consumers, not here. *)
+
+open Editor_common
+
+(* The Wasm-text parser, instantiated the same way (no fast parser). Its lexer,
+   parser and {!Wax_wasm.Validation} are what make this module cover WAT too. *)
+module Wat_parser =
+  Wax_wasm.Parsing.Make
+    (struct
+      type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
+    end)
+    (Wax_wasm.Tokens)
+    (Wax_wasm.Parser)
+    (Wax_wasm.Parser_messages)
+    (Wax_wasm.Lexer)
+
+let format_string src =
+  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error { message; _ } ->
+      Error (String.trim (Wax_utils.Message.to_plain_string message))
+  | Ok (ast, ctx) ->
+      let trivia, tail =
+        collect_trivia ctx ~print:(fun p ~collect ->
+            Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect ast)
+      in
+      let buf = Buffer.create (String.length src) in
+      let fmt = Format.formatter_of_buffer buf in
+      let print_wat f m =
+        Wax_utils.Printer.run f (fun p ->
+            Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p ~trivia
+              ~tail m)
+      in
+      Format.fprintf fmt "%a@." print_wat ast;
+      Ok (Buffer.contents buf)
+
+(* Validate a WAT buffer with the type sink on, returning [(span, rendered
+   type)] for every value the validator pushes — the raw material for WAT hover.
+   Warnings are off (this pass exists only to harvest types, not to report). *)
+let wat_type_map src =
+  let ast_opt, syntax_errors, _ =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  match ast_opt with
+  | None -> []
+  | Some ast ->
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+      let types = ref [] in
+      (try Wax_wasm.Validation.f ~warn_unused:false ~record_types:types d ast
+       with Wax_utils.Diagnostic.Aborted -> ());
+      !types
+
+(* As [hover_string], but for WAT: the type the innermost instruction under the
+   cursor leaves on the stack, from the validator's recorded types. An
+   instruction that produces several results contributes one entry per result at
+   the same span; they are joined in stack order. *)
+let hover_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let span (loc : Wax_utils.Ast.location) =
+    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+  in
+  let entries = wat_type_map src in
+  (* The innermost span (smallest width) covering the cursor. *)
+  let best =
+    List.fold_left
+      (fun best (loc, ty) ->
+        if contains loc then
+          match best with
+          | Some (bloc, _) when span bloc <= span loc -> best
+          | _ -> Some (loc, ty)
+        else best)
+      None entries
+  in
+  match best with
+  | None -> None
+  | Some (loc, _) -> (
+      (* Render every type recorded at that innermost span (a multi-result
+         instruction records one each), in stack order, deduping repeats a
+         path-sensitive re-check may add. An instruction that produces no value
+         renders to nothing, so its span yields no hover — rather than the
+         enclosing instruction's type. *)
+      let seen = Hashtbl.create 8 in
+      let tys =
+        List.rev entries
+        |> List.filter_map (fun (l, rt) ->
+            if l = loc then
+              match Wax_wasm.Validation.render_recorded_type rt with
+              | Some t when not (Hashtbl.mem seen t) ->
+                  Hashtbl.replace seen t ();
+                  Some t
+              | _ -> None
+            else None)
+      in
+      match tys with
+      | [] -> None
+      | _ -> Some { h_type = String.concat " " tys; h_range = loc })
+
+(* As [type_definition_string], but for WAT: from the value or type identifier
+   under the cursor, the definition of its type — a local/parameter/result of a
+   named reference type jumps to that type's definition, and a type reference
+   jumps to the type. The validator records the target type's definition span at
+   each such value/reference span. *)
+let type_definition_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let span (loc : Wax_utils.Ast.location) =
+    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+  in
+  let best =
+    List.fold_left
+      (fun best (loc, rt) ->
+        match Wax_wasm.Validation.type_def_location rt with
+        | Some def when contains loc -> (
+            match best with
+            | Some (bloc, _) when span bloc <= span loc -> best
+            | _ -> Some (loc, def))
+        | _ -> best)
+      None (wat_type_map src)
+  in
+  match best with Some (_, def) -> [ def ] | None -> []
+
+(* The WAT name-resolution bindings for the buffer, from the recovered parse (so
+   navigation works mid-edit). *)
+let wat_bindings src =
+  let ast_opt, _syntax, _ =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  match ast_opt with None -> [] | Some ast -> Wax_wasm.Resolve.f ast
+
+(* The binding whose definition or one of whose uses covers the cursor (smallest
+   span winning), together with that covering occurrence's span. *)
+let wat_binding_at ~encoding src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let span (loc : Wax_utils.Ast.location) =
+    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+  in
+  List.fold_left
+    (fun best (b : Wax_wasm.Resolve.binding) ->
+      let occ = (match b.def with Some d -> [ d ] | None -> []) @ b.uses in
+      List.fold_left
+        (fun best loc ->
+          if contains loc then
+            match best with
+            | Some (_, bloc) when span bloc <= span loc -> best
+            | _ -> Some (b, loc)
+          else best)
+        best occ)
+    None (wat_bindings src)
+
+(* All occurrences of a binding (its definition, if named, then its uses). *)
+let wat_occurrences (b : Wax_wasm.Resolve.binding) =
+  (match b.def with Some d -> [ d ] | None -> []) @ b.uses
+
+(* As [definition_string], but for WAT: the definition span of the symbol under
+   the cursor (empty for an anonymous / numeric-only definition). *)
+let definition_string ?(encoding = UTF16) src line ch =
+  match wat_binding_at ~encoding src line ch with
+  | Some (b, _) -> (
+      match b.Wax_wasm.Resolve.def with Some d -> [ d ] | None -> [])
+  | None -> []
+
+(* As [references_string], but for WAT: every occurrence of the symbol under the
+   cursor (definition and uses), for find-references and document-highlight. *)
+let references_string ?(encoding = UTF16) src line ch =
+  match wat_binding_at ~encoding src line ch with
+  | Some (b, _) -> wat_occurrences b
+  | None -> []
+
+(* As [rename_prepare_string], but for WAT: the span at the cursor, if it sits on
+   a symbolic ([$id]) occurrence of a named definition. A numeric index use or an
+   anonymous definition is not renameable. *)
+let rename_prepare_string ?(encoding = UTF16) src line ch =
+  match wat_binding_at ~encoding src line ch with
+  | Some (b, occ) when b.Wax_wasm.Resolve.def <> None ->
+      let text = slice src occ in
+      if String.length text > 0 && text.[0] = '$' then Some occ else None
+  | _ -> None
+
+(* As [rename_string], but for WAT. Only symbolic ([$id]) occurrences are
+   rewritten — a numeric index use of the same definition is left untouched — and
+   the replacement keeps the leading [$]. *)
+let rename_string ?(encoding = UTF16) src line ch newname =
+  match wat_binding_at ~encoding src line ch with
+  | Some (b, _) when b.Wax_wasm.Resolve.def <> None ->
+      let repl =
+        if String.length newname > 0 && newname.[0] = '$' then newname
+        else "$" ^ newname
+      in
+      List.filter_map
+        (fun loc ->
+          let text = slice src loc in
+          if String.length text > 0 && text.[0] = '$' then Some (loc, repl)
+          else None)
+        (wat_occurrences b)
+  | _ -> []
+
+(* As [check_string] but for WAT: parse with the WAT recovery config so all
+   syntax errors surface at once, then validate the best-effort AST in recovery
+   mode ([set_recovery]) so [Wax_wasm.Validation] suppresses the warnings and the
+   stack-shape cascades a dropped or auto-closed construct would otherwise
+   trigger, while real errors in the intact regions still show. *)
+let check_string src =
+  let ast_opt, syntax_errors, _ctx =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  let syntax = List.map syntax_error_diag syntax_errors in
+  match ast_opt with
+  | None -> syntax
+  | Some ast ->
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+      (try Wax_wasm.Validation.f ~warn_unused:true d ast
+       with Wax_utils.Diagnostic.Aborted -> ());
+      syntax @ collected_diags d
+
+let to_wax_string src =
+  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error { message; _ } ->
+      Error (String.trim (Wax_utils.Message.to_plain_string message))
+  | Ok (ast, ctx) -> (
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      try
+        let wax_ast = Wax_conversion.From_wasm.module_ d ast in
+        if has_errors d then Error (errors_string d)
+        else
+          let wax_ast =
+            Wax_lang.Typing.f ~simplify:true d wax_ast
+            |> snd |> Wax_lang.Typing.erase_types
+          in
+          let trivia, tail =
+            collect_trivia
+              ~print:(fun p ~collect ->
+                Wax_lang.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect
+                  wax_ast)
+              ~retarget:
+                (Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
+              ctx
+          in
+          let buf = Buffer.create (String.length src) in
+          let fmt = Format.formatter_of_buffer buf in
+          let print_wax f m =
+            Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+                Wax_lang.Output.module_ p ~trivia ~tail m)
+          in
+          Format.fprintf fmt "%a@." print_wax wax_ast;
+          Ok (Buffer.contents buf)
+      with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
+
+(* The same outline for a Wasm-text module. Its fields differ from Wax's: the
+   [$id] name is optional, and a definition carries its exports separately, so an
+   anonymous definition is named by its first export, else by a fallback word. *)
+let wat_field_symbols
+    (field :
+      ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
+        Wax_utils.Ast.location )
+      Wax_wasm.Ast.annotated) : sym list =
+  (* [Ast] for the [annotated] record labels ([desc]/[info]); [Ast.Text] for the
+     module-field constructors. *)
+  let open Wax_wasm.Ast in
+  let open Wax_wasm.Ast.Text in
+  let one s_name s_kind s_selection =
+    { s_name; s_kind; s_range = field.info; s_selection; s_children = [] }
+  in
+  (* The lexer stores a [$id] without its leading [$] (but the id's span still
+     covers it). Render it exactly as the printer does (so an id that is not a
+     plain identifier gets the quoted [$"…"] form); this also distinguishes an id
+     from an export name, which is shown bare. *)
+  let id_name (n : name) = Wax_wasm.Output.id_string n.desc in
+  let named (id : name option) (exports : name list) kind fallback =
+    match id with
+    | Some n -> [ one (id_name n) kind n.info ]
+    | None -> (
+        match exports with
+        | e :: _ -> [ one e.desc kind e.info ]
+        | [] -> [ one fallback kind field.info ])
+  in
+  let import_kind (desc : importdesc) =
+    match desc with
+    | Func _ -> "function"
+    | Memory _ -> "memory"
+    | Table _ -> "table"
+    | Global _ -> "variable"
+    | Tag _ -> "event"
+  in
+  let import_sym module_ (name : name) (id : name option) desc =
+    let s_name, s_selection =
+      match id with
+      | Some n -> (id_name n, n.info)
+      | None -> (module_ ^ "." ^ name.desc, name.info)
+    in
+    one s_name (import_kind desc) s_selection
+  in
+  match field.desc with
+  | Func { id; exports; _ } -> named id exports "function" "func"
+  | Global { id; exports; _ } -> named id exports "variable" "global"
+  | Memory { id; exports; _ } -> named id exports "memory" "memory"
+  | Table { id; exports; _ } -> named id exports "table" "table"
+  | Tag { id; exports; _ } -> named id exports "event" "tag"
+  | Elem { id = Some n; _ } -> [ one (id_name n) "array" n.info ]
+  | Elem { id = None; _ } -> []
+  | Data { id = Some n; _ } -> [ one (id_name n) "data" n.info ]
+  | Data { id = None; _ } -> []
+  | String_global { id; _ } -> [ one (id_name id) "variable" id.info ]
+  | Import { module_; name; id; desc; _ } ->
+      [ import_sym module_.desc name id desc ]
+  | Import_group1 { module_; items } ->
+      List.map
+        (fun (name, id, desc) -> import_sym module_.desc name id desc)
+        items
+  | Import_group2 { module_; desc; items } ->
+      List.map (fun (name, id) -> import_sym module_.desc name id desc) items
+  | Types rectype ->
+      Array.to_list rectype
+      |> List.filter_map (fun entry ->
+          let id, _ = entry.desc in
+          match (id : name option) with
+          | Some n ->
+              Some
+                {
+                  s_name = id_name n;
+                  s_kind = "type";
+                  s_range = entry.info;
+                  s_selection = n.info;
+                  s_children = [];
+                }
+          | None -> None)
+  | Export _ | Start _ -> []
+  | Module_if_annotation _ -> []
+
+(* As [symbols_string], but for WAT, and with the WAT recovery config (parens as
+   sync points, the placeholder operand, closers, and the field-keyword barrier),
+   so a broken buffer still outlines the fields around the error instead of
+   collapsing to an empty outline. Syntax errors are ignored here; the intact
+   fields of the best-effort AST are outlined. *)
+let symbols_string src =
+  let ast_opt, _syntax_errors, _ctx =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  match ast_opt with
+  | None -> []
+  | Some (_name, fields) -> List.concat_map wat_field_symbols fields
+
+(* Iterate [f] over every WAT module field, descending into the branches of an
+   [(@if …)] conditional annotation (whose bodies hold nested fields), so a field
+   guarded by a condition is walked like any other. *)
+let rec wat_iter_fields f fields =
+  let open Wax_wasm.Ast in
+  List.iter
+    (fun (field :
+           ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
+             Wax_utils.Ast.location )
+           annotated) ->
+      f field;
+      match field.desc with
+      | Text.Module_if_annotation { then_fields; else_fields; _ } ->
+          wat_iter_fields f then_fields.desc;
+          Option.iter (fun b -> wat_iter_fields f b.desc) else_fields
+      | _ -> ())
+    fields
+
+(* Apply [f] to every instruction (recursively) in a WAT field's code — a
+   function body, or a global / elem / data / table initializer expression. *)
+let wat_field_iter_instr f
+    (field :
+      ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
+        Wax_utils.Ast.location )
+      Wax_wasm.Ast.annotated) =
+  let open Wax_wasm.Ast.Text in
+  let expr e = List.iter (Wax_wasm.Ast_utils.iter_instr f) e in
+  match field.desc with
+  | Func { instrs; _ } -> expr instrs
+  | Global { init; _ } -> expr init
+  | Elem { init; _ } -> List.iter expr init
+  | Data { mode = Active (_, e); _ } -> expr e
+  | Table { init = Init_expr e; _ } -> expr e
+  | Table { init = Init_segment es; _ } -> List.iter expr es
+  | _ -> ()
+
+(* As [signature_help_string], but for WAT: inside a folded direct call
+   [(call $f a b …)], the callee's signature with the operand under the cursor as
+   the active parameter. The signature is the validator's recorded type at the
+   callee identifier; the active parameter is how many operands end before the
+   cursor. Only folded direct calls ([call]/[return_call]) qualify — an unfolded
+   call takes its arguments off the stack, so there is no argument position to
+   track. *)
+let signature_help_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let span (loc : Wax_utils.Ast.location) =
+    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+  in
+  let same_span (a : Wax_utils.Ast.location) (b : Wax_utils.Ast.location) =
+    a.loc_start.pos_cnum = b.loc_start.pos_cnum
+    && a.loc_end.pos_cnum = b.loc_end.pos_cnum
+  in
+  let ast_opt, _, _ =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  match ast_opt with
+  | None -> None
+  | Some (_name, fields) -> (
+      (* The innermost folded direct call whose span covers the cursor. *)
+      let best = ref None in
+      let consider i =
+        let open Wax_wasm.Ast in
+        let open Text in
+        match i.desc with
+        | Folded ({ desc = Call idx | ReturnCall idx; _ }, args)
+          when contains i.info -> (
+            match !best with
+            | Some (bloc, _, _) when span bloc <= span i.info -> ()
+            | _ -> best := Some (i.info, idx, args))
+        | _ -> ()
+      in
+      wat_iter_fields (fun f -> wat_field_iter_instr consider f) fields;
+      match !best with
+      | None -> None
+      | Some (_, idx, args) -> (
+          let signature =
+            List.find_map
+              (fun (loc, rt) ->
+                if same_span loc idx.Wax_wasm.Ast.info then
+                  Wax_wasm.Validation.signature_labels rt
+                else None)
+              (wat_type_map src)
+          in
+          match signature with
+          | None -> None
+          | Some (params, results) ->
+              (* The active parameter: how many operands end before the cursor,
+                 clamped to the parameter count. *)
+              let active =
+                let open Wax_wasm.Ast in
+                List.fold_left
+                  (fun acc a ->
+                    if le (pos a.info.loc_end) target then acc + 1 else acc)
+                  0 args
+              in
+              let nparams = List.length params in
+              let active =
+                if nparams = 0 then 0 else min active (nparams - 1)
+              in
+              let buf = Buffer.create 64 in
+              Buffer.add_string buf "func (";
+              let ranges =
+                List.mapi
+                  (fun i p ->
+                    if i > 0 then Buffer.add_string buf ", ";
+                    let s = Buffer.length buf in
+                    Buffer.add_string buf p;
+                    (s, Buffer.length buf))
+                  params
+              in
+              Buffer.add_char buf ')';
+              (match results with
+              | [] -> ()
+              | _ ->
+                  Buffer.add_string buf " -> ";
+                  Buffer.add_string buf (String.concat ", " results));
+              Some (Buffer.contents buf, ranges, active)))
+
+(* As [selection_range_string], but for WAT: the chain of enclosing field and
+   instruction spans covering the cursor, innermost first, from the recovered
+   parse (so it survives a mid-edit buffer). *)
+let selection_range_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let ast_opt, _, _ =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  match ast_opt with
+  | None -> []
+  | Some (_name, fields) ->
+      let spans = ref [ (0, String.length src) ] in
+      let add (loc : Wax_utils.Ast.location) =
+        if loc.loc_start.pos_cnum >= 0 && contains loc then
+          spans := (loc.loc_start.pos_cnum, loc.loc_end.pos_cnum) :: !spans
+      in
+      wat_iter_fields
+        (fun f ->
+          add f.info;
+          wat_field_iter_instr (fun i -> add i.info) f)
+        fields;
+      let pairs =
+        List.sort_uniq compare !spans
+        |> List.sort (fun (s1, e1) (s2, e2) -> compare (e1 - s1) (e2 - s2))
+      in
+      let offsets =
+        List.concat_map (fun (s, e) -> [ s; e ]) pairs |> List.sort_uniq compare
+      in
+      let posn = positions ~encoding src offsets in
+      List.filter_map
+        (fun (s, e) ->
+          match (Hashtbl.find_opt posn s, Hashtbl.find_opt posn e) with
+          | Some (sl, sc), Some (el, ec) -> Some (sl, sc, el, ec)
+          | _ -> None)
+        pairs
+
+(* Multi-line block-comment spans for WAT, for comment folding. As
+   [block_comment_folds] but for Wasm-text comment syntax: line comments are
+   [;;] and block comments are [(; … ;)] (which nest). *)
+let wat_block_comment_folds src =
+  let n = String.length src in
+  let at j = if j < n then src.[j] else '\000' in
+  let folds = ref [] and line = ref 0 and i = ref 0 in
+  while !i < n do
+    let c = src.[!i] in
+    if c = '"' then begin
+      (* skip a string literal, honoring backslash escapes *)
+      incr i;
+      let stop = ref false in
+      while (not !stop) && !i < n do
+        (match src.[!i] with
+        | '\\' -> incr i
+        | '"' -> stop := true
+        | '\n' -> incr line
+        | _ -> ());
+        incr i
+      done
+    end
+    else if c = '(' && at (!i + 1) = ';' then begin
+      let start_line = !line in
+      i := !i + 2;
+      let depth = ref 1 in
+      while !depth > 0 && !i < n do
+        if src.[!i] = '(' && at (!i + 1) = ';' then (
+          incr depth;
+          i := !i + 2)
+        else if src.[!i] = ';' && at (!i + 1) = ')' then (
+          decr depth;
+          i := !i + 2)
+        else begin
+          if src.[!i] = '\n' then incr line;
+          incr i
+        end
+      done;
+      if !line > start_line then folds := (start_line, !line) :: !folds
+    end
+    else if c = ';' && at (!i + 1) = ';' then
+      while !i < n && src.[!i] <> '\n' do
+        incr i
+      done
+    else begin
+      if c = '\n' then incr line;
+      incr i
+    end
+  done;
+  !folds
+
+(* As [folding_string], but for WAT: each field span, every block-like
+   instruction body ([block]/[loop]/[if]/[try]/[try_table]), the branches of an
+   [(@if …)] annotation, and the multi-line [(; ;)] comments. From the recovered
+   parse so it works mid-edit. *)
+let folding_string src =
+  let ast_opt, _, _ =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  let tbl = Hashtbl.create 64 in
+  let add start_line end_line kind =
+    if end_line > start_line then
+      match Hashtbl.find_opt tbl start_line with
+      | Some (e, _) when e >= end_line -> ()
+      | _ -> Hashtbl.replace tbl start_line (end_line, kind)
+  in
+  let add_loc kind (loc : Wax_utils.Ast.location) =
+    if loc.loc_start.pos_cnum >= 0 then
+      add (loc.loc_start.pos_lnum - 1) (loc.loc_end.pos_lnum - 1) kind
+  in
+  (match ast_opt with
+  | None -> ()
+  | Some (_name, fields) ->
+      let open Wax_wasm.Ast in
+      let open Text in
+      wat_iter_fields
+        (fun field ->
+          (match field.desc with
+          | Import_group1 _ | Import_group2 _ -> add_loc "imports" field.info
+          | Module_if_annotation { then_fields; else_fields; _ } ->
+              add_loc "region" then_fields.info;
+              Option.iter (fun b -> add_loc "region" b.info) else_fields
+          | _ -> add_loc "region" field.info);
+          wat_field_iter_instr
+            (fun i ->
+              (* Fold the whole control instruction (from [(block]/[(if]/… to its
+                 closing paren); a WAT block body's own span excludes the outer
+                 parens, so folding the instruction is what collapses the
+                 construct as the editor expects. *)
+              match i.desc with
+              | Block _ | Loop _ | If _ | TryTable _ | Try _ ->
+                  add_loc "region" i.info
+              | _ -> ())
+            field)
+        fields);
+  List.iter (fun (s, e) -> add s e "comment") (wat_block_comment_folds src);
+  Hashtbl.fold (fun s (e, k) acc -> (s, e, k) :: acc) tbl []
+
+(* Semantic tokens for WAT: colour each index identifier by the kind of
+   definition it resolves to, so functions, types, globals, locals and struct
+   fields — all rendered the same by the grammar — are distinguished. Built from
+   the name-resolution bindings ([Wax_wasm.Resolve]); labels have no matching
+   token type in the legend and keep their grammar colour. Both symbolic ([$id])
+   and numeric index tokens are classified. *)
+let semantic_tokens_string ?(encoding = UTF16) src =
+  let token_type : Wax_wasm.Resolve.kind -> string option = function
+    | Func -> Some "function"
+    | Type -> Some "type"
+    | Field -> Some "property"
+    | Param -> Some "parameter"
+    | Local | Global | Memory | Table | Tag | Elem | Data -> Some "variable"
+    | Label -> None
+  in
+  let toks =
+    List.concat_map
+      (fun (b : Wax_wasm.Resolve.binding) ->
+        match token_type b.kind with
+        | None -> []
+        | Some ty ->
+            let occ =
+              (match b.def with Some d -> [ d ] | None -> []) @ b.uses
+            in
+            List.map (fun loc -> (loc, ty)) occ)
+      (wat_bindings src)
+  in
+  let toks =
+    List.filter
+      (fun ((loc : Wax_utils.Ast.location), _) -> loc.loc_start.pos_cnum >= 0)
+      toks
+  in
+  let offsets =
+    List.concat_map
+      (fun ((loc : Wax_utils.Ast.location), _) ->
+        [ loc.loc_start.pos_cnum; loc.loc_end.pos_cnum ])
+      toks
+    |> List.sort_uniq compare
+  in
+  let pos = positions ~encoding src offsets in
+  let seen = Hashtbl.create 256 in
+  toks
+  |> List.filter_map (fun ((loc : Wax_utils.Ast.location), kind) ->
+      match
+        ( Hashtbl.find_opt pos loc.loc_start.pos_cnum,
+          Hashtbl.find_opt pos loc.loc_end.pos_cnum )
+      with
+      | Some (line, char), Some (_, ec) when not (Hashtbl.mem seen (line, char))
+        ->
+          Hashtbl.add seen (line, char) ();
+          Some
+            {
+              st_line = line;
+              st_char = char;
+              st_len = ec - char;
+              st_type = kind;
+            }
+      | _ -> None)
+  |> List.sort (fun a b ->
+      compare (a.st_line, a.st_char) (b.st_line, b.st_char))

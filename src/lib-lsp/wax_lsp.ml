@@ -132,18 +132,18 @@ let remove_doc uri = Hashtbl.remove documents (doc_key uri)
 let diagnostics_debounce = 0.15
 let dirty : (string, unit) Hashtbl.t = Hashtbl.create 8
 
-(* Wasm text is served by the [*_wat_string] analysis; everything else is Wax. *)
+(* Wasm text (.wat) is served by [Wat_editor]; everything else by [Wax_editor]. *)
 let is_wat uri = Filename.check_suffix (Lsp.Uri.to_string uri) ".wat"
 
 (* The position encoding negotiated at [initialize]: the unit the client counts
    line offsets in. UTF-16 is the mandatory default; UTF-8 is used only when the
    client offers it. Set once, before any request is served, so [Wax_editor]'s
    coordinate conversions match what the client sends and expects. *)
-let encoding = ref Wax_editor.UTF16
+let encoding = ref Editor_common.UTF16
 
 let lsp_encoding = function
-  | Wax_editor.UTF8 -> PositionEncodingKind.UTF8
-  | Wax_editor.UTF16 -> PositionEncodingKind.UTF16
+  | Editor_common.UTF8 -> PositionEncodingKind.UTF8
+  | Editor_common.UTF16 -> PositionEncodingKind.UTF16
 
 (* The conditional-compilation defines (the editor's `wax.define`, mirroring the
    `-D` CLI flag), read from configuration at startup and on change. Diagnostics
@@ -177,8 +177,8 @@ let defines_of_settings (json : Jsonrpc.Json.t) =
 let position line character = Position.create ~line ~character
 
 let range_of_location src (loc : Wax_utils.Ast.location) =
-  let sl, sc = Wax_editor.position ~encoding:!encoding src loc.loc_start in
-  let el, ec = Wax_editor.position ~encoding:!encoding src loc.loc_end in
+  let sl, sc = Editor_common.position ~encoding:!encoding src loc.loc_start in
+  let el, ec = Editor_common.position ~encoding:!encoding src loc.loc_end in
   Range.create ~start:(position sl sc) ~end_:(position el ec)
 
 (* The span of the whole buffer, for a full-document formatting edit. The end
@@ -194,8 +194,8 @@ let full_range text =
   let last = String.sub text start (String.length text - start) in
   let width =
     match !encoding with
-    | Wax_editor.UTF8 -> String.length last
-    | Wax_editor.UTF16 -> Wax_utils.Unicode.utf16_length last
+    | Editor_common.UTF8 -> String.length last
+    | Editor_common.UTF16 -> Wax_utils.Unicode.utf16_length last
   in
   Range.create ~start:(position 0 0) ~end_:(position line width)
 
@@ -232,7 +232,7 @@ let completion_item_kind = function
    warning with its meaning and how to configure it. *)
 let warning_doc_url = "https://ocsigen.org/wax/cli.html#warnings"
 
-let diagnostic_of_diag uri src (d : Wax_editor.diag) =
+let diagnostic_of_diag uri src (d : Editor_common.diag) =
   let severity =
     match d.severity with
     | Wax_utils.Diagnostic.Error -> DiagnosticSeverity.Error
@@ -270,7 +270,7 @@ let diagnostic_of_diag uri src (d : Wax_editor.diag) =
 
 let publish_diagnostics uri src =
   let diags =
-    if is_wat uri then Wax_editor.check_wat_string src
+    if is_wat uri then Wat_editor.check_string src
     else Wax_editor.check_string_with_defines src !defines
   in
   let diagnostics = List.map (diagnostic_of_diag uri src) diags in
@@ -298,14 +298,14 @@ let hover_markup h_type =
     (MarkupContent.create ~kind:MarkupKind.Markdown
        ~value:(Printf.sprintf "```wax\n%s\n```" h_type))
 
-let rec document_symbol src (s : Wax_editor.sym) =
+let rec document_symbol src (s : Editor_common.sym) =
   DocumentSymbol.create ~name:s.s_name ~kind:(symbol_kind s.s_kind)
     ~range:(range_of_location src s.s_range)
     ~selectionRange:(range_of_location src s.s_selection)
     ~children:(List.map (document_symbol src) s.s_children)
     ()
 
-let completion_item (c : Wax_editor.completion) =
+let completion_item (c : Editor_common.completion) =
   let detail = if c.k_detail = "" then None else Some c.k_detail in
   CompletionItem.create ~label:c.k_name
     ~kind:(completion_item_kind c.k_kind)
@@ -343,7 +343,7 @@ let semantic_data toks =
   in
   let rec go prev_line prev_char = function
     | [] -> []
-    | (tok : Wax_editor.sem_token) :: rest -> (
+    | (tok : Editor_common.sem_token) :: rest -> (
         match index tok.st_type with
         | None -> go prev_line prev_char rest
         | Some ti ->
@@ -393,7 +393,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       (match params.capabilities.general with
       | Some { positionEncodings = Some encs; _ }
         when List.mem PositionEncodingKind.UTF8 encs ->
-          encoding := Wax_editor.UTF8
+          encoding := Editor_common.UTF8
       | _ -> ());
       (* Conditional-compilation defines, if the client passed any as
          initialization options. Live updates come via didChangeConfiguration. *)
@@ -408,7 +408,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let hover =
-            if is_wat uri then Wax_editor.hover_wat_string
+            if is_wat uri then Wat_editor.hover_string
             else Wax_editor.hover_string
           in
           match
@@ -424,7 +424,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let definition =
-            if is_wat uri then Wax_editor.definition_wat_string
+            if is_wat uri then Wat_editor.definition_string
             else Wax_editor.definition_string
           in
           match
@@ -443,7 +443,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let type_definition =
-            if is_wat uri then Wax_editor.type_definition_wat_string
+            if is_wat uri then Wat_editor.type_definition_string
             else Wax_editor.type_definition_string
           in
           match
@@ -462,7 +462,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let references =
-            if is_wat uri then Wax_editor.references_wat_string
+            if is_wat uri then Wat_editor.references_string
             else Wax_editor.references_string
           in
           Some
@@ -475,7 +475,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let references =
-            if is_wat uri then Wax_editor.references_wat_string
+            if is_wat uri then Wat_editor.references_string
             else Wax_editor.references_string
           in
           Some
@@ -489,7 +489,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let rename_prepare =
-            if is_wat uri then Wax_editor.rename_prepare_wat_string
+            if is_wat uri then Wat_editor.rename_prepare_string
             else Wax_editor.rename_prepare_string
           in
           Option.map (range_of_location src)
@@ -507,8 +507,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
             in
             if is_wat uri then
               List.map edit
-                (Wax_editor.rename_wat_string ~encoding:!encoding src
-                   position.line position.character newName)
+                (Wat_editor.rename_string ~encoding:!encoding src position.line
+                   position.character newName)
             else (
               match
                 Wax_editor.rename_string ~encoding:!encoding src position.line
@@ -526,7 +526,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let syms =
-            if is_wat uri then Wax_editor.symbols_wat_string src
+            if is_wat uri then Wat_editor.symbols_string src
             else Wax_editor.symbols_string src
           in
           Some (`DocumentSymbol (List.map (document_symbol src) syms)))
@@ -547,7 +547,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       | None -> empty
       | Some src -> (
           let signature_help =
-            if is_wat uri then Wax_editor.signature_help_wat_string
+            if is_wat uri then Wat_editor.signature_help_string
             else Wax_editor.signature_help_string
           in
           match
@@ -575,9 +575,9 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
         with_doc uri (fun src ->
             Some
               (List.map
-                 (fun (h : Wax_editor.inlay) ->
+                 (fun (h : Editor_common.inlay) ->
                    let line, character =
-                     Wax_editor.position ~encoding:!encoding src h.n_pos
+                     Editor_common.position ~encoding:!encoding src h.n_pos
                    in
                    InlayHint.create ~position:(position line character)
                      ~label:(`String h.n_label) ~kind:InlayHintKind.Type ())
@@ -586,7 +586,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let folding =
-            if is_wat uri then Wax_editor.folding_wat_string
+            if is_wat uri then Wat_editor.folding_string
             else Wax_editor.folding_string
           in
           Some
@@ -610,7 +610,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
             positions
       | Some src ->
           let selection_range_chain =
-            if is_wat uri then Wax_editor.selection_range_wat_string
+            if is_wat uri then Wat_editor.selection_range_string
             else Wax_editor.selection_range_string
           in
           List.map
@@ -629,7 +629,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           let semantic_tokens =
-            if is_wat uri then Wax_editor.semantic_tokens_wat_string
+            if is_wat uri then Wat_editor.semantic_tokens_string
             else Wax_editor.semantic_tokens_string
           in
           Some
@@ -642,7 +642,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       | None -> None
       | Some src -> (
           let formatted =
-            if is_wat uri then Wax_editor.format_wat_string src
+            if is_wat uri then Wat_editor.format_string src
             else Wax_editor.format_string src
           in
           match formatted with
