@@ -41,8 +41,9 @@
      enclosing spans at the position, innermost first. Wax only.
    - [semanticTokens src] -> array of { line; character; length; kind }. Wax only.
    - [foldingRanges src] -> array of { startLine; endLine; kind }. Wax only.
-   - [inactiveRanges src defines] -> array of { startLine; …; endChar }: the
-     spans a conditional-compilation configuration makes unreachable. Wax only.
+   - [inactiveRanges src defines] / [inactiveRangesWat src defines] -> array of
+     { startLine; …; endChar }: the spans a conditional-compilation configuration
+     makes unreachable (Wax [#[if]] / WAT [(@if)] branches ruled out).
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages, for the side-by-side preview commands. *)
 
@@ -303,11 +304,9 @@ let signature_result signature_help src line ch =
           val active = active
         end
 
-let inactive_ranges_result src defines =
+let inactive_ranges_result inactive_ranges src defines =
   let defines = Js.to_array defines |> Array.to_list |> List.map Js.to_string in
-  let ranges =
-    try inactive_ranges_string (Js.to_string src) defines with _ -> []
-  in
+  let ranges = try inactive_ranges (Js.to_string src) defines with _ -> [] in
   Js.array
     (Array.of_list
        (List.map
@@ -395,7 +394,10 @@ let () =
 
       method semanticTokens src = semantic_result semantic_tokens_string src
       method foldingRanges src = folding_result folding_string src
-      method inactiveRanges src defines = inactive_ranges_result src defines
+
+      method inactiveRanges src defines =
+        inactive_ranges_result inactive_ranges_string src defines
+
       method formatWat src = format_result Wat_editor.format_string src
       method checkWat src = check_result Wat_editor.check_string src
       method symbolsWat src = symbols_result Wat_editor.symbols_string src
@@ -435,4 +437,7 @@ let () =
         completion_result Wat_editor.completion_string src line ch defines
 
       method inlaysWat src = inlays_result Wat_editor.inlays_string src
+
+      method inactiveRangesWat src defines =
+        inactive_ranges_result Wat_editor.inactive_ranges_string src defines
     end

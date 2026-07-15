@@ -11,10 +11,10 @@
    The Wax side type-checks and builds a typed tree that powers its features
    (hover, inlay hints, go-to-definition, references, rename, completion,
    signature help, semantic tokens, selection and folding ranges, inactive
-   ranges); the Wasm-text side ({!Wat_editor}) reaches the same set through
-   validation and name resolution instead (its inlay hints show the name behind a
-   numeric index rather than an inferred type), with only the inactive-range
-   shading still Wax only. *)
+   ranges); the Wasm-text side ({!Wat_editor}) now reaches the whole set through
+   validation and name resolution instead — its inlay hints show the name behind
+   a numeric index rather than an inferred type, and its inactive ranges dim the
+   [(@if)] branch a configuration rules out. *)
 
 open Editor_common
 

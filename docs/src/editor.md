@@ -26,14 +26,15 @@ through `wax lsp`:
 - Document outline, folding ranges, selection ranges, and semantic tokens.
 - Formatting.
 
-WebAssembly text (`.wat`) gets most of the same features: formatting,
+WebAssembly text (`.wat`) gets the same features: formatting,
 diagnostics, the outline, hover types, go-to-definition, go-to-type-definition,
 find references, document highlight, rename, folding, selection ranges, signature
 help, semantic tokens (identifiers coloured by the kind of index they resolve
 to), completion (where an index is expected, the names of the space it wants —
 functions, globals, locals, types, labels — since the instruction fixes the
-kind), and inlay hints (after a numeric index, the name of the definition it
-refers to, so `(local.get 0)` reads as `(local.get 0 $x)`). Syntax highlighting
+kind), inlay hints (after a numeric index, the name of the definition it
+refers to, so `(local.get 0)` reads as `(local.get 0 $x)`), and inactive-branch
+dimming for `(@if)` conditional compilation. Syntax highlighting
 otherwise comes from the extension's own grammar in VS Code and from
 `tree-sitter-wax` elsewhere.
 

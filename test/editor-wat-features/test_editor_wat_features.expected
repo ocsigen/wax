@@ -136,3 +136,10 @@
   symbolic uses (no hints) -> (none)
   numeric use of an anonymous func (no name) -> (none)
 
+=== inactive ranges (@if branches ruled out) ===
+  debug=false (then dead) [debug=false] -> (2,4)-(2,21)
+  debug=true (else dead) [debug=true] -> (3,4)-(3,21)
+  debug=false fast=true (both levels) [debug=false fast=true] -> (5,29)-(5,43) (2,4)-(2,21)
+  no defines [] -> (none)
+  residual (unrelated define) [other=1] -> (none)
+

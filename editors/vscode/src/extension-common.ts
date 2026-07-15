@@ -1052,8 +1052,12 @@ function registerInactiveDimming(
     vscode.workspace.getConfiguration("wax").get<string[]>("define", []);
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  const langOf = (doc: vscode.TextDocument) =>
+    doc.languageId === "wax" ? "wax" : doc.languageId === "wat" ? "wat" : null;
+
   async function refresh(editor: vscode.TextEditor | undefined): Promise<void> {
-    if (!editor || editor.document.languageId !== "wax") return;
+    const lang = editor && langOf(editor.document);
+    if (!editor || !lang) return;
     const defs = defines();
     if (defs.length === 0) {
       editor.setDecorations(decoration, []);
@@ -1067,7 +1071,11 @@ function registerInactiveDimming(
     }
     let ranges: WaxRange[];
     try {
-      ranges = wax.inactiveRanges(editor.document.getText(), defs);
+      const text = editor.document.getText();
+      ranges =
+        lang === "wat"
+          ? wax.inactiveRangesWat(text, defs)
+          : wax.inactiveRanges(text, defs);
     } catch {
       return;
     }
@@ -1086,7 +1094,7 @@ function registerInactiveDimming(
     vscode.window.onDidChangeActiveTextEditor((e) => void refresh(e)),
     vscode.window.onDidChangeVisibleTextEditors(() => refreshAll()),
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.languageId !== "wax") return;
+      if (!langOf(e.document)) return;
       const key = e.document.uri.toString();
       const existing = timers.get(key);
       if (existing) clearTimeout(existing);
@@ -1121,18 +1129,20 @@ function registerDefineStatusBar(context: vscode.ExtensionContext): void {
 
   const update = () => {
     const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== "wax") {
+    const lang = editor?.document.languageId;
+    if (!editor || (lang !== "wax" && lang !== "wat")) {
       item.hide();
       return;
     }
     const defs = defines();
+    const branch = lang === "wat" ? "`(@if)`" : "`#[if]`/`#[else]`";
     item.text = "$(settings-gear) " + (defs.length ? defs.join(", ") : "no defines");
     item.tooltip = new vscode.MarkdownString(
       (defs.length
         ? "Conditional-compilation defines:\n" +
           defs.map((d) => "- `" + d + "`").join("\n")
         : "No conditional-compilation defines set.") +
-        "\n\nClick to configure. Inactive `#[if]`/`#[else]` branches are dimmed.",
+        "\n\nClick to configure. Inactive " + branch + " branches are dimmed.",
     );
     item.show();
   };

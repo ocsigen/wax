@@ -176,8 +176,7 @@ export interface Wax {
   // Foldable regions — block bodies and multi-line block comments. Wax only.
   foldingRanges(src: string): WaxFolding[];
   // The source ranges made unreachable by the given `-D` defines (dead
-  // `#[if]`/`#[else]` branch bodies), for dimming. Empty with no defines. Wax
-  // only.
+  // `#[if]`/`#[else]` branch bodies), for dimming. Empty with no defines.
   inactiveRanges(src: string, defines: string[]): WaxRange[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;
@@ -221,6 +220,9 @@ export interface Wax {
   ): WaxCompletion[];
   // The resolved definition name after each numeric index, as inlay hints.
   inlaysWat(src: string): WaxInlay[];
+  // The source ranges a `-D` configuration makes unreachable (dead `(@if)`
+  // branch bodies), for dimming.
+  inactiveRangesWat(src: string, defines: string[]): WaxRange[];
   // Cross-language conversion (for the preview commands).
   toWat(src: string): FormatResult;
   toWax(src: string): FormatResult;
