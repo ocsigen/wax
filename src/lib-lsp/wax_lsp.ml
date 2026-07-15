@@ -501,7 +501,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let edits =
         match get_doc uri with
         | None -> []
-        | Some src ->
+        | Some src -> (
             let edit (loc, newText) =
               TextEdit.create ~range:(range_of_location src loc) ~newText
             in
@@ -509,7 +509,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
               List.map edit
                 (Wat_editor.rename_string ~encoding:!encoding src position.line
                    position.character newName)
-            else (
+            else
               match
                 Wax_editor.rename_string ~encoding:!encoding src position.line
                   position.character newName

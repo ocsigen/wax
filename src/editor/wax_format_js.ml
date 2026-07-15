@@ -379,7 +379,6 @@ let () =
         rename_prepare_result rename_prepare_string src line ch
 
       method rename src line ch newname = rename_result src line ch newname
-
       method symbols src = symbols_result symbols_string src
 
       method completion src line ch defines =
