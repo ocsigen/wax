@@ -264,3 +264,55 @@ user), not an edit.
   a->count: 2 edit(s) -> count,count
   a->b:     error: Cannot rename to "b": that name is already in use, and the rename would change which definition one or more names refer to.
   a->2bad:  error: "2bad" is not a valid identifier.
+
+A `.wat` document gets the same language features as Wax (over the WAT analysis:
+the validator's recorded stack types for hover, the name-resolution table for
+navigation and rename, a structural walk for folding). Open a small Wasm-text
+module and drive one request of each kind:
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///m.wat"; td={"uri":uri}
+  > src=("(module\n"
+  >      "  (func $add (param $a i32) (param $b i32) (result i32)\n"
+  >      "    (local.get $a) (local.get $b) (i32.add))\n"
+  >      "  (func $main (result i32)\n"
+  >      "    (call $add (i32.const 1) (i32.const 2))))\n")
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wat","version":1,"text":src}}},
+  >    {"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":td,"position":{"line":2,"character":37}}},
+  >    {"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":td,"position":{"line":4,"character":11}}},
+  >    {"jsonrpc":"2.0","id":4,"method":"textDocument/references","params":{"textDocument":td,"position":{"line":1,"character":9},"context":{"includeDeclaration":True}}},
+  >    {"jsonrpc":"2.0","id":5,"method":"textDocument/rename","params":{"textDocument":td,"position":{"line":4,"character":11},"newName":"sum"}},
+  >    {"jsonrpc":"2.0","id":6,"method":"textDocument/foldingRange","params":{"textDocument":td}},
+  >    {"jsonrpc":"2.0","id":7,"method":"textDocument/documentSymbol","params":{"textDocument":td}},
+  >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i,by,pubs=p.stdout,0,{},[]
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if "id" in r: by[r["id"]]=r["result"]
+  >     elif r.get("method")=="textDocument/publishDiagnostics": pubs.append(r["params"]["diagnostics"])
+  > def rng(r): return "(%d,%d)-(%d,%d)"%(r["start"]["line"],r["start"]["character"],r["end"]["line"],r["end"]["character"])
+  > print("diagnostics:", len(pubs[0]) if pubs else "none")
+  > print("hover:", by[2]["contents"]["value"].replace(chr(10)," | "))
+  > print("definition:", ", ".join(rng(l["range"]) for l in by[3]))
+  > print("references:", ", ".join(rng(l["range"]) for l in by[4]))
+  > ch=by[5]["changes"]
+  > print("rename:", ", ".join("%s=%s"%(rng(e["range"]),e["newText"]) for lst in ch.values() for e in lst))
+  > print("folding:", ", ".join("%d-%d"%(f["startLine"],f["endLine"]) for f in by[6]))
+  > print("symbols:", ", ".join(s["name"] for s in by[7]))
+  > print("stderr:", p.stderr.decode().strip() or "(empty)")
+  > PY
+  diagnostics: 1
+  hover: ```wax | i32 | ```
+  definition: (1,8)-(1,12)
+  references: (1,8)-(1,12), (4,10)-(4,14)
+  rename: (1,8)-(1,12)=$sum, (4,10)-(4,14)=$sum
+  folding: 1-2, 3-4
+  symbols: $add, $main
+  stderr: (empty)

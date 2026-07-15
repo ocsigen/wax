@@ -26,10 +26,12 @@ through `wax lsp`:
 - Document outline, folding ranges, selection ranges, and semantic tokens.
 - Formatting.
 
-The hover, navigation, and completion features are Wax-only, as they read the
-type-checker's typed tree; formatting, diagnostics, and the outline also work
-for WebAssembly text (`.wat`). Syntax highlighting comes from the extension's
-own grammar in VS Code and from `tree-sitter-wax` elsewhere.
+WebAssembly text (`.wat`) gets most of the same features: formatting,
+diagnostics, the outline, hover types, go-to-definition, find references,
+document highlight, rename, folding, and selection ranges. Completion, signature
+help, inlay hints, go-to-type-definition, and semantic tokens are Wax-only for
+now. Syntax highlighting comes from the extension's own grammar in VS Code and
+from `tree-sitter-wax` elsewhere.
 
 ## Visual Studio Code
 

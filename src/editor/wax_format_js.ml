@@ -150,9 +150,9 @@ let check_result_defines src defines =
 
 (* [null] when there is no typed node under the cursor (or anything went wrong):
    the provider then shows no hover rather than crashing the host. *)
-let hover_result src line ch =
+let hover_result hover src line ch =
   let s = Js.to_string src in
-  match try hover_string s line ch with _ -> None with
+  match try hover s line ch with _ -> None with
   | None -> Js.null
   | Some h -> Js.some (js_hover s h)
 
@@ -172,9 +172,9 @@ let js_range src (loc : Wax_utils.Ast.location) =
     val endChar = end_char
   end
 
-let definition_result src line ch =
+let definition_result definition src line ch =
   let s = Js.to_string src in
-  let defs = try definition_string s line ch with _ -> [] in
+  let defs = try definition s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) defs))
 
 let type_definition_result src line ch =
@@ -182,16 +182,16 @@ let type_definition_result src line ch =
   let defs = try type_definition_string s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) defs))
 
-let references_result src line ch =
+let references_result references src line ch =
   let s = Js.to_string src in
-  let occurrences = try references_string s line ch with _ -> [] in
+  let occurrences = try references s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) occurrences))
 
 (* [null] when the cursor is not on a renameable symbol; the provider then
    reports that rename is not available here. *)
-let rename_prepare_result src line ch =
+let rename_prepare_result rename_prepare src line ch =
   let s = Js.to_string src in
-  match try rename_prepare_string s line ch with _ -> None with
+  match try rename_prepare s line ch with _ -> None with
   | None -> Js.null
   | Some loc -> Js.some (js_range s loc)
 
@@ -209,20 +209,28 @@ let js_edit src (loc, newText) =
 (* [{ edits; error }]: the rename edits, or an [error] message when the rename
    is rejected (an unusable name, or a change that would clash with an existing
    name); the provider surfaces the message instead of editing. *)
-let rename_result src line ch newname =
-  let s = Js.to_string src in
-  let n = Js.to_string newname in
-  let edits, error =
-    match try rename_string s line ch n with _ -> Rename_edits [] with
-    | Rename_edits edits -> (edits, None)
-    | Rename_conflict message -> ([], Some message)
-  in
+let rename_object s edits error =
   object%js
     val edits = Js.array (Array.of_list (List.map (js_edit s) edits))
 
     val error =
       match error with Some e -> Js.some (Js.string e) | None -> Js.null
   end
+
+let rename_result src line ch newname =
+  let s = Js.to_string src in
+  let n = Js.to_string newname in
+  match try rename_string s line ch n with _ -> Rename_edits [] with
+  | Rename_edits edits -> rename_object s edits None
+  | Rename_conflict message -> rename_object s [] (Some message)
+
+(* WAT rename cannot clash (it rewrites [$id] tokens only), so its result always
+   has a null [error]. *)
+let rename_wat_result src line ch newname =
+  let s = Js.to_string src in
+  let n = Js.to_string newname in
+  let edits = try rename_wat_string s line ch n with _ -> [] in
+  rename_object s edits None
 
 let rec js_symbol src s =
   let start_line, start_char = utf16_position src s.s_range.loc_start in
@@ -310,10 +318,8 @@ let inactive_ranges_result src defines =
             end)
           ranges))
 
-let selection_range_result src line ch =
-  let ranges =
-    try selection_range_string (Js.to_string src) line ch with _ -> []
-  in
+let selection_range_result selection_range src line ch =
+  let ranges = try selection_range (Js.to_string src) line ch with _ -> [] in
   Js.array
     (Array.of_list
        (List.map
@@ -326,8 +332,8 @@ let selection_range_result src line ch =
             end)
           ranges))
 
-let folding_result src =
-  let folds = try folding_string (Js.to_string src) with _ -> [] in
+let folding_result folding src =
+  let folds = try folding (Js.to_string src) with _ -> [] in
   Js.array
     (Array.of_list
        (List.map
@@ -358,26 +364,56 @@ let () =
     object%js
       method format src = format_result format_string src
       method check src defines = check_result_defines src defines
-      method hover src line ch = hover_result src line ch
+      method hover src line ch = hover_result hover_string src line ch
       method inlays src = inlays_result src
-      method definition src line ch = definition_result src line ch
+
+      method definition src line ch =
+        definition_result definition_string src line ch
+
       method typeDefinition src line ch = type_definition_result src line ch
-      method references src line ch = references_result src line ch
-      method renamePrepare src line ch = rename_prepare_result src line ch
+
+      method references src line ch =
+        references_result references_string src line ch
+
+      method renamePrepare src line ch =
+        rename_prepare_result rename_prepare_string src line ch
+
       method rename src line ch newname = rename_result src line ch newname
+
       method symbols src = symbols_result symbols_string src
 
       method completion src line ch defines =
         completion_result src line ch defines
 
       method signatureHelp src line ch = signature_result src line ch
-      method selectionRange src line ch = selection_range_result src line ch
+
+      method selectionRange src line ch =
+        selection_range_result selection_range_string src line ch
+
       method semanticTokens src = semantic_result src
-      method foldingRanges src = folding_result src
+      method foldingRanges src = folding_result folding_string src
       method inactiveRanges src defines = inactive_ranges_result src defines
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
       method symbolsWat src = symbols_result symbols_wat_string src
       method toWat src = format_result to_wat_string src
       method toWax src = format_result to_wax_string src
+      method hoverWat src line ch = hover_result hover_wat_string src line ch
+
+      method definitionWat src line ch =
+        definition_result definition_wat_string src line ch
+
+      method referencesWat src line ch =
+        references_result references_wat_string src line ch
+
+      method renamePrepareWat src line ch =
+        rename_prepare_result rename_prepare_wat_string src line ch
+
+      method renameWat src line ch newname =
+        rename_wat_result src line ch newname
+
+      method selectionRangeWat src line ch =
+        selection_range_result selection_range_wat_string src line ch
+
+      method foldingRangesWat src = folding_result folding_wat_string src
     end

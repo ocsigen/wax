@@ -183,6 +183,25 @@ export interface Wax {
   formatWat(src: string): FormatResult;
   checkWat(src: string): WaxDiagnostic[];
   symbolsWat(src: string): WaxSymbol[];
+  // WAT editor features, on par with the Wax ones above. Hover shows the type an
+  // instruction leaves on the stack; definition/references/rename operate on the
+  // WAT name-resolution table; folding/selection are structural.
+  hoverWat(src: string, line: number, character: number): WaxHover | null;
+  definitionWat(src: string, line: number, character: number): WaxRange[];
+  referencesWat(src: string, line: number, character: number): WaxRange[];
+  renamePrepareWat(
+    src: string,
+    line: number,
+    character: number,
+  ): WaxRange | null;
+  renameWat(
+    src: string,
+    line: number,
+    character: number,
+    newName: string,
+  ): WaxEdit[];
+  selectionRangeWat(src: string, line: number, character: number): WaxRange[];
+  foldingRangesWat(src: string): WaxFolding[];
   // Cross-language conversion (for the preview commands).
   toWat(src: string): FormatResult;
   toWax(src: string): FormatResult;

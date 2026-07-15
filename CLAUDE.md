@@ -109,9 +109,14 @@ open/change (lint diagnostics carry the `-W` code, a `codeDescription` link to
 the docs, and `DiagnosticTag.Unnecessary` via `Warning.is_unnecessary`). The one
 setting is `wax.define` (conditional-compilation defines, mirroring `-D`), read
 from `initializationOptions` and `workspace/didChangeConfiguration` and threaded
-into `check_string_with_defines`/`completion_string`. Wax-only features return
-empty for a `.wat` URI; `.wat` gets formatting, diagnostics and the outline.
-`--stdio` is accepted and ignored. The
+into `check_string_with_defines`/`completion_string`. A `.wat` URI is served by
+the `*_wat_string` analyses (dispatched on `is_wat`): formatting, diagnostics,
+outline, hover (types from `Validation.f`'s `?record_types` sink), and
+navigation/rename (go-to-definition, references, document-highlight,
+prepare-rename, rename — all over `Wax_wasm.Resolve`, the WAT name-resolution
+pass), plus folding and selection-range. Still Wax-only for `.wat` (guarded to
+return empty): completion, signature-help, inlay-hint, type-definition, and
+semantic-tokens. `--stdio` is accepted and ignored. The
 `wax` binary builds in both `exe` and `wasm` modes, and `lsp`/`jsonrpc` compile
 under wasm_of_ocaml, so the npm wasm CLI still builds with the subcommand linked
 in.

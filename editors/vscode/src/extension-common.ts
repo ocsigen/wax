@@ -141,6 +141,18 @@ const LANGUAGES: LanguageSpec[] = [
     format: (wax, src) => wax.formatWat(src),
     check: (wax, src, _defines) => wax.checkWat(src),
     symbols: (wax, src) => wax.symbolsWat(src),
+    hover: (wax, src, line, character) => wax.hoverWat(src, line, character),
+    definition: (wax, src, line, character) =>
+      wax.definitionWat(src, line, character),
+    references: (wax, src, line, character) =>
+      wax.referencesWat(src, line, character),
+    renamePrepare: (wax, src, line, character) =>
+      wax.renamePrepareWat(src, line, character),
+    rename: (wax, src, line, character, newName) =>
+      wax.renameWat(src, line, character, newName),
+    foldingRanges: (wax, src) => wax.foldingRangesWat(src),
+    selectionRange: (wax, src, line, character) =>
+      wax.selectionRangeWat(src, line, character),
   },
 ];
 
