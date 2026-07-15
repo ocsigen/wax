@@ -132,8 +132,26 @@ let remove_doc uri = Hashtbl.remove documents (doc_key uri)
 let diagnostics_debounce = 0.15
 let dirty : (string, unit) Hashtbl.t = Hashtbl.create 8
 
-(* Wasm text (.wat) is served by [Wat_editor]; everything else by [Wax_editor]. *)
-let is_wat uri = Filename.check_suffix (Lsp.Uri.to_string uri) ".wat"
+(* A document's language, recorded when the client opens it. The editor-declared
+   [languageId] is the authoritative signal — the editor's own filetype detection
+   (not merely the file name) chose it — so we honour it, and only fall back to
+   the URI extension when the client sends an id we do not recognize. This lets
+   an editor serve Wasm text under a different extension, or force a language on
+   an unsaved buffer, without us second-guessing it. *)
+let doc_is_wat : (string, bool) Hashtbl.t = Hashtbl.create 16
+let uri_is_wat uri = Filename.check_suffix (Lsp.Uri.to_string uri) ".wat"
+
+(* Resolve the language from the [languageId] the client sent at open: ["wat"] is
+   Wasm text, ["wax"] is Wax, an unknown id defers to the extension. *)
+let language_is_wat ~language_id uri =
+  match language_id with "wat" -> true | "wax" -> false | _ -> uri_is_wat uri
+
+(* Wasm text is served by [Wat_editor], Wax by [Wax_editor]; dispatch on the
+   language recorded at open (extension fallback if somehow not recorded). *)
+let is_wat uri =
+  match Hashtbl.find_opt doc_is_wat (doc_key uri) with
+  | Some b -> b
+  | None -> uri_is_wat uri
 
 (* The position encoding negotiated at [initialize]: the unit the client counts
    line offsets in. UTF-16 is the mandatory default; UTF-8 is used only when the
@@ -660,7 +678,11 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
 let on_notification (n : Lsp.Client_notification.t) =
   match n with
   | Lsp.Client_notification.TextDocumentDidOpen { textDocument } ->
-      (* Open is a one-off, not a burst: publish at once for instant feedback. *)
+      (* Open is a one-off, not a burst: publish at once for instant feedback.
+         Record the language the client declared (before publishing, as the
+         diagnostics pass dispatches on it). *)
+      Hashtbl.replace doc_is_wat (doc_key textDocument.uri)
+        (language_is_wat ~language_id:textDocument.languageId textDocument.uri);
       set_doc textDocument.uri textDocument.text;
       publish_diagnostics textDocument.uri textDocument.text
   | Lsp.Client_notification.TextDocumentDidChange
@@ -675,6 +697,7 @@ let on_notification (n : Lsp.Client_notification.t) =
       | [] -> ())
   | Lsp.Client_notification.TextDocumentDidClose { textDocument } ->
       remove_doc textDocument.uri;
+      Hashtbl.remove doc_is_wat (doc_key textDocument.uri);
       Hashtbl.remove dirty (doc_key textDocument.uri);
       (* Clear the editor's diagnostics for a closed document. *)
       send_notification

@@ -98,8 +98,9 @@ types the features return and the shared helpers — trivia, positions, diag
 rendering), `Wax_editor` (the Wax features), and `Wat_editor` (the Wasm-text
 features, `open Editor_common`); the library is `(wrapped false)` so all three
 are top-level. Every language feature is a `*_string` function
-(`Wax_editor.hover_string` / `Wat_editor.hover_string`, dispatched on the `.wat`
-extension); the LSP server and the JS wrapper only marshal their results. The loop
+(`Wax_editor.hover_string` / `Wat_editor.hover_string`, dispatched on the
+document's language); the LSP server and the JS wrapper only marshal their
+results. The loop
 is synchronous (one request at a time), document sync is `Full` (each change
 carries the whole buffer, which is what `Wax_editor`'s source-keyed analysis
 cache expects), and the position encoding is negotiated at `initialize` (UTF-8
@@ -114,8 +115,12 @@ open/change (lint diagnostics carry the `-W` code, a `codeDescription` link to
 the docs, and `DiagnosticTag.Unnecessary` via `Warning.is_unnecessary`). The one
 setting is `wax.define` (conditional-compilation defines, mirroring `-D`), read
 from `initializationOptions` and `workspace/didChangeConfiguration` and threaded
-into `check_string_with_defines`/`completion_string`. A `.wat` URI is served by
-`Wat_editor` (dispatched on `is_wat`): formatting, diagnostics,
+into `check_string_with_defines`/`completion_string`. A Wasm-text document is
+served by `Wat_editor` (`is_wat` dispatches on the language the client declared
+at `didOpen` via `languageId` — `wat` vs `wax` — recorded per-URI in
+`doc_is_wat`, falling back to the `.wat` extension only for an unrecognized id;
+so an editor serving WAT under another extension or an unsaved buffer is
+honoured): formatting, diagnostics,
 outline, folding, selection-range; hover, signature-help and semantic-tokens
 (from `Validation.f`'s `?record_types` sink — each value at its instruction span,
 identifiers at their own span: a call's callee signature, a local/global's type,
