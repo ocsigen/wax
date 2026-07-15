@@ -57,6 +57,98 @@ export async function run(): Promise<void> {
     throw new Error("web: expected outline symbols: " + JSON.stringify(syms));
   }
 
+  // --- Position-based language features, driven through the runtime. A "‸" in
+  // the source marks the (zero-based) cursor; `at` strips it and returns the
+  // position. These lock in the behaviour otherwise only checked by hand. ---
+  const at = (marked: string) => {
+    const i = marked.indexOf("‸");
+    const before = marked.slice(0, i);
+    const line = (before.match(/\n/g) || []).length;
+    const character = before.length - (before.lastIndexOf("\n") + 1);
+    return { src: marked.slice(0, i) + marked.slice(i + 1), line, character };
+  };
+  const names = (cs: { name: string }[]) => cs.map((c) => c.name);
+
+  // hover: the inferred type of the expression under the cursor.
+  {
+    const p = at("fn f(x: i32) -> i32 {\n  ‸x;\n}\n");
+    const h = wax.hover(p.src, p.line, p.character);
+    if (!h || h.type !== "i32") {
+      throw new Error("web: hover: " + JSON.stringify(h));
+    }
+  }
+
+  // definition + find-references: a use links to its declaration, and the
+  // declaration finds the declaration plus the use.
+  {
+    const p = at("fn add(a: i32) -> i32 { a; }\nfn g() -> i32 { ‸add(0); }\n");
+    const defs = wax.definition(p.src, p.line, p.character);
+    if (defs.length !== 1 || defs[0].startLine !== 0) {
+      throw new Error("web: definition: " + JSON.stringify(defs));
+    }
+    const refs = wax.references(p.src, p.line, p.character);
+    if (refs.length !== 2) {
+      throw new Error("web: references: " + JSON.stringify(refs));
+    }
+  }
+
+  // completion: names in scope, scoped to the cursor — a `let` bound after it is
+  // not offered — plus the always-in-scope module definitions and parameters.
+  {
+    const p = at(
+      "const c: i32 = 0;\nfn f(a: i32) {\n  let x = 1;\n‸  let y = 2;\n}\n",
+    );
+    const n = names(wax.completion(p.src, p.line, p.character));
+    for (const want of ["c", "f", "a", "x"]) {
+      if (!n.includes(want)) {
+        throw new Error("web: completion missing " + want + ": " + n);
+      }
+    }
+    if (n.includes("y")) {
+      throw new Error("web: completion offered out-of-scope y: " + n);
+    }
+  }
+
+  // member completion after ".": a struct's fields, and a numeric receiver's
+  // value methods.
+  {
+    const p = at("type p = { x: i32, y: i32 };\nfn g(q: &p) {\n  _ = q.‸x;\n}\n");
+    const n = names(wax.completion(p.src, p.line, p.character));
+    if (!n.includes("x") || !n.includes("y")) {
+      throw new Error("web: member completion: " + n);
+    }
+  }
+  {
+    const p = at("fn m(v: f32) {\n  _ = v.‸s;\n}\n");
+    if (!names(wax.completion(p.src, p.line, p.character)).includes("sqrt")) {
+      throw new Error("web: value-method completion missing sqrt");
+    }
+  }
+  // completion after "::": an intrinsic namespace's members.
+  {
+    const p = at("fn m() {\n  _ = i64::‸a;\n}\n");
+    if (!names(wax.completion(p.src, p.line, p.character)).includes("add128")) {
+      throw new Error("web: namespace completion missing add128");
+    }
+  }
+
+  // signature help: the callee's signature with the active argument, for a
+  // function call and — thanks to error recovery auto-closing — an unclosed one.
+  {
+    const p = at("fn add(a: i32, b: i32) -> i32 { a; }\nfn m() { _ = add(1, ‸2); }\n");
+    const s = wax.signatureHelp(p.src, p.line, p.character);
+    if (!s || s.label !== "fn(a: i32, b: i32) -> i32" || s.active !== 1) {
+      throw new Error("web: signatureHelp: " + JSON.stringify(s));
+    }
+  }
+  {
+    const p = at("fn add(a: i32, b: i32) {}\nfn m() {\n  add(1, ‸\n}\n");
+    const s = wax.signatureHelp(p.src, p.line, p.character);
+    if (!s || s.active !== 1) {
+      throw new Error("web: signatureHelp (unclosed): " + JSON.stringify(s));
+    }
+  }
+
   // WAT support shares the same wasm module. Formatting is idempotent, a syntax
   // error is rejected, a clean module has no diagnostics, and an invalid one
   // reports at least one error. (The clean module exports its function so the
