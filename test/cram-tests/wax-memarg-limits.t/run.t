@@ -81,7 +81,7 @@ Giving an initializer, or using a nullable element type, is fine:
 A module may not export the same name twice:
 
   $ wax check dup-export.wax
-  Error: There is already an export of name "a".
+  Error: There is already an export of name 'a'.
    ──➤  dup-export.wax:2:12
   1 │ #[export = "a"]
   2 │ #[export = "a"]

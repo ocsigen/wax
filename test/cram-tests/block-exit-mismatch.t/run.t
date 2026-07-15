@@ -5,17 +5,18 @@ from a `br` to the block's label and the fall-through:
 
   $ wax check br-and-fall-through.wax
   Error:
-    The values reaching this block's exit have no common supertype, so its result type cannot be inferred.
+    The values reaching this block's exit have no common supertype, so its
+    result type cannot be inferred.
    ──➤  br-and-fall-through.wax:2:9
   1 │ fn f(c: i32) {
   2 │     _ = 'l: do {
     ·         ^^^^^^^^^
   3 │         if c { br 'l 5; }
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ·                      ^ i32
+    ·                      ^ 'i32'
   4 │         null as &any;
     · ^^^^^^^^^^^^^^^^^^^^^^
-    ·         ^^^^^^^^^^^^ &any
+    ·         ^^^^^^^^^^^^ '&any'
   5 │     };
     · ^^^^^
   6 │ }
@@ -26,17 +27,18 @@ from a `br` to the block's label and the fall-through:
 
   $ wax check two-br.wax
   Error:
-    The values reaching this block's exit have no common supertype, so its result type cannot be inferred.
+    The values reaching this block's exit have no common supertype, so its
+    result type cannot be inferred.
    ──➤  two-br.wax:2:9
   1 │ fn f(c: i32) {
   2 │     _ = 'l: do {
     ·         ^^^^^^^^^
   3 │         if c { br 'l 5; }
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ·                      ^ i32
+    ·                      ^ 'i32'
   4 │         if c { br 'l (null as &any); }
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ·                       ^^^^^^^^^^^^ &any
+    ·                       ^^^^^^^^^^^^ '&any'
   5 │         unreachable;
     · ^^^^^^^^^^^^^^^^^^^^^
   6 │     };

@@ -27,7 +27,7 @@ The intrinsic's result must still match the function's declared result type,
 the same tail-call constraint a genuine call is held to.
 
   $ wax check bad.wax
-  Error: This instruction has type i32 but is expected to have type i64.
+  Error: This instruction has type 'i32' but is expected to have type 'i64'.
    ──➤  bad.wax:4:23
   2 │ 
   3 │ // The intrinsic result must match the function's result type.

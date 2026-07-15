@@ -63,7 +63,7 @@ clash:
 but a guarded export overlapping an unconditional one does:
 
   $ wax check dup.wax
-  Error: There is already an export of name "e".
+  Error: There is already an export of name 'e'.
    ──➤  dup.wax:3:12
   1 │ #[export = "e", if portable]
   2 │ fn a(v: &eq) -> &eq { v; }
@@ -108,7 +108,8 @@ A guard is only meaningful on an export or start, not on other attributes:
 
   $ wax check badguard.wax
   Error:
-    A conditional guard is only allowed on an export or start annotation, not on import.
+    A conditional guard is only allowed on an export or start annotation, not on
+    import.
    ──➤  badguard.wax:2:21
   1 │ import "m" {
   2 │     #[import = "n", if debug]

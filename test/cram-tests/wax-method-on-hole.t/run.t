@@ -16,7 +16,8 @@ receiver rather than collapsing or crashing:
 
   $ wax check field.wax
   Error:
-    Cannot determine the type of this expression, which is needed to compile this operation.
+    Cannot determine the type of this expression, which is needed to compile
+    this operation.
    ──➤  field.wax:2:34
   1 │ type s = { x: i32 };
   2 │ fn f() -> i32 { unreachable; _ = _.x; }

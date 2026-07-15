@@ -5,7 +5,7 @@ codes are unchanged.
 A type error, as JSON (still exit 128):
 
   $ wax check --error-format=json bad.wax
-  {"severity":"error","file":"bad.wax","startLine":1,"startColumn":16,"endLine":1,"endColumn":19,"startOffset":16,"endOffset":19,"message":"Expecting type i32 but got type\nfloat.","warning":null,"hint":null,"related":[]}
+  {"severity":"error","file":"bad.wax","startLine":1,"startColumn":16,"endLine":1,"endColumn":19,"startOffset":16,"endOffset":19,"message":"Expecting type 'i32' but got type 'float'.","warning":null,"hint":null,"related":[]}
   [128]
 
 A warning (an unused local) carries its severity and its -W name; exit stays 0:
@@ -16,7 +16,7 @@ A warning (an unused local) carries its severity and its -W name; exit stays 0:
 The default output is unchanged, human-readable with a source snippet:
 
   $ wax check bad.wax
-  Error: Expecting type i32 but got type float.
+  Error: Expecting type 'i32' but got type 'float'.
    ──➤  bad.wax:1:17
   1 │ fn h() -> i32 { 1.0; }
     ·                 ^^^

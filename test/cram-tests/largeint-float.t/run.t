@@ -29,8 +29,9 @@ A non-numeric pairing is still rejected:
 
   $ printf 'fn f(x: f32) -> f32 {\n    x & 4294967296;\n}\n' > bad.wax
   $ wax -i wax -f wasm bad.wax -o /dev/null
-  Error: This operator cannot be applied to operands of types f32 and
-    large number.
+  Error:
+    This operator cannot be applied to operands of types 'f32' and
+    'large number'.
    ──➤  bad.wax:2:7
   1 │ fn f(x: f32) -> f32 {
   2 │     x & 4294967296;

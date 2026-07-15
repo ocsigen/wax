@@ -84,7 +84,8 @@ itself. A bitwise operator rejects a float operand:
   $ wax -f wat - <<'WAX'
   > fn f(a: f64) -> f64 { a &= 1.0; a; }
   > WAX
-  Error: This operator cannot be applied to operands of types f64 and float.
+  Error:
+    This operator cannot be applied to operands of types 'f64' and 'float'.
    ──➤  -:1:25
   1 │ fn f(a: f64) -> f64 { a &= 1.0; a; }
     ·                         ^^
@@ -96,7 +97,8 @@ and an unsigned-agnostic `/` rejects an integer operand (it is float division):
   $ wax -f wat - <<'WAX'
   > fn f(a: i32) -> i32 { a /= 3; a; }
   > WAX
-  Error: This operator cannot be applied to operands of types i32 and number.
+  Error:
+    This operator cannot be applied to operands of types 'i32' and 'number'.
    ──➤  -:1:25
   1 │ fn f(a: i32) -> i32 { a /= 3; a; }
     ·                         ^^

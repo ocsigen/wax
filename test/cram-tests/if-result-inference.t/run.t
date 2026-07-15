@@ -24,7 +24,7 @@ When the type cannot be determined it is reported. The branches must agree; in a
 checked position the offending branch is pointed at:
 
   $ wax check mismatched.wax
-  Error: This instruction has type &any but is expected to have type i64.
+  Error: This instruction has type '&any' but is expected to have type 'i64'.
    ──➤  mismatched.wax:2:31
   1 │ fn f(c: i32) -> i64 {
   2 │     if c { 0 as i64; } else { null as &any; }
@@ -52,13 +52,14 @@ no `=> T` annotation could reconcile them, so none is suggested):
 
   $ wax check mismatched-synth.wax
   Error:
-    The values reaching this block's exit have no common supertype, so its result type cannot be inferred.
+    The values reaching this block's exit have no common supertype, so its
+    result type cannot be inferred.
    ──➤  mismatched-synth.wax:2:6
   1 │ fn f(c: i32) -> i32 {
   2 │     (if c { 0 as i64; } else { null as &any; }).clz() as i32;
     ·      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ·             ^^^^^^^^ i64
-    ·                                ^^^^^^^^^^^^ &any
+    ·             ^^^^^^^^ 'i64'
+    ·                                ^^^^^^^^^^^^ '&any'
   3 │ }
   4 │ 
   [128]

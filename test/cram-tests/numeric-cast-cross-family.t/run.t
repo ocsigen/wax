@@ -11,7 +11,7 @@ A committed float cast to an integer with a plain cast (no signedness):
 
   $ echo 'fn f() { (1.0 + 2.0) as i32; }' > a.wax
   $ wax check a.wax
-  Error: This value of type float cannot be cast to the target type.
+  Error: This value of type 'float' cannot be cast to the target type.
    ──➤  a.wax:1:11
   1 │ fn f() { (1.0 + 2.0) as i32; }
     ·           ^^^^^^^^^
@@ -27,7 +27,7 @@ A committed integer cast to a float with a plain cast:
 
   $ echo 'fn f() { (5 & 3) as f32; }' > b.wax
   $ wax check b.wax
-  Error: This value of type int cannot be cast to the target type.
+  Error: This value of type 'int' cannot be cast to the target type.
    ──➤  b.wax:1:11
   1 │ fn f() { (5 & 3) as f32; }
     ·           ^^^^^
@@ -43,7 +43,7 @@ A signedness on a float-to-float cast is meaningless:
 
   $ echo 'fn f(x: f64) -> f32 { x as f32_u; }' > c.wax
   $ wax check c.wax
-  Error: This value of type f64 cannot be cast to the target type.
+  Error: This value of type 'f64' cannot be cast to the target type.
    ──➤  c.wax:1:23
   1 │ fn f(x: f64) -> f32 { x as f32_u; }
     ·                       ^
@@ -54,7 +54,7 @@ A polymorphic reference (here [null!] in dead code) cannot convert to a float:
 
   $ printf 'fn f() -> f32 {\n    unreachable;\n    null! as f32_u;\n}\n' > d.wax
   $ wax check d.wax
-  Error: This value of type &_ cannot be cast to the target type.
+  Error: This value of type '&_' cannot be cast to the target type.
    ──➤  d.wax:3:5
   1 │ fn f() -> f32 {
   2 │     unreachable;

@@ -25,7 +25,8 @@ below re-enable what they demonstrate with an explicit `-W`.
   11 │ }
   12 │ 
   Warning:
-    This conversion always traps: the constant is out of the target type's range.
+    This conversion always traps: the constant is out of the target type's
+    range.
     ──➤  lints.wax:15:5
   13 │ #[export = "trunc"]
   14 │ fn trunc() -> i32 {
@@ -119,7 +120,8 @@ zero, or an out-of-range trapping conversion):
   11 │ }
   12 │ 
   Warning:
-    This conversion always traps: the constant is out of the target type's range.
+    This conversion always traps: the constant is out of the target type's
+    range.
     ──➤  lints.wax:15:5
   13 │ #[export = "trunc"]
   14 │ fn trunc() -> i32 {
@@ -228,7 +230,8 @@ analog of `unused-local`); prefix a name with `_` to silence one:
   11 │ }
   12 │ 
   Error:
-    This conversion always traps: the constant is out of the target type's range.
+    This conversion always traps: the constant is out of the target type's
+    range.
     ──➤  lints.wax:15:5
   13 │ #[export = "trunc"]
   14 │ fn trunc() -> i32 {

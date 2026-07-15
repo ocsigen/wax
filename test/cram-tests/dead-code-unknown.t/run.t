@@ -5,7 +5,8 @@ type is unknown. The diagnostic points at the offending operand:
 
   $ wax check dead.wax
   Error:
-    Cannot determine the type of this expression, which is needed to compile this operation.
+    Cannot determine the type of this expression, which is needed to compile
+    this operation.
    ──➤  dead.wax:7:5
   5 │ fn f() -> i32 {
   6 │     unreachable;
@@ -14,7 +15,8 @@ type is unknown. The diagnostic points at the offending operand:
   8 │ }
   9 │ 
   Error:
-    Cannot determine the type of this expression, which is needed to compile this operation.
+    Cannot determine the type of this expression, which is needed to compile
+    this operation.
     ──➤  dead.wax:16:13
   14 │ fn g() {
   15 │     unreachable;

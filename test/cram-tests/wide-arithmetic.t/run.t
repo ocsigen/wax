@@ -47,7 +47,7 @@ is needed).
 An unknown member of the [i64] namespace is rejected.
 
   $ wax check bad-name.wax
-  Error: There is no i64::add256 intrinsic.
+  Error: There is no 'i64::add256' intrinsic.
    ──➤  bad-name.wax:2:5
   1 │ fn f(a: i64, b: i64) -> (i64, i64) {
   2 │     i64::add256(a, b);

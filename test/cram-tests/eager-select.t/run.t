@@ -10,7 +10,8 @@ inner division here, not the outer arm):
 
   $ wax check -W eager-select=warning eager.wax
   Warning:
-    This operation is evaluated even when the condition selects the other branch.
+    This operation is evaluated even when the condition selects the other
+    branch.
    ──➤  eager.wax:4:37
   2 │ 
   3 │ #[export = "div"]
@@ -21,7 +22,8 @@ inner division here, not the outer arm):
   6 │ #[export = "call"]
   Hint: Use an 'if' expression to evaluate only the chosen branch.
   Warning:
-    This operation is evaluated even when the condition selects the other branch.
+    This operation is evaluated even when the condition selects the other
+    branch.
    ──➤  eager.wax:7:30
   5 │ 
   6 │ #[export = "call"]
@@ -32,7 +34,8 @@ inner division here, not the outer arm):
   9 │ #[export = "pure"]
   Hint: Use an 'if' expression to evaluate only the chosen branch.
   Warning:
-    This operation is evaluated even when the condition selects the other branch.
+    This operation is evaluated even when the condition selects the other
+    branch.
     ──➤  eager.wax:13:45
   11 │ 
   12 │ #[export = "buried"]
@@ -43,7 +46,8 @@ inner division here, not the outer arm):
   15 │ #[export = "nested"]
   Hint: Use an 'if' expression to evaluate only the chosen branch.
   Warning:
-    This operation is evaluated even when the condition selects the other branch.
+    This operation is evaluated even when the condition selects the other
+    branch.
     ──➤  eager.wax:16:53
   14 │ 
   15 │ #[export = "nested"]

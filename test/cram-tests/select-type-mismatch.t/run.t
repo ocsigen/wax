@@ -6,13 +6,14 @@ suggested.)
 
   $ wax check mismatch.wax
   Error:
-    The two branches of this select have no common supertype, so its result type cannot be inferred.
+    The two branches of this select have no common supertype, so its result type
+    cannot be inferred.
    ──➤  mismatch.wax:2:6
   1 │ fn f(c: i32) -> i32 {
   2 │     (c ? 0 as i64 : null as &any).clz() as i32;
     ·      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ·          ^^^^^^^^ i64
-    ·                     ^^^^^^^^^^^^ &any
+    ·          ^^^^^^^^ 'i64'
+    ·                     ^^^^^^^^^^^^ '&any'
   3 │ }
   4 │ 
   [128]

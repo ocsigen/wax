@@ -1959,6 +1959,14 @@ let diagnostic_ctx printer =
     locate = (fun _ -> None);
   }
 
+(* Render an AST fragment into a caller-supplied styled printer — used to embed a
+   type in a diagnostic [Message], so it shares the message's colour theme and
+   width (unlike [diagnostic_ctx], which sniffs [stderr]). No trivia, no location
+   lookup. Defined before the [Printer.t]-taking entries below shadow [valtype]
+   / [comptype] with the diagnostic-context wrappers. *)
+let styled_ctx base = { base; locate = (fun _ -> None) }
+let valtype_styled base i = valtype (styled_ctx base) i
+let comptype_styled base i = comptype (styled_ctx base) i
 let instr printer i = instr Instruction (diagnostic_ctx printer) i
 let valtype printer i = valtype (diagnostic_ctx printer) i
 let comptype printer i = comptype (diagnostic_ctx printer) i

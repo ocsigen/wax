@@ -135,27 +135,42 @@ and collecting = {
       *)
 }
 
-let rec output_inferred_type f ty =
+(* Render an inferred type into a styled printer (colour theme + width supplied
+   by the caller), so a type embedded in a diagnostic message shares that
+   message's theme and layout. The flexible-literal families render as their own
+   [Type]-styled words; concrete types delegate to the shared [Output]. *)
+let rec output_inferred_type_styled sp ty =
+  let open Wax_utils in
+  let word s = Styled_printer.print_styled sp Colors.Type s in
   match Cell.get ty with
   (* A block result still being inferred renders as the annotation under test (the
      type a reader, e.g. a mismatched [br]/catch, is checked against), not [any]. *)
-  | Collecting { declared = Some d; _ } -> output_inferred_type f d
-  | Unknown | Error | Collecting _ -> Format.fprintf f "any"
-  | UnknownRef -> Format.fprintf f "&_"
-  | Null -> Format.fprintf f "null"
+  | Collecting { declared = Some d; _ } -> output_inferred_type_styled sp d
+  | Unknown | Error | Collecting _ -> word "any"
+  | UnknownRef -> word "&_"
+  | Null -> word "null"
   (* These flexible literal types render by the family they resolve to, distinct
      from one another and from the concrete valtypes: [number] is any numeric
      (i32/i64/f32/f64), [int] an integer (i32/i64), [large number] a numeric
      literal too big for i32 (i64/f32/f64, defaulting to i64 — float-capable, so
      it belongs to the [number] family, not [int]), [float] a float (f32/f64). *)
-  | Number -> Format.fprintf f "number"
-  | Int -> Format.fprintf f "int"
-  | LargeInt -> Format.fprintf f "large number"
-  | Int16 -> Format.fprintf f "i16"
-  | Int8 -> Format.fprintf f "i8"
-  | Float -> Format.fprintf f "float"
-  | Valtype { anon_comptype = Some c; _ } -> Output.comptype f c
-  | Valtype ty -> Output.valtype f ty.typ
+  | Number -> word "number"
+  | Int -> word "int"
+  | LargeInt -> word "large number"
+  | Int16 -> word "i16"
+  | Int8 -> word "i8"
+  | Float -> word "float"
+  | Valtype { anon_comptype = Some c; _ } -> Output.comptype_styled sp c
+  | Valtype ty -> Output.valtype_styled sp ty.typ
+
+(* The plain-[Format] rendering, for the stack/debug printers and the editor's
+   hover string: run the styled renderer with an uncoloured theme. *)
+let output_inferred_type f ty =
+  Wax_utils.Printer.run f (fun p ->
+      output_inferred_type_styled
+        (Wax_utils.Styled_printer.create ~printer:p
+           ~theme:Wax_utils.Colors.no_color ~trivia:(Hashtbl.create 0) ())
+        ty)
 
 (* [Unknown] (unreachable/branch), [Error] (recovery) and [UnknownRef] (a
    reference of unknown heap type) all stand for "no concrete type known". They

@@ -13,7 +13,8 @@ so `a == b` is a bare `ref.eq` and `a != b` negates it with `i32.eqz`.
 non-equatable references is rejected the same way for both operators.
 
   $ wax check bad-ne.wax
-  Error: This operator cannot be applied to operands of types &func and &func.
+  Error:
+    This operator cannot be applied to operands of types '&func' and '&func'.
    ──➤  bad-ne.wax:2:7
   1 │ fn f(a: &func, b: &func) -> i32 {
   2 │     a != b;

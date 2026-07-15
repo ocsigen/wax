@@ -71,7 +71,7 @@ suppressed as a recovery cascade (only the genuine diagnostics remain):
     ·                         ^
   2 │ fn g() -> i32 { 1.0; }
   3 │ 
-  Error: Expecting type i32 but got type float.
+  Error: Expecting type 'i32' but got type 'float'.
    ──➤  mixed.wax:2:17
   1 │ fn f() -> i32 { let x = ; x + 1; }
   2 │ fn g() -> i32 { 1.0; }

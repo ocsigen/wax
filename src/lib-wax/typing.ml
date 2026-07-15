@@ -205,18 +205,36 @@ let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
 module Error = struct
   open Wax_utils
 
-  let print_name f x = Format.fprintf f "'%s'" x.desc
+  (* Message-building combinators (see {!Wax_utils.Message}). Prose is [text],
+     joined with [++] (soft, wrap-point space) or [^^] (no space). An emphasized
+     atom — [name] an identifier, [kw] a code token, [num] a numeric literal,
+     [typ] an inferred type — is coloured when the theme is coloured and quoted
+     ['…'] when it is not (so JSON/short, always uncoloured, are always quoted). *)
+  let text = Message.text
+  let ( ++ ) = Message.( ++ )
+  let ( ^^ ) = Message.( ^^ )
+  let name x = Message.ident x.desc
+  let kw = Message.code
+  let num s = Message.styled Colors.Constant s
 
-  (* All errors share the same envelope: severity [Error], a formatted message,
-     and an optional hint. [report] captures that boilerplate so each error
-     below is just its message (and, where relevant, a hint). *)
-  let report ?hint ?related context ~location fmt =
-    Format.kdprintf
-      (fun msg ->
-        Diagnostic.report context ~location ~severity:Error ?hint ?related
-          ~message:(Message.of_format (fun f () -> msg f))
-          ())
-      fmt
+  (* An inferred type, rendered through the shared pretty-printer so it shares
+     the message's theme and width. Quoted when the theme is uncoloured, to match
+     the other emphasized atoms. *)
+  let typ ty =
+    Message.raw (fun sp ->
+        let quote =
+          Colors.escape_sequence sp.Styled_printer.theme Colors.Type = ""
+        in
+        if quote then Printer.string sp.Styled_printer.printer "'";
+        Infer.output_inferred_type_styled sp ty;
+        if quote then Printer.string sp.Styled_printer.printer "'")
+
+  (* All errors share the same envelope: severity [Error], a message, and an
+     optional hint. [report] captures that boilerplate so each error below is
+     just its message (and, where relevant, a hint). *)
+  let report ?hint ?related context ~location message =
+    Diagnostic.report context ~location ~severity:Error ?hint ?related ~message
+      ()
 
   (* Warnings share the same envelope as [report] but with severity [Warning],
      so they are printed without aborting the pass. [warning] names the warning
@@ -230,68 +248,63 @@ module Error = struct
      suppress them wholesale here — the user fixes the syntax errors first and the
      warnings surface on a clean re-check. This is the warning-severity analogue
      of the [unbound_name]/[empty_stack] cascade guards. *)
-  let warn ?warning ?universal ?hint ?related context ~location fmt =
-    if Wax_utils.Diagnostic.in_recovery context then
-      Format.ikfprintf (fun _ -> ()) Format.err_formatter fmt
-    else
-      Format.kdprintf
-        (fun msg ->
-          Diagnostic.report context ~location ~severity:Warning ?warning
-            ?universal ?hint ?related
-            ~message:(Message.of_format (fun f () -> msg f))
-            ())
-        fmt
+  let warn ?warning ?universal ?hint ?related context ~location message =
+    if not (Wax_utils.Diagnostic.in_recovery context) then
+      Diagnostic.report context ~location ~severity:Warning ?warning ?universal
+        ?hint ?related ~message ()
 
   (* A local declared by a [let] but never read. Prefix its name with [_] to
      silence the warning. *)
-  let unused_local context ~location name =
+  let unused_local context ~location x =
     warn ~warning:Wax_utils.Warning.Unused_local ~universal:true context
-      ~location "The local variable %a is never used." print_name name
+      ~location
+      (text "The local variable" ++ name x ++ text "is never used.")
 
   (* A module field (a function or global) declared but never referenced,
      exported, or used as the start function. Prefix its name with [_] to
      silence the warning. *)
-  let unused_field context ~location kind name =
+  let unused_field context ~location kind x =
     warn ~warning:Wax_utils.Warning.Unused_field ~universal:true context
-      ~location "The %s %a is never used." kind print_name name
+      ~location
+      (text "The" ++ text kind ++ name x ++ text "is never used.")
 
   (* An imported function or global never referenced, exported, or used as the
      start function. Prefix its name with [_] to silence the warning. *)
-  let unused_import context ~location kind name =
+  let unused_import context ~location kind x =
     warn ~warning:Wax_utils.Warning.Unused_import ~universal:true context
-      ~location "The imported %s %a is never used." kind print_name name
+      ~location
+      (text "The imported" ++ text kind ++ name x ++ text "is never used.")
 
   (* An operation with no effect on its result, or a constant result. *)
-  let redundant_operation context ~location fmt =
+  let redundant_operation context ~location message =
     warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true context
-      ~location fmt
+      ~location message
 
   (* A cast/test whose operand can never have the target type. *)
   let cast_always_fails context ~location ~is_test =
-    if is_test then
-      warn ~warning:Wax_utils.Warning.Cast_always_fails ~universal:true context
-        ~location
-        "This type test is always false: the value can never have this type."
-    else
-      warn ~warning:Wax_utils.Warning.Cast_always_fails ~universal:true context
-        ~location "This cast always traps: the value can never have this type."
+    warn ~warning:Wax_utils.Warning.Cast_always_fails ~universal:true context
+      ~location
+      (text
+         (if is_test then
+            "This type test is always false: the value can never have this \
+             type."
+          else "This cast always traps: the value can never have this type."))
 
   (* A cast/test whose operand already has the target type. *)
   let redundant_cast context ~location ~is_test =
-    if is_test then
-      warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true
-        context ~location
-        "This type test is always true: the value already has this type."
-    else
-      warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true
-        context ~location
-        "This cast is redundant: the value already has this type."
+    warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true context
+      ~location
+      (text
+         (if is_test then
+            "This type test is always true: the value already has this type."
+          else "This cast is redundant: the value already has this type."))
 
   (* A block label declared but never branched to. Prefix its name with [_] to
      silence the warning. *)
-  let unused_label context ~location name =
+  let unused_label context ~location x =
     warn ~warning:Wax_utils.Warning.Unused_label ~universal:true context
-      ~location "The label %a is never used." print_name name
+      ~location
+      (text "The label" ++ name x ++ text "is never used.")
 
   (* A shift whose constant count is at least the operand's bit width. Wasm
      shifts mask the count modulo the width, so the result is very likely not
@@ -300,47 +313,55 @@ module Error = struct
     warn ~warning:Wax_utils.Warning.Shift_overflow ~universal:true context
       ~location
       ~hint:
-        (Message.of_format (fun f () ->
-             Format.fprintf f
-               "Wasm masks the count modulo %d, shifting by %Ld instead." width
-               (Int64.rem count (Int64.of_int width))))
-      "The shift count %Ld is at least the operand width (%d bits)." count width
+        ((text "Wasm masks the count modulo" ++ Message.int width)
+        ^^ text "," ++ text "shifting by"
+           ++ Message.int64 (Int64.rem count (Int64.of_int width))
+           ++ text "instead.")
+      (text "The shift count" ++ Message.int64 count
+       ++ text "is at least the operand width ("
+      ^^ Message.int width ^^ text " bits).")
 
   (* An integer division or remainder by a constant zero: it always traps. *)
   let division_by_zero context ~location =
     warn ~warning:Wax_utils.Warning.Constant_trap ~universal:true context
-      ~location "This integer division or remainder by zero always traps."
+      ~location
+      (text "This integer division or remainder by zero always traps.")
 
   (* A comparison whose result does not depend on its variable operand. *)
   let tautological_comparison context ~location ~value =
     warn ~warning:Wax_utils.Warning.Tautological_comparison ~universal:true
-      context ~location "This comparison is always %b." value
+      context ~location
+      ((text "This comparison is always" ++ Message.bool value) ^^ text ".")
 
   (* A branch, loop, or [select] condition that is a constant. *)
   let constant_condition context ~location ~value =
     warn ~warning:Wax_utils.Warning.Constant_condition ~universal:true context
-      ~location "This condition is always %b." value
+      ~location
+      ((text "This condition is always" ++ Message.bool value) ^^ text ".")
 
   (* A side-effect-free expression whose result is computed and then dropped. *)
   let unused_result context ~location =
     warn ~warning:Wax_utils.Warning.Unused_result ~universal:true context
       ~location
-      "The result of this expression is discarded, and computing it has no \
-       effect."
+      (text
+         "The result of this expression is discarded, and computing it has no \
+          effect.")
 
   (* A trapping float-to-integer conversion of a constant that lies outside the
      target type's range (or is NaN/infinite): it always traps. *)
   let conversion_out_of_range context ~location =
     warn ~warning:Wax_utils.Warning.Constant_trap ~universal:true context
       ~location
-      "This conversion always traps: the constant is out of the target type's \
-       range."
+      (text
+         "This conversion always traps: the constant is out of the target \
+          type's range.")
 
   (* A statement that can never be reached: it follows an unconditional branch,
      [return], or [unreachable]. [related] points at the diverging instruction. *)
   let dead_code context ~location ~related =
     warn ~warning:Wax_utils.Warning.Dead_code ~universal:true context ~location
-      ~related "This code is unreachable."
+      ~related
+      (text "This code is unreachable.")
 
   (* A trapping or effectful operation inside a branch of a [?:]. Because [?:]
      compiles to a [select], which evaluates both branches, the operation runs
@@ -354,18 +375,14 @@ module Error = struct
           {
             Wax_utils.Diagnostic.location = select;
             message =
-              Message.of_format (fun f () ->
-                  Format.fprintf f
-                    "This '?:' evaluates both branches (it compiles to a \
-                     'select').");
+              text
+                "This '?:' evaluates both branches (it compiles to a 'select').";
           };
         ]
-      ~hint:
-        (Message.of_format (fun f () ->
-             Format.fprintf f
-               "Use an 'if' expression to evaluate only the chosen branch."))
-      "This operation is evaluated even when the condition selects the other \
-       branch."
+      ~hint:(text "Use an 'if' expression to evaluate only the chosen branch.")
+      (text
+         "This operation is evaluated even when the condition selects the \
+          other branch.")
 
   (* Two operators whose relative precedence is easy to misremember are mixed
      without parentheses (see {!lint_precedence}). [location] is the outer
@@ -378,16 +395,13 @@ module Error = struct
           {
             Wax_utils.Diagnostic.location = inner;
             message =
-              Message.of_format (fun f () ->
-                  Format.fprintf f
-                    "This %s operator binds tighter than the %s operator."
-                    inner_kind outer_kind);
+              text "This" ++ text inner_kind
+              ++ text "operator binds tighter than the"
+              ++ text outer_kind ++ text "operator.";
           };
         ]
-      ~hint:
-        (Message.of_format (fun f () ->
-             Format.fprintf f "Add parentheses to make the grouping explicit."))
-      "Operator precedence here is easy to misread."
+      ~hint:(text "Add parentheses to make the grouping explicit.")
+      (text "Operator precedence here is easy to misread.")
 
   let empty_stack context ~location =
     (* Like [unbound_name], suppress this in error-recovery mode: a stack
@@ -397,36 +411,39 @@ module Error = struct
        nothing downstream cascades; genuine underflows in intact code still
        surface on a clean re-check once the syntax errors are fixed. *)
     if not (Wax_utils.Diagnostic.in_recovery context) then
-      report context ~location "The stack is empty."
+      report context ~location (text "The stack is empty.")
 
   let let_in_conditional context ~location =
     report context ~location
-      "A let binding is not allowed inside a conditional annotation; declare \
-       the local before the conditional."
+      (text
+         "A let binding is not allowed inside a conditional annotation; \
+          declare the local before the conditional.")
 
   let non_empty_stack context ~location output_stack =
-    report context ~location "Some values remain on the stack:%a" output_stack
-      ()
+    report context ~location
+      (Message.of_format (fun f () ->
+           Format.fprintf f "Some values remain on the stack:%a" output_stack ()))
 
   (* Report the values still on the stack by pointing a caret at each of them.
      [location] carries the topmost value; [related] the others. *)
   let leftover_values context ~location ~related =
     report context ~location ~related
-      (if related = [] then "This value remains on the stack."
-       else "These values remain on the stack.")
+      (text
+         (if related = [] then "This value remains on the stack."
+          else "These values remain on the stack."))
 
   let expected_func_type context ~location =
-    report context ~location "Expected function type."
+    report context ~location (text "Expected function type.")
 
   let inline_function_type_mismatch context ~location =
     report context ~location
-      "The inline function type does not match the type definition."
+      (text "The inline function type does not match the type definition.")
 
   let expected_struct_type context ~location =
-    report context ~location "Expected struct type."
+    report context ~location (text "Expected struct type.")
 
   let expected_array_type context ~location =
-    report context ~location "Expected array type."
+    report context ~location (text "Expected array type.")
 
   (* An operation (a call, a field/array access, …) needs its operand's concrete
      type to be compiled, but the operand's type is unknown: it was taken off the
@@ -435,30 +452,36 @@ module Error = struct
      type and stays silent), so it is reported here. *)
   let unknown_operand_type context ~location =
     report context ~location
-      "Cannot determine the type of this expression, which is needed to \
-       compile this operation."
+      (text
+         "Cannot determine the type of this expression, which is needed to \
+          compile this operation.")
 
   (* A struct literal omitted its type name in a position where the expected
      type does not pin an exact struct type, so the type cannot be inferred. *)
   let cannot_infer_struct_type context ~location =
     report context ~location
-      "Cannot infer the struct type here; add an explicit type, as in '{T| \
-       ..}'."
+      (text "Cannot infer the struct type here; add an explicit type, as in"
+       ++ kw "{T| ..}"
+      ^^ text ".")
 
   let cannot_infer_array_type context ~location =
     report context ~location
-      "Cannot infer the array type here; add an explicit type, as in '[T| ..]'."
+      (text "Cannot infer the array type here; add an explicit type, as in"
+       ++ kw "[T| ..]"
+      ^^ text ".")
 
-  let method_needs_parentheses context ~location name =
+  let method_needs_parentheses context ~location meth =
     report context ~location
-      "'%s' is an instruction method and must be called with parentheses, as \
-       '%s()'."
-      name name
+      (kw meth
+       ++ text
+            "is an instruction method and must be called with parentheses, as"
+       ++ kw (meth ^ "()")
+      ^^ text ".")
 
   let type_mismatch context ~location ty' ty =
     report context ~location
-      "Expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]." output_inferred_type
-      ty output_inferred_type ty'
+      ((text "Expecting type" ++ typ ty ++ text "but got type" ++ typ ty')
+      ^^ text ".")
 
   let not_an_expression context ~location n =
     (* Suppress in error-recovery mode, like [empty_stack]: an instruction with
@@ -469,121 +492,139 @@ module Error = struct
        surfaces on a clean re-check. *)
     if not (Wax_utils.Diagnostic.in_recovery context) then
       report context ~location
-        "An expression is expected here. This instruction returns %d values." n
+        (text "An expression is expected here. This instruction returns"
+        ++ Message.int n ++ text "values.")
 
   let binop_type_mismatch context ~location ty1 ty2 =
     report context ~location
-      "This operator cannot be applied to operands of types@ @[<2>%a@]@ and@ \
-       @[<2>%a@]."
-      output_inferred_type ty1 output_inferred_type ty2
+      (text "This operator cannot be applied to operands of types"
+       ++ typ ty1 ++ text "and" ++ typ ty2
+      ^^ text ".")
 
   let instruction_type_mismatch context ~location ty ty' =
     report context ~location
-      "This instruction has type@ @[<2>%a@]@ but is expected to have type@ \
-       @[<2>%a@]."
-      output_inferred_type ty output_inferred_type ty'
+      (text "This instruction has type"
+       ++ typ ty
+       ++ text "but is expected to have type"
+       ++ typ ty'
+      ^^ text ".")
 
   let value_count_mismatch context ~location ~expected ~provided =
     report context ~location
-      "This instruction provides %d value(s) but %d was/were expected." provided
-      expected
+      (text "This instruction provides"
+      ++ Message.int provided ++ text "value(s) but" ++ Message.int expected
+      ++ text "was/were expected.")
 
   let invalid_method_receiver context ~location ty =
     report context ~location
-      "This operation cannot be applied to a value of type@ @[<2>%a@]."
-      output_inferred_type ty
+      ((text "This operation cannot be applied to a value of type" ++ typ ty)
+      ^^ text ".")
 
-  let invalid_management_call context ~location name =
-    report context ~location "Invalid arguments in call to '%s'." name
+  let invalid_management_call context ~location meth =
+    report context ~location
+      ((text "Invalid arguments in call to" ++ kw meth) ^^ text ".")
 
   let if_without_else context ~location =
     report context ~location
-      "This 'if' must produce a value and so requires an 'else' branch."
+      (text "This 'if' must produce a value and so requires an 'else' branch.")
 
   let parameterized_block_expression context ~location =
     report context ~location
-      "A block, loop or if used as an expression cannot take parameters."
+      (text "A block, loop or if used as an expression cannot take parameters.")
 
-  let uninitialized_local context ~location name =
-    report context ~location "The local variable %a has not been initialized."
-      print_name name
+  let uninitialized_local context ~location x =
+    report context ~location
+      (text "The local variable" ++ name x ++ text "has not been initialized.")
 
   let non_nullable_table context ~location =
     report context ~location
-      "A table with a non-nullable element type must have an initializer."
+      (text "A table with a non-nullable element type must have an initializer.")
 
   let start_function_signature context ~location =
     report context ~location
-      "The start function must have no parameters and no results."
+      (text "The start function must have no parameters and no results.")
 
   let multiple_start context ~location =
-    report context ~location "A module can have at most one start function."
+    report context ~location
+      (text "A module can have at most one start function.")
 
   let multiple_module context ~location =
-    report context ~location "A module can have at most one name annotation."
+    report context ~location
+      (text "A module can have at most one name annotation.")
 
   let unknown_annotation context ~location name =
-    report context ~location "Unknown annotation %S." name
+    report context ~location ((text "Unknown annotation" ++ kw name) ^^ text ".")
 
   let annotation_value_mismatch context ~location name expected =
-    report context ~location "The %s annotation expects %s." name expected
+    report context ~location
+      ((text "The" ++ text name ++ text "annotation expects" ++ text expected)
+      ^^ text ".")
 
   let annotation_not_allowed context ~location name =
-    report context ~location "The %s annotation is not allowed here." name
+    report context ~location
+      (text "The" ++ text name ++ text "annotation is not allowed here.")
 
   let guard_not_allowed context ~location name =
     report context ~location
-      "A conditional guard is only allowed on an export or start annotation, \
-       not on %s."
-      name
+      (text
+         "A conditional guard is only allowed on an export or start \
+          annotation, not on"
+       ++ text name
+      ^^ text ".")
 
   let multiple_import context ~location =
     report context ~location
-      "An import can have at most one import-name annotation."
+      (text "An import can have at most one import-name annotation.")
 
-  let final_supertype context ~location name =
+  let final_supertype context ~location x =
     report context ~location
-      "The type %a is final and cannot be extended; declare it 'open'."
-      print_name name
+      (text "The type" ++ name x
+      ++ text "is final and cannot be extended; declare it 'open'.")
 
-  let invalid_subtype context ~location name =
-    report context ~location "This type is not a valid subtype of %a."
-      print_name name
+  let invalid_subtype context ~location x =
+    report context ~location
+      ((text "This type is not a valid subtype of" ++ name x) ^^ text ".")
 
   let descriptor_outside_rec_group context ~location ~described =
-    report context ~location "The %s type must be in the same recursion group."
-      (if described then "described" else "descriptor")
+    report context ~location
+      (text "The"
+      ++ text (if described then "described" else "descriptor")
+      ++ text "type must be in the same recursion group.")
 
   let descriptor_not_reciprocal context ~location ~described =
-    if described then
-      report context ~location
-        "This descriptor does not describe the type it is attached to."
-    else
-      report context ~location
-        "The descriptor of this type does not describe it back."
+    report context ~location
+      (text
+         (if described then
+            "This descriptor does not describe the type it is attached to."
+          else "The descriptor of this type does not describe it back."))
 
   let forward_use_of_described context ~location =
     report context ~location
-      "A described type must be declared before its descriptor."
+      (text "A described type must be declared before its descriptor.")
 
   let descriptor_not_struct context ~location ~described =
-    report context ~location "A %s type must be a struct type."
-      (if described then "described" else "descriptor")
+    report context ~location
+      (text "A"
+      ++ text (if described then "described" else "descriptor")
+      ++ text "type must be a struct type.")
 
   let type_without_descriptor context ~location =
     report context ~location
-      "This descriptor instruction requires a type that has a descriptor."
+      (text "This descriptor instruction requires a type that has a descriptor.")
 
   let descriptor_allocation_required context ~location =
     report context ~location
-      "A type with a descriptor must be allocated with a descriptor: \
-       {descriptor(d) | …}."
+      (text
+         "A type with a descriptor must be allocated with a descriptor: \
+          {descriptor(d) | …}.")
 
   let feature_disabled context ~location feature =
     report context ~location
-      "This uses the %s feature, which is not enabled; pass --feature %s."
-      (Wax_utils.Feature.name feature)
-      (Wax_utils.Feature.name feature)
+      (text "This uses the"
+       ++ text (Wax_utils.Feature.name feature)
+       ++ text "feature, which is not enabled; pass --feature"
+       ++ text (Wax_utils.Feature.name feature)
+      ^^ text ".")
 
   (* A secondary caret at [location] labelled with an inferred value type. Used
      to point at each branch of an [if]/select whose branches are in
@@ -591,18 +632,14 @@ module Error = struct
      checked position which can name one expected type, no annotation that would
      reconcile them — so we just show what each branch produces. *)
   let typed_branch_label location ty =
-    {
-      Wax_utils.Diagnostic.location;
-      message =
-        Message.of_format (fun f () ->
-            Format.fprintf f "@[<2>%a@]" output_inferred_type ty);
-    }
+    { Wax_utils.Diagnostic.location; message = typ ty }
 
   let select_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
     report context ~location
       ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
-      "The two branches of this select have no common supertype, so its result \
-       type cannot be inferred."
+      (text
+         "The two branches of this select have no common supertype, so its \
+          result type cannot be inferred.")
 
   (* The exit values of a block-like construct (an [if]'s two branches, or a
      [do]/[loop]/[try]'s fall-through and/or values branched to its label) do not
@@ -610,8 +647,9 @@ module Error = struct
   let block_exit_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
     report context ~location
       ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
-      "The values reaching this block's exit have no common supertype, so its \
-       result type cannot be inferred."
+      (text
+         "The values reaching this block's exit have no common supertype, so \
+          its result type cannot be inferred.")
 
   (* A value delivered by [br_if] stays on the stack (the fall-through) typed as
      the block's result, so its type must equal the inferred result exactly, not
@@ -621,28 +659,23 @@ module Error = struct
   let br_if_result_mismatch context ~location ~loc ~result ty =
     report context ~location
       ~related:[ typed_branch_label loc ty; typed_branch_label location result ]
-      "This [br_if] value stays on the stack as the block's result, so its \
-       type must match the inferred result exactly; add a result annotation to \
-       the block."
+      (text
+         "This [br_if] value stays on the stack as the block's result, so its \
+          type must match the inferred result exactly; add a result annotation \
+          to the block.")
 
   let name_already_bound context ~location kind x =
-    report context ~location "A %s named %a is already bound." kind print_name x
+    report context ~location
+      (text "A" ++ text kind ++ text "named" ++ name x
+     ++ text "is already bound.")
 
-  let did_you_mean suggestions =
-    match List.rev suggestions with
+  let did_you_mean = function
     | [] -> None
-    | last :: rest ->
-        let rest = List.rev rest in
-        let pp f = Format.fprintf f "%s" in
+    | suggestions ->
         Some
-          (Message.of_format (fun f () ->
-               Format.fprintf f "Did@ you@ mean@ %a%s%a?"
-                 (Format.pp_print_list
-                    ~pp_sep:(fun f () -> Format.fprintf f ",@ ")
-                    pp)
-                 rest
-                 (if rest = [] then "" else " or ")
-                 pp last))
+          (text "Did you mean"
+           ++ Message.enumerate ~conj:"or" (List.map Message.ident suggestions)
+          ^^ text "?")
 
   let unbound_name context ~location ?(suggestions = []) kind x =
     (* In error-recovery mode (type-checking a best-effort AST past syntax
@@ -655,159 +688,189 @@ module Error = struct
        at the use site, so nothing downstream cascades either. *)
     if not (Wax_utils.Diagnostic.in_recovery context) then
       report ?hint:(did_you_mean suggestions) context ~location
-        "The %s %a is not bound." kind print_name x
+        (text "The" ++ text kind ++ name x ++ text "is not bound.")
 
   let unknown_intrinsic context ~location ns name =
-    report context ~location "There is no %s::%s intrinsic." ns name
+    report context ~location
+      (text "There is no" ++ kw (ns ^ "::" ^ name) ++ text "intrinsic.")
 
   let intrinsic_not_called context ~location ns name =
     report context ~location
-      "The qualified name %s::%s can only be used as a function call." ns name
+      (text "The qualified name"
+      ++ kw (ns ^ "::" ^ name)
+      ++ text "can only be used as a function call.")
 
   let before_hole context ~location =
-    report context ~location "This expression occurs before a hole '_'."
+    report context ~location (text "This expression occurs before a hole '_'.")
 
   let duplicated_field context ~location x =
-    report context ~location "Several fields have the same name %a." print_name
-      x
+    report context ~location
+      ((text "Several fields have the same name" ++ name x) ^^ text ".")
 
   let splice_without_supertype context ~location =
     report context ~location
-      "'..' requires a supertype to inherit fields from (write 'type t: super \
-       = { .., ... }')."
+      (text
+         "'..' requires a supertype to inherit fields from (write 'type t: \
+          super = { .., ... }').")
 
   let splice_non_struct context ~location x =
     report context ~location
-      "'..' can only inherit fields from a struct supertype; %a is not a \
-       struct."
-      print_name x
+      (text "'..' can only inherit fields from a struct supertype;"
+      ++ name x ++ text "is not a struct.")
 
   let duplicated_parameter context ~location x =
-    report context ~location "Several parameters have the same name %a."
-      print_name x
+    report context ~location
+      ((text "Several parameters have the same name" ++ name x) ^^ text ".")
 
   let constant_expression_required context ~location =
-    report context ~location "Only constant expressions are allowed here."
+    report context ~location
+      (text "Only constant expressions are allowed here.")
 
   let data_run_bad_element context ~location typename =
     report context ~location
-      "This value is out of range for the data run's element type '%s'."
-      typename
+      (text "This value is out of range for the data run's element type"
+       ++ kw typename
+      ^^ text ".")
 
   let data_v128_arity context ~location count =
-    report context ~location "This v128 lane group must have %d lanes." count
+    report context ~location
+      (text "This v128 lane group must have"
+      ++ Message.int count ++ text "lanes.")
 
   let memory_offset_too_large context ~location max_offset =
-    report context ~location "The memory offset should be less than 0x%Lx."
-      (Wax_utils.Uint64.to_int64 max_offset)
+    report context ~location
+      (text "The memory offset should be less than"
+       ++ num (Printf.sprintf "0x%Lx" (Wax_utils.Uint64.to_int64 max_offset))
+      ^^ text ".")
 
   let memory_align_too_large context ~location natural =
     report context ~location
-      "The memory alignment is larger than the natural alignment %d." natural
+      (text "The memory alignment is larger than the natural alignment"
+       ++ Message.int natural
+      ^^ text ".")
 
   let memory_immediate_too_large context ~location =
     report context ~location
-      "This memory offset or alignment must fit a 64-bit unsigned integer."
+      (text
+         "This memory offset or alignment must fit a 64-bit unsigned integer.")
 
   let bad_memory_align context ~location =
-    report context ~location "The memory alignment should be a power of two."
+    report context ~location
+      (text "The memory alignment should be a power of two.")
 
   let atomic_alignment context ~location natural =
     report context ~location
-      "The alignment of an atomic access must be its natural alignment %d."
-      natural
+      (text "The alignment of an atomic access must be its natural alignment"
+       ++ Message.int natural
+      ^^ text ".")
 
   let invalid_lane_index context ~location max_lane =
-    report context ~location "The lane index should be less than %d." max_lane
+    report context ~location
+      ((text "The lane index should be less than" ++ Message.int max_lane)
+      ^^ text ".")
 
   let lane_value_out_of_range context ~location bits =
-    report context ~location "The lane value does not fit in %d bits." bits
+    report context ~location
+      (text "The lane value does not fit in" ++ Message.int bits ++ text "bits.")
 
   let limit_too_large context ~location kind max =
     report context ~location
-      "The %s size is too large. It should be less than 0x%Lx." kind
-      (Wax_utils.Uint64.to_int64 max)
+      (text "The" ++ text kind
+       ++ text "size is too large. It should be less than"
+       ++ num (Printf.sprintf "0x%Lx" (Wax_utils.Uint64.to_int64 max))
+      ^^ text ".")
 
   let limit_mismatch context ~location kind =
     report context ~location
-      "The %s maximum size should be larger than the minimal size." kind
+      (text "The" ++ text kind
+      ++ text "maximum size should be larger than the minimal size.")
 
   let invalid_page_size context ~location =
-    report context ~location "The custom page size must be 1 or 65536."
+    report context ~location (text "The custom page size must be 1 or 65536.")
 
   let shared_memory_without_max context ~location =
-    report context ~location "A shared memory must have a maximum size."
+    report context ~location (text "A shared memory must have a maximum size.")
 
   let duplicated_export context ~location name =
-    report context ~location "There is already an export of name %S." name
+    report context ~location
+      ((text "There is already an export of name" ++ kw name) ^^ text ".")
 
   let invalid_cast_type context ~location =
     report context ~location
-      "Continuation types cannot be used in a cast instruction."
+      (text "Continuation types cannot be used in a cast instruction.")
 
   let stack_switching_type_mismatch context ~location ~descr =
     report context ~location
-      "Type mismatch in this stack switching instruction:@ %s." descr
+      ((text "Type mismatch in this stack switching instruction:" ++ text descr)
+      ^^ text ".")
 
   let constant_global_required context ~location =
-    report context ~location "Only accessing a constant global is allowed here."
+    report context ~location
+      (text "Only accessing a constant global is allowed here.")
 
   let immutable context ~location what =
-    report context ~location "This %s is immutable and cannot be assigned." what
+    report context ~location
+      (text "This" ++ text what ++ text "is immutable and cannot be assigned.")
 
   let not_assignable context ~location x =
-    report context ~location "%a cannot be assigned." print_name x
+    report context ~location (name x ++ text "cannot be assigned.")
 
   let field_count_mismatch context ~location ~expected ~provided =
     report context ~location
-      "This structure provides %d field(s) but %d was/were expected." provided
-      expected
+      (text "This structure provides"
+      ++ Message.int provided ++ text "field(s) but" ++ Message.int expected
+      ++ text "was/were expected.")
 
   let missing_field context ~location x =
-    report context ~location "There is no field named %a." print_name x
+    report context ~location
+      ((text "There is no field named" ++ name x) ^^ text ".")
 
   let invalid_cast context ~location ty' =
     report context ~location
-      "This value of type@ @[<2>%a@]@ cannot be cast to the target type."
-      output_inferred_type ty'
+      (text "This value of type" ++ typ ty'
+      ++ text "cannot be cast to the target type.")
 
   let tag_with_results context ~location =
-    report context ~location "An exception tag cannot have result values."
+    report context ~location
+      (text "An exception tag cannot have result values.")
 
   let catch_target_mismatch context ~location provided expected =
     report context ~location
-      "Catching this exception provides a value of type@ @[<2>%a@]@ but the \
-       handler's branch target expects@ @[<2>%a@]."
-      output_inferred_type provided output_inferred_type expected
+      (text "Catching this exception provides a value of type"
+       ++ typ provided
+       ++ text "but the handler's branch target expects"
+       ++ typ expected
+      ^^ text ".")
 
   let not_defaultable context ~location =
     report context ~location
-      "This type has no default value for all its fields."
+      (text "This type has no default value for all its fields.")
 
   let incompatible_array_elements context ~location =
     report context ~location
-      "The source and destination array element types are incompatible."
+      (text "The source and destination array element types are incompatible.")
 
   let incompatible_element_type context ~location provided expected =
     report context ~location
-      "The element type@ @[<2>%a@]@ is not compatible with the expected \
-       element type@ @[<2>%a@]."
-      output_inferred_type provided output_inferred_type expected
+      (text "The element type" ++ typ provided
+       ++ text "is not compatible with the expected element type"
+       ++ typ expected
+      ^^ text ".")
 
   let invalid_string_element_type context ~location =
     report context ~location
-      "A string literal can only build an [i8] or [i16] array."
+      (text "A string literal can only build an [i8] or [i16] array.")
 
   let string_not_unicode context ~location =
     report context ~location
-      "A string building an [i16] array must be a valid Unicode string."
+      (text "A string building an [i16] array must be a valid Unicode string.")
 
   let expected_ref context ~location =
-    report context ~location "A reference type is expected here."
+    report context ~location (text "A reference type is expected here.")
 
   let dispatch_duplicate_arm context ~location x =
-    report context ~location "This dispatch has several cases named %a."
-      print_name x
+    report context ~location
+      ((text "This dispatch has several cases named" ++ name x) ^^ text ".")
 end
 
 (*** Symbol tables and namespaces ***)
@@ -2439,11 +2502,12 @@ let lint_redundant ctx op l r =
   let is1 = int_literal_value_is 1L in
   let no_effect () =
     Error.redundant_operation ctx.diagnostics ~location:op.info
-      "This operation has no effect on its result."
+      (Wax_utils.Message.text "This operation has no effect on its result.")
   in
   let always v =
     Error.redundant_operation ctx.diagnostics ~location:op.info
-      "This operation always yields %Ld." v
+      Wax_utils.Message.(
+        (text "This operation always yields" ++ int64 v) ^^ text ".")
   in
   match op.desc with
   | Add when is0 l || is0 r -> no_effect () (* x + 0 *)
@@ -3385,7 +3449,8 @@ let rec lint_source ctx (i : _ Ast.instr) =
       (match (op, e.desc) with
       | None, Get id' when String.equal id.desc id'.desc ->
           Error.redundant_operation ctx.diagnostics ~location:i.info
-            "This assignment writes the variable back to itself."
+            (Wax_utils.Message.text
+               "This assignment writes the variable back to itself.")
       | _ -> ());
       lint_source ctx e
   | Tee (_, e)

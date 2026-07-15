@@ -4,7 +4,7 @@ well-formed, and they may appear only where they are meaningful.
 An unknown annotation is rejected:
 
   $ wax check unknown.wax
-  Error: Unknown annotation "inline".
+  Error: Unknown annotation 'inline'.
    ──➤  unknown.wax:1:1
   1 │ #[inline] fn f() {}
     · ^^^^^^^^^^^^^^^^^^^

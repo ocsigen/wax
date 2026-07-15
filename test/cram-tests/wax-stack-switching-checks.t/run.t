@@ -42,8 +42,10 @@ A resume handler label must receive the tag's parameters followed by a
 continuation of the remaining result type:
 
   $ wax check resume-handler.wax
-  Error: Type mismatch in this stack switching instruction:
-    this handler must take the tag's parameters followed by a continuation of the remaining result type.
+  Error:
+    Type mismatch in this stack switching instruction: this handler must take
+    the tag's parameters followed by a continuation of the remaining result
+    type.
    ──➤  resume-handler.wax:7:31
   5 │     _ =
   6 │         'on_foo: do &ft {
@@ -57,8 +59,9 @@ A cont.bind's destination continuation must match the source with its leading
 parameters bound away:
 
   $ wax check cont-bind-mismatch.wax
-  Error: Type mismatch in this stack switching instruction:
-    the bound parameters and results do not match between the two continuation types.
+  Error:
+    Type mismatch in this stack switching instruction: the bound parameters and
+    results do not match between the two continuation types.
    ──➤  cont-bind-mismatch.wax:5:25
   3 │ type ft1_alt = fn(i64) -> i32;
   4 │ type ct1_alt = cont ft1_alt;
@@ -71,8 +74,9 @@ A switch's continuation must have a continuation type as its last parameter (it
 names the continuation being switched to):
 
   $ wax check switch-last-param-not-cont.wax
-  Error: Type mismatch in this stack switching instruction:
-    the continuation's last parameter must itself be a continuation type.
+  Error:
+    Type mismatch in this stack switching instruction: the continuation's last
+    parameter must itself be a continuation type.
    ──➤  switch-last-param-not-cont.wax:4:19
   2 │ type ct1 = cont ft1;
   3 │ tag e();
@@ -85,8 +89,9 @@ A switch tag must take no parameters and its results must match both
 continuation types:
 
   $ wax check switch-tag-has-param.wax
-  Error: Type mismatch in this stack switching instruction:
-    the 'switch' tag must take no parameters and its results must match the two continuation types.
+  Error:
+    Type mismatch in this stack switching instruction: the 'switch' tag must
+    take no parameters and its results must match the two continuation types.
    ──➤  switch-tag-has-param.wax:8:26
   6 │ }
   7 │ tag e(i32) -> i32;

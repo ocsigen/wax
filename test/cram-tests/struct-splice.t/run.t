@@ -50,7 +50,8 @@ The `..` form is preserved when reformatting Wax (it is not expanded):
   > type t = { .., x: i32 };
   > WAX
   Error:
-    '..' requires a supertype to inherit fields from (write 'type t: super = { .., ... }').
+    '..' requires a supertype to inherit fields from (write 'type t: super = {
+    .., ... }').
    ──➤  -:1:10
   1 │ type t = { .., x: i32 };
     ·          ^^^^^^^^^^^^^^

@@ -56,7 +56,8 @@ mutually-exclusive branches); declare the local before the conditional instead.
 
   $ wax --validate letbad.wax -o checked.wax
   Error:
-    A let binding is not allowed inside a conditional annotation; declare the local before the conditional.
+    A let binding is not allowed inside a conditional annotation; declare the
+    local before the conditional.
    ──➤  letbad.wax:2:20
   1 │ fn f() {
   2 │     #[if(debug)] { let x: i32 = 1; }

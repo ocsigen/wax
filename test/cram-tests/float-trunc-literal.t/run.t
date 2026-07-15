@@ -31,7 +31,7 @@ A strict cast still requires a float operand: an integer source is rejected.
 
   $ printf 'fn f(x: i64) -> i32 {\n    x as i32_s_strict;\n}\n' > bad.wax
   $ wax -i wax -f wasm bad.wax -o /dev/null --validate
-  Error: This value of type i64 cannot be cast to the target type.
+  Error: This value of type 'i64' cannot be cast to the target type.
    ──➤  bad.wax:2:5
   1 │ fn f(x: i64) -> i32 {
   2 │     x as i32_s_strict;

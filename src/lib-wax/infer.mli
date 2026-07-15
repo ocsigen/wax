@@ -121,9 +121,16 @@ and collecting = {
           forcing the annotation to be kept. *)
 }
 
+val output_inferred_type_styled :
+  Wax_utils.Styled_printer.t -> inferred_type Cell.t -> unit
+(** Render an inferred type into a styled printer, so it shares a diagnostic
+    message's colour theme and width (an unresolved one prints as [any]). This
+    is what the typer's [Message] [typ] combinator is built on. *)
+
 val output_inferred_type : Format.formatter -> inferred_type Cell.t -> unit
-(** Render an inferred type for diagnostics (an unresolved one prints as [any]).
-*)
+(** Render an inferred type as plain (uncoloured) text — for the editor's hover
+    string and the stack/debug printers. Diagnostics use
+    {!output_inferred_type_styled} instead. *)
 
 val is_unknown_or_error : inferred_type Cell.t -> bool
 (** Whether a cell resolves to [Unknown], [Error] or [UnknownRef] — the common

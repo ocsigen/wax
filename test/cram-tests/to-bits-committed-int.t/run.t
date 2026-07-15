@@ -14,7 +14,7 @@ Regression: found by the AST-mutation fuzzer.
   > WAX
 
   $ wax check m.wax
-  Error: This operation cannot be applied to a value of type int.
+  Error: This operation cannot be applied to a value of type 'int'.
    ──➤  m.wax:2:15
   1 │ fn f() -> i64 {
   2 │     (0).clz().to_bits();

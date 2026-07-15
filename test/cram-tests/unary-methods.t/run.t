@@ -28,7 +28,8 @@ method name and naming the parenthesised form to use.
 
   $ wax check bare.wax
   Error:
-    'sqrt' is an instruction method and must be called with parentheses, as 'sqrt()'.
+    'sqrt' is an instruction method and must be called with parentheses, as
+    'sqrt()'.
    ──➤  bare.wax:2:7
   1 │ fn f(x: f64) -> f64 {
   2 │     x.sqrt;
@@ -42,7 +43,8 @@ receiver's type resolves to a non-struct definition:
 
   $ wax check bare_array.wax
   Error:
-    'length' is an instruction method and must be called with parentheses, as 'length()'.
+    'length' is an instruction method and must be called with parentheses, as
+    'length()'.
    ──➤  bare_array.wax:4:7
   2 │ 
   3 │ fn f(v: &vec) -> i32 {

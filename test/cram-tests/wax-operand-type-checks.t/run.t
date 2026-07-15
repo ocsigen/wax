@@ -4,7 +4,7 @@ also checks.
 A float-only method requires a floating-point receiver:
 
   $ wax check float-method-bad.wax
-  Error: This operation cannot be applied to a value of type i64.
+  Error: This operation cannot be applied to a value of type 'i64'.
    ──➤  float-method-bad.wax:1:28
   1 │ fn f() -> f32 { (0 as i64).ceil(); }
     ·                            ^^^^
@@ -14,7 +14,7 @@ A float-only method requires a floating-point receiver:
 An integer-only method requires an integer receiver:
 
   $ wax check int-method-bad.wax
-  Error: This operation cannot be applied to a value of type f32.
+  Error: This operation cannot be applied to a value of type 'f32'.
    ──➤  int-method-bad.wax:1:30
   1 │ fn f() -> i32 { (0.0 as f32).clz(); }
     ·                              ^^^
@@ -24,8 +24,9 @@ An integer-only method requires an integer receiver:
 table.copy requires the source element type to fit the destination:
 
   $ wax check table-copy-bad.wax
-  Error: The element type &?extern
-    is not compatible with the expected element type &?func.
+  Error:
+    The element type '&?extern' is not compatible with the expected element type
+    '&?func'.
    ──➤  table-copy-bad.wax:3:10
   1 │ table t1: &?func [10];
   2 │ table t2: &?extern [10];
@@ -37,8 +38,9 @@ table.copy requires the source element type to fit the destination:
 table.init requires the element segment's type to fit the table:
 
   $ wax check table-init-bad.wax
-  Error: The element type &?extern
-    is not compatible with the expected element type &?func.
+  Error:
+    The element type '&?extern' is not compatible with the expected element type
+    '&?func'.
    ──➤  table-init-bad.wax:3:10
   1 │ table t: &?func [10];
   2 │ elem el: &?extern = [];
@@ -50,8 +52,9 @@ table.init requires the element segment's type to fit the table:
 array.init_elem requires the element segment's type to fit the array:
 
   $ wax check array-init-elem-bad.wax
-  Error: The element type &?extern
-    is not compatible with the expected element type &?func.
+  Error:
+    The element type '&?extern' is not compatible with the expected element type
+    '&?func'.
    ──➤  array-init-elem-bad.wax:3:15
   1 │ type a = [mut &?func];
   2 │ elem e: &?extern = [];
@@ -63,8 +66,9 @@ array.init_elem requires the element segment's type to fit the array:
 array.new_elem likewise requires the element segment's type to fit the array:
 
   $ wax check array-new-elem-bad.wax
-  Error: The element type &?extern
-    is not compatible with the expected element type &?func.
+  Error:
+    The element type '&?extern' is not compatible with the expected element type
+    '&?func'.
    ──➤  array-new-elem-bad.wax:3:16
   1 │ type a = [mut &?func];
   2 │ elem e: &?extern = [];
@@ -87,7 +91,7 @@ Reading a field that the struct type does not declare is rejected:
 An 'if' condition must be an i32, in both statement and expression position:
 
   $ wax check if-cond-not-i32.wax
-  Error: This instruction has type f64 but is expected to have type i32.
+  Error: This instruction has type 'f64' but is expected to have type 'i32'.
    ──➤  if-cond-not-i32.wax:1:13
   1 │ fn f() { if 0.0 as f64 { } }
     ·             ^^^^^^^^^^
@@ -95,7 +99,7 @@ An 'if' condition must be an i32, in both statement and expression position:
   [128]
 
   $ wax check if-cond-not-i32-expr.wax
-  Error: This instruction has type f64 but is expected to have type i32.
+  Error: This instruction has type 'f64' but is expected to have type 'i32'.
    ──➤  if-cond-not-i32-expr.wax:1:20
   1 │ fn f() -> i32 { if 0.0 as f64 => i32 { 0 as i32; } else { 1 as i32; } }
     ·                    ^^^^^^^^^^
@@ -134,7 +138,7 @@ A throw argument must match the tag's parameter type; the caret points at the
 offending argument, not the whole throw:
 
   $ wax check throw-arg-type.wax
-  Error: This instruction has type i64 but is expected to have type i32.
+  Error: This instruction has type 'i64' but is expected to have type 'i32'.
    ──➤  throw-arg-type.wax:1:30
   1 │ tag t(i32); fn f() { throw t 5 as i64; }
     ·                              ^^^^^^^^
@@ -145,7 +149,7 @@ A branch or return operand whose type does not match the target underlines the
 operand, not the whole branch/return:
 
   $ wax check return-operand-type.wax
-  Error: This instruction has type i64 but is expected to have type i32.
+  Error: This instruction has type 'i64' but is expected to have type 'i32'.
    ──➤  return-operand-type.wax:1:24
   1 │ fn f() -> i32 { return 0 as i64; }
     ·                        ^^^^^^^^
@@ -153,7 +157,7 @@ operand, not the whole branch/return:
   [128]
 
   $ wax check br-operand-type.wax
-  Error: This instruction has type i64 but is expected to have type i32.
+  Error: This instruction has type 'i64' but is expected to have type 'i32'.
    ──➤  br-operand-type.wax:1:27
   1 │ fn f() -> i32 'l: { br 'l 0 as i64; }
     ·                           ^^^^^^^^
@@ -164,7 +168,7 @@ A binary operator written as a method underlines the operator (the method
 name):
 
   $ wax check binop-method-operands.wax
-  Error: This operator cannot be applied to operands of types i64 and f64.
+  Error: This operator cannot be applied to operands of types 'i64' and 'f64'.
    ──➤  binop-method-operands.wax:1:25
   1 │ fn f() { _ = (0 as i64).copysign(0 as f64); }
     ·                         ^^^^^^^^
@@ -174,7 +178,7 @@ name):
 In infix form the same error underlines the operator token itself:
 
   $ wax check binop-infix-operands.wax
-  Error: This operator cannot be applied to operands of types i64 and f64.
+  Error: This operator cannot be applied to operands of types 'i64' and 'f64'.
    ──➤  binop-infix-operands.wax:1:25
   1 │ fn f() { _ = (0 as i64) + (0 as f64); }
     ·                         ^
@@ -185,7 +189,7 @@ A unary operator applied to an operand of the wrong type underlines the
 operator:
 
   $ wax check unop-operand.wax
-  Error: This instruction has type &eq but is expected to have type number.
+  Error: This instruction has type '&eq' but is expected to have type 'number'.
    ──➤  unop-operand.wax:1:20
   1 │ fn f(x: &eq) { _ = -x; }
     ·                    ^
@@ -196,8 +200,9 @@ A try_table catch routes the tag's values to a branch target; when they do not
 match, the error names the tag/target mismatch and points at the target label:
 
   $ wax check catch-target-mismatch.wax
-  Error: Catching this exception provides a value of type &?t
-    but the handler's branch target expects &t.
+  Error:
+    Catching this exception provides a value of type '&?t' but the handler's
+    branch target expects '&t'.
    ──➤  catch-target-mismatch.wax:3:48
   1 │ type t = fn();
   2 │ tag e(&?t);

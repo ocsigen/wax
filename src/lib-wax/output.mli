@@ -8,6 +8,12 @@ val width : int
 val instr : Wax_utils.Printer.t -> _ Ast.instr -> unit
 val valtype : Wax_utils.Printer.t -> Ast.valtype -> unit
 val comptype : Wax_utils.Printer.t -> Ast.comptype -> unit
+
+val valtype_styled : Wax_utils.Styled_printer.t -> Ast.valtype -> unit
+(** Render a type into a caller-supplied styled printer, so it shares a
+    diagnostic message's colour theme and width. *)
+
+val comptype_styled : Wax_utils.Styled_printer.t -> Ast.comptype -> unit
 val storagetype : Wax_utils.Printer.t -> Ast.storagetype -> unit
 val fieldtype : Wax_utils.Printer.t -> Ast.fieldtype -> unit
 

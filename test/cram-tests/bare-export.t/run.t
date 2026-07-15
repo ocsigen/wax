@@ -20,7 +20,7 @@ A bare `#[export]` (no name) exports the field under its own Wax name, while
 The bare form participates in duplicate-export detection under the reused name.
 
   $ wax check dup.wax
-  Error: There is already an export of name "add".
+  Error: There is already an export of name 'add'.
    ──➤  dup.wax:4:12
   2 │ fn add(a: i32, b: i32) -> i32 { a + b; }
   3 │ 
