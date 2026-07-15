@@ -75,7 +75,7 @@ type member_receiver =
   | R_numeric of inferred_type
       (** a value receiver: its integer / float / v128 methods *)
   | R_struct of fieldtype Ast.annotated_array  (** the struct's fields *)
-  | R_array  (** [length] *)
+  | R_array of fieldtype  (** by element type: [length]/[fill]/[copy]/[init] *)
   | R_memory of [ `I32 | `I64 ]  (** by address type *)
   | R_table of [ `I32 | `I64 ] * reftype  (** by address and element type *)
 
@@ -4171,19 +4171,29 @@ let table_method_candidates ~addr_name ~elem_name =
     m "init" (Printf.sprintf "fn(elem, %s, i32, i32) -> ()" addr_name);
   ]
 
+(* The methods member completion offers on an array receiver [a.length()] with
+   element [elem]: [length], and the [fill]/[copy]/[init] bulk operations (the
+   last from a data / element segment). Indices and counts are [i32]; [fill]'s
+   value and [copy]'s source array are the element type. *)
+let array_method_candidates elem =
+  let m member_name member_detail =
+    { member_name; member_kind = Method; member_detail }
+  in
+  let value = render_fieldtype { elem with Ast.mut = false } in
+  let arr = "&[" ^ render_fieldtype elem ^ "]" in
+  [
+    m "length" "fn() -> i32";
+    m "fill" (Printf.sprintf "fn(i32, %s, i32) -> ()" value);
+    m "copy" (Printf.sprintf "fn(i32, %s, i32, i32) -> ()" arr);
+    m "init" (Printf.sprintf "fn(seg, i32, i32, i32) -> ()");
+  ]
+
 (* The member-completion candidates a recorded {!member_receiver} stands for,
    derived on demand (the editor forces only the one under the cursor). *)
 let member_candidates : member_receiver -> member_candidate list = function
   | R_numeric t -> Option.value ~default:[] (numeric_receiver_candidates t)
   | R_struct fields -> struct_candidates fields
-  | R_array ->
-      [
-        {
-          member_name = "length";
-          member_kind = Method;
-          member_detail = "fn() -> i32";
-        };
-      ]
+  | R_array elem -> array_method_candidates elem
   | R_memory at -> memory_method_candidates ~addr_name:(address_type_name at)
   | R_table (at, rt) ->
       table_method_candidates ~addr_name:(address_type_name at)
@@ -5932,8 +5942,9 @@ and type_aggregate_access ctx i =
                     None)
             | Func _ | Array _ | Cont _ ->
                 (match def.typ with
-                | Array _ ->
-                    record_members ctx.member_completions field.info R_array
+                | Array elem ->
+                    record_members ctx.member_completions field.info
+                      (R_array elem)
                 | _ -> ());
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics

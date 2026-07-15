@@ -180,7 +180,9 @@ does not carry. Three distinct prerequisites:
   **Value methods** after `.` are offered too: on a numeric receiver the typer
   records a curated registry (`Typing.integer_methods` / `float_methods` —
   `clz`, `sqrt`, `min`, …) at the same field-access choke point, an array
-  receiver records `length`, and a `v128` receiver records the SIMD vector ops
+  receiver records `length`/`fill`/`copy`/`init`
+  (`Typing.array_method_candidates`, element-typed), and a `v128` receiver
+  records the SIMD vector ops
   (`add_i32x4`, `extract_lane_s_i8x16`, `shuffle_i8x16`, …). The receiver is
   matched by inferred type (`Typing.numeric_receiver_candidates`), so it covers
   not only the concrete numeric valtypes but a still-flexible literal too: a
@@ -230,10 +232,10 @@ does not carry. Three distinct prerequisites:
     `render_signature`;
   - an intrinsic namespace path (`Path`, `i64::add128`) from
     `Typing.namespace_members`;
-  - a method (`x.min(_)`, `v.add_i32x4(_)`, `mem.load8(_)`, `tab.grow(_)`) —
-    the receiver's inferred type (read from the typed tree, or the module's
-    memory/table declaration) selects the candidate set, and the one named by
-    the method gives the label.
+  - a method (`x.min(_)`, `v.add_i32x4(_)`, `mem.load8(_)`, `tab.grow(_)`,
+    `arr.fill(_)`) — the receiver's inferred type (read from the typed tree, the
+    module's memory/table declaration, or an array type's element) selects the
+    candidate set, and the one named by the method gives the label.
 
   The active parameter is the number of arguments ending before the cursor. A
   `SignatureHelpProvider` in `extension-common.ts` (triggers `(` and `,`)

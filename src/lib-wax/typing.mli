@@ -97,6 +97,11 @@ val table_method_candidates :
     size/grow/fill/copy/init — with [addr_name] the table's address type and
     [elem_name] its element type for their signatures. *)
 
+val array_method_candidates : Ast.fieldtype -> member_candidate list
+(** The methods member completion offers on an array receiver ([a.length()]) of
+    the given element type — [length] and the [fill]/[copy]/[init] bulk
+    operations. *)
+
 val namespace_members : string -> member_candidate list
 (** The free functions completion offers after an intrinsic namespace path
     [ns::]: [v128::] (SIMD const constructors and [bitselect]), [i64::]
@@ -106,7 +111,7 @@ val namespace_members : string -> member_candidate list
 type member_receiver =
   | R_numeric of Infer.inferred_type
   | R_struct of Ast.fieldtype Ast.annotated_array
-  | R_array
+  | R_array of Ast.fieldtype
   | R_memory of [ `I32 | `I64 ]
   | R_table of [ `I32 | `I64 ] * Ast.reftype
       (** What a member access [recv.<here>] is on, recorded by {!f_infer} (via

@@ -1470,6 +1470,24 @@ let addr_type_name : [ `I32 | `I64 ] -> string = function
   | `I32 -> "i32"
   | `I64 -> "i64"
 
+(* The element type of the array type named [name] in the module (its [type
+   name = [elem]] definition), for resolving an array receiver's methods. *)
+let array_element typed_module name =
+  let found = ref None in
+  Wax_lang.Ast_utils.iter_fields
+    (fun field ->
+      match field.Wax_lang.Ast.desc with
+      | Wax_lang.Ast.Type rectype ->
+          Array.iter
+            (fun entry ->
+              let id, (sub : Wax_lang.Ast.subtype) = entry.Wax_lang.Ast.desc in
+              if id.Wax_lang.Ast.desc = name then
+                match sub.typ with Array elem -> found := Some elem | _ -> ())
+            rectype
+      | _ -> ())
+    typed_module;
+  !found
+
 (* The signature label of a method call [recv.meth(...)], for signature help. The
    candidate signatures of [recv] are those of a memory / table it names (by the
    declared address / element type from the module) or, otherwise, the value
@@ -1481,8 +1499,15 @@ let method_label typed_module recv meth_name =
     let cells = fst recv.info in
     if Array.length cells = 0 then None
     else
-      Wax_lang.Typing.numeric_receiver_candidates
-        (Wax_lang.Infer.Cell.get cells.(Array.length cells - 1))
+      let ty = Wax_lang.Infer.Cell.get cells.(Array.length cells - 1) in
+      match ty with
+      | Wax_lang.Infer.Valtype { typ = Ref { typ = Type n | Exact n; _ }; _ }
+        -> (
+          (* an array receiver: its element type selects the array methods *)
+          match array_element typed_module n.desc with
+          | Some elem -> Some (Wax_lang.Typing.array_method_candidates elem)
+          | None -> Wax_lang.Typing.numeric_receiver_candidates ty)
+      | _ -> Wax_lang.Typing.numeric_receiver_candidates ty
   in
   let candidates =
     match recv.desc with

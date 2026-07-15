@@ -60,8 +60,10 @@
 - Signature help for `.wax`: while typing a call, the callee's signature is
   shown with the active argument highlighted — for functions, imported
   functions, `ns::` intrinsics, and methods (`x.min(…)`, `v.add_i32x4(…)`,
-  `mem.load8(…)`, `tab.grow(…)`), whose signature comes from the receiver's
-  type. Triggers on `(` and `,`.
+  `mem.load8(…)`, `tab.grow(…)`, `arr.fill(…)`), whose signature comes from the
+  receiver's type. Triggers on `(` and `,`.
+- Member completion on an array receiver now offers the bulk operations
+  `fill`/`copy`/`init` alongside `length` (previously only `length`).
 
 ## 0.2.2
 
