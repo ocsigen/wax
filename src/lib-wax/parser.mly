@@ -833,6 +833,8 @@ plaininstr:
   { with_loc $sloc (Struct (None, f :: l)) }
 | "{" f = structure_field "}"
   { with_loc $sloc (Struct (None, [f])) }
+| "{" "}"
+  { with_loc $sloc (Struct (None, [])) }
 | "{" x = ident "|" ".." "}"
   { with_loc $sloc (StructDefault (Some x)) }
 | "{" ".." "}"

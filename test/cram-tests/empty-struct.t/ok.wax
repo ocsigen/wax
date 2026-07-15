@@ -1,0 +1,13 @@
+type empty = { };
+type ints = [mut i32];
+
+#[export = "mk"]
+fn mk() -> &empty {
+    {};
+}
+
+#[export = "s"]
+const s: &empty = {empty|};
+
+#[export = "a"]
+const a: &ints = [ints|];

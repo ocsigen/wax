@@ -330,15 +330,14 @@ module.exports = grammar({
       field('value', $.string_literal),
     )),
 
-    // { x | fields } | { fields } | { descriptor(d) | fields }.
-    // With a base type the field list may be empty; without one it may not.
+    // {} | { fields } | { x | fields } | { descriptor(d) | fields }.
     struct_expression: $ => prec(PREC.block, seq(
       '{',
-      choice(
+      optional(choice(
         seq(field('base', choice($._expression, $.descriptor_operand)), '|',
           sepByTrailing(',', $.field_initializer)),
         sepBy1Trailing(',', $.field_initializer),
-      ),
+      )),
       '}',
     )),
 

@@ -6686,16 +6686,13 @@ and check_instruction ?(drop_supertype = false) ctx expected
   (* The type name to emit for a construction whose source name was [original]
      and whose resolved name is [typ]. A name omitted in the source stays
      omitted. A present name is dropped only when converting from Wasm
-     ([simplify], so hand-written Wax is never rewritten), the expected type
-     makes it redundant, and the name-less surface form re-parses ([parseable] —
-     false only for a field-less struct, whose name-less form [{}] has no
-     syntax). *)
-  let emitted_name original typ ~parseable ~field_unique =
+     ([simplify], so hand-written Wax is never rewritten) and the expected type
+     makes it redundant (or the fields alone pin the type). *)
+  let emitted_name original typ ~field_unique =
     match original with
     | None -> None
     | Some _ ->
-        if ctx.simplify && parseable && (name_redundant typ || field_unique)
-        then None
+        if ctx.simplify && (name_redundant typ || field_unique) then None
         else Some typ
   in
   (* The result reference type of a construction of [name]; validates it against
@@ -6814,9 +6811,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
               | Some n -> n.desc = typ.desc
               | None -> false
             in
-            let emitted =
-              emitted_name ty typ ~parseable:(fields <> []) ~field_unique
-            in
+            let emitted = emitted_name ty typ ~field_unique in
             let*! result = construction_result typ in
             return_expression i (Struct (emitted, List.rev fields')) result
       in
@@ -6856,9 +6851,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
                    fields)
             then Error.not_defaultable ctx.diagnostics ~location:typ.info;
             require_no_descriptor typ;
-            let emitted =
-              emitted_name ty typ ~parseable:true ~field_unique:false
-            in
+            let emitted = emitted_name ty typ ~field_unique:false in
             let*! result = construction_result typ in
             return_expression i (StructDefault emitted) result
       in
@@ -6967,9 +6960,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             in
             let* i2' = instruction ctx i2 in
             check_type ctx i2' i32_cell;
-            let emitted =
-              emitted_name ty typ ~parseable:true ~field_unique:false
-            in
+            let emitted = emitted_name ty typ ~field_unique:false in
             let*! result = construction_result typ in
             return_expression i (Array (emitted, i1', i2')) result
       in
@@ -6990,9 +6981,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             (let>@ field = lookup_array_type ctx typ in
              if not (field_has_default field) then
                Error.not_defaultable ctx.diagnostics ~location:typ.info);
-            let emitted =
-              emitted_name ty typ ~parseable:true ~field_unique:false
-            in
+            let emitted = emitted_name ty typ ~field_unique:false in
             let*! result = construction_result typ in
             return_expression i (ArrayDefault (emitted, n')) result
       in
@@ -7034,9 +7023,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
                   return (i' :: l))
                 (return []) instrs
             in
-            let emitted =
-              emitted_name ty typ ~parseable:(instrs <> []) ~field_unique:false
-            in
+            let emitted = emitted_name ty typ ~field_unique:false in
             let*! result = construction_result typ in
             return_expression i (ArrayFixed (emitted, List.rev instrs')) result
       in
@@ -7070,9 +7057,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
                  check_elem_subtype ctx ~location:i.info ~src ~dst
              | _ ->
                  ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option));
-            let emitted =
-              emitted_name ty typ ~parseable:true ~field_unique:false
-            in
+            let emitted = emitted_name ty typ ~field_unique:false in
             let*! result = construction_result typ in
             return_expression i (ArraySegment (emitted, seg, off', len')) result
       in
@@ -7133,7 +7118,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
            Error.invalid_string_element_type ctx.diagnostics ~location:i.info);
       let emitted =
         if typ.desc = string_typ.desc then None
-        else emitted_name ty typ ~parseable:true ~field_unique:false
+        else emitted_name ty typ ~field_unique:false
       in
       let* node =
         let*! result = construction_result typ in

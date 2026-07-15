@@ -55,3 +55,18 @@ const z = {T| };
     value: (struct_expression
       base: (identifier))))
 
+==================
+empty struct
+==================
+
+fn f() { {}; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (struct_expression))))
+
