@@ -53,15 +53,17 @@ val rename_prepare_string :
   int ->
   Wax_utils.Ast.location option
 
-(* The rename edits — [(span, replacement)] for every occurrence; empty when the
-   position is not on a renameable symbol. *)
+(* The rename outcome: [Rename_edits] with one [(span, replacement)] per
+   symbolic occurrence (empty when the position is not on a renameable symbol),
+   or [Rename_conflict] when the new name would collide with an existing name in
+   the same flat index space (or otherwise rebind a name). *)
 val rename_string :
   ?encoding:position_encoding ->
   string ->
   int ->
   int ->
   string ->
-  (Wax_utils.Ast.location * string) list
+  rename_outcome
 
 (* The module's top-level definitions, for the outline. *)
 val symbols_string : string -> sym list

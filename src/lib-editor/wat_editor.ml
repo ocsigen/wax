@@ -273,9 +273,69 @@ let rename_prepare_string ?(encoding = UTF16) src line ch =
       if String.length text > 0 && text.[0] = '$' then Some occ else None
   | _ -> None
 
+(* Splice the rename edits into [src], returning the new buffer. *)
+let apply_wat_rename_edits src edits =
+  let sorted =
+    List.sort
+      (fun ((a : Wax_utils.Ast.location), _) ((b : Wax_utils.Ast.location), _)
+         -> compare a.loc_start.Lexing.pos_cnum b.loc_start.pos_cnum)
+      edits
+  in
+  let buf = Buffer.create (String.length src + 16) in
+  let cur =
+    List.fold_left
+      (fun cur ((loc : Wax_utils.Ast.location), repl) ->
+        let s = loc.loc_start.pos_cnum and e = loc.loc_end.pos_cnum in
+        Buffer.add_substring buf src cur (s - cur);
+        Buffer.add_string buf repl;
+        e)
+      0 sorted
+  in
+  Buffer.add_substring buf src cur (String.length src - cur);
+  Buffer.contents buf
+
+(* Map a byte offset in [src] to its offset in the buffer with [edits] applied:
+   every edit that starts strictly before it shifts it by that edit's length
+   delta. Used to follow a definition token across the rewrite. *)
+let map_wat_offset edits off =
+  List.fold_left
+    (fun acc ((l : Wax_utils.Ast.location), repl) ->
+      if l.loc_start.Lexing.pos_cnum < off then
+        acc + String.length repl - (l.loc_end.pos_cnum - l.loc_start.pos_cnum)
+      else acc)
+    off edits
+
+(* Would carrying out [edits] on the binding [b] (whose definition's first token
+   is at [def_start] in [src]) change which definition some name resolves to?
+   WAT index spaces are flat, so a clash shows up structurally: after the
+   rewrite, re-resolve and find the binding that still owns the renamed
+   definition; if its occurrence count differs from [b]'s, the new name either
+   merged [b] with a same-space namesake (a collision) or captured / lost a
+   reference (a shadowed label), in every case rebinding a name. A clean rename
+   relabels each token one-for-one, leaving every binding's occurrence count
+   untouched. Numeric-index uses are counted on both sides, so they never trip
+   the check. *)
+let wat_rename_clashes src edits (b : Wax_wasm.Resolve.binding) def_start =
+  let before = List.length b.defs + List.length b.uses in
+  let src' = apply_wat_rename_edits src edits in
+  let new_def_start = map_wat_offset edits def_start in
+  match
+    List.find_opt
+      (fun (b' : Wax_wasm.Resolve.binding) ->
+        List.exists
+          (fun (d : Wax_utils.Ast.location) ->
+            d.loc_start.Lexing.pos_cnum = new_def_start)
+          b'.defs)
+      (wat_bindings src')
+  with
+  | None -> true (* the definition token vanished — the name broke the parse *)
+  | Some b' -> List.length b'.defs + List.length b'.uses <> before
+
 (* As [rename_string], but for WAT. Only symbolic ([$id]) occurrences are
    rewritten — a numeric index use of the same definition is left untouched — and
-   the replacement keeps the leading [$]. *)
+   the replacement keeps the leading [$]. A rename that would collide with an
+   existing name in the same (flat) index space, or otherwise rebind a name, is
+   rejected with a [Rename_conflict]. *)
 let rename_string ?(encoding = UTF16) src line ch newname =
   match wat_binding_at ~encoding src line ch with
   | Some (b, _) when b.Wax_wasm.Resolve.defs <> [] ->
@@ -283,13 +343,28 @@ let rename_string ?(encoding = UTF16) src line ch newname =
         if String.length newname > 0 && newname.[0] = '$' then newname
         else "$" ^ newname
       in
-      List.filter_map
-        (fun loc ->
-          let text = slice src loc in
-          if String.length text > 0 && text.[0] = '$' then Some (loc, repl)
-          else None)
-        (wat_occurrences b)
-  | _ -> []
+      let edits =
+        List.filter_map
+          (fun loc ->
+            let text = slice src loc in
+            if String.length text > 0 && text.[0] = '$' then Some (loc, repl)
+            else None)
+          (wat_occurrences b)
+      in
+      if edits = [] then Rename_edits []
+      else
+        let def_start =
+          (List.hd b.Wax_wasm.Resolve.defs).Wax_utils.Ast.loc_start.pos_cnum
+        in
+        if wat_rename_clashes src edits b def_start then
+          Rename_conflict
+            (Printf.sprintf
+               "Cannot rename to %S: that name is already in use, and the \
+                rename would change which definition one or more names refer \
+                to."
+               repl)
+        else Rename_edits edits
+  | _ -> Rename_edits []
 
 (* As [check_string] but for WAT: the recovered parse's syntax errors together
    with the validation / lint diagnostics, both from the shared analysis. *)

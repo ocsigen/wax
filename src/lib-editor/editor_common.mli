@@ -46,6 +46,15 @@ type sem_token = {
   st_type : string;
 }
 
+(* The outcome of a rename. [Rename_edits] carries [(span, replacement)] for
+   every occurrence, and is empty when the position is not on a renameable
+   symbol. [Rename_conflict] carries a message rejecting the rename: [newname] is
+   not a usable identifier, or carrying it out would change which definition some
+   name resolves to. Shared by {!Wax_editor} and {!Wat_editor}. *)
+type rename_outcome =
+  | Rename_conflict of string
+  | Rename_edits of (Wax_utils.Ast.location * string) list
+
 (* Which unit an editor counts a line's character offset in. [UTF16] is the LSP
    default and what VS Code uses; [UTF8] counts bytes (the internal unit). The
    position functions and the [?encoding] arguments default to [UTF16]. *)

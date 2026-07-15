@@ -225,13 +225,14 @@ let rename_result src line ch newname =
   | Rename_edits edits -> rename_object s edits None
   | Rename_conflict message -> rename_object s [] (Some message)
 
-(* WAT rename cannot clash (it rewrites [$id] tokens only), so its result always
-   has a null [error]. *)
 let rename_wat_result src line ch newname =
   let s = Js.to_string src in
   let n = Js.to_string newname in
-  let edits = try Wat_editor.rename_string s line ch n with _ -> [] in
-  rename_object s edits None
+  match
+    try Wat_editor.rename_string s line ch n with _ -> Rename_edits []
+  with
+  | Rename_edits edits -> rename_object s edits None
+  | Rename_conflict message -> rename_object s [] (Some message)
 
 let rec js_symbol src s =
   let start_line, start_char = utf16_position src s.s_range.loc_start in

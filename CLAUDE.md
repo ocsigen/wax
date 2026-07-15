@@ -123,7 +123,10 @@ a type reference's source subtype; the subtype is kept in the reference-keyed
 `index_mapping` so deduplicated types still show their own definition); and
 navigation/rename (go-to-definition, references, document-highlight,
 prepare-rename, rename — over `Wax_wasm.Resolve`, the WAT name-resolution pass,
-which also classifies the semantic tokens); and type-definition (from a value of
+which also classifies the semantic tokens; rename detects clashes like the Wax
+side by re-resolving the rewritten buffer and rejecting a change to the renamed
+binding's occurrence count, and both sides return the shared
+`Editor_common.rename_outcome`); and type-definition (from a value of
 a named reference type to that type's definition, via a def-span recorded in the
 sink at each such value). Still Wax-only for `.wat` (guarded to return empty):
 completion and inlay-hint. `--stdio` is accepted and ignored. The

@@ -44,6 +44,11 @@
 === rename $mk -> $make (numeric call 0 untouched) ===
   (3,8) := $make
   (6,32) := $make
+=== rename func $mk -> $point (type name; different space, ok) ===
+  (3,8) := $point
+  (6,32) := $point
+=== rename field $x -> $y (clashes with sibling field) ===
+  conflict: Cannot rename to "$y": that name is already in use, and the rename would change which definition one or more names refer to.
 === references type $point ===:
   (2,8)
   (3,25)

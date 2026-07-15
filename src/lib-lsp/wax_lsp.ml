@@ -505,21 +505,19 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
             let edit (loc, newText) =
               TextEdit.create ~range:(range_of_location src loc) ~newText
             in
-            if is_wat uri then
-              List.map edit
-                (Wat_editor.rename_string ~encoding:!encoding src position.line
-                   position.character newName)
-            else
-              match
-                Wax_editor.rename_string ~encoding:!encoding src position.line
-                  position.character newName
-              with
-              | Wax_editor.Rename_conflict message ->
-                  Jsonrpc.Response.Error.raise
-                    (Jsonrpc.Response.Error.make
-                       ~code:Jsonrpc.Response.Error.Code.RequestFailed ~message
-                       ())
-              | Wax_editor.Rename_edits edits -> List.map edit edits)
+            let rename =
+              if is_wat uri then Wat_editor.rename_string
+              else Wax_editor.rename_string
+            in
+            match
+              rename ~encoding:!encoding src position.line position.character
+                newName
+            with
+            | Editor_common.Rename_conflict message ->
+                Jsonrpc.Response.Error.raise
+                  (Jsonrpc.Response.Error.make
+                     ~code:Jsonrpc.Response.Error.Code.RequestFailed ~message ())
+            | Editor_common.Rename_edits edits -> List.map edit edits)
       in
       WorkspaceEdit.create ~changes:[ (uri, edits) ] ()
   | Lsp.Client_request.DocumentSymbol { textDocument; _ } ->
