@@ -118,9 +118,16 @@ complete set of options.
 
 A [Wax extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax)
 supports both `.wax` and WebAssembly text (`.wat`) files: syntax highlighting,
-formatting (with format on save), diagnostics as you type, a document outline,
-snippets, and side-by-side compile/decompile previews. It works in both desktop
-and web VS Code. Its source lives in [`editors/vscode/`](editors/vscode/).
+formatting (with format on save), snippets, side-by-side compile/decompile
+previews, and the full language-server feature set (diagnostics, hover, go to
+definition, find references, rename, completion, signature help, and more). It
+works in both desktop and web VS Code. Its source lives in
+[`editors/vscode/`](editors/vscode/).
+
+Any other editor with a Language Server Protocol client (Neovim, Emacs, Helix,
+Zed, and others) gets the same features by launching `wax lsp`, the built-in
+language server. See the [CLI reference](docs/src/cli.md#language-server) for
+per-editor setup.
 
 ## Installation
 
