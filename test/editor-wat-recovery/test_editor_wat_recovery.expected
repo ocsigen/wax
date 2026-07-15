@@ -1,0 +1,23 @@
+=== outline survives a broken field ===
+outline: function/$a function/$b variable/$g
+diagnostics:
+  [error] Syntax error
+
+=== check suppresses cascades at EOF ===
+outline: function/func
+diagnostics:
+  [error] Expecting instructions.
+
+=== check keeps a real error past a syntax error ===
+outline: function/func function/func
+diagnostics:
+  [error] Syntax error
+  [error] Type mismatch: this produces a value of type 'i64', but type 'i32' is expected.
+
+=== clean module reports normally ===
+outline: function/func
+diagnostics:
+  [error] Type mismatch: this produces a value of type 'i64', but type 'i32' is expected.
+  [error] Type mismatch: the stack is empty (a value is missing).
+  [warning] This function is never used.
+

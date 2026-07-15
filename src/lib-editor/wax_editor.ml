@@ -803,14 +803,26 @@ let rename_string ?(encoding = UTF16) src line ch newname =
            newname)
     else Rename_edits edits
 
+(* As [check_string] but for WAT: parse with the WAT recovery config so all
+   syntax errors surface at once, then validate the best-effort AST in recovery
+   mode ([set_recovery]) so [Wax_wasm.Validation] suppresses the warnings and the
+   stack-shape cascades a dropped or auto-closed construct would otherwise
+   trigger, while real errors in the intact regions still show. *)
 let check_wat_string src =
-  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error e -> [ syntax_error_diag e ]
-  | Ok (ast, _ctx) ->
+  let ast_opt, syntax_errors, _ctx =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  let syntax = List.map syntax_error_diag syntax_errors in
+  match ast_opt with
+  | None -> syntax
+  | Some ast ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
+      Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
       (try Wax_wasm.Validation.f ~warn_unused:true d ast
        with Wax_utils.Diagnostic.Aborted -> ());
-      collected_diags d
+      syntax @ collected_diags d
 
 (* Whether a collector holds any error (as opposed to only warnings), and its
    errors joined into one message. Used by the conversions, which need a
@@ -1505,10 +1517,20 @@ let wat_field_symbols
   | Export _ | Start _ -> []
   | Module_if_annotation _ -> []
 
+(* As [symbols_string], but for WAT, and with the WAT recovery config (parens as
+   sync points, the placeholder operand, closers, and the field-keyword barrier),
+   so a broken buffer still outlines the fields around the error instead of
+   collapsing to an empty outline. Syntax errors are ignored here; the intact
+   fields of the best-effort AST are outlined. *)
 let symbols_wat_string src =
-  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error _ -> []
-  | Ok ((_name, fields), _ctx) -> List.concat_map wat_field_symbols fields
+  let ast_opt, _syntax_errors, _ctx =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  match ast_opt with
+  | None -> []
+  | Some (_name, fields) -> List.concat_map wat_field_symbols fields
 
 (* The signature label of the callee of a call [callee(args)], for signature
    help: a named function ([Get name], defined or imported) rendered as
