@@ -6,4 +6,5 @@
 
 (library
  (name wax_editor)
+ (wrapped false)
  (libraries wax_utils wax_wasm wax_lang wax_conversion))

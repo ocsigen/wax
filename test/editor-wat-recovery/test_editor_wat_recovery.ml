@@ -1,5 +1,5 @@
-(* The WAT editor consumers ([Wax_editor.symbols_wat_string] /
-   [check_wat_string]) run the WAT parser under panic-mode recovery, so a broken
+(* The WAT editor consumers ([Wat_editor.symbols_string] /
+   [Wat_editor.check_string]) run the WAT parser under panic-mode recovery, so a broken
    buffer still yields an outline and validation errors from the intact regions.
    These cases pin that: the outline keeps the well-formed fields around a syntax
    error, and [check] reports the syntax errors while suppressing the warnings
@@ -14,14 +14,14 @@ let report name src =
   Printf.printf "=== %s ===\n" name;
   Printf.printf "outline:";
   List.iter
-    (fun (s : Wax_editor.sym) -> Printf.printf " %s/%s" s.s_kind s.s_name)
-    (Wax_editor.symbols_wat_string src);
+    (fun (s : Editor_common.sym) -> Printf.printf " %s/%s" s.s_kind s.s_name)
+    (Wat_editor.symbols_string src);
   print_newline ();
   Printf.printf "diagnostics:\n";
   List.iter
-    (fun (d : Wax_editor.diag) ->
+    (fun (d : Editor_common.diag) ->
       Printf.printf "  [%s] %s\n" (sev d.severity) d.message)
-    (Wax_editor.check_wat_string src);
+    (Wat_editor.check_string src);
   print_newline ()
 
 let () =

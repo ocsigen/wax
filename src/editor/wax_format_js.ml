@@ -45,6 +45,7 @@
      languages, for the side-by-side preview commands. *)
 
 open Js_of_ocaml
+open Editor_common
 open Wax_editor
 
 let js_related src (message, (location : Wax_utils.Ast.location)) =
@@ -229,7 +230,7 @@ let rename_result src line ch newname =
 let rename_wat_result src line ch newname =
   let s = Js.to_string src in
   let n = Js.to_string newname in
-  let edits = try rename_wat_string s line ch n with _ -> [] in
+  let edits = try Wat_editor.rename_string s line ch n with _ -> [] in
   rename_object s edits None
 
 let rec js_symbol src s =
@@ -393,36 +394,38 @@ let () =
       method semanticTokens src = semantic_result semantic_tokens_string src
       method foldingRanges src = folding_result folding_string src
       method inactiveRanges src defines = inactive_ranges_result src defines
-      method formatWat src = format_result format_wat_string src
-      method checkWat src = check_result check_wat_string src
-      method symbolsWat src = symbols_result symbols_wat_string src
+      method formatWat src = format_result Wat_editor.format_string src
+      method checkWat src = check_result Wat_editor.check_string src
+      method symbolsWat src = symbols_result Wat_editor.symbols_string src
       method toWat src = format_result to_wat_string src
-      method toWax src = format_result to_wax_string src
-      method hoverWat src line ch = hover_result hover_wat_string src line ch
+      method toWax src = format_result Wat_editor.to_wax_string src
+
+      method hoverWat src line ch =
+        hover_result Wat_editor.hover_string src line ch
 
       method definitionWat src line ch =
-        definition_result definition_wat_string src line ch
+        definition_result Wat_editor.definition_string src line ch
 
       method referencesWat src line ch =
-        references_result references_wat_string src line ch
+        references_result Wat_editor.references_string src line ch
 
       method renamePrepareWat src line ch =
-        rename_prepare_result rename_prepare_wat_string src line ch
+        rename_prepare_result Wat_editor.rename_prepare_string src line ch
 
       method renameWat src line ch newname =
         rename_wat_result src line ch newname
 
       method selectionRangeWat src line ch =
-        selection_range_result selection_range_wat_string src line ch
+        selection_range_result Wat_editor.selection_range_string src line ch
 
-      method foldingRangesWat src = folding_result folding_wat_string src
+      method foldingRangesWat src = folding_result Wat_editor.folding_string src
 
       method semanticTokensWat src =
-        semantic_result semantic_tokens_wat_string src
+        semantic_result Wat_editor.semantic_tokens_string src
 
       method signatureHelpWat src line ch =
-        signature_result signature_help_wat_string src line ch
+        signature_result Wat_editor.signature_help_string src line ch
 
       method typeDefinitionWat src line ch =
-        type_definition_result type_definition_wat_string src line ch
+        type_definition_result Wat_editor.type_definition_string src line ch
     end
