@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-828c4755.js";
+            window.path_to_searchindex_js = "searchindex-68a55f00.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -214,7 +214,7 @@ server</a>).</p>
 <ul>
 <li>Specify the output format.</li>
 <li>Values: <code>wax</code>, <code>wat</code>, <code>wasm</code>.</li>
-<li>Default: <code>wasm</code> (if not auto-detected from output filename).</li>
+<li>Default: <code>wax</code> (if not auto-detected from output filename).</li>
 </ul>
 </li>
 <li>
@@ -447,10 +447,10 @@ remains unresolved; resolve them first with <code>-D</code>/<code>--define</code
 </ul>
 </li>
 <li>
-<p><strong><code>--source-map-file</code></strong> <em>FILE</em></p>
+<p><strong><code>--source-map</code></strong></p>
 <ul>
-<li>Generate a source map file. Only valid with wasm output (<code>-f wasm</code>);
-requesting one for wat or wax output is an error.</li>
+<li>Generate a source map file alongside the output file and insert a <code>sourceMappingURL</code> custom section. Only valid with wasm output (<code>-f wasm</code>) to a file;
+requesting one for wat or wax output, or when outputting to <code>stdout</code>, is an error.</li>
 </ul>
 </li>
 <li>
@@ -478,7 +478,7 @@ unchanged.</li>
 <pre><code class="language-sh">wax input.wat -o output.wax
 </code></pre>
 <p><strong>Format a Wax file (round-trip):</strong></p>
-<pre><code class="language-sh">wax input.wax -f wax
+<pre><code class="language-sh">wax input.wax
 </code></pre>
 <p><strong>Read from stdin and write to stdout:</strong></p>
 <pre><code class="language-sh">cat input.wax | wax -f wasm &gt; output.wasm
@@ -633,7 +633,7 @@ in the repository (one directory per editor, each with a README).</p>
 </thead>
 <tbody>
 <tr><td><code>0</code></td><td>Success. For <code>check</code> / <code>format --check</code>, also means every file passed.</td></tr>
-<tr><td><code>123</code></td><td>A <strong>usage</strong> error: an invalid combination of flags (e.g. <code>--source-map-file</code> with text output, or binary output to a terminal), or a <code>format --check</code> run that found files needing formatting.</td></tr>
+<tr><td><code>123</code></td><td>A <strong>usage</strong> error: an invalid combination of flags (e.g. <code>--source-map</code> with text output, or binary output to a terminal), or a <code>format --check</code> run that found files needing formatting.</td></tr>
 <tr><td><code>124</code></td><td>A command-line parse error: an unknown flag or a bad option value (reported by the argument parser).</td></tr>
 <tr><td><code>125</code></td><td>An internal error (an uncaught exception).</td></tr>
 <tr><td><code>128</code></td><td>The input was <strong>rejected by a diagnostic</strong>: a parse, validation, or type error, or a malformed wasm binary. This is also the status of a <code>check</code> run that found any problem.</td></tr>
