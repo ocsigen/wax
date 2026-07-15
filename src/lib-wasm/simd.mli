@@ -96,7 +96,7 @@ val const_arity : Wax_utils.V128.shape -> int
 
 val const_is_float : Wax_utils.V128.shape -> bool
 
-(** {1 Memory loads/stores ([mem.v128_*])} *)
+(** {1 Memory loads/stores ([mem.loadv128], [mem.load8_lane], …)} *)
 
 type mem_intrinsic = {
   m_operands : ty list;
@@ -112,8 +112,8 @@ val mem_method : string -> mem_intrinsic option
 val is_mem_method : string -> bool
 
 val mem_method_names : string list
-(** Every SIMD memory-access method name ([v128_load] … [v128_store64_lane]),
-    for completion after [mem.]. The names {!mem_method} recognises. *)
+(** Every SIMD memory-access method name ([loadv128] … [store64_lane]), for
+    completion after [mem.]. The names {!mem_method} recognises. *)
 
 (** {1 WAT mnemonics for plain vector instructions}
 

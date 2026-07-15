@@ -2356,9 +2356,31 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* ops = Stack.grab (List.length operands) in
       let* addr = Stack.pop_width_preserved in
       let nat = 1 lsl Atomics.natural_align_log2 op in
-      Stack.push (List.length results)
-        (mem_call m (Atomics.method_name op)
-           ((addr :: ops) @ mem_extra with_loc memarg nat))
+      let call =
+        mem_call m
+          (Atomics.method_name (Atomics.family op))
+          ((addr :: ops) @ mem_extra with_loc memarg nat)
+      in
+      (* The method name carries the access width only; a narrow load resolves
+         its i32/i64 type with a trailing [as iN_u] cast, following the plain
+         narrow-load decompile above (the i64 forms of the 8/16-bit loads widen
+         in two steps, re-fused by [To_wasm]). Stores and RMWs re-resolve from
+         their value operand's type. *)
+      let result =
+        match op with
+        | AtomicLoad (t, Some w) -> (
+            let cast typ e =
+              with_loc
+                (Ast.Cast
+                   (e, Signedtype { typ; signage = Unsigned; strict = false }))
+            in
+            match (w, t) with
+            | _, `I32 -> cast `I32 call
+            | `I32, `I64 -> cast `I64 call
+            | (`I8 | `I16), `I64 -> cast `I64 (cast `I32 call))
+        | _ -> call
+      in
+      Stack.push (List.length results) result
   | AtomicFence -> Stack.push 0 (path_call "atomic" "fence" [])
   | Char c -> Stack.push 1 (with_loc (Char c))
   | String (t, s) ->

@@ -1,23 +1,83 @@
 memory mem: i32 [1, 1] shared;
 
+// The function types are declared (and named) up front so the wasm round-trip
+// in run.t is byte-identical: left synthesized, the decompiler would have to
+// invent names for them, which land in the recompiled binary's name section.
+type loader = fn(i32) -> i32;
+type loader64 = fn(i32) -> i64;
+type storer = fn(i32, i32, i64);
+type rmw64_t = fn(i32, i64) -> i64;
+type rmw32_t = fn(i32, i32) -> i32;
+type cmpxchg32_t = fn(i32, i32, i32) -> i32;
+type cmpxchg64_t = fn(i32, i64, i64) -> i64;
+type waiter32 = fn(i32, i32, i64) -> i32;
+type waiter64 = fn(i32, i64, i64) -> i32;
+type nullary = fn();
+
 #[export = "load"]
 fn load(p: i32) -> i32 {
-    mem.i32_atomic_load(p);
+    mem.atomic_load32(p);
+}
+
+#[export = "load64"]
+fn load64(p: i32) -> i64 {
+    mem.atomic_load64(p);
+}
+
+#[export = "narrow_loads"]
+fn narrow_loads(p: i32) -> i64 {
+    let a = mem.atomic_load8(p) as i32_u;   // i32.atomic.load8_u
+    let b = mem.atomic_load16(p) as i32_u;  // i32.atomic.load16_u
+    let c = mem.atomic_load8(p) as i64_u;   // i64.atomic.load8_u
+    let d = mem.atomic_load16(p) as i64_u;  // i64.atomic.load16_u
+    let e = mem.atomic_load32(p) as i64_u;  // i64.atomic.load32_u (fused)
+    let f = mem.atomic_load32(p) as i64_s;  // i32.atomic.load; i64.extend_i32_s
+    c + d + e + f + ((a + b) as i64_u);
+}
+
+#[export = "stores"]
+fn stores(p: i32, v: i32, w: i64) {
+    mem.atomic_store8(p, v);   // i32.atomic.store8
+    mem.atomic_store16(p, w);  // i64.atomic.store16
+    mem.atomic_store32(p, v);  // i32.atomic.store
+    mem.atomic_store32(p, w);  // i64.atomic.store32
+    mem.atomic_store64(p, w);  // i64.atomic.store
+    mem.atomic_store8(p, 1);   // a flexible literal defaults to i32
 }
 
 #[export = "rmw"]
 fn rmw(p: i32, v: i64) -> i64 {
-    mem.i64_atomic_rmw16_add_u(p, v);
+    mem.atomic_rmw_add16(p, v);  // i64.atomic.rmw16.add_u
+}
+
+#[export = "rmw32"]
+fn rmw32(p: i32, v: i32) -> i32 {
+    mem.atomic_rmw_sub32(p, v);  // i32.atomic.rmw.sub
+}
+
+#[export = "rmw64"]
+fn rmw64(p: i32, v: i64) -> i64 {
+    mem.atomic_rmw_xchg64(p, v);  // i64.atomic.rmw.xchg
 }
 
 #[export = "cmpxchg"]
 fn cmpxchg(p: i32, e: i32, r: i32) -> i32 {
-    mem.i32_atomic_rmw_cmpxchg(p, e, r);
+    mem.atomic_rmw_cmpxchg32(p, e, r);  // i32.atomic.rmw.cmpxchg
+}
+
+#[export = "cmpxchg8"]
+fn cmpxchg8(p: i32, e: i64, r: i64) -> i64 {
+    mem.atomic_rmw_cmpxchg8(p, e, r);  // i64.atomic.rmw8.cmpxchg_u
 }
 
 #[export = "wait"]
 fn wait(p: i32, e: i32, t: i64) -> i32 {
     mem.atomic_wait32(p, e, t);
+}
+
+#[export = "wait64"]
+fn wait64(p: i32, e: i64, t: i64) -> i32 {
+    mem.atomic_wait64(p, e, t);
 }
 
 #[export = "notify"]

@@ -75,7 +75,7 @@ namespace members:
     fence        fn() -> ()                             ok
 
 memory / table methods:
-  memory (105)
+  memory (78)
     load8                    fn(i32, offset?: int, align?: int) -> i32 ok
     load16                   fn(i32, offset?: int, align?: int) -> i32 ok
     load32                   fn(i32, offset?: int, align?: int) -> i32 ok
@@ -93,94 +93,67 @@ memory / table methods:
     fill                     fn(i32, i32, i32) -> ()              ok
     copy                     fn(i32, i32, i32) -> ()              ok
     init                     fn(data, i32, i32, i32) -> ()        ok
-    atomic_notify            fn(i32, i32, offset?: int) -> i32    ok
+    atomic_load8             fn(i32, offset?: int) -> i8          ok
+    atomic_load16            fn(i32, offset?: int) -> i16         ok
+    atomic_load32            fn(i32, offset?: int) -> i32         ok
+    atomic_load64            fn(i32, offset?: int) -> i64         ok
+    atomic_store8            fn(i32, int, offset?: int) -> ()     ok
+    atomic_store16           fn(i32, int, offset?: int) -> ()     ok
+    atomic_store32           fn(i32, int, offset?: int) -> ()     ok
+    atomic_store64           fn(i32, i64, offset?: int) -> ()     ok
+    atomic_rmw_add8          fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_add16         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_add32         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_add64         fn(i32, i64, offset?: int) -> i64    ok
+    atomic_rmw_sub8          fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_sub16         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_sub32         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_sub64         fn(i32, i64, offset?: int) -> i64    ok
+    atomic_rmw_and8          fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_and16         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_and32         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_and64         fn(i32, i64, offset?: int) -> i64    ok
+    atomic_rmw_or8           fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_or16          fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_or32          fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_or64          fn(i32, i64, offset?: int) -> i64    ok
+    atomic_rmw_xor8          fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_xor16         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_xor32         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_xor64         fn(i32, i64, offset?: int) -> i64    ok
+    atomic_rmw_xchg8         fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_xchg16        fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_xchg32        fn(i32, int, offset?: int) -> int    ok
+    atomic_rmw_xchg64        fn(i32, i64, offset?: int) -> i64    ok
+    atomic_rmw_cmpxchg8      fn(i32, int, int, offset?: int) -> int ok
+    atomic_rmw_cmpxchg16     fn(i32, int, int, offset?: int) -> int ok
+    atomic_rmw_cmpxchg32     fn(i32, int, int, offset?: int) -> int ok
+    atomic_rmw_cmpxchg64     fn(i32, i64, i64, offset?: int) -> i64 ok
     atomic_wait32            fn(i32, i32, i64, offset?: int) -> i32 ok
     atomic_wait64            fn(i32, i64, i64, offset?: int) -> i32 ok
-    i32_atomic_load          fn(i32, offset?: int) -> i32         ok
-    i64_atomic_load          fn(i32, offset?: int) -> i64         ok
-    i32_atomic_load8_u       fn(i32, offset?: int) -> i32         ok
-    i32_atomic_load16_u      fn(i32, offset?: int) -> i32         ok
-    i64_atomic_load8_u       fn(i32, offset?: int) -> i64         ok
-    i64_atomic_load16_u      fn(i32, offset?: int) -> i64         ok
-    i64_atomic_load32_u      fn(i32, offset?: int) -> i64         ok
-    i32_atomic_store         fn(i32, i32, offset?: int) -> ()     ok
-    i64_atomic_store         fn(i32, i64, offset?: int) -> ()     ok
-    i32_atomic_store8        fn(i32, i32, offset?: int) -> ()     ok
-    i32_atomic_store16       fn(i32, i32, offset?: int) -> ()     ok
-    i64_atomic_store8        fn(i32, i64, offset?: int) -> ()     ok
-    i64_atomic_store16       fn(i32, i64, offset?: int) -> ()     ok
-    i64_atomic_store32       fn(i32, i64, offset?: int) -> ()     ok
-    i32_atomic_rmw_add       fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw_add       fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw8_add_u    fn(i32, i32, offset?: int) -> i32    ok
-    i32_atomic_rmw16_add_u   fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw8_add_u    fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw16_add_u   fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw32_add_u   fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw_sub       fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw_sub       fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw8_sub_u    fn(i32, i32, offset?: int) -> i32    ok
-    i32_atomic_rmw16_sub_u   fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw8_sub_u    fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw16_sub_u   fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw32_sub_u   fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw_and       fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw_and       fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw8_and_u    fn(i32, i32, offset?: int) -> i32    ok
-    i32_atomic_rmw16_and_u   fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw8_and_u    fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw16_and_u   fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw32_and_u   fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw_or        fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw_or        fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw8_or_u     fn(i32, i32, offset?: int) -> i32    ok
-    i32_atomic_rmw16_or_u    fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw8_or_u     fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw16_or_u    fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw32_or_u    fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw_xor       fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw_xor       fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw8_xor_u    fn(i32, i32, offset?: int) -> i32    ok
-    i32_atomic_rmw16_xor_u   fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw8_xor_u    fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw16_xor_u   fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw32_xor_u   fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw_xchg      fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw_xchg      fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw8_xchg_u   fn(i32, i32, offset?: int) -> i32    ok
-    i32_atomic_rmw16_xchg_u  fn(i32, i32, offset?: int) -> i32    ok
-    i64_atomic_rmw8_xchg_u   fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw16_xchg_u  fn(i32, i64, offset?: int) -> i64    ok
-    i64_atomic_rmw32_xchg_u  fn(i32, i64, offset?: int) -> i64    ok
-    i32_atomic_rmw_cmpxchg   fn(i32, i32, i32, offset?: int) -> i32 ok
-    i64_atomic_rmw_cmpxchg   fn(i32, i64, i64, offset?: int) -> i64 ok
-    i32_atomic_rmw8_cmpxchg_u fn(i32, i32, i32, offset?: int) -> i32 ok
-    i32_atomic_rmw16_cmpxchg_u fn(i32, i32, i32, offset?: int) -> i32 ok
-    i64_atomic_rmw8_cmpxchg_u fn(i32, i64, i64, offset?: int) -> i64 ok
-    i64_atomic_rmw16_cmpxchg_u fn(i32, i64, i64, offset?: int) -> i64 ok
-    i64_atomic_rmw32_cmpxchg_u fn(i32, i64, i64, offset?: int) -> i64 ok
-    v128_load                fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load8x8_s           fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load8x8_u           fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load16x4_s          fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load16x4_u          fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load32x2_s          fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load32x2_u          fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load32_zero         fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load64_zero         fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_store               fn(i32, v128, offset?: int, align?: int) -> () ok
-    v128_load8_splat         fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load16_splat        fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load32_splat        fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load64_splat        fn(i32, offset?: int, align?: int) -> v128 ok
-    v128_load8_lane          fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
-    v128_load16_lane         fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
-    v128_load32_lane         fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
-    v128_load64_lane         fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
-    v128_store8_lane         fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
-    v128_store16_lane        fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
-    v128_store32_lane        fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
-    v128_store64_lane        fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
+    atomic_notify            fn(i32, i32, offset?: int) -> i32    ok
+    loadv128                 fn(i32, offset?: int, align?: int) -> v128 ok
+    load8x8_s                fn(i32, offset?: int, align?: int) -> v128 ok
+    load8x8_u                fn(i32, offset?: int, align?: int) -> v128 ok
+    load16x4_s               fn(i32, offset?: int, align?: int) -> v128 ok
+    load16x4_u               fn(i32, offset?: int, align?: int) -> v128 ok
+    load32x2_s               fn(i32, offset?: int, align?: int) -> v128 ok
+    load32x2_u               fn(i32, offset?: int, align?: int) -> v128 ok
+    load32_zero              fn(i32, offset?: int, align?: int) -> v128 ok
+    load64_zero              fn(i32, offset?: int, align?: int) -> v128 ok
+    storev128                fn(i32, v128, offset?: int, align?: int) -> () ok
+    load8_splat              fn(i32, offset?: int, align?: int) -> v128 ok
+    load16_splat             fn(i32, offset?: int, align?: int) -> v128 ok
+    load32_splat             fn(i32, offset?: int, align?: int) -> v128 ok
+    load64_splat             fn(i32, offset?: int, align?: int) -> v128 ok
+    load8_lane               fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
+    load16_lane              fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
+    load32_lane              fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
+    load64_lane              fn(i32, v128, lane: int, offset?: int, align?: int) -> v128 ok
+    store8_lane              fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
+    store16_lane             fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
+    store32_lane             fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
+    store64_lane             fn(i32, v128, lane: int, offset?: int, align?: int) -> () ok
   table (5)
     size                     fn() -> i32                          ok
     grow                     fn(&?func, i32) -> i32               ok

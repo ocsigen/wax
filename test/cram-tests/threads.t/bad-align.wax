@@ -1,2 +1,3 @@
 memory mem: i32 [1, 1] shared;
-fn f(p: i32) -> i32 { mem.i32_atomic_load(p, align: 1); }
+fn f(p: i32) -> i32 { mem.atomic_load32(p, align: 1); }
+fn g(p: i32, v: i64) -> i64 { mem.atomic_rmw_add16(p, v, align: 4); }

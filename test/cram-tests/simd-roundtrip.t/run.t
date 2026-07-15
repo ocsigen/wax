@@ -40,13 +40,13 @@ lowering back (wax -> wat); the binary is byte-identical modulo debug names.
       _ = a.bitmask_i8x16();
       _ = v128::bitselect(a, b, a);
       _ = a.relaxed_madd_f32x4(b, a);
-      _ = m.v128_load(0);
-      _ = m.v128_load8x8_s(0);
-      _ = m.v128_load32_zero(0);
-      _ = m.v128_load8_splat(0);
-      _ = m.v128_load8_lane(0, a, lane: 3);
-      m.v128_store(0, a);
-      m.v128_store8_lane(0, a, lane: 3);
+      _ = m.loadv128(0);
+      _ = m.load8x8_s(0);
+      _ = m.load32_zero(0);
+      _ = m.load8_splat(0);
+      _ = m.load8_lane(0, a, lane: 3);
+      m.storev128(0, a);
+      m.store8_lane(0, a, lane: 3);
       a;
   }
 

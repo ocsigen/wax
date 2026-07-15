@@ -7,10 +7,10 @@ prints offset when non-zero and align when non-natural.
   > fn f(p: i32, v: i32) {
   >     m.store32(p, v, offset: 16, align: 1);
   >     m.store32(p, v, align: 1, offset: 16);
-  >     m.i32_atomic_store(p, v, offset: 8);
+  >     m.atomic_store32(p, v, offset: 8);
   > }
   > fn g(p: i32, v: v128) -> v128 {
-  >     m.v128_load8_lane(p, v, lane: 3, offset: 16);
+  >     m.load8_lane(p, v, lane: 3, offset: 16);
   > }
   > fn h(p: i32) -> i32 {
   >     become h(m.load32(p, offset: 4));
@@ -46,7 +46,7 @@ and align independently of each other:
   fn f(p: i32, v: v128) {
       m.store32(p, 0, offset: 4);
       m.store32(p, 0, align: 1);
-      m.v128_store8_lane(p, v, lane: 3, offset: 2);
+      m.store8_lane(p, v, lane: 3, offset: 2);
   }
 
 A label anywhere else is an error; so are an unknown or duplicated label, a
@@ -134,7 +134,7 @@ A SIMD lane access needs its lane immediate:
   $ cat > nolane.wax <<'EOF'
   > memory m: i32 [1];
   > fn f(p: i32, v: v128) -> v128 {
-  >     m.v128_load8_lane(p, v, offset: 16);
+  >     m.load8_lane(p, v, offset: 16);
   > }
   > EOF
   $ wax check nolane.wax
@@ -142,8 +142,8 @@ A SIMD lane access needs its lane immediate:
    ──➤  nolane.wax:3:5
   1 │ memory m: i32 [1];
   2 │ fn f(p: i32, v: v128) -> v128 {
-  3 │     m.v128_load8_lane(p, v, offset: 16);
-    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 │     m.load8_lane(p, v, offset: 16);
+    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │ }
   5 │ 
   [128]
@@ -157,7 +157,7 @@ still validate, so a real range error is not masked):
   >     m.load32(p, 1, 16);
   > }
   > fn g(p: i32, v: v128) -> v128 {
-  >     m.v128_load8_lane(p, v, 16);
+  >     m.load8_lane(p, v, 16);
   > }
   > EOF
   $ wax check positional.wax
@@ -173,20 +173,20 @@ still validate, so a real range error is not masked):
   5 │ fn g(p: i32, v: v128) -> v128 {
   Error:
     The static immediates of a memory access must be labelled, e.g.
-    'm.v128_load8_lane(..., lane: 0, offset: 16)'.
-   ──➤  positional.wax:6:29
+    'm.load8_lane(..., lane: 0, offset: 16)'.
+   ──➤  positional.wax:6:24
   4 │ }
   5 │ fn g(p: i32, v: v128) -> v128 {
-  6 │     m.v128_load8_lane(p, v, 16);
-    ·                             ^^
+  6 │     m.load8_lane(p, v, 16);
+    ·                        ^^
   7 │ }
   8 │ 
   Error: The lane index should be less than 16.
-   ──➤  positional.wax:6:29
+   ──➤  positional.wax:6:24
   4 │ }
   5 │ fn g(p: i32, v: v128) -> v128 {
-  6 │     m.v128_load8_lane(p, v, 16);
-    ·                             ^^
+  6 │     m.load8_lane(p, v, 16);
+    ·                        ^^
   7 │ }
   8 │ 
   [128]

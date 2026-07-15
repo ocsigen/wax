@@ -8,7 +8,7 @@
    [v.extract_lane_s_i8x16(0)]. The wax name is the WAT mnemonic [A.B] rewritten
    as [B_A] (so [i32x4.add] -> [add_i32x4], [v128.and] -> [and_v128]). Constants
    and bitselect are free functions ([v128_i32x4(...)], [v128_bitselect]);
-   loads/stores are methods on a memory object ([mem.v128_load(addr)]). *)
+   loads/stores are methods on a memory object ([mem.loadv128(addr)]). *)
 
 module Text = Ast.Text
 
@@ -216,17 +216,20 @@ let extract_name s (sign : Ast.signage option) =
   ^ (match sign with Some x -> sgn x | None -> "")
   ^ "_" ^ shape_str s
 
-(* Memory load/store names: WAT [v128.foo] -> wax method [v128_foo]. *)
+(* Memory load/store names: like the scalar accesses, the access width (or the
+   full-width family letter, [loadv128] beside [loadf32]) is in the method
+   name; the widening loads keep their [_s]/[_u] suffix (both variants exist,
+   so the suffix carries information). *)
 let vec_load_name : Ast.vec_load_op -> string = function
-  | Load128 -> "v128_load"
-  | Load8x8S -> "v128_load8x8_s"
-  | Load8x8U -> "v128_load8x8_u"
-  | Load16x4S -> "v128_load16x4_s"
-  | Load16x4U -> "v128_load16x4_u"
-  | Load32x2S -> "v128_load32x2_s"
-  | Load32x2U -> "v128_load32x2_u"
-  | Load32Zero -> "v128_load32_zero"
-  | Load64Zero -> "v128_load64_zero"
+  | Load128 -> "loadv128"
+  | Load8x8S -> "load8x8_s"
+  | Load8x8U -> "load8x8_u"
+  | Load16x4S -> "load16x4_s"
+  | Load16x4U -> "load16x4_u"
+  | Load32x2S -> "load32x2_s"
+  | Load32x2U -> "load32x2_u"
+  | Load32Zero -> "load32_zero"
+  | Load64Zero -> "load64_zero"
 
 let lane_width_str : [ `I8 | `I16 | `I32 | `I64 ] -> string = function
   | `I8 -> "8"
@@ -234,10 +237,10 @@ let lane_width_str : [ `I8 | `I16 | `I32 | `I64 ] -> string = function
   | `I32 -> "32"
   | `I64 -> "64"
 
-let load_lane_name w = "v128_load" ^ lane_width_str w ^ "_lane"
-let store_lane_name w = "v128_store" ^ lane_width_str w ^ "_lane"
-let load_splat_name w = "v128_load" ^ lane_width_str w ^ "_splat"
-let store_name = "v128_store"
+let load_lane_name w = "load" ^ lane_width_str w ^ "_lane"
+let store_lane_name w = "store" ^ lane_width_str w ^ "_lane"
+let load_splat_name w = "load" ^ lane_width_str w ^ "_splat"
+let store_name = "storev128"
 
 let vec_load_nat_align : Ast.vec_load_op -> int = function
   | Load128 -> 16
@@ -529,7 +532,7 @@ let const_is_float : Wax_utils.V128.shape -> bool = function
   | _ -> false
 
 (****)
-(* Memory loads/stores ([mem.v128_*]). The receiver is the memory object, not a
+(* Memory loads/stores ([mem.loadv128], [mem.load8_lane], …). The receiver is the memory object, not a
    stack value; [m_operands] are the stack operands (address, then maybe the
    stored/lane vector), followed by an optional constant lane immediate and the
    usual trailing [align]/[offset] literals. *)
@@ -585,16 +588,16 @@ let mem_method name : mem_intrinsic option =
       }
   in
   match name with
-  | "v128_load" -> load Load128 16
-  | "v128_load8x8_s" -> load Load8x8S 8
-  | "v128_load8x8_u" -> load Load8x8U 8
-  | "v128_load16x4_s" -> load Load16x4S 8
-  | "v128_load16x4_u" -> load Load16x4U 8
-  | "v128_load32x2_s" -> load Load32x2S 8
-  | "v128_load32x2_u" -> load Load32x2U 8
-  | "v128_load32_zero" -> load Load32Zero 4
-  | "v128_load64_zero" -> load Load64Zero 8
-  | "v128_store" ->
+  | "loadv128" -> load Load128 16
+  | "load8x8_s" -> load Load8x8S 8
+  | "load8x8_u" -> load Load8x8U 8
+  | "load16x4_s" -> load Load16x4S 8
+  | "load16x4_u" -> load Load16x4U 8
+  | "load32x2_s" -> load Load32x2S 8
+  | "load32x2_u" -> load Load32x2U 8
+  | "load32_zero" -> load Load32Zero 4
+  | "load64_zero" -> load Load64Zero 8
+  | "storev128" ->
       Some
         {
           m_operands = [ TI32; TV128 ];
@@ -603,23 +606,23 @@ let mem_method name : mem_intrinsic option =
           m_nat_align = 16;
           m_make = (fun m ma _ -> Text.VecStore (m, ma));
         }
-  | "v128_load8_splat" -> load_splat `I8 1
-  | "v128_load16_splat" -> load_splat `I16 2
-  | "v128_load32_splat" -> load_splat `I32 4
-  | "v128_load64_splat" -> load_splat `I64 8
-  | "v128_load8_lane" -> load_lane `I8 1
-  | "v128_load16_lane" -> load_lane `I16 2
-  | "v128_load32_lane" -> load_lane `I32 4
-  | "v128_load64_lane" -> load_lane `I64 8
-  | "v128_store8_lane" -> store_lane `I8 1
-  | "v128_store16_lane" -> store_lane `I16 2
-  | "v128_store32_lane" -> store_lane `I32 4
-  | "v128_store64_lane" -> store_lane `I64 8
+  | "load8_splat" -> load_splat `I8 1
+  | "load16_splat" -> load_splat `I16 2
+  | "load32_splat" -> load_splat `I32 4
+  | "load64_splat" -> load_splat `I64 8
+  | "load8_lane" -> load_lane `I8 1
+  | "load16_lane" -> load_lane `I16 2
+  | "load32_lane" -> load_lane `I32 4
+  | "load64_lane" -> load_lane `I64 8
+  | "store8_lane" -> store_lane `I8 1
+  | "store16_lane" -> store_lane `I16 2
+  | "store32_lane" -> store_lane `I32 4
+  | "store64_lane" -> store_lane `I64 8
   | _ -> None
 
 let is_mem_method name = mem_method name <> None
 
-(* Every SIMD memory-access method name ([v128_load], [v128_store8_lane], …),
+(* Every SIMD memory-access method name ([loadv128], [store8_lane], …),
    for completion after [mem.]. The set [mem_method] recognises. *)
 let mem_method_names =
   let widths = [ `I8; `I16; `I32; `I64 ] in

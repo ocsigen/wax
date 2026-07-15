@@ -26,17 +26,17 @@ A lane index near u64 max is rejected, not an assertion failure:
 
   $ cat > badidx.wax <<'EOF'
   > fn f(x: v128) -> i64 {
-  >     m.v128_store64_lane(0, x, lane: 18446744073709551615);
+  >     m.store64_lane(0, x, lane: 18446744073709551615);
   >     m.load64(0);
   > }
   > memory m: i32 [1];
   > EOF
   $ wax -i wax -f wasm badidx.wax -o /dev/null
   Error: The lane index should be less than 2.
-   ──➤  badidx.wax:2:37
+   ──➤  badidx.wax:2:32
   1 │ fn f(x: v128) -> i64 {
-  2 │     m.v128_store64_lane(0, x, lane: 18446744073709551615);
-    ·                                     ^^^^^^^^^^^^^^^^^^^^
+  2 │     m.store64_lane(0, x, lane: 18446744073709551615);
+    ·                                ^^^^^^^^^^^^^^^^^^^^
   3 │     m.load64(0);
   4 │ }
   [128]
