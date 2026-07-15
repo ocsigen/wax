@@ -172,14 +172,14 @@ for the inline (implicit) function type of a definition. A wrong call argument:
 A call result that does not match what the caller declares:
 
   $ wax --validate call_result.wat -o out.wat
-  Error: Type mismatch: expecting type 'i32' but got type '(ref $t)'.
-   ──➤  call_result.wat:4:4
-  2 │   (type $t (struct))
+  Error:
+    Type mismatch: this produces a value of type '(ref $t)', but type 'i32' is
+    expected.
+   ──➤  call_result.wat:5:6
   3 │   (func $g (result (ref $t)) (unreachable))
   4 │   (func (result i32)
-    ·    ^^^^^^^^^^^^^^^^^^
   5 │     (call $g)))
-    · ^^^^^^^^^^^^^^
+    ·      ^^^^^^^
   6 │ 
   [128]
 
