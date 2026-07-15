@@ -233,9 +233,24 @@ overflows and escapes recovery) — a huge `memory`/`data` size crashes it. Caug
 by `fuzz_recover` at seed 0; predates the recovery work and wants a separate fix
 (clamp/catch the literal conversion so it degrades to a diagnostic).
 
-### Next: wire consumers
+### Consumers wired (done)
 
-Group-drop is not yet wired into any consumer; `symbolsWat` (the editor outline,
-no validator changes) is the first, cleanest target; `checkWat` diagnostics need
-recovery-mode suppression in `validation.ml` (the WAT validator has none, unlike
-the Wax typer's `Diagnostic.set_recovery`).
+`symbolsWat` and `checkWat` (`src/lib-editor/wax_editor.ml`) now parse WAT under
+recovery, so the editor outline and diagnostics survive a syntax error the way
+the Wax side already did. `check_wat_string` validates the best-effort AST with
+`set_recovery` on, and `lib-wasm/validation.ml` gained the matching suppression
+(mirroring the Wax typer): in recovery mode it drops all warnings and the
+stack-shape error cascades (`empty_stack`/`non_empty_stack`/`leftover_values`)
+that a dropped or auto-closed body triggers, while every genuine error in an
+intact region still surfaces. Suppression is gated on `in_recovery`, so the CLI
+validator is unchanged. Unbound-index/label errors are deliberately *not*
+suppressed — group-drop preserves field shells (names survive a dropped body), so
+those cascades are rare, and keeping them live surfaces real typos during
+editing. Tested in `test/editor-wat-recovery/`.
+
+### Possible follow-ups
+
+The `wax check --all-errors` CLI path is still Wax-only (`main.ml` guards on
+`Wax`); it could route WAT through `wat_parse_recover` too. And an overlong
+integer literal still crashes `parse_recover` (see the aside above), independent
+of all this.
