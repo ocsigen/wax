@@ -924,7 +924,8 @@ let rec symbol_completions (s : sym) =
 
 (* Parameters and [let] locals of the function whose span covers the cursor
    (over-approximate: every local in the function, not only those in scope at the
-   point). *)
+   point). [iter_fields] descends into conditional branches, so a function
+   defined under [#[if]] is found too. *)
 let function_locals ast target =
   let open Wax_lang.Ast in
   let contains (loc : Wax_utils.Ast.location) =
@@ -934,8 +935,9 @@ let function_locals ast target =
     in
     le (pos loc.loc_start) target && le target (pos loc.loc_end)
   in
-  List.concat_map
-    (fun (field : (location modulefield, Wax_utils.Ast.location) annotated) ->
+  let acc = ref [] in
+  Wax_lang.Ast_utils.iter_fields
+    (fun field ->
       match field.desc with
       | Func { sign; body = _, instrs; _ } when contains field.info ->
           let params =
@@ -963,9 +965,10 @@ let function_locals ast target =
                        bindings
                  | _ -> ()))
             instrs;
-          params @ List.rev !lets
-      | _ -> [])
-    ast
+          acc := !acc @ params @ List.rev !lets
+      | _ -> ())
+    ast;
+  !acc
 
 let is_ident_char c =
   (c >= 'a' && c <= 'z')
@@ -1024,10 +1027,17 @@ let completion_string src line ch =
     match ast_opt with
     | None -> keywords
     | Some ast ->
-        let module_ =
-          List.concat_map field_symbols ast
-          |> List.concat_map symbol_completions
-        in
+        (* [iter_fields] descends into conditional branches, so a definition
+           under [#[if]] (or a function with several conditional definitions) is
+           included, not just the top-level fields. *)
+        let module_ = ref [] in
+        Wax_lang.Ast_utils.iter_fields
+          (fun field ->
+            module_ :=
+              !module_
+              @ List.concat_map symbol_completions (field_symbols field))
+          ast;
+        let module_ = !module_ in
         let locals = function_locals ast target in
         (* Locals shadow module names of the same name; keep the first
            occurrence of each (name, kind). *)
