@@ -449,4 +449,28 @@ let () =
   complete "not an index position"
     (prelude ^ "  (func (result i32) (i32.const 0)))\n")
     "(i32.const 0";
+  print_newline ();
+
+  (* Diagnostics on an incomplete operand: recovery names what is missing — an
+     "index" where a func / label / … is expected, a "number" at a numeric
+     literal (a float may be wanted, so not "integer") — and the inserted
+     placeholder does not itself draw a spurious "unbound" error on top. *)
+  let diags label src =
+    Printf.printf "  %s ->" label;
+    (match Wat_editor.check_string src with
+    | [] -> Printf.printf " (none)"
+    | ds ->
+        List.iter
+          (fun (d : Editor_common.diag) ->
+            Printf.printf " [%s]" (String.trim d.message))
+          ds);
+    print_newline ()
+  in
+  Printf.printf "=== diagnostics on a missing operand ===\n";
+  diags "missing call index" "(module (func (call)))\n";
+  diags "missing branch label" "(module (func (br)))\n";
+  diags "missing local index (no spurious unbound)"
+    "(module (func (local.get)))\n";
+  diags "missing const number" "(module (func (i32.const)))\n";
+  diags "missing float const number" "(module (func (f32.const)))\n";
   print_newline ()

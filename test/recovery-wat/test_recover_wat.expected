@@ -4,7 +4,7 @@ errors: 1
 (func (nop))
 === missing branch index ===
 errors: 1
-(func (br 0))
+(func (br $_))
 === junk instruction, later field survives ===
 errors: 2
 (func)
@@ -20,9 +20,9 @@ errors: 1
 errors: 1
 (func (nop))
 (global i32 (i32.const 0))
-=== missing heap type is a zero index ===
+=== missing heap type is an index placeholder ===
 errors: 1
-(func (ref.null 0))
+(func (ref.null $_))
 (func (nop))
 === bare field keyword in a body is not a barrier ===
 errors: 1

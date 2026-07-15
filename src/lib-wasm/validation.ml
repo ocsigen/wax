@@ -294,6 +294,21 @@ let record loc rt =
       r := (l, !sink_config, rt) :: !r
   | _ -> ()
 
+(* A named index with a zero-width span is one error recovery synthesized in
+   place — the placeholder [$_] it inserts for a missing index ([(call)] repaired
+   to [(call $_)]). A diagnostic anchored solely to it (the placeholder name
+   being unbound) is suppressed: the "Missing index" syntax error already stands
+   there. The check is narrow on purpose — a real [$id] spans at least two
+   characters, and an {e omitted} index that defaults to [0] (e.g. the implicit
+   memory of [memory.copy]) is a [Num], whose unbound-ness is a genuine error —
+   so only the synthetic named placeholder is caught. *)
+let is_recovery_placeholder (idx : Ast.Text.idx) =
+  match idx.Ast.desc with
+  | Ast.Text.Id _ ->
+      idx.info.Ast.loc_start.Lexing.pos_cnum
+      = idx.info.Ast.loc_end.Lexing.pos_cnum
+  | Ast.Text.Num _ -> false
+
 (* Reconstruct a source type from an interned one. Used as the source type of a
    pushed value when no truer reference is available, so every concrete stack
    value carries a source type (as on the Wax side, where an inferred type
@@ -389,13 +404,17 @@ module Error = struct
           ^^ text "?")
 
   let unbound_label context ~location id lst =
-    report context ~location ~severity:Error ?hint:(did_you_mean lst)
-      (text "Unknown label:" ++ index id ++ text "is not bound.")
+    if is_recovery_placeholder id then ()
+    else
+      report context ~location ~severity:Error ?hint:(did_you_mean lst)
+        (text "Unknown label:" ++ index id ++ text "is not bound.")
 
   let unbound_index context ~location kind id lst =
-    report context ~location ~severity:Error ?hint:(did_you_mean lst)
-      ((text "Unknown" ++ text kind)
-      ^^ (text ": index" ++ index id ++ text "is not bound."))
+    if is_recovery_placeholder id then ()
+    else
+      report context ~location ~severity:Error ?hint:(did_you_mean lst)
+        ((text "Unknown" ++ text kind)
+        ^^ (text ": index" ++ index id ++ text "is not bound."))
 
   let packed_array_access context ~location =
     report context ~location ~severity:Error

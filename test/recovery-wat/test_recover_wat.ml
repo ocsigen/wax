@@ -24,8 +24,10 @@ let report name source =
   print_newline ()
 
 let () =
-  (* Missing operand: a zero-width [0] is inserted so the instruction stays in
-     the body and the sibling function is not lost. *)
+  (* Missing operand: a zero-width placeholder is inserted so the instruction
+     stays in the body and the sibling function is not lost. The placeholder is
+     a named index [$_] where an index is expected (so the diagnostic reads
+     "Missing index"), a [0] at a numeric-literal position like a const. *)
   report "missing const operand keeps both funcs"
     "(module (func (i32.const)) (func (nop)))\n";
   report "missing branch index" "(module (func (br)))\n";
@@ -42,9 +44,10 @@ let () =
     "(module (func (i32.const 1) (func (nop)))\n";
   report "missing ')' before a global"
     "(module (func (nop) (global i32 (i32.const 0)))\n";
-  (* The "0" placeholder generalizes past plain integers: a heap type may be a
-     type index, so (ref.null) is repaired to (ref.null 0). *)
-  report "missing heap type is a zero index"
+  (* The placeholder generalizes past plain integers: a heap type may be a type
+     index (which accepts a named index), so (ref.null) is repaired to
+     (ref.null $_). *)
+  report "missing heap type is an index placeholder"
     "(module (func (ref.null)) (func (nop)))\n";
   (* A field keyword typed as an instruction ("memory" with no "(") must not be
      mistaken for a new field: the barrier fires only when the keyword really is

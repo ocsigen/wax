@@ -428,7 +428,7 @@ f64:
 
 index:
 | n = u32 { with_loc $sloc (Num n) }
-| i = ID { {info = i.info; desc = (Id i.Ast.desc)} }
+| i = ID { with_loc $sloc (Id i.Ast.desc) }
 
 name: s = STRING
   { if not (String.is_valid_utf_8 s.Ast.desc) then

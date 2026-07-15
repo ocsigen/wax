@@ -26,12 +26,23 @@ let sync : Tokens.token -> Parsing.sync_class = function
 let closers = [ Tokens.RPAREN ]
 
 (* WAT has no statement separator, but a missing {e operand} is the common
-   mid-typing slip — [(i32.const)] wants a number before its [)]. Offering a
-   zero-width [0] repairs the group in place: the const family (and integer
-   indices such as [(br)]) all accept a [NAT], so the instruction stays in the
-   best-effort AST with a "Missing integer" diagnostic instead of the whole
-   group being dropped. Passed as [?insert]. *)
-let insert = [ (Tokens.NAT "0", Wax_utils.Message.text "Missing integer.") ]
+   mid-typing slip — [(call)] wants an index, [(i32.const)] a number. Offering a
+   zero-width placeholder repairs the group in place, keeping the instruction in
+   the best-effort AST (with a "Missing …" diagnostic) instead of dropping the
+   whole group. Two candidates, tried in order, so the diagnostic names what is
+   actually missing: a named index [$_] first — accepted exactly where an index
+   is expected (a func / label / type / … use), which a bare number would also
+   fit but describe less accurately — then a [0], accepted at the numeric-literal
+   positions an index is not (the const family, lane / align operands, where a
+   float may equally be wanted, hence "number" not "integer"). The parser picks
+   the first candidate its erroring state can shift, so index positions report
+   "Missing index" and the rest "Missing number". Passed as [?insert]. *)
+let insert =
+  [
+    ( Tokens.ID (Wax_utils.Ast.no_loc "_"),
+      Wax_utils.Message.text "Missing index." );
+    (Tokens.NAT "0", Wax_utils.Message.text "Missing number.");
+  ]
 
 (* A missing closer — [(module (func … (func …] with a [)] left out — surfaces
    as a field-opening keyword offered where an instruction was expected. This

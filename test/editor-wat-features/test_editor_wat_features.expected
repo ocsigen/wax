@@ -121,3 +121,10 @@
   partial prefix $h (functions) -> [$helper:function]
   not an index position -> []
 
+=== diagnostics on a missing operand ===
+  missing call index -> [Missing index.]
+  missing branch label -> [Missing index.]
+  missing local index (no spurious unbound) -> [Missing index.]
+  missing const number -> [Missing number.]
+  missing float const number -> [Missing number.]
+
