@@ -97,9 +97,10 @@ so both consumers share it — every language feature is a `Wax_editor.*_string`
 function; the LSP server and the JS wrapper only marshal their results. The loop
 is synchronous (one request at a time), document sync is `Full` (each change
 carries the whole buffer, which is what `Wax_editor`'s source-keyed analysis
-cache expects), and positions are negotiated as UTF-16 (the mandatory LSP
-baseline, matching the (line, UTF-16 char) coordinates the `*_string` functions
-take; picking UTF-8 would need the analysis to accept byte columns). Requests
+cache expects), and the position encoding is negotiated at `initialize` (UTF-8
+when the client offers it, else UTF-16; `Wax_editor`'s `*_string` functions take
+a `?encoding` that defaults to UTF-16, so the JS wrapper is unaffected, and
+`Wax_editor.position ~encoding` maps results back). Requests
 map 1:1 to `Wax_editor` functions (hover, definition, type-definition,
 references, document-highlight, prepare-rename/rename, document-symbol,
 completion, signature-help, inlay-hint, folding, selection-range,

@@ -399,10 +399,10 @@ features that need the typed tree are Wax-only, while formatting, diagnostics
 and the outline work for `.wat` too (dispatched by the document's URI
 extension).
 
-Documents are synchronized in full (each change carries the whole buffer) and
-positions are negotiated as UTF-16, the LSP default that every client supports.
-The `--stdio` flag is accepted (and ignored) for the editors that pass it by
-convention.
+Documents are synchronized in full (each change carries the whole buffer). The
+position encoding is negotiated: the server uses UTF-8 when the client offers it
+and otherwise UTF-16, the LSP default that every client supports. The `--stdio`
+flag is accepted (and ignored) for the editors that pass it by convention.
 
 ### Editor setup
 

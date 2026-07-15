@@ -87,3 +87,41 @@ header, reads the framed replies back, and prints a compact summary:
   formatting: 1 edit(s), reindented=True
   shutdown: null
   stderr: (empty)
+
+Position encoding is negotiated. A line with a multi-byte identifier (`é` is two
+UTF-8 bytes but one UTF-16 unit) makes the two encodings disagree on column
+offsets. When the client offers `utf-8` the server selects it, interprets the
+incoming character offset as a byte column, and reports offsets back in bytes;
+otherwise it uses `utf-16`. Drive the same hover under each and show the offsets
+track the negotiated unit (Python computes each encoding's offset for the `x`
+that sits after the `é`-bearing comment):
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///u.wax"; td={"uri":uri}
+  > src="fn f(x: i32) -> i32 { /* é */ x + 0; }\n"
+  > b=src.index("x + 0"); pre=src[:b]
+  > off={"utf-16": len(pre.encode("utf-16-le"))//2, "utf-8": len(pre.encode("utf-8"))}
+  > def hover(enc):
+  >     caps={"general":{"positionEncodings":[enc,"utf-16"]}}
+  >     S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":caps}},
+  >        {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >        {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wax","version":1,"text":src}}},
+  >        {"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":td,"position":{"line":0,"character":off[enc]}}},
+  >        {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  >     p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  >     o,i,by=p.stdout,0,{}
+  >     while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >         n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >         r=json.loads(o[s:s+n]); i=s+n
+  >         if "id" in r: by[r["id"]]=r["result"]
+  >     rg=by[2]["range"]
+  >     return by[1]["capabilities"]["positionEncoding"], off[enc], rg["start"]["character"], rg["end"]["character"]
+  > for enc in ("utf-16","utf-8"):
+  >     e,c,s,t=hover(enc)
+  >     print("offered %-6s -> negotiated=%s hover char=%d range=(%d,%d)" % (enc,e,c,s,t))
+  > PY
+  offered utf-16 -> negotiated=utf-16 hover char=30 range=(30,31)
+  offered utf-8  -> negotiated=utf-8 hover char=31 range=(31,32)

@@ -376,22 +376,34 @@ let render_result_types
   | [ t ] -> Some (cell_to_string t)
   | l -> Some ("(" ^ String.concat ", " (List.map cell_to_string l) ^ ")")
 
-(* Map an incoming VS Code position to a byte column for comparison with Lexing
-   columns: the byte column on zero-based [line] that its UTF-16 [char] denotes.
-   The inverse of [utf16_position]'s column conversion. *)
-let byte_column src line char =
-  let len = String.length src in
-  let rec line_start i n =
-    if n <= 0 || i >= len then i
-    else line_start (i + 1) (if src.[i] = '\n' then n - 1 else n)
-  in
-  let start = line_start 0 line in
-  let stop =
-    match String.index_from_opt src start '\n' with Some j -> j | None -> len
-  in
-  Wax_utils.Unicode.utf16_offset_to_byte
-    (String.sub src start (stop - start))
-    char
+(* Which unit an editor counts a line's [character] offset in. UTF-16 is the LSP
+   default (and what VS Code uses); UTF-8 counts code units, i.e. bytes, which is
+   the internal unit here, so its conversions are the identity. *)
+type position_encoding = UTF8 | UTF16
+
+(* Map an incoming editor position to a byte column for comparison with Lexing
+   columns: the byte column on zero-based [line] that its [char] denotes. Under
+   [UTF16] (the default) [char] counts UTF-16 code units, so convert against the
+   line prefix; under [UTF8] it already is the byte column. The inverse of
+   [position]'s column conversion. *)
+let byte_column ?(encoding = UTF16) src line char =
+  match encoding with
+  | UTF8 -> char
+  | UTF16 ->
+      let len = String.length src in
+      let rec line_start i n =
+        if n <= 0 || i >= len then i
+        else line_start (i + 1) (if src.[i] = '\n' then n - 1 else n)
+      in
+      let start = line_start 0 line in
+      let stop =
+        match String.index_from_opt src start '\n' with
+        | Some j -> j
+        | None -> len
+      in
+      Wax_utils.Unicode.utf16_offset_to_byte
+        (String.sub src start (stop - start))
+        char
 
 let slice src (loc : Wax_utils.Ast.location) =
   String.sub src loc.loc_start.pos_cnum
@@ -413,11 +425,11 @@ let render_hover_target ~name = function
       Format.pp_print_flush fmt ();
       String.trim (Buffer.contents buf)
 
-let hover_string src line ch =
+let hover_string ?(encoding = UTF16) src line ch =
   let a = analyze src in
   (* Lexing lines are one-based and its columns are byte offsets; [ch] is a
      zero-based UTF-16 column, so convert it against the buffer. *)
-  let target = (line + 1, byte_column src line ch) in
+  let target = (line + 1, byte_column ~encoding src line ch) in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
@@ -528,8 +540,8 @@ let inlays_string src =
    definition spans) while type-checking; find the innermost use span covering
    the position and return its definitions — usually one, several only for a name
    defined in multiple conditional-compilation branches. *)
-let definition_string src line ch =
-  let target = (line + 1, byte_column src line ch) in
+let definition_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
@@ -557,13 +569,13 @@ let definition_string src line ch =
    a primitive or built-in abstract type), and resolves each name to the [type]
    declaration of that name (there may be several under conditional compilation).
    Nothing for a primitive, anonymous, or unknown type. *)
-let type_definition_string src line ch =
+let type_definition_string ?(encoding = UTF16) src line ch =
   let a = analyze src in
   match a.a_typed with
   | None -> []
   | Some typed -> (
       let open Wax_lang.Ast in
-      let target = (line + 1, byte_column src line ch) in
+      let target = (line + 1, byte_column ~encoding src line ch) in
       let pos (p : Lexing.position) =
         (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
       in
@@ -628,9 +640,9 @@ let same_span (a : Wax_utils.Ast.location) (b : Wax_utils.Ast.location) =
   a.loc_start.Lexing.pos_cnum = b.loc_start.pos_cnum
   && a.loc_end.pos_cnum = b.loc_end.pos_cnum
 
-let references_string src line ch =
+let references_string ?(encoding = UTF16) src line ch =
   let refs = (analyze src).a_defs in
-  let target = (line + 1, byte_column src line ch) in
+  let target = (line + 1, byte_column ~encoding src line ch) in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
@@ -674,8 +686,9 @@ let references_string src line ch =
    renaming the variable does not silently rename the field. Returns
    [(span, replacement)] edits, empty when the cursor is not on a renameable
    symbol — the provider then declines. *)
-let occurrence_at src line ch (loc : Wax_utils.Ast.location) =
-  let target = (line + 1, byte_column src line ch) in
+let occurrence_at ?(encoding = UTF16) src line ch (loc : Wax_utils.Ast.location)
+    =
+  let target = (line + 1, byte_column ~encoding src line ch) in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
@@ -684,10 +697,12 @@ let occurrence_at src line ch (loc : Wax_utils.Ast.location) =
 
 (* The span of the token to rename (for the editor's prepare step), or [None]
    when the cursor is not on a renameable symbol. *)
-let rename_prepare_string src line ch =
-  List.find_opt (occurrence_at src line ch) (references_string src line ch)
+let rename_prepare_string ?(encoding = UTF16) src line ch =
+  List.find_opt
+    (occurrence_at ~encoding src line ch)
+    (references_string ~encoding src line ch)
 
-let rename_string src line ch newname =
+let rename_string ?(encoding = UTF16) src line ch newname =
   let puns = (analyze src).a_puns in
   List.map
     (fun (loc : Wax_utils.Ast.location) ->
@@ -696,7 +711,7 @@ let rename_string src line ch newname =
         else newname
       in
       (loc, replacement))
-    (references_string src line ch)
+    (references_string ~encoding src line ch)
 
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
@@ -790,15 +805,23 @@ let to_wax_string src =
 
 (* Map a Lexing position to a zero-based (line, UTF-16 character) editor
    position — the shape LSP and VS Code use. Lexing lines are one-based and its
-   [pos_cnum - pos_bol] is a byte column, whereas the character is a count of
-   UTF-16 code units; the two differ once a line contains a non-ASCII character
-   (Wax allows them in identifiers and comments), so convert the line prefix up
-   to the position. [src] is the buffer being indexed. The inverse of
-   [byte_column]. *)
-let utf16_position src (p : Lexing.position) =
+   [pos_cnum - pos_bol] is a byte column, which is the [UTF8] character offset
+   directly; for [UTF16] the character counts UTF-16 code units, which differ
+   from bytes once a line contains a non-ASCII character (Wax allows them in
+   identifiers and comments), so convert the line prefix. [src] is the buffer
+   being indexed. The inverse of [byte_column]. *)
+let position ~encoding src (p : Lexing.position) =
   let bol = p.Lexing.pos_bol and cnum = p.Lexing.pos_cnum in
-  ( p.Lexing.pos_lnum - 1,
-    Wax_utils.Unicode.utf16_length (String.sub src bol (cnum - bol)) )
+  let prefix = String.sub src bol (cnum - bol) in
+  let column =
+    match encoding with
+    | UTF8 -> cnum - bol
+    | UTF16 -> Wax_utils.Unicode.utf16_length prefix
+  in
+  (p.Lexing.pos_lnum - 1, column)
+
+(* The UTF-16 specialization, for the VS Code wrapper (which is always UTF-16). *)
+let utf16_position src p = position ~encoding:UTF16 src p
 
 (* Document outline: the module's top-level definitions (functions, globals,
    types, memories, tags, tables, elems, data, imports) with their spans, for the
@@ -1177,8 +1200,8 @@ let line_start_offset src line =
    identifier prefix (possibly empty) whose preceding non-identifier character is
    a [.]. A cheap text test, so ordinary name completion never runs the typed
    pass member completion needs. *)
-let is_member_position src line ch =
-  let off = line_start_offset src line + byte_column src line ch in
+let is_member_position ?(encoding = UTF16) src line ch =
+  let off = line_start_offset src line + byte_column ~encoding src line ch in
   let i = ref (off - 1) in
   while !i >= 0 && is_ident_char src.[!i] do
     decr i
@@ -1187,8 +1210,8 @@ let is_member_position src line ch =
 
 (* The receiver of the member access whose (possibly partial) field span covers
    the cursor in [members], if any. *)
-let member_receiver_at src line ch members =
-  let target = (line + 1, byte_column src line ch) in
+let member_receiver_at ?(encoding = UTF16) src line ch members =
+  let target = (line + 1, byte_column ~encoding src line ch) in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
@@ -1216,8 +1239,8 @@ let member_completion (c : Wax_lang.Typing.member_candidate) =
    [::] immediately precedes the prefix — the namespace name [ns]. A text test,
    like {!is_member_position}: the [::] operator only introduces a namespace
    path, so name completion never belongs here. *)
-let namespace_position src line ch =
-  let off = line_start_offset src line + byte_column src line ch in
+let namespace_position ?(encoding = UTF16) src line ch =
+  let off = line_start_offset src line + byte_column ~encoding src line ch in
   let i = ref (off - 1) in
   while !i >= 0 && is_ident_char src.[!i] do
     decr i
@@ -1232,16 +1255,18 @@ let namespace_position src line ch =
     if !j < stop then Some (String.sub src (!j + 1) (stop - !j)) else None)
   else None
 
-let completion_string src line ch defines =
-  if is_member_position src line ch then
-    match member_receiver_at src line ch (analyze src).a_members with
+let completion_string ?(encoding = UTF16) src line ch defines =
+  if is_member_position ~encoding src line ch then
+    match member_receiver_at ~encoding src line ch (analyze src).a_members with
     | Some r -> List.map member_completion (Wax_lang.Typing.member_candidates r)
     | None -> (
         (* A bare [.]: the parser drops the field-less access, so nothing is
            recorded. Splice a sentinel field in so [recv.<sentinel>] parses and
            types, then read the receiver's fields at the sentinel (analyzed
            uncached, so the transient buffer does not evict the real one). *)
-        let off = line_start_offset src line + byte_column src line ch in
+        let off =
+          line_start_offset src line + byte_column ~encoding src line ch
+        in
         let sentinel = "waxCompletionProbe" in
         let repaired =
           String.sub src 0 off ^ sentinel
@@ -1255,13 +1280,13 @@ let completion_string src line ch defines =
             List.map member_completion (Wax_lang.Typing.member_candidates r)
         | None -> [])
   else
-    match namespace_position src line ch with
+    match namespace_position ~encoding src line ch with
     | Some ns ->
         (* After [ns::]: the intrinsic namespace's free functions, known
            textually (the namespaces are keywords), so this needs no parse. *)
         List.map member_completion (Wax_lang.Typing.namespace_members ns)
     | None -> (
-        let target = (line + 1, byte_column src line ch) in
+        let target = (line + 1, byte_column ~encoding src line ch) in
         let ast_opt, _syntax_errors, _ctx =
           Wax_parser.parse_recover ~filename:"<buffer>"
             ~sync:Wax_lang.Recover.sync ~insert:Wax_lang.Recover.insert
@@ -1534,11 +1559,13 @@ let param_ranges label =
    name. [None] when the cursor is in no call, or the callee has no known
    signature. Needs the call to parse and type — a balanced (auto-closed) one
    does. *)
-let signature_help_string src line ch =
+let signature_help_string ?(encoding = UTF16) src line ch =
   match (analyze src).a_typed with
   | None -> None
   | Some ast -> (
-      let cursor = line_start_offset src line + byte_column src line ch in
+      let cursor =
+        line_start_offset src line + byte_column ~encoding src line ch
+      in
       let loc_of (i : _ Wax_lang.Ast.instr) : Wax_utils.Ast.location =
         snd i.info
       in
@@ -1592,10 +1619,10 @@ type sem_token = {
 }
 
 (* Map each byte offset in [offsets] (sorted ascending) to its (0-based line,
-   0-based UTF-16 column) in [src], in a single left-to-right pass — so the
-   whole token list is converted in O(src + offsets) rather than re-scanning a
-   line prefix per token (quadratic on a long line). *)
-let utf16_positions src offsets =
+   0-based column, in [encoding] units) in [src], in a single left-to-right pass
+   — so the whole token list is converted in O(src + offsets) rather than
+   re-scanning a line prefix per token (quadratic on a long line). *)
+let positions ~encoding src offsets =
   let tbl = Hashtbl.create (List.length offsets * 2) in
   let remaining = ref offsets in
   let flush byte line col =
@@ -1613,11 +1640,18 @@ let utf16_positions src offsets =
     flush !byte !line !col;
     let d = String.get_utf_8_uchar src !byte in
     let u = Uchar.utf_decode_uchar d in
-    if Uchar.to_int u = Char.code '\n' then (
-      incr line;
-      col := 0)
-    else col := !col + if Uchar.to_int u > 0xFFFF then 2 else 1;
-    byte := !byte + max 1 (Uchar.utf_decode_length d)
+    let width = Uchar.utf_decode_length d in
+    (if Uchar.to_int u = Char.code '\n' then (
+       incr line;
+       col := 0)
+     else
+       col :=
+         !col
+         +
+         match encoding with
+         | UTF8 -> width
+         | UTF16 -> if Uchar.to_int u > 0xFFFF then 2 else 1);
+    byte := !byte + max 1 width
   done;
   flush !byte !line !col;
   tbl
@@ -1632,8 +1666,8 @@ let utf16_positions src offsets =
    already form a chain, and deduping by byte span then ordering by width yields
    it innermost-first. The whole buffer is always the outermost step (select
    all). *)
-let selection_range_string src line ch =
-  let target = (line + 1, byte_column src line ch) in
+let selection_range_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
@@ -1664,7 +1698,7 @@ let selection_range_string src line ch =
       let offsets =
         List.concat_map (fun (s, e) -> [ s; e ]) pairs |> List.sort_uniq compare
       in
-      let posn = utf16_positions src offsets in
+      let posn = positions ~encoding src offsets in
       List.filter_map
         (fun (s, e) ->
           match (Hashtbl.find_opt posn s, Hashtbl.find_opt posn e) with
@@ -1798,7 +1832,7 @@ let folding_string src =
    *definitions* (function / type / variable / parameter names) come from that
    same walk, and struct fields ([property]) and intrinsic namespace paths from a
    pass over the instructions. *)
-let semantic_tokens_string src =
+let semantic_tokens_string ?(encoding = UTF16) src =
   let a = analyze src in
   match a.a_typed with
   | None -> []
@@ -1883,7 +1917,7 @@ let semantic_tokens_string src =
           | [] -> ())
         a.a_defs;
       (* Resolve all byte offsets to UTF-16 positions in one pass (see
-         [utf16_positions]), then one token per span, sorted; synthesized
+         [positions]), then one token per span, sorted; synthesized
          (negative) spans are dropped. *)
       let toks =
         List.filter
@@ -1898,7 +1932,7 @@ let semantic_tokens_string src =
           toks
         |> List.sort_uniq compare
       in
-      let pos = utf16_positions src offsets in
+      let pos = positions ~encoding src offsets in
       let seen = Hashtbl.create 256 in
       toks
       |> List.filter_map (fun ((loc : Wax_utils.Ast.location), kind) ->
@@ -1929,7 +1963,7 @@ let semantic_tokens_string src =
    live neighbour's brace is never dimmed; nested dead branches inside it are
    redundant but harmless. Ranges as (startLine, startChar, endLine, endChar),
    0-based, UTF-16; empty when no define is set. *)
-let inactive_ranges_string src defines =
+let inactive_ranges_string ?(encoding = UTF16) src defines =
   let bindings =
     Wax_wasm.Cond_specialize.of_list
       (List.filter_map
@@ -1986,7 +2020,7 @@ let inactive_ranges_string src defines =
             dead
           |> List.sort_uniq compare
         in
-        let pos = utf16_positions src offsets in
+        let pos = positions ~encoding src offsets in
         List.filter_map
           (fun (l : Wax_utils.Ast.location) ->
             match

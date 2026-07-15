@@ -8,11 +8,11 @@
    The loop is synchronous — one request at a time, no concurrency — which suits
    a single editor session and the synchronous analysis. Document sync is [Full]:
    each change carries the whole buffer, which is exactly what [Wax_editor]'s
-   source-keyed analysis expects. Positions are negotiated as UTF-16 (the LSP
-   default and mandatory baseline), matching the (line, UTF-16 character)
-   coordinates the [Wax_editor] functions accept; picking UTF-8 when a client
-   offers it is a possible later refinement, but would need the analysis to take
-   byte columns. *)
+   source-keyed analysis expects. The position encoding is negotiated at
+   [initialize]: UTF-8 when the client offers it (bytes are [Wax_editor]'s
+   internal unit, so the conversion is the identity), otherwise UTF-16 (the LSP
+   default and mandatory baseline); the chosen encoding is threaded to every
+   [Wax_editor] call. *)
 
 open Lsp.Types
 
@@ -68,16 +68,28 @@ let remove_doc uri = Hashtbl.remove documents (doc_key uri)
 (* Wasm text is served by the [*_wat_string] analysis; everything else is Wax. *)
 let is_wat uri = Filename.check_suffix (Lsp.Uri.to_string uri) ".wat"
 
+(* The position encoding negotiated at [initialize]: the unit the client counts
+   line offsets in. UTF-16 is the mandatory default; UTF-8 is used only when the
+   client offers it. Set once, before any request is served, so [Wax_editor]'s
+   coordinate conversions match what the client sends and expects. *)
+let encoding = ref Wax_editor.UTF16
+
+let lsp_encoding = function
+  | Wax_editor.UTF8 -> PositionEncodingKind.UTF8
+  | Wax_editor.UTF16 -> PositionEncodingKind.UTF16
+
 (* --- coordinate mapping between LSP and Wax_editor --- *)
 
 let position line character = Position.create ~line ~character
 
 let range_of_location src (loc : Wax_utils.Ast.location) =
-  let sl, sc = Wax_editor.utf16_position src loc.loc_start in
-  let el, ec = Wax_editor.utf16_position src loc.loc_end in
+  let sl, sc = Wax_editor.position ~encoding:!encoding src loc.loc_start in
+  let el, ec = Wax_editor.position ~encoding:!encoding src loc.loc_end in
   Range.create ~start:(position sl sc) ~end_:(position el ec)
 
-(* The span of the whole buffer, for a full-document formatting edit. *)
+(* The span of the whole buffer, for a full-document formatting edit. The end
+   column is measured in the negotiated encoding: bytes under UTF-8, UTF-16 code
+   units under UTF-16. *)
 let full_range text =
   let rec last_line i line start =
     if i >= String.length text then (line, start)
@@ -85,9 +97,11 @@ let full_range text =
     else last_line (i + 1) line start
   in
   let line, start = last_line 0 0 0 in
+  let last = String.sub text start (String.length text - start) in
   let width =
-    Wax_utils.Unicode.utf16_length
-      (String.sub text start (String.length text - start))
+    match !encoding with
+    | Wax_editor.UTF8 -> String.length last
+    | Wax_editor.UTF16 -> Wax_utils.Unicode.utf16_length last
   in
   Range.create ~start:(position 0 0) ~end_:(position line width)
 
@@ -216,8 +230,8 @@ let semantic_data toks =
   in
   Array.of_list (go 0 0 toks)
 
-let server_capabilities =
-  ServerCapabilities.create ~positionEncoding:PositionEncodingKind.UTF16
+let server_capabilities () =
+  ServerCapabilities.create ~positionEncoding:(lsp_encoding !encoding)
     ~textDocumentSync:
       (`TextDocumentSyncOptions
          (TextDocumentSyncOptions.create ~openClose:true
@@ -249,8 +263,15 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
     match get_doc uri with None -> None | Some src -> f src
   in
   match r with
-  | Lsp.Client_request.Initialize _ ->
-      InitializeResult.create ~capabilities:server_capabilities
+  | Lsp.Client_request.Initialize params ->
+      (* Pick UTF-8 when the client offers it, otherwise keep the UTF-16
+         default (which every client supports); advertise the choice back. *)
+      (match params.capabilities.general with
+      | Some { positionEncodings = Some encs; _ }
+        when List.mem PositionEncodingKind.UTF8 encs ->
+          encoding := Wax_editor.UTF8
+      | _ -> ());
+      InitializeResult.create ~capabilities:(server_capabilities ())
         ~serverInfo:(InitializeResult.create_serverInfo ~name:"wax-lsp" ())
         ()
   | Lsp.Client_request.Shutdown -> ()
@@ -260,7 +281,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       else
         with_doc uri (fun src ->
             match
-              Wax_editor.hover_string src position.line position.character
+              Wax_editor.hover_string ~encoding:!encoding src position.line
+                position.character
             with
             | None -> None
             | Some h ->
@@ -272,7 +294,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           match
-            Wax_editor.definition_string src position.line position.character
+            Wax_editor.definition_string ~encoding:!encoding src position.line
+              position.character
           with
           | [] -> None
           | locs ->
@@ -287,8 +310,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       let uri = textDocument.uri in
       with_doc uri (fun src ->
           match
-            Wax_editor.type_definition_string src position.line
-              position.character
+            Wax_editor.type_definition_string ~encoding:!encoding src
+              position.line position.character
           with
           | [] -> None
           | locs ->
@@ -305,22 +328,22 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
             (List.map
                (fun loc ->
                  Location.create ~uri ~range:(range_of_location src loc))
-               (Wax_editor.references_string src position.line
-                  position.character)))
+               (Wax_editor.references_string ~encoding:!encoding src
+                  position.line position.character)))
   | Lsp.Client_request.TextDocumentHighlight { textDocument; position; _ } ->
       with_doc textDocument.uri (fun src ->
           Some
             (List.map
                (fun loc ->
                  DocumentHighlight.create ~range:(range_of_location src loc) ())
-               (Wax_editor.references_string src position.line
-                  position.character)))
+               (Wax_editor.references_string ~encoding:!encoding src
+                  position.line position.character)))
   | Lsp.Client_request.TextDocumentPrepareRename { textDocument; position; _ }
     ->
       with_doc textDocument.uri (fun src ->
           Option.map (range_of_location src)
-            (Wax_editor.rename_prepare_string src position.line
-               position.character))
+            (Wax_editor.rename_prepare_string ~encoding:!encoding src
+               position.line position.character))
   | Lsp.Client_request.TextDocumentRename { textDocument; position; newName; _ }
     ->
       let uri = textDocument.uri in
@@ -331,8 +354,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
             List.map
               (fun (loc, newText) ->
                 TextEdit.create ~range:(range_of_location src loc) ~newText)
-              (Wax_editor.rename_string src position.line position.character
-                 newName)
+              (Wax_editor.rename_string ~encoding:!encoding src position.line
+                 position.character newName)
       in
       WorkspaceEdit.create ~changes:[ (uri, edits) ] ()
   | Lsp.Client_request.DocumentSymbol { textDocument; _ } ->
@@ -349,8 +372,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       else
         with_doc uri (fun src ->
             let items =
-              Wax_editor.completion_string src position.line position.character
-                []
+              Wax_editor.completion_string ~encoding:!encoding src position.line
+                position.character []
             in
             Some (`List (List.map completion_item items)))
   | Lsp.Client_request.SignatureHelp { textDocument; position; _ } -> (
@@ -359,8 +382,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       | None -> empty
       | Some src -> (
           match
-            Wax_editor.signature_help_string src position.line
-              position.character
+            Wax_editor.signature_help_string ~encoding:!encoding src
+              position.line position.character
           with
           | None -> empty
           | Some (label, ranges, active) ->
@@ -385,7 +408,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
               (List.map
                  (fun (h : Wax_editor.inlay) ->
                    let line, character =
-                     Wax_editor.utf16_position src h.n_pos
+                     Wax_editor.position ~encoding:!encoding src h.n_pos
                    in
                    InlayHint.create ~position:(position line character)
                      ~label:(`String h.n_label) ~kind:InlayHintKind.Type ())
@@ -414,7 +437,8 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
           List.map
             (fun (p : Position.t) ->
               let chain =
-                Wax_editor.selection_range_string src p.line p.character
+                Wax_editor.selection_range_string ~encoding:!encoding src p.line
+                  p.character
               in
               match selection_range chain with
               | Some sr -> sr
@@ -429,7 +453,9 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
         with_doc textDocument.uri (fun src ->
             Some
               (SemanticTokens.create
-                 ~data:(semantic_data (Wax_editor.semantic_tokens_string src))
+                 ~data:
+                   (semantic_data
+                      (Wax_editor.semantic_tokens_string ~encoding:!encoding src))
                  ()))
   | Lsp.Client_request.TextDocumentFormatting { textDocument; _ } -> (
       let uri = textDocument.uri in
