@@ -16,8 +16,9 @@
      to a conditional-compilation configuration.
    - [hover src line ch] -> { type; startLine; startChar; endLine; endChar } or
      null: the type at the (zero-based) position. Wax only.
-   - [inlays src] -> array of { line; char; label }: the inferred type on each
-     un-annotated [let] binding. Wax only.
+   - [inlays src] / [inlaysWat src] -> array of { line; char; label }: for Wax,
+     the inferred type on each un-annotated [let] binding; for WAT, the resolved
+     name after each numeric index.
    - [definition src line ch] / [typeDefinition src line ch] -> array of
      { startLine; startChar; endLine; endChar }: the definition span(s) for the
      name at the position (or, for [typeDefinition], its type's declaration).
@@ -158,9 +159,9 @@ let hover_result hover src line ch =
   | None -> Js.null
   | Some h -> Js.some (js_hover s h)
 
-let inlays_result src =
+let inlays_result inlays src =
   let s = Js.to_string src in
-  let hints = try inlays_string s with _ -> [] in
+  let hints = try inlays s with _ -> [] in
   Js.array (Array.of_list (List.map (js_inlay s) hints))
 
 (* Each definition as a plain range object; empty array when nothing resolves. *)
@@ -366,7 +367,7 @@ let () =
       method format src = format_result format_string src
       method check src defines = check_result_defines src defines
       method hover src line ch = hover_result hover_string src line ch
-      method inlays src = inlays_result src
+      method inlays src = inlays_result inlays_string src
 
       method definition src line ch =
         definition_result definition_string src line ch
@@ -432,4 +433,6 @@ let () =
 
       method completionWat src line ch defines =
         completion_result Wat_editor.completion_string src line ch defines
+
+      method inlaysWat src = inlays_result Wat_editor.inlays_string src
     end

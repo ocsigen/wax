@@ -12,8 +12,9 @@
    (hover, inlay hints, go-to-definition, references, rename, completion,
    signature help, semantic tokens, selection and folding ranges, inactive
    ranges); the Wasm-text side ({!Wat_editor}) reaches the same set through
-   validation and name resolution instead, with only inlay hints (and the
-   inactive-range shading) still Wax only. *)
+   validation and name resolution instead (its inlay hints show the name behind a
+   numeric index rather than an inferred type), with only the inactive-range
+   shading still Wax only. *)
 
 open Editor_common
 

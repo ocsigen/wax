@@ -478,4 +478,35 @@ let () =
      whether the slot is touching the token or a space away. *)
   diags "bare $ (one error, not two)" "(module (func $f (local.get $)))\n";
   diags "bare $ then space (one error)" "(module (func $f (local.get $ )))\n";
+  print_newline ();
+
+  (* Inlay hints: after a numeric index that resolves to a named definition, its
+     name. A symbolic use shows nothing (the name is there); an anonymous target
+     shows nothing (no name). Positions are (line, column) of the hint anchor. *)
+  let inlays label src =
+    Printf.printf "  %s ->" label;
+    (match Wat_editor.inlays_string src with
+    | [] -> Printf.printf " (none)"
+    | hs ->
+        List.iter
+          (fun (n : Editor_common.inlay) ->
+            Printf.printf " (%d,%d)%s" n.n_pos.pos_lnum
+              (n.n_pos.pos_cnum - n.n_pos.pos_bol)
+              n.n_label)
+          hs);
+    print_newline ()
+  in
+  Printf.printf "=== inlay hints (numeric index -> name) ===\n";
+  inlays "local / global / label by number"
+    "(module\n\
+    \  (global $g i32 (i32.const 0))\n\
+    \  (func $f (param $x i32)\n\
+    \    (block $done (br 0))\n\
+    \    (global.set 0 (local.get 0))))\n";
+  inlays "numeric call to a named func"
+    "(module (func $helper) (func (call 0)))\n";
+  inlays "symbolic uses (no hints)"
+    "(module (func $f (param $x i32) (local.get $x)))\n";
+  inlays "numeric use of an anonymous func (no name)"
+    "(module (func) (func (call 0)))\n";
   print_newline ()

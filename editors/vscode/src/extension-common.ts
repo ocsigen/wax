@@ -48,7 +48,8 @@ interface LanguageSpec {
   // Type of the expression at a position, for hover. Only Wax has a typed tree;
   // omitted for WAT (its validator builds none), so no hover is registered there.
   hover?(wax: Wax, src: string, line: number, character: number): WaxHover | null;
-  // Inferred-type inlay hints. Wax only, for the same reason.
+  // Inlay hints: Wax shows an inferred type per un-annotated `let`, WAT the
+  // resolved name after each numeric index.
   inlays?(wax: Wax, src: string): WaxInlay[];
   // Definition span(s) at a position, for go-to-definition. Wax only.
   definition?(wax: Wax, src: string, line: number, character: number): WaxRange[];
@@ -160,6 +161,7 @@ const LANGUAGES: LanguageSpec[] = [
       wax.signatureHelpWat(src, line, character),
     completion: (wax, src, line, character, defines) =>
       wax.completionWat(src, line, character, defines),
+    inlays: (wax, src) => wax.inlaysWat(src),
   },
 ];
 

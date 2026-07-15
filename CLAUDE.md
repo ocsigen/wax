@@ -138,8 +138,12 @@ spaces and the enclosing instruction fixes which space, so `Resolve.f`'s
 `?expected` sink records at every index use-site — including the zero-width `0`
 the recovering parse inserts for a missing operand — a thunk of the in-scope
 names of that space; completion finds the use-site at the cursor and offers those
-names with their leading `$`, letting the client filter by the typed prefix).
-Still Wax-only for `.wat` (guarded to return empty): inlay-hint. `--stdio` is
+names with their leading `$`, letting the client filter by the typed prefix);
+and inlay-hint (WAT is explicitly typed, so what is implicit is the name behind a
+numeric index, not a type: after each numeric index that resolves to a named
+definition, `Wat_editor.inlays_string` shows that name — from `Resolve`'s uses —
+so `(local.get 0)` reads as `(local.get 0 $x)`; a symbolic use or an anonymous
+target shows nothing). `--stdio` is
 accepted and ignored. The
 `wax` binary builds in both `exe` and `wasm` modes, and `lsp`/`jsonrpc` compile
 under wasm_of_ocaml, so the npm wasm CLI still builds with the subcommand linked
