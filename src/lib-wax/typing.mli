@@ -76,6 +76,15 @@ val simd_v128_methods : unit -> member_candidate list
     registry ({!Wax_wasm.Simd.method_names}), which is also what the typer
     dispatches through, so the list cannot drift from what type-checks. *)
 
+val numeric_receiver_candidates :
+  Infer.inferred_type -> member_candidate list option
+(** The value-method candidates member completion offers for a numeric receiver
+    of the given inferred type — a concrete numeric valtype ([i32] … [v128]) or
+    a still-flexible literal ([number]/[int]/[large number]/[float], which take
+    their integer and/or float methods by family). [None] when the type has no
+    value methods (a packed [i8]/[i16], which must be cast first, or a
+    non-numeric type). *)
+
 val namespace_members : string -> member_candidate list
 (** The free functions completion offers after an intrinsic namespace path
     [ns::]: [v128::] (SIMD const constructors and [bitselect]), [i64::]

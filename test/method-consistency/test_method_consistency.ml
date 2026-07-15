@@ -175,6 +175,64 @@ let () =
         | None -> None)
     | _ -> None
   in
+  (* A numeric receiver can still be a flexible literal type (an unnarrowed
+     literal expression, e.g. [(3)] or [(3 | 0)]) rather than a concrete valtype.
+     For each, type-check every offered method on a receiver of that type: the
+     counts show the family mapping ([number]/[large number] take both families,
+     [int] integer only, [float] float only), and "all type-check" confirms none
+     is offered that the typer would reject. *)
+  let binary = [ "rotl"; "rotr"; "min"; "max"; "copysign" ] in
+  Printf.printf "\nflexible receivers:\n";
+  List.iter
+    (fun (label, recv_expr, arg, ty) ->
+      match Typing.numeric_receiver_candidates ty with
+      | None -> Printf.printf "  %-14s (none)\n" label
+      | Some cands ->
+          let fails =
+            List.filter_map
+              (fun (c : Typing.member_candidate) ->
+                let a = if List.mem c.member_name binary then arg else "" in
+                if
+                  error_count
+                    (Printf.sprintf "fn t() { _ = (%s).%s(%s); }\n" recv_expr
+                       c.member_name a)
+                  = 0
+                then None
+                else Some c.member_name)
+              cands
+          in
+          (* A [Same] method (head) and a [Reinterpret] one show the receiver
+             renders by family (e.g. [-> int], not [-> i32]) and the flip. *)
+          let sig_of name =
+            match
+              List.find_opt
+                (fun (c : Typing.member_candidate) -> c.member_name = name)
+                cands
+            with
+            | Some c -> Printf.sprintf "%s: %s" name c.member_detail
+            | None -> ""
+          in
+          let samples =
+            List.filter
+              (fun s -> s <> "")
+              [
+                sig_of (List.hd cands).member_name;
+                sig_of "from_bits";
+                sig_of "to_bits";
+              ]
+          in
+          Printf.printf "  %-14s %2d offered, %s  [%s]\n" (label ^ ":")
+            (List.length cands)
+            (match fails with
+            | [] -> "all type-check"
+            | fs -> "FAIL: " ^ String.concat " " fs)
+            (String.concat ", " samples))
+    [
+      ("number", "3", "2", Infer.Number);
+      ("int", "3 | 0", "2", Infer.Int);
+      ("large number", "5000000000", "2", Infer.LargeInt);
+      ("float", "3.0", "2.0", Infer.Float);
+    ];
   Printf.printf "\nnamespace members:\n";
   List.iter
     (fun ns ->

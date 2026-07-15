@@ -39,6 +39,10 @@
 - Completion after `::` offers an intrinsic namespace's free functions —
   `v128::` (const constructors, `bitselect`), `i64::` (wide arithmetic) and
   `atomic::` (`fence`) — each with its signature.
+- Value-method completion now also fires when the receiver is a flexible
+  numeric literal, not only a concrete type: `(3).` offers both integer and
+  float methods (the literal can still narrow either way), `(3.0).` the float
+  methods. Signatures render by family (`fn() -> int`) for such a receiver.
 
 ## 0.2.2
 

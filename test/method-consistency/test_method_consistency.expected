@@ -51,6 +51,12 @@ sample signatures:
   shuffle_i8x16          fn(16 lane indices, v128) -> v128
   splat_i32x4            (not offered)
 
+flexible receivers:
+  number:        18 offered, all type-check  [clz: fn() -> number, from_bits: fn() -> float, to_bits: fn() -> int]
+  int:            8 offered, all type-check  [clz: fn() -> int, from_bits: fn() -> float]
+  large number:  18 offered, all type-check  [clz: fn() -> large number, from_bits: fn() -> float, to_bits: fn() -> int]
+  float:         10 offered, all type-check  [abs: fn() -> float, to_bits: fn() -> int]
+
 namespace members:
   v128:: (7)
     bitselect    fn(v128, v128, v128) -> v128           ok

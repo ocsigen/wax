@@ -132,28 +132,25 @@ let numtype_name : Ast.valtype -> string = function
   | V128 -> "v128"
   | Ref _ -> "ref"
 
-(* The member-completion candidates for [methods] on numeric receiver [recv]:
-   each rendered with a real signature ([fn() -> i32], [fn(f32) -> f32]). *)
-let method_candidates recv methods =
-  let result m =
-    match m.vm_result with
-    | Same -> recv
-    | Reinterpret -> (
-        match recv with
-        | Ast.I32 -> Ast.F32
-        | I64 -> F64
-        | F32 -> I32
-        | F64 -> I64
-        | other -> other)
-  in
+(* The member-completion candidates for [methods] on a numeric receiver
+   rendered as [recv_name] (a concrete [i32] or a flexible-literal family like
+   [int]), with a real signature ([fn() -> i32], [fn(f32) -> f32]).
+   [reinterp_name] is the result type of a bit-reinterpreting method
+   ([from_bits]/[to_bits]) — the opposite family, which for a flexible receiver
+   is rendered by family name too. *)
+let method_candidates ~recv_name ~reinterp_name methods =
   List.map
     (fun m ->
-      let params = if m.vm_binary then numtype_name recv else "" in
+      let params = if m.vm_binary then recv_name else "" in
+      let result =
+        match m.vm_result with
+        | Same -> recv_name
+        | Reinterpret -> reinterp_name
+      in
       {
         member_name = m.vm_name;
         member_kind = Method;
-        member_detail =
-          Printf.sprintf "fn(%s) -> %s" params (numtype_name (result m));
+        member_detail = Printf.sprintf "fn(%s) -> %s" params result;
       })
     methods
 
@@ -3981,6 +3978,40 @@ let simd_method_candidate name =
 let simd_v128_methods () =
   List.map simd_method_candidate (Simd.method_names Simd.TV128)
 
+(* The value-method candidates member completion offers for a numeric receiver
+   of inferred type [t], or [None] if it has none. Beyond the concrete numeric
+   valtypes ([i32] … [f64], [v128]), a receiver can still be a flexible literal
+   type: an [int] takes its integer methods only, a [number] or [large number]
+   both families (either narrowing is still open), a [float] its float methods
+   only. A packed [i8]/[i16] read must be cast before any method, so gets none.
+   The [from_bits]/[to_bits] reinterpretation flips the family, rendered by
+   family name for a flexible receiver since the width is uncommitted. *)
+let numeric_receiver_candidates (t : inferred_type) :
+    member_candidate list option =
+  let ints ~recv_name ~reinterp =
+    method_candidates ~recv_name ~reinterp_name:reinterp integer_methods
+  in
+  let floats ~recv_name ~reinterp =
+    method_candidates ~recv_name ~reinterp_name:reinterp float_methods
+  in
+  match t with
+  | Valtype { typ = I32; _ } -> Some (ints ~recv_name:"i32" ~reinterp:"f32")
+  | Valtype { typ = I64; _ } -> Some (ints ~recv_name:"i64" ~reinterp:"f64")
+  | Valtype { typ = F32; _ } -> Some (floats ~recv_name:"f32" ~reinterp:"i32")
+  | Valtype { typ = F64; _ } -> Some (floats ~recv_name:"f64" ~reinterp:"i64")
+  | Valtype { typ = V128; _ } -> Some (simd_v128_methods ())
+  | Int -> Some (ints ~recv_name:"int" ~reinterp:"float")
+  | Number ->
+      Some
+        (ints ~recv_name:"number" ~reinterp:"float"
+        @ floats ~recv_name:"number" ~reinterp:"int")
+  | LargeInt ->
+      Some
+        (ints ~recv_name:"large number" ~reinterp:"float"
+        @ floats ~recv_name:"large number" ~reinterp:"int")
+  | Float -> Some (floats ~recv_name:"float" ~reinterp:"int")
+  | _ -> None
+
 (* Free-function members offered after [v128::] — [bitselect] and the per-shape
    const constructors — with signatures from the SIMD registry. *)
 let simd_free_members () =
@@ -5681,18 +5712,17 @@ and type_aggregate_access ctx i =
       let* i' = instruction ctx i' in
       let*! ty =
         let ty = expression_type ctx i' in
-        (* A numeric receiver's methods, for member completion; a reference
-           receiver's members are recorded in the struct/array arms below. *)
-        (match Cell.get ty with
-        | Valtype { typ = (I32 | I64) as recv; _ } ->
-            record_members ctx.member_completions field.info (fun () ->
-                method_candidates recv integer_methods)
-        | Valtype { typ = (F32 | F64) as recv; _ } ->
-            record_members ctx.member_completions field.info (fun () ->
-                method_candidates recv float_methods)
-        | Valtype { typ = V128; _ } ->
-            record_members ctx.member_completions field.info simd_v128_methods
-        | _ -> ());
+        (* A numeric receiver's value methods, for member completion (concrete or
+           still-flexible literal type); a reference receiver's members are
+           recorded in the struct/array arms below. Built only in the editor
+           (the sink is set), since a numeric [.field] is otherwise an error
+           path. *)
+        (if ctx.member_completions <> None then
+           match numeric_receiver_candidates (Cell.get ty) with
+           | Some candidates ->
+               record_members ctx.member_completions field.info (fun () ->
+                   candidates)
+           | None -> ());
         match (Cell.get ty, field.desc) with
         | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in

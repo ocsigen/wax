@@ -168,7 +168,14 @@ does not carry. Three distinct prerequisites:
   records a curated registry (`Typing.integer_methods` / `float_methods` —
   `clz`, `sqrt`, `min`, …) at the same field-access choke point, an array
   receiver records `length`, and a `v128` receiver records the SIMD vector ops
-  (`add_i32x4`, `extract_lane_s_i8x16`, `shuffle_i8x16`, …). The scalar registry
+  (`add_i32x4`, `extract_lane_s_i8x16`, `shuffle_i8x16`, …). The receiver is
+  matched by inferred type (`Typing.numeric_receiver_candidates`), so it covers
+  not only the concrete numeric valtypes but a still-flexible literal too: a
+  `number`/`large number` offers both integer and float methods (either
+  narrowing is still open), an `int` its integer methods only, a `float` its
+  float methods only, and a packed `i8`/`i16` none (it must be cast first).
+  A flexible receiver's signatures render by family (`fn() -> int`, not
+  `fn() -> i32`), matching how hover shows the type. The scalar registry
   is curated because that dispatch is match-based, not enumerable, so
   `test/method-consistency` type-checks each entry — arity and result type
   included — to keep it from drifting; the v128 set instead comes straight from
