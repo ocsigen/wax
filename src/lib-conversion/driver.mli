@@ -25,6 +25,17 @@ val wax_parse_recover :
     malformed byte) is recorded as a diagnostic and skipped, so parsing resumes
     past it rather than stopping. *)
 
+val wat_parse_recover :
+  filename:string ->
+  string ->
+  Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_ option
+  * Wax_wasm.Parsing.syntax_error list
+  * Wax_utils.Trivia.context
+(** As {!wax_parse_recover}, for WAT. WAT is fully parenthesized, so recovery
+    resynchronizes on the parentheses alone (see {!Wax_wasm.Recover}): the
+    nesting-aware skip and auto-closing with [")"] salvage the constructs that
+    parsed rather than dropping a whole field on the first error. *)
+
 val wat_to_binary :
   ?color:Wax_utils.Colors.flag ->
   ?defines:Wax_wasm.Cond_specialize.bindings ->

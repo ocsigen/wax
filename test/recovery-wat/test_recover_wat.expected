@@ -1,0 +1,14 @@
+=== missing const operand keeps both funcs ===
+errors: 1
+(func (i32.const 0))
+(func (nop))
+=== missing branch index ===
+errors: 1
+(func (br 0))
+=== junk instruction, later field survives ===
+errors: 2
+(func)
+(func (nop))
+=== unclosed func body at EOF ===
+errors: 1
+(func (i32.const 1))

@@ -259,7 +259,7 @@ struct
        to a state that [acceptable] confirms can shift it, [offer] it, and carry
        on. Every error is collected; the returned AST is whatever the parser
        reduces to, with holes where erroneous spans were skipped. *)
-    let parse_recover ~filename ~sync ?insert ?(closers = []) text =
+    let parse_recover ~filename ~sync ?(insert = []) ?(closers = []) text =
       let module MI = P.MenhirInterpreter in
       let lexbuf = initialize_lexing filename text in
       let errors = ref [] in
@@ -323,11 +323,11 @@ struct
       in
       (* A missing token, reported as a zero-width caret just before the
          offending token (where the inserted token belongs). *)
-      let record_missing label (pos : Lexing.position) =
+      let record_missing message (pos : Lexing.position) =
         errors :=
           {
             location = { Wax_utils.Ast.loc_start = pos; loc_end = pos };
-            message = Wax_utils.Message.(text "Missing" ++ code label);
+            message;
             related = [];
           }
           :: !errors
@@ -393,22 +393,27 @@ struct
          otherwise [None] falls through to skip-based recovery. Attempted at most
          once per source position ([last_insert]) so it cannot loop. *)
       let try_insert env last =
-        match (insert, last) with
-        | Some (tok, label), Some ((_, startp, _) as held)
-          when !last_insert <> startp.Lexing.pos_cnum
-               && MI.acceptable (MI.input_needed env) tok startp -> (
+        match last with
+        | Some ((_, startp, _) as held)
+          when insert <> [] && !last_insert <> startp.Lexing.pos_cnum ->
             last_insert := startp.Lexing.pos_cnum;
-            let after_insert =
-              settle (MI.offer (MI.input_needed env) (tok, startp, startp))
+            let cp = MI.input_needed env in
+            (* Try each candidate token in order; keep the first that both is
+               acceptable and, once the held token is offered on top, leaves the
+               parser wanting more input or accepting (the validation check). *)
+            let attempt (tok, message) =
+              if not (MI.acceptable cp tok startp) then None
+              else
+                match settle (MI.offer cp (tok, startp, startp)) with
+                | MI.InputNeeded _ as after_insert -> (
+                    match settle (MI.offer after_insert held) with
+                    | (MI.InputNeeded _ | MI.Accepted _) as after_held ->
+                        record_missing message startp;
+                        Some after_held
+                    | _ -> None)
+                | _ -> None
             in
-            match after_insert with
-            | MI.InputNeeded _ -> (
-                match settle (MI.offer after_insert held) with
-                | (MI.InputNeeded _ | MI.Accepted _) as after_held ->
-                    record_missing label startp;
-                    Some after_held
-                | _ -> None)
-            | _ -> None)
+            List.find_map attempt insert
         | _ -> None
       in
       (* When the offending token is itself a structural boundary — a closing
@@ -457,13 +462,23 @@ struct
                       (settle (MI.offer checkpoint (c, pos, pos)))
                       false (fuel - 1)
                 | None -> (
-                    match insert with
-                    | Some (sep, _)
-                      when (not prev_sep) && MI.acceptable checkpoint sep pos ->
-                        loop
-                          (settle (MI.offer checkpoint (sep, pos, pos)))
-                          true (fuel - 1)
-                    | _ -> None)
+                    if
+                      (* No closer fits: try an [insert] candidate (a statement
+                       separator, or a placeholder operand that lets a construct
+                       complete), but never two non-closers in a row. *)
+                      prev_sep
+                    then None
+                    else
+                      match
+                        List.find_opt
+                          (fun (tok, _) -> MI.acceptable checkpoint tok pos)
+                          insert
+                      with
+                      | Some (tok, _) ->
+                          loop
+                            (settle (MI.offer checkpoint (tok, pos, pos)))
+                            true (fuel - 1)
+                      | None -> None)
             in
             loop (MI.input_needed env) false 1000
         | _ -> None

@@ -39,12 +39,16 @@ let sync : Tokens.token -> Wax_wasm.Parsing.sync_class = function
   | Tokens.EOF -> Terminal
   | _ -> Skip
 
-(* The token recovery may insert in front of an offending token: a statement
-   separator [";"]. A dropped [;] between two statements is by far the most
-   common Wax syntax slip, and the parser state that follows a complete statement
-   can shift [SEMI], so [Parsing.parse_recover] inserts one there (reporting a
-   "Missing ';'") rather than skipping to the next boundary. *)
-let insert = (Tokens.SEMI, ";")
+(* Candidate tokens recovery may insert in front of an offending token, each
+   with the diagnostic to report. For Wax the only candidate is a statement
+   separator [";"]: a dropped [;] between two statements is by far the most
+   common slip, and the state after a complete statement can shift [SEMI], so
+   [Parsing.parse_recover] inserts one there (reporting "Missing ';'") rather
+   than skipping to the next boundary. *)
+let insert =
+  [
+    (Tokens.SEMI, Wax_utils.Message.(text "Missing" ++ (code ";" ^^ text ".")));
+  ]
 
 (* The closing brackets recovery may insert to auto-close a construct left open
    at end of input, so the function/block the user is still typing reduces into

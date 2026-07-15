@@ -108,7 +108,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:Tokens.token * string ->
+    ?insert:(Tokens.token * Wax_utils.Message.t) list ->
     ?closers:Tokens.token list ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
@@ -125,14 +125,17 @@ end) : sig
       as a language server that must report all errors and keep a partial AST
       across them.
 
-      [insert] names a token (with its display string, e.g. a statement
-      separator [(SEMI, ";")]) that recovery may {e insert} in front of an
-      offending token instead of skipping to a boundary, when the erroring state
-      can shift it — the common "missing [;]" case. The engine's [acceptable]
-      answers whether the token fits directly, so no error-message parsing is
-      needed. Insertion is attempted at most once per source position, so a
-      wrong guess cannot loop; it falls back to skip-based recovery. Omit for
-      grammars with no such separator (e.g. WAT), leaving recovery skip-only.
+      [insert] is a list of candidate tokens (each with the diagnostic to
+      report) that recovery may {e insert} in front of an offending token
+      instead of skipping to a boundary — a statement separator like [;], or a
+      placeholder operand like a zero [0] that lets an incomplete construct
+      complete. The candidates are tried in order; the engine's [acceptable]
+      answers whether one fits, and the repair is kept only if the offending
+      token then shifts too (validated, so a wrong guess is discarded).
+      Insertion is attempted at most once per source position, so it cannot
+      loop; it falls back to skip-based recovery. The candidates also serve
+      [close_pending] (e.g. completing an unclosed construct at EOF). Omit
+      ([[]]) to disable insertion.
 
       [closers] lists the closing-bracket tokens. At end of input inside an
       unclosed bracketed construct, recovery auto-closes: it inserts whichever
@@ -210,7 +213,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:Tokens.token * string ->
+    ?insert:(Tokens.token * Wax_utils.Message.t) list ->
     ?closers:Tokens.token list ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context

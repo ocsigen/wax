@@ -42,7 +42,7 @@ errors: 2
 === missing ';' is repaired by insertion ===
 AST: recovered (1 defs)
 errors: 1
-  3:4-3:4: Missing ';'
+  3:4-3:4: Missing ';'.
 
 === unhelpful insertion is rejected, not reported ===
 AST: recovered (1 defs)

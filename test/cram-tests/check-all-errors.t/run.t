@@ -40,7 +40,7 @@ shift a `;` (it can, right after a complete statement), so it reports a precise
 "Missing ';'" at that point and parses on with the rest intact:
 
   $ wax check --all-errors missing-semi.wax
-  Error: Missing ';'
+  Error: Missing ';'.
    ──➤  missing-semi.wax:3:5
   1 │ fn f() -> i32 {
   2 │     let x = 1
