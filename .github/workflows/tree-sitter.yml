@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Load the native binding
+        run: |
+          node -e "const w = require('./bindings/node');
+                   if (!w.language) throw new Error('binding exposes no language');
+                   console.log('loaded native binding:', w.name)"
+
       - name: Check the committed parser is up to date
         run: |
           npx tree-sitter generate
