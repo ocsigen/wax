@@ -270,10 +270,19 @@ let signature_labels = function
    threaded parameter: the push chokepoints below record into it without
    carrying it through the ~130 call sites. When set (only in editor mode, via
    [f]'s [?record_types]), every value pushed onto the stack is recorded as
-   [(span of the pushing instruction, type)] — the raw material for WAT hover.
-   [None] on ordinary validation, so the recording is free. *)
-let recorded_types : (Ast.location * recorded_type) list ref option ref =
+   [(span of the pushing instruction, configuration index, type)] — the raw
+   material for WAT hover. The configuration index distinguishes entries from
+   different explored configurations (conditional compilation), so a consumer can
+   join a single configuration's stack results as a tuple yet keep the types a
+   config-varying span takes across configurations apart. [None] on ordinary
+   validation, so the recording is free. *)
+let recorded_types : (Ast.location * int * recorded_type) list ref option ref =
   ref None
+
+(* The configuration currently being validated (0 for a module without
+   conditional compilation; bumped for each configuration {!Cond_explore}
+   explores), tagging every recorded entry. *)
+let sink_config = ref 0
 
 (* Record [rt] at instruction span [loc], if the sink is active and [loc] is a
    real source span (not a synthesized / recovery placeholder). No rendering
@@ -282,7 +291,7 @@ let recorded_types : (Ast.location * recorded_type) list ref option ref =
 let record loc rt =
   match (!recorded_types, loc) with
   | Some r, Some l when l.Ast.loc_start.Lexing.pos_cnum >= 0 ->
-      r := (l, rt) :: !r
+      r := (l, !sink_config, rt) :: !r
   | _ -> ()
 
 (* Reconstruct a source type from an interned one. Used as the source type of a
@@ -1153,7 +1162,7 @@ let record_value_type_def loc source =
                 | Some (n : Ast.Text.name) -> n.Ast.info
                 | None -> e.Ast.info
               in
-              r := (l, Value_type def) :: !r
+              r := (l, !sink_config, Value_type def) :: !r
           | None -> ())
       | _ -> ())
   | _ -> ()
@@ -3766,24 +3775,25 @@ and instruction ctx i st =
       | Folded (head, _) ->
           let st', () = instruction_core ctx i st in
           (* The head is validated last, so its entries are at the front. Pop
-             them off the operator span and re-record them at the folded span. *)
+             them off the operator span and re-record them at the folded span,
+             keeping each entry's configuration index. *)
           let rec take acc =
             match !r with
-            | (l0, t) :: tl when l0 = head.Ast.info ->
+            | (l0, cfg, t) :: tl when l0 = head.Ast.info ->
                 r := tl;
-                take (t :: acc)
+                take ((cfg, t) :: acc)
             | _ -> acc
           in
-          List.iter (fun t -> r := (i.info, t) :: !r) (take []);
+          List.iter (fun (cfg, t) -> r := (i.info, cfg, t) :: !r) (take []);
           (st', ())
       | _ ->
           let before = !r in
           let st', () = instruction_core ctx i st in
           let produced =
             (not (!r == before))
-            && match !r with (l0, _) :: _ -> l0 = i.info | [] -> false
+            && match !r with (l0, _, _) :: _ -> l0 = i.info | [] -> false
           in
-          if not produced then r := (i.info, No_result) :: !r;
+          if not produced then r := (i.info, !sink_config, No_result) :: !r;
           (st', ()))
 
 and instructions ctx l =
@@ -5534,6 +5544,7 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
     ?record_types diagnostics ((name, fields) as modul) =
   Wax_utils.Debug.timed "validate" @@ fun () ->
   recorded_types := record_types;
+  sink_config := 0;
   Fun.protect ~finally:(fun () ->
       recorded_types := None;
       sink_type_context := None)
@@ -5542,10 +5553,17 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
   if not (List.exists field_has_conditional fields) then
     validate_configuration ~warn_unused ~features diagnostics modul
   else
+    (* Tag each explored configuration's recorded types with a distinct index,
+       so a config-varying span's alternatives stay separable from a single
+       configuration's multi-result tuple. *)
+    let config = ref (-1) in
     Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with f :: _ -> Some f.Ast.info | [] -> None)
       ~specialize:(fun env asm ~enqueue ~record ->
         (name, specialize env diagnostics ~enqueue ~record asm fields))
-      ~check:(validate_configuration ~warn_unused ~features)
+      ~check:(fun diagnostics modul ->
+        incr config;
+        sink_config := !config;
+        validate_configuration ~warn_unused ~features diagnostics modul)
       ()

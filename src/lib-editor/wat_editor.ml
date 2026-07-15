@@ -58,9 +58,13 @@ let wat_type_map src =
       !types
 
 (* As [hover_string], but for WAT: the type the innermost instruction under the
-   cursor leaves on the stack, from the validator's recorded types. An
-   instruction that produces several results contributes one entry per result at
-   the same span; they are joined in stack order. *)
+   cursor leaves on the stack, from the validator's recorded types. A
+   multi-result instruction contributes one entry per result within a
+   configuration; those are joined in stack order into a tuple on one line. A
+   span whose type varies across conditional-compilation configurations
+   contributes an entry per configuration; those are shown one alternative per
+   line. An instruction that produces no value renders to nothing, so its span
+   yields no hover rather than the enclosing instruction's type. *)
 let hover_string ?(encoding = UTF16) src line ch =
   let target = (line + 1, byte_column ~encoding src line ch) in
   let pos (p : Lexing.position) =
@@ -77,37 +81,53 @@ let hover_string ?(encoding = UTF16) src line ch =
   (* The innermost span (smallest width) covering the cursor. *)
   let best =
     List.fold_left
-      (fun best (loc, ty) ->
+      (fun best (loc, _cfg, _rt) ->
         if contains loc then
           match best with
-          | Some (bloc, _) when span bloc <= span loc -> best
-          | _ -> Some (loc, ty)
+          | Some bloc when span bloc <= span loc -> best
+          | _ -> Some loc
         else best)
       None entries
   in
   match best with
   | None -> None
-  | Some (loc, _) -> (
-      (* Render every type recorded at that innermost span (a multi-result
-         instruction records one each), in stack order, deduping repeats a
-         path-sensitive re-check may add. An instruction that produces no value
-         renders to nothing, so its span yields no hover — rather than the
-         enclosing instruction's type. *)
-      let seen = Hashtbl.create 8 in
-      let tys =
+  | Some loc -> (
+      (* Group the entries at that span by configuration, in push order:
+         within a configuration the results form one tuple line; distinct
+         configurations become distinct lines. Identical lines (a config-neutral
+         span recorded once per configuration) collapse. *)
+      let lines =
         List.rev entries
-        |> List.filter_map (fun (l, rt) ->
-            if l = loc then
-              match Wax_wasm.Validation.render_recorded_type rt with
-              | Some t when not (Hashtbl.mem seen t) ->
-                  Hashtbl.replace seen t ();
-                  Some t
-              | _ -> None
-            else None)
+        |> List.fold_left
+             (fun acc (l, cfg, rt) ->
+               if l <> loc then acc
+               else
+                 match Wax_wasm.Validation.render_recorded_type rt with
+                 | None -> acc
+                 | Some t -> (
+                     match List.assoc_opt cfg acc with
+                     | Some _ ->
+                         List.map
+                           (fun (c, ts) ->
+                             if c = cfg then (c, ts ^ " " ^ t) else (c, ts))
+                           acc
+                     | None -> acc @ [ (cfg, t) ]))
+             []
+        |> List.map snd
       in
-      match tys with
+      let seen = Hashtbl.create 8 in
+      let lines =
+        List.filter
+          (fun t ->
+            if Hashtbl.mem seen t then false
+            else (
+              Hashtbl.replace seen t ();
+              true))
+          lines
+      in
+      match lines with
       | [] -> None
-      | _ -> Some { h_type = String.concat " " tys; h_range = loc })
+      | _ -> Some { h_type = String.concat "\n" lines; h_range = loc })
 
 (* As [type_definition_string], but for WAT: from the value or type identifier
    under the cursor, the definition of its type — a local/parameter/result of a
@@ -128,7 +148,7 @@ let type_definition_string ?(encoding = UTF16) src line ch =
   in
   let best =
     List.fold_left
-      (fun best (loc, rt) ->
+      (fun best (loc, _cfg, rt) ->
         match Wax_wasm.Validation.type_def_location rt with
         | Some def when contains loc -> (
             match best with
@@ -165,7 +185,7 @@ let wat_binding_at ~encoding src line ch =
   in
   List.fold_left
     (fun best (b : Wax_wasm.Resolve.binding) ->
-      let occ = (match b.def with Some d -> [ d ] | None -> []) @ b.uses in
+      let occ = b.defs @ b.uses in
       List.fold_left
         (fun best loc ->
           if contains loc then
@@ -177,15 +197,13 @@ let wat_binding_at ~encoding src line ch =
     None (wat_bindings src)
 
 (* All occurrences of a binding (its definition, if named, then its uses). *)
-let wat_occurrences (b : Wax_wasm.Resolve.binding) =
-  (match b.def with Some d -> [ d ] | None -> []) @ b.uses
+let wat_occurrences (b : Wax_wasm.Resolve.binding) = b.defs @ b.uses
 
 (* As [definition_string], but for WAT: the definition span of the symbol under
    the cursor (empty for an anonymous / numeric-only definition). *)
 let definition_string ?(encoding = UTF16) src line ch =
   match wat_binding_at ~encoding src line ch with
-  | Some (b, _) -> (
-      match b.Wax_wasm.Resolve.def with Some d -> [ d ] | None -> [])
+  | Some (b, _) -> b.Wax_wasm.Resolve.defs
   | None -> []
 
 (* As [references_string], but for WAT: every occurrence of the symbol under the
@@ -200,7 +218,7 @@ let references_string ?(encoding = UTF16) src line ch =
    anonymous definition is not renameable. *)
 let rename_prepare_string ?(encoding = UTF16) src line ch =
   match wat_binding_at ~encoding src line ch with
-  | Some (b, occ) when b.Wax_wasm.Resolve.def <> None ->
+  | Some (b, occ) when b.Wax_wasm.Resolve.defs <> [] ->
       let text = slice src occ in
       if String.length text > 0 && text.[0] = '$' then Some occ else None
   | _ -> None
@@ -210,7 +228,7 @@ let rename_prepare_string ?(encoding = UTF16) src line ch =
    the replacement keeps the leading [$]. *)
 let rename_string ?(encoding = UTF16) src line ch newname =
   match wat_binding_at ~encoding src line ch with
-  | Some (b, _) when b.Wax_wasm.Resolve.def <> None ->
+  | Some (b, _) when b.Wax_wasm.Resolve.defs <> [] ->
       let repl =
         if String.length newname > 0 && newname.[0] = '$' then newname
         else "$" ^ newname
@@ -459,7 +477,7 @@ let signature_help_string ?(encoding = UTF16) src line ch =
       | Some (_, idx, args) -> (
           let signature =
             List.find_map
-              (fun (loc, rt) ->
+              (fun (loc, _cfg, rt) ->
                 if same_span loc idx.Wax_wasm.Ast.info then
                   Wax_wasm.Validation.signature_labels rt
                 else None)
@@ -666,9 +684,7 @@ let semantic_tokens_string ?(encoding = UTF16) src =
         match token_type b.kind with
         | None -> []
         | Some ty ->
-            let occ =
-              (match b.def with Some d -> [ d ] | None -> []) @ b.uses
-            in
+            let occ = b.defs @ b.uses in
             List.map (fun loc -> (loc, ty)) occ)
       (wat_bindings src)
   in

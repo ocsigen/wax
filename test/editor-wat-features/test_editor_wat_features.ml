@@ -322,4 +322,69 @@ let () =
   Printf.printf "=== type definition ($t defined at line 2) ===\n";
   type_def "on local.get $x (value of ref $t)" "local.get $x" 6;
   type_def "on local.get $p" "local.get $p" 6;
+  print_newline ();
+
+  (* Hover groups the recorded types by configuration: a call to a function
+     whose signature differs across `(@if)` branches shows one alternative per
+     line, while a single call to a multi-result function shows its results as
+     one space-joined tuple on one line. *)
+  let hover_multiline src sub off =
+    let i = Str.search_forward (Str.regexp_string sub) src 0 in
+    let line = ref 0 and bol = ref 0 in
+    String.iteri
+      (fun j c ->
+        if j < i && c = '\n' then (
+          incr line;
+          bol := j + 1))
+      src;
+    match Wat_editor.hover_string src !line (i - !bol + off) with
+    | Some h -> String.split_on_char '\n' h.Editor_common.h_type
+    | None -> [ "(none)" ]
+  in
+  let config_varying =
+    "(module\n\
+    \  (@if $x\n\
+    \    (@then (func $f (param i32) (result i32) (local.get 0)))\n\
+    \    (@else (func $f (param i64) (result i64) (local.get 0))))\n\
+    \  (func (result i32) (call $f (i32.const 1))))\n"
+  in
+  let multi_result =
+    "(module\n\
+    \  (func $pair (result i32 i64) (i32.const 1) (i64.const 2))\n\
+    \  (func (result i32 i64) (call $pair)))\n"
+  in
+  Printf.printf "=== hover: config-varying signature (one line each) ===\n";
+  List.iter (Printf.printf "  %s\n")
+    (hover_multiline config_varying "call $f" 6);
+  Printf.printf "=== hover: multi-result call (one tuple line) ===\n";
+  List.iter (Printf.printf "  %s\n")
+    (hover_multiline multi_result "call $pair" 1);
+  print_newline ();
+
+  (* A config-varying `$f` is defined in both the @then and @else branch. Hover
+     shows both signatures; go-to-def, references and rename must reach both
+     definitions, not just one. Locate the `$f` of the `call $f` use. *)
+  let cv_l, cv_c =
+    let i = Str.search_forward (Str.regexp_string "call $f") config_varying 0 in
+    let line = ref 0 and bol = ref 0 in
+    String.iteri
+      (fun j c ->
+        if j < i && c = '\n' then (
+          incr line;
+          bol := j + 1))
+      config_varying;
+    (!line, i - !bol + 5)
+  in
+  Printf.printf "=== definition (config-varying call $f) ===\n";
+  List.iter
+    (fun loc -> Printf.printf "  %s\n" (show_loc loc))
+    (Wat_editor.definition_string config_varying cv_l cv_c);
+  Printf.printf "=== references (config-varying $f) ===\n";
+  List.iter
+    (fun loc -> Printf.printf "  %s\n" (show_loc loc))
+    (Wat_editor.references_string config_varying cv_l cv_c);
+  Printf.printf "=== rename config-varying $f -> $g ===\n";
+  List.iter
+    (fun (loc, repl) -> Printf.printf "  %s := %s\n" (show_loc loc) repl)
+    (Wat_editor.rename_string config_varying cv_l cv_c "g");
   print_newline ()
