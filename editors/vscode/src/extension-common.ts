@@ -135,6 +135,7 @@ export function activateWith(
     if (lang.semanticTokens) registerSemanticTokens(context, opts, lang);
   }
   registerDiagnostics(context, opts);
+  registerInactiveDimming(context, opts);
   registerConvert(context, opts);
 
   // Warm the runtime now (loadWax caches its promise) so the first format or
@@ -811,6 +812,77 @@ function registerDiagnostics(
 
   // Check documents already open at activation.
   for (const document of vscode.workspace.textDocuments) schedule(document);
+}
+
+// --- Inactive-branch dimming -------------------------------------------------
+// With `wax.define` set, dim the `#[if]`/`#[else]` branch bodies the chosen
+// configuration makes unreachable — as a preprocessor greys out inactive
+// `#ifdef` regions. Applied per visible editor (a decoration), recomputed on
+// edit, on the configuration changing, and as editors come and go.
+function registerInactiveDimming(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+): void {
+  const decoration = vscode.window.createTextEditorDecorationType({
+    opacity: "0.5",
+  });
+  context.subscriptions.push(decoration);
+  const defines = () =>
+    vscode.workspace.getConfiguration("wax").get<string[]>("define", []);
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  async function refresh(editor: vscode.TextEditor | undefined): Promise<void> {
+    if (!editor || editor.document.languageId !== "wax") return;
+    const defs = defines();
+    if (defs.length === 0) {
+      editor.setDecorations(decoration, []);
+      return;
+    }
+    let wax: Wax;
+    try {
+      wax = await loadWax(context, opts);
+    } catch {
+      return;
+    }
+    let ranges: WaxRange[];
+    try {
+      ranges = wax.inactiveRanges(editor.document.getText(), defs);
+    } catch {
+      return;
+    }
+    editor.setDecorations(
+      decoration,
+      ranges.map(
+        (r) => new vscode.Range(r.startLine, r.startChar, r.endLine, r.endChar),
+      ),
+    );
+  }
+
+  const refreshAll = () =>
+    vscode.window.visibleTextEditors.forEach((e) => void refresh(e));
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((e) => void refresh(e)),
+    vscode.window.onDidChangeVisibleTextEditors(() => refreshAll()),
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      if (e.document.languageId !== "wax") return;
+      const key = e.document.uri.toString();
+      const existing = timers.get(key);
+      if (existing) clearTimeout(existing);
+      timers.set(
+        key,
+        setTimeout(() => {
+          timers.delete(key);
+          for (const ed of vscode.window.visibleTextEditors)
+            if (ed.document === e.document) void refresh(ed);
+        }, 300),
+      );
+    }),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("wax.define")) refreshAll();
+    }),
+  );
+  refreshAll();
 }
 
 // --- Convert / preview -----------------------------------------------------

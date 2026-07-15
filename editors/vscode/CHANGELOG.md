@@ -68,6 +68,9 @@
   functions, parameters, locals/globals, types (including type references like
   `&point`), struct fields, and intrinsic namespaces — beyond what the grammar
   can distinguish.
+- Conditional-compilation dimming for `.wax`: set `wax.define` (mirroring `-D`,
+  e.g. `["debug=true"]`) and the `#[if]`/`#[else]` branches that configuration
+  makes unreachable are greyed out as dead code.
 
 ## 0.2.2
 

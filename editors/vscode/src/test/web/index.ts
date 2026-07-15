@@ -187,6 +187,25 @@ export async function run(): Promise<void> {
     }
   }
 
+  // inactive-branch ranges: a define makes the opposite branch dead; the range
+  // spans the whole `#[else] { … }` (marker and closing brace included).
+  {
+    const src = "#[if(debug)] {\n  fn a() {}\n}\n#[else] {\n  fn b() {}\n}\n";
+    if (wax.inactiveRanges(src, []).length !== 0) {
+      throw new Error("web: inactiveRanges should be empty with no define");
+    }
+    const dead = wax.inactiveRanges(src, ["debug=true"]);
+    if (
+      dead.length !== 1 ||
+      dead[0].startLine !== 3 ||
+      dead[0].startChar !== 0 ||
+      dead[0].endLine !== 5 ||
+      dead[0].endChar !== 1
+    ) {
+      throw new Error("web: inactiveRanges(debug=true): " + JSON.stringify(dead));
+    }
+  }
+
   // WAT support shares the same wasm module. Formatting is idempotent, a syntax
   // error is rejected, a clean module has no diagnostics, and an invalid one
   // reports at least one error. (The clean module exports its function so the

@@ -151,6 +151,15 @@ does not carry. Three distinct prerequisites:
   in one linear pass (`utf16_positions`), not a per-token line-prefix rescan. A
   `DocumentSemanticTokensProvider` in `extension-common.ts` renders them against
   a standard legend. Wax only.
+- [x] **Config-aware editing (dimming).** With a `wax.define` setting (the `-D`
+  bindings, e.g. `["debug=true"]`), an `inactiveRanges` export returns the
+  `#[if]`/`#[else]` branch bodies the configuration makes unreachable
+  (`Cond_specialize.eval` per branch), and a per-editor decoration greys them
+  out — like a preprocessor dimming dead `#ifdef` regions. The parser now keeps
+  each branch's own `#[if]/#[else] { … }` span (marker and braces) on its
+  located body, so a single dead branch can be located precisely. Follow-ups:
+  feeding the defines into diagnostics/completion so they specialise to the
+  configuration too. Wax only.
 - [x] **Completion.** A `completion` export offers the names in scope at a
   position — the module's top-level definitions (reusing the outline walk), the
   enclosing function's parameters and locals, and the keywords — each tagged with

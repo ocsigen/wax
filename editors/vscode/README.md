@@ -46,6 +46,10 @@ Syntax highlighting, formatting, diagnostics, and snippets for
 - **Semantic highlighting** (`.wax`): colours identifiers by role — functions,
   parameters, locals/globals, types (including references like `&point`), struct
   fields, and intrinsic namespaces — refining the grammar's coarser colouring.
+- **Conditional-compilation dimming** (`.wax`): set `wax.define` (e.g.
+  `["debug=true", "arch=wasm64"]`, mirroring the `-D` flag) and the `#[if]` /
+  `#[else]` branches that configuration makes unreachable are dimmed as dead
+  code, like a preprocessor greying out inactive `#ifdef` regions.
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

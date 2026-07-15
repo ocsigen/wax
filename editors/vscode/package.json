@@ -125,6 +125,17 @@
           "group": "navigation"
         }
       ]
+    },
+    "configuration": {
+      "title": "Wax",
+      "properties": {
+        "wax.define": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "Conditional-compilation defines, as passed to `-D`/`--define` (e.g. `debug=true`, `arch=wasm64`, `version=2.1.0`). Branches of `#[if]`/`#[else]` that these bindings make unreachable are dimmed as dead code in `.wax` files."
+        }
+      }
     }
   }
 }

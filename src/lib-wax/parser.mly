@@ -250,11 +250,25 @@ let rec process_stmts = function
   | [] -> []
   | RS_plain i :: rest -> i :: process_stmts rest
   | RS_if (loc, cond, then_body) :: RS_else (eloc, else_body) :: rest ->
+      (* Keep each branch's own [#[if]/#[else] { … }] span (marker included) on
+         its located body, not just the combined span on the node, so a consumer
+         (the editor's dead-branch dimming) can locate a single branch. *)
       with_loc (fst loc, snd eloc)
-        (If_annotation { cond; then_body; else_body = Some else_body })
+        (If_annotation
+           {
+             cond;
+             then_body = { then_body with info = location_of loc };
+             else_body = Some { else_body with info = location_of eloc };
+           })
       :: process_stmts rest
   | RS_if (loc, cond, then_body) :: rest ->
-      with_loc loc (If_annotation { cond; then_body; else_body = None })
+      with_loc loc
+        (If_annotation
+           {
+             cond;
+             then_body = { then_body with info = location_of loc };
+             else_body = None;
+           })
       :: process_stmts rest
   | RS_else (loc, _) :: _ ->
       raise
@@ -294,11 +308,24 @@ let rec lower_fields = function
   | [] -> []
   | RF_plain f :: rest -> f :: lower_fields rest
   | RF_if (loc, cond, then_fields) :: RF_else (eloc, else_fields) :: rest ->
+      (* Keep each branch's own [#[if]/#[else] { … }] span (marker included) on
+         its located body — see [process_stmts]. *)
       with_loc (fst loc, snd eloc)
-        (Conditional { cond; then_fields; else_fields = Some else_fields })
+        (Conditional
+           {
+             cond;
+             then_fields = { then_fields with info = location_of loc };
+             else_fields = Some { else_fields with info = location_of eloc };
+           })
       :: lower_fields rest
   | RF_if (loc, cond, then_fields) :: rest ->
-      with_loc loc (Conditional { cond; then_fields; else_fields = None })
+      with_loc loc
+        (Conditional
+           {
+             cond;
+             then_fields = { then_fields with info = location_of loc };
+             else_fields = None;
+           })
       :: lower_fields rest
   | RF_else (loc, _) :: _ ->
       raise

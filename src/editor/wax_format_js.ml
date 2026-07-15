@@ -1789,6 +1789,84 @@ let semantic_tokens_string src =
       |> List.sort (fun a b ->
           compare (a.st_line, a.st_char) (b.st_line, b.st_char))
 
+(* The source ranges made unreachable by the conditional-compilation [defines]
+   (each a "name" or "name=value" as on the [-D] CLI): for every [#[if]] /
+   [If_annotation] whose condition the bindings determine, the body of the branch
+   not taken — the [#[else]] when the condition holds, the [#[if]] body when it
+   does not; a condition that stays residual (mentions an unset variable) dims
+   nothing. A dead branch's own body span is used (not the splice range), so a
+   live neighbour's brace is never dimmed; nested dead branches inside it are
+   redundant but harmless. Ranges as (startLine, startChar, endLine, endChar),
+   0-based, UTF-16; empty when no define is set. *)
+let inactive_ranges_string src defines =
+  let bindings =
+    Wax_wasm.Cond_specialize.of_list
+      (List.filter_map
+         (fun s ->
+           match Wax_wasm.Cond_specialize.parse_define s with
+           | Ok b -> Some b
+           | Error _ -> None)
+         defines)
+  in
+  if Wax_wasm.Cond_specialize.is_empty bindings then []
+  else
+    let ast_opt, _, _ =
+      Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+        ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
+    in
+    match ast_opt with
+    | None -> []
+    | Some ast ->
+        let dctx = Wax_utils.Diagnostic.collector ~source:src () in
+        let dead = ref [] in
+        (* the body not taken for a determined condition: [else] when true, the
+           [if] body when false; nothing when the condition stays residual. *)
+        let branch cond then_loc else_loc =
+          match Wax_wasm.Cond_specialize.eval dctx bindings cond with
+          | True -> Option.iter (fun l -> dead := l :: !dead) else_loc
+          | False -> dead := then_loc :: !dead
+          | Residual _ -> ()
+        in
+        Wax_lang.Ast_utils.iter_fields
+          (fun field ->
+            match field.desc with
+            | Conditional { cond; then_fields; else_fields } ->
+                let else_loc =
+                  match else_fields with Some b -> Some b.info | None -> None
+                in
+                branch cond then_fields.info else_loc
+            | _ -> ())
+          ast;
+        Wax_lang.Ast_utils.iter_module_instr
+          (fun i ->
+            match i.desc with
+            | If_annotation { cond; then_body; else_body } ->
+                let else_loc =
+                  match else_body with Some b -> Some b.info | None -> None
+                in
+                branch cond then_body.info else_loc
+            | _ -> ())
+          ast;
+        let dead = !dead in
+        let offsets =
+          List.concat_map
+            (fun (l : Wax_utils.Ast.location) ->
+              [ l.loc_start.pos_cnum; l.loc_end.pos_cnum ])
+            dead
+          |> List.sort_uniq compare
+        in
+        let pos = utf16_positions src offsets in
+        List.filter_map
+          (fun (l : Wax_utils.Ast.location) ->
+            match
+              ( Hashtbl.find_opt pos l.loc_start.pos_cnum,
+                Hashtbl.find_opt pos l.loc_end.pos_cnum )
+            with
+            | Some (sl, sc), Some (el, ec) when (sl, sc) <> (el, ec) ->
+                Some (sl, sc, el, ec)
+            | _ -> None)
+          dead
+
 let js_completion c =
   object%js
     val name = Js.string c.k_name
@@ -1824,6 +1902,25 @@ let signature_result src line ch =
           val active = active
         end
 
+let inactive_ranges_result src defines =
+  let defines =
+    Js.to_array defines |> Array.to_list |> List.map Js.to_string
+  in
+  let ranges =
+    try inactive_ranges_string (Js.to_string src) defines with _ -> []
+  in
+  Js.array
+    (Array.of_list
+       (List.map
+          (fun (sl, sc, el, ec) ->
+            object%js
+              val startLine = sl
+              val startChar = sc
+              val endLine = el
+              val endChar = ec
+            end)
+          ranges))
+
 let semantic_result src =
   let toks = try semantic_tokens_string (Js.to_string src) with _ -> [] in
   Js.array
@@ -1853,6 +1950,7 @@ let () =
       method completion src line ch = completion_result src line ch
       method signatureHelp src line ch = signature_result src line ch
       method semanticTokens src = semantic_result src
+      method inactiveRanges src defines = inactive_ranges_result src defines
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
       method symbolsWat src = symbols_result symbols_wat_string src

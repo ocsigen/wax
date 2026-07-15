@@ -138,6 +138,10 @@ export interface Wax {
   ): WaxSignature | null;
   // Every classified identifier occurrence, for semantic highlighting. Wax only.
   semanticTokens(src: string): WaxSemanticToken[];
+  // The source ranges made unreachable by the given `-D` defines (dead
+  // `#[if]`/`#[else]` branch bodies), for dimming. Empty with no defines. Wax
+  // only.
+  inactiveRanges(src: string, defines: string[]): WaxRange[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;
   checkWat(src: string): WaxDiagnostic[];
