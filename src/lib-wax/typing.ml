@@ -160,6 +160,11 @@ let method_candidates ~recv_name ~reinterp_name methods =
 let render_fieldtype (f : Ast.fieldtype) =
   String.trim (Format.asprintf "%a" Output.fieldtype f)
 
+(* A reference type rendered as it reads in source (e.g. [&func], [&?extern]),
+   for a table's element type in the member-completion detail. *)
+let render_reftype (rt : Ast.reftype) =
+  String.trim (Format.asprintf "%a" Output.valtype (Ast.Ref rt))
+
 (* The member candidates for a struct's [fields], for member completion. *)
 let struct_candidates fields =
   Array.to_list fields
@@ -4012,6 +4017,62 @@ let numeric_receiver_candidates (t : inferred_type) :
   | Float -> Some (floats ~recv_name:"float" ~reinterp:"int")
   | _ -> None
 
+let address_type_name : [ `I32 | `I64 ] -> string = function
+  | `I32 -> "i32"
+  | `I64 -> "i64"
+
+(* The value methods member completion offers on a memory receiver
+   [mem.load8(addr)], with [addr_name] the memory's address type: the scalar
+   loads/stores and the size/grow/fill/copy/init management ops (a trailing
+   [align]/[offset] immediate, allowed on loads/stores, is omitted). The
+   SIMD-memory ([mem.v128_load]) and atomic ([mem.i32_atomic_load]) accesses are
+   not offered yet — they need the vector / atomics name registries, and atomics
+   a shared memory. *)
+let memory_method_candidates ~addr_name =
+  let m member_name member_detail =
+    { member_name; member_kind = Method; member_detail }
+  in
+  let load name r = m name (Printf.sprintf "fn(%s) -> %s" addr_name r) in
+  let store name v = m name (Printf.sprintf "fn(%s, %s) -> ()" addr_name v) in
+  [
+    load "load8" "i32";
+    load "load16" "i32";
+    load "load32" "i32";
+    load "load64" "i64";
+    load "loadf32" "f32";
+    load "loadf64" "f64";
+    store "store8" "i32";
+    store "store16" "i32";
+    store "store32" "i32";
+    store "store64" "i64";
+    store "storef32" "f32";
+    store "storef64" "f64";
+    m "size" (Printf.sprintf "fn() -> %s" addr_name);
+    m "grow" (Printf.sprintf "fn(%s) -> %s" addr_name addr_name);
+    m "fill" (Printf.sprintf "fn(%s, i32, %s) -> ()" addr_name addr_name);
+    m "copy"
+      (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name addr_name addr_name);
+    m "init" (Printf.sprintf "fn(data, %s, i32, i32) -> ()" addr_name);
+  ]
+
+(* The value methods member completion offers on a table receiver [tab.size()],
+   with [addr_name] the table's address type and [elem_name] its element type:
+   the size/grow/fill/copy/init management ops. Element access is [tab[i]], not
+   a method. *)
+let table_method_candidates ~addr_name ~elem_name =
+  let m member_name member_detail =
+    { member_name; member_kind = Method; member_detail }
+  in
+  [
+    m "size" (Printf.sprintf "fn() -> %s" addr_name);
+    m "grow" (Printf.sprintf "fn(%s, %s) -> %s" elem_name addr_name addr_name);
+    m "fill"
+      (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name elem_name addr_name);
+    m "copy"
+      (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name addr_name addr_name);
+    m "init" (Printf.sprintf "fn(elem, %s, i32, i32) -> ()" addr_name);
+  ]
+
 (* Free-function members offered after [v128::] — [bitselect] and the per-shape
    const constructors — with signatures from the SIMD registry. *)
 let simd_free_members () =
@@ -5712,17 +5773,30 @@ and type_aggregate_access ctx i =
       let* i' = instruction ctx i' in
       let*! ty =
         let ty = expression_type ctx i' in
-        (* A numeric receiver's value methods, for member completion (concrete or
-           still-flexible literal type); a reference receiver's members are
-           recorded in the struct/array arms below. Built only in the editor
-           (the sink is set), since a numeric [.field] is otherwise an error
-           path. *)
+        (* The receiver's value methods, for member completion: the numeric ones
+           (a concrete or still-flexible literal type), or — when the receiver
+           is a memory / table name rather than a value — that object's methods.
+           A reference receiver's struct fields / array [length] are recorded in
+           the arms below. Built only in the editor (the sink is set), since a
+           numeric or memory [.field] is otherwise an error path. *)
         (if ctx.member_completions <> None then
-           match numeric_receiver_candidates (Cell.get ty) with
-           | Some candidates ->
-               record_members ctx.member_completions field.info (fun () ->
-                   candidates)
-           | None -> ());
+           let record cands =
+             record_members ctx.member_completions field.info (fun () -> cands)
+           in
+           match i'.desc with
+           | Get name when memory_receiver ctx name ->
+               let _, at = Option.get (Tbl.find_opt ctx.memories name) in
+               record
+                 (memory_method_candidates ~addr_name:(address_type_name at))
+           | Get name when table_receiver ctx name ->
+               let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
+               record
+                 (table_method_candidates ~addr_name:(address_type_name at)
+                    ~elem_name:(render_reftype rt))
+           | _ -> (
+               match numeric_receiver_candidates (Cell.get ty) with
+               | Some cands -> record cands
+               | None -> ()));
         match (Cell.get ty, field.desc) with
         | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in

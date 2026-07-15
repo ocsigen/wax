@@ -187,6 +187,16 @@ does not carry. Three distinct prerequisites:
   v128`); the member sink carries a kind and detail per candidate, not a bare
   name.
 
+  A **memory or table receiver** — a name, not a value — is handled at the same
+  `.` choke point by matching the receiver's `Get name` against
+  `memory_receiver`/`table_receiver`: `mem.` offers the scalar loads/stores and
+  `size`/`grow`/`fill`/`copy`/`init` (`Typing.memory_method_candidates`), `tab.`
+  the management ops (`table_method_candidates`), each signature rendered with
+  the object's own address type (and, for a table, element type). The
+  SIMD-memory (`mem.v128_load`) and atomic (`mem.i32_atomic_load`) accesses are
+  not offered yet — they need name registries in `Wax_wasm.Simd`/`Atomics`, and
+  atomics a shared memory.
+
   **Intrinsic namespaces** after `::` are offered too: `v128::` (the SIMD const
   constructors and `bitselect`), `i64::` (the wide-arithmetic ops) and
   `atomic::` (`fence`), each a "function" completion with its signature
@@ -194,10 +204,9 @@ does not carry. Three distinct prerequisites:
   Since the namespaces are keywords, the editor detects `ns::` textually (no
   parse needed, so it survives a broken buffer), on the `:` trigger.
 
-  Follow-ups: memory/table method completion (a different dispatch path where
-  the receiver is not a value), offering the namespace names themselves before
-  `::`, and per-point local scoping (currently every local in the function is
-  offered).
+  Follow-ups: the SIMD-memory / atomic memory accesses, offering the namespace
+  names themselves before `::`, and per-point local scoping (currently every
+  local in the function is offered).
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -213,10 +222,11 @@ The core language-server features are all in: diagnostics, formatting, outline,
 hover, inlay hints, go-to-definition, find-references / document-highlight,
 rename, and completion (names and struct members). What is left refines them:
 
-- **Completion polish** — value methods after `.` are done (numeric, array and
-  v128 receivers, with a method icon + signature), struct fields carry their
-  type, and intrinsic namespaces after `::` are offered; still open are
-  memory/table method completion and per-point local scoping.
+- **Completion polish** — value methods after `.` are done (numeric, array,
+  v128, and memory/table receivers, with a method icon + signature), struct
+  fields carry their type, and intrinsic namespaces after `::` are offered;
+  still open are the SIMD-memory / atomic memory accesses and per-point local
+  scoping.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 

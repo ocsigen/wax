@@ -43,6 +43,10 @@
   numeric literal, not only a concrete type: `(3).` offers both integer and
   float methods (the literal can still narrow either way), `(3.0).` the float
   methods. Signatures render by family (`fn() -> int`) for such a receiver.
+- Member completion on a memory or table receiver: `mem.` offers the scalar
+  loads/stores and `size`/`grow`/`fill`/`copy`/`init`, `tab.` the management
+  ops, each with its signature. (SIMD-memory and atomic accesses are not offered
+  yet.)
 
 ## 0.2.2
 

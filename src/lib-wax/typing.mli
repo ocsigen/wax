@@ -85,6 +85,18 @@ val numeric_receiver_candidates :
     value methods (a packed [i8]/[i16], which must be cast first, or a
     non-numeric type). *)
 
+val memory_method_candidates : addr_name:string -> member_candidate list
+(** The methods member completion offers on a memory receiver
+    ([mem.load8(addr)]) — the scalar loads/stores and size/grow/fill/copy/init —
+    with [addr_name] the memory's address type ([i32]/[i64]) for their
+    signatures. The SIMD-memory and atomic accesses are not included yet. *)
+
+val table_method_candidates :
+  addr_name:string -> elem_name:string -> member_candidate list
+(** The methods member completion offers on a table receiver ([tab.size()]) —
+    size/grow/fill/copy/init — with [addr_name] the table's address type and
+    [elem_name] its element type for their signatures. *)
+
 val namespace_members : string -> member_candidate list
 (** The free functions completion offers after an intrinsic namespace path
     [ns::]: [v128::] (SIMD const constructors and [bitselect]), [i64::]

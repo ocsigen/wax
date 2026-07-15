@@ -73,3 +73,29 @@ namespace members:
     mul_wide_u   fn(i64, i64) -> (i64, i64)             ok
   atomic:: (1)
     fence        fn() -> ()                             ok
+
+memory / table methods:
+  memory (17)
+    load8     fn(i32) -> i32                   ok
+    load16    fn(i32) -> i32                   ok
+    load32    fn(i32) -> i32                   ok
+    load64    fn(i32) -> i64                   ok
+    loadf32   fn(i32) -> f32                   ok
+    loadf64   fn(i32) -> f64                   ok
+    store8    fn(i32, i32) -> ()               ok
+    store16   fn(i32, i32) -> ()               ok
+    store32   fn(i32, i32) -> ()               ok
+    store64   fn(i32, i64) -> ()               ok
+    storef32  fn(i32, f32) -> ()               ok
+    storef64  fn(i32, f64) -> ()               ok
+    size      fn() -> i32                      ok
+    grow      fn(i32) -> i32                   ok
+    fill      fn(i32, i32, i32) -> ()          ok
+    copy      fn(i32, i32, i32) -> ()          ok
+    init      fn(data, i32, i32, i32) -> ()    ok
+  table (5)
+    size      fn() -> i32                      ok
+    grow      fn(&?func, i32) -> i32           ok
+    fill      fn(i32, &?func, i32) -> ()       ok
+    copy      fn(i32, i32, i32) -> ()          ok
+    init      fn(elem, i32, i32, i32) -> ()    ok

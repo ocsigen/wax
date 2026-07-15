@@ -252,4 +252,60 @@ let () =
           Printf.printf "    %-12s %-38s %s\n" c.member_name c.member_detail
             status)
         members)
-    [ "v128"; "i64"; "atomic" ]
+    [ "v128"; "i64"; "atomic" ];
+  (* Memory / table receiver methods (the receiver is a memory or table name,
+     not a value). Type-check every offered method with a valid call on a memory
+     / table fixture, so a curated signature that drifts from the typer shows. *)
+  let is_void (c : Typing.member_candidate) =
+    let suf = "-> ()" and d = c.member_detail in
+    String.length d >= String.length suf
+    && String.sub d (String.length d - String.length suf) (String.length suf)
+       = suf
+  in
+  let mem_fixture body =
+    Printf.sprintf "memory mem: i32 [1];\ndata d = \"x\";\nfn t() { %s }\n" body
+  in
+  let tab_fixture body =
+    Printf.sprintf
+      "table tab: &?func [1];\nelem e: &?func = [];\nfn t() { %s }\n" body
+  in
+  let mem_args = function
+    | "load8" | "load16" | "load32" | "load64" | "loadf32" | "loadf64" -> "0"
+    | "store8" | "store16" | "store32" | "store64" -> "0, 0"
+    | "storef32" | "storef64" -> "0, 0.0"
+    | "size" -> ""
+    | "grow" -> "1"
+    | "fill" | "copy" -> "0, 0, 1"
+    | "init" -> "d, 0, 0, 1"
+    | _ -> ""
+  in
+  let tab_args = function
+    | "size" -> ""
+    | "grow" -> "null, 1"
+    | "fill" -> "0, null, 1"
+    | "copy" -> "0, 0, 1"
+    | "init" -> "e, 0, 0, 1"
+    | _ -> ""
+  in
+  let check_obj label fixture recv args_of cands =
+    Printf.printf "  %s (%d)\n" label (List.length cands);
+    List.iter
+      (fun (c : Typing.member_candidate) ->
+        let call =
+          Printf.sprintf "%s.%s(%s)" recv c.member_name (args_of c.member_name)
+        in
+        let body =
+          if is_void c then call ^ ";" else Printf.sprintf "_ = %s;" call
+        in
+        Printf.printf "    %-9s %-32s %s\n" c.member_name c.member_detail
+          (match error_count (fixture body) with
+          | 0 -> "ok"
+          | -1 -> "PARSE ERROR"
+          | n -> Printf.sprintf "FAIL(%d)" n))
+      cands
+  in
+  Printf.printf "\nmemory / table methods:\n";
+  check_obj "memory" mem_fixture "mem" mem_args
+    (Typing.memory_method_candidates ~addr_name:"i32");
+  check_obj "table" tab_fixture "tab" tab_args
+    (Typing.table_method_candidates ~addr_name:"i32" ~elem_name:"&?func")

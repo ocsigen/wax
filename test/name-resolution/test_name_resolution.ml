@@ -105,4 +105,6 @@ let () =
     "type arr = [i32];\n\
      fn m(x: i32, w: i64, f: f32, a: &arr) {\n\
     \  _ = x.clz; _ = w.from_bits; _ = f.sqrt; _ = a.length;\n\
-     }\n"
+     }\n";
+  (* A memory receiver (a name, not a value) records that object's methods. *)
+  resolve "memory receiver" "memory mem: i32 [1];\nfn f() { _ = mem.load8; }\n"
