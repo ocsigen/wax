@@ -18,7 +18,7 @@ exit stays 0:
 
 An unknown format is rejected:
 
-  $ wax check --error-format=bogus bad.wax
+  $ NO_COLOR=1 wax check --error-format=bogus bad.wax
   Usage: wax check [--help] [OPTION]… FILE…
-  wax: option --error-format: Unknown error format: bogus
+  wax: option '--error-format': Unknown error format: bogus
   [124]
