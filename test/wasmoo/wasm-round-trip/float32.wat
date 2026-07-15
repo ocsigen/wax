@@ -248,8 +248,7 @@
     (then
       (if (result i32) (f32.lt (local.get $a) (f32.const inf))
         (then (i32.const 0)) ;; normal
-        (else (i32.const 3))) ;; infinity
-    )
+        (else (i32.const 3)))) ;; infinity
     (else
       (if (result i32) (f32.eq (local.get $a) (f32.const 0))
         (then (i32.const 2)) ;; zero

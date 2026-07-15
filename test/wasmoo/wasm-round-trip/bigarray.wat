@@ -686,7 +686,8 @@
       (local.set $o
         (select (i32.const 0x7E00) ;; NaN
           (i32.const 0x7C00)
-          (i32.gt_u (local.get $x) (i32.const 0x7f800000))))) ;; infinity
+          (i32.gt_u (local.get $x) (i32.const 0x7f800000)))) ;; infinity
+    )
     (else
       (if (i32.lt_u (local.get $x) (i32.const 0x38800000))
         (then

@@ -783,8 +783,7 @@
     (then
       (if (result i32) (f64.lt (local.get $a) (f64.const inf))
         (then (i32.const 0)) ;; normal
-        (else (i32.const 3))) ;; infinity
-    )
+        (else (i32.const 3)))) ;; infinity
     (else
       (if (result i32) (f64.eq (local.get $a) (f64.const 0))
         (then (i32.const 2)) ;; zero

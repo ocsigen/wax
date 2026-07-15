@@ -207,32 +207,33 @@ let associate ?only ctx =
      a node, so the pass is O(n + #comments). The sibling tail call recurses in
      width, the child call in depth — the same recursion depth (tree height) as
      the old code. *)
-  let rec process_range lo hi comments =
+  (* [last_upto] is the [upto] a range's *last* node uses — the point up to which
+     it may still claim trailing comments. For a child range it is the enclosing
+     parent's end ([ecnum] of the node that spawned the recursion), so the last
+     child reaches across its separator (a block's [;]) to grab the comment
+     trailing the last statement, and a comment after a stack of co-terminating
+     closers bubbles out to the *outermost* of them (each inner one's window ends,
+     exclusive, exactly where the comment is anchored). At the top level there is
+     no enclosing node, so it falls back to [ecnum lo + 1] and a module-tail
+     comment stays in [leftover]. *)
+  let rec process_range ~last_upto lo hi comments =
     if lo > hi then comments
     else
       let child_lo = lo + 1 and child_hi = subtree_end.(lo) in
       let next_sib = child_hi + 1 in
-      let upto = if next_sib <= hi then scnum next_sib else ecnum lo + 1 in
-      let before, rem1 = split_before (scnum lo) comments in
-      let rem2 = process_range child_lo child_hi rem1 in
-      let within_all, rem3 = split_before (ecnum lo) rem2 in
-      (* Comments anchored inside the node but past its last child are its
-         trailing region — for a block, whatever sits between the last statement
-         (whose span stops before its [;]) and the closing [}]. An own-line
-         ([Line_start]) comment there reads as part of the block and renders
-         inside it ([within]); an inline one trails the last statement and reads
-         as trailing the whole construct, so it renders after the node ([after]),
-         e.g. after a [)]/[}] rather than dangling inside before it. Non-block
-         nodes rarely reach here (their last child, not separated by a [;], grabs
-         its own trailing comment), so this is in practice block-specific. *)
-      let within_candidates, inline_trailing =
-        List.partition
-          (fun e ->
-            match (e.trivia, e.position) with
-            | Item { kind = Line_comment; _ }, Inline -> false
-            | _ -> true)
-          within_all
+      let upto =
+        if next_sib <= hi then scnum next_sib
+        else match last_upto with Some u -> u | None -> ecnum lo + 1
       in
+      let before, rem1 = split_before (scnum lo) comments in
+      let rem2 =
+        process_range ~last_upto:(Some (ecnum lo)) child_lo child_hi rem1
+      in
+      (* Own-line comments still inside the node ([within]) render inside it; an
+         inline trailing comment has already been claimed above by the last child
+         (as its [after]). Comments past the node's end are its [after] region,
+         rendered on the far side of the closing delimiter. *)
+      let within, rem3 = split_before (ecnum lo) rem2 in
       let steal_candidate =
         if child_hi >= child_lo && ecnum child_hi = ecnum lo then
           Some arr.(child_hi)
@@ -245,19 +246,20 @@ let associate ?only ctx =
             | Some assoc ->
                 let stolen = assoc.after in
                 Hashtbl.replace tbl last_child { assoc with after = [] };
-                (stolen, rem3)
+                (* A co-terminating last child's own [after] window collapsed to
+                   empty (its [upto] reached only to [ecnum lo]); scan on up to
+                   this node's [upto] so its real trailing comments aren't
+                   dropped. Whatever the child did drain is already out of the
+                   stream, so [extra] can't double-count. *)
+                let extra, rem4 = get_after (ecnum lo) ~upto rem3 in
+                (stolen @ extra, rem4)
             | None -> get_after (ecnum lo) ~upto rem3)
         | None -> get_after (ecnum lo) ~upto rem3
       in
-      Hashtbl.add tbl arr.(lo)
-        {
-          before;
-          within = within_candidates;
-          after = inline_trailing @ final_after;
-        };
-      process_range next_sib hi rem4
+      Hashtbl.add tbl arr.(lo) { before; within; after = final_after };
+      process_range ~last_upto next_sib hi rem4
   in
-  let leftover = process_range 0 (n - 1) comments in
+  let leftover = process_range ~last_upto:None 0 (n - 1) comments in
   (* [leftover] holds comments that no location owns: trailing comments after
      the last node, or — when the module has no locations at all (e.g. an empty
      [(module)]) — the whole file. The caller prints them as tail trivia. *)

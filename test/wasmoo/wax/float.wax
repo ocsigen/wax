@@ -632,17 +632,21 @@ fn caml_classify_float(x: f64) -> i32 {
     let a = x.abs();
     if a >= 0x1p-1022 {
         if a < inf {
-            0; // normal
-        } else {
+            0;
+        } // normal
+        else {
             3;
-        } // infinity
-    } else {
+        }
+    } // infinity
+    else {
         if a == 0 {
-            2; // zero
-        } else {
+            2;
+        } // zero
+        else {
             if a == a {
-                1; // subnormal
-            } else {
+                1;
+            } // subnormal
+            else {
                 4;
             }
         }

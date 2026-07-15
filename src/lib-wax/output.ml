@@ -734,8 +734,8 @@ let rec instr prec pp (i : _ instr) =
       let branch body =
         space pp ();
         punctuation pp "{";
-        located_block_contents pp body;
-        punctuation pp "}"
+        let after = located_block_contents pp body in
+        close_block pp after
       in
       hvbox pp (fun () ->
           attribute pp (Printf.sprintf "#[if(%s)]" (cond_to_string cond));
@@ -767,8 +767,8 @@ let rec instr prec pp (i : _ instr) =
                       punctuation pp ")");
               space pp ();
               punctuation pp "{");
-          located_block_contents pp l;
-          punctuation pp "}")
+          let after = located_block_contents pp l in
+          close_block pp after)
   | If { label; typ; cond; if_block; else_block } ->
       hvbox pp (fun () ->
           box pp (fun () ->
@@ -785,19 +785,20 @@ let rec instr prec pp (i : _ instr) =
                         blocktype pp typ)));
               space pp ();
               punctuation pp "{");
-          located_block_contents pp if_block;
+          let if_after = located_block_contents pp if_block in
           match else_block with
           | Some else_block ->
               hvbox pp (fun () ->
                   box pp (fun () ->
                       punctuation pp "}";
+                      print_trivia pp if_after;
                       space pp ();
                       keyword pp "else";
                       space pp ();
                       punctuation pp "{");
-                  located_block_contents pp else_block;
-                  punctuation pp "}")
-          | None -> punctuation pp "}")
+                  let else_after = located_block_contents pp else_block in
+                  close_block pp else_after)
+          | None -> close_block pp if_after)
   | Try { label; typ; block = l; catches; catch_all } ->
       hvbox pp (fun () ->
           box pp (fun () ->
@@ -808,10 +809,11 @@ let rec instr prec pp (i : _ instr) =
                 blocktype pp typ;
                 space pp ());
               punctuation pp "{");
-          located_block_contents pp l;
+          let block_after = located_block_contents pp l in
           hvbox pp (fun () ->
               box pp (fun () ->
                   punctuation pp "}";
+                  print_trivia pp block_after;
                   space pp ();
                   keyword pp "catch";
                   space pp ();
@@ -827,8 +829,8 @@ let rec instr prec pp (i : _ instr) =
                               punctuation pp "=>";
                               space pp ();
                               punctuation pp "{");
-                          located_block_contents pp block;
-                          punctuation pp "}"))
+                          let after = located_block_contents pp block in
+                          close_block pp after))
                     catches;
                   Option.iter
                     (fun block ->
@@ -840,8 +842,8 @@ let rec instr prec pp (i : _ instr) =
                               punctuation pp "=>";
                               space pp ();
                               punctuation pp "{");
-                          located_block_contents pp block;
-                          punctuation pp "}"))
+                          let after = located_block_contents pp block in
+                          close_block pp after))
                     catch_all);
               (* The break before the closing [}] must sit outside the [indent]
                  above so it lands at the catch block's own column, not the
@@ -858,10 +860,11 @@ let rec instr prec pp (i : _ instr) =
                 blocktype pp bt;
                 space pp ());
               punctuation pp "{");
-          located_block_contents pp l;
+          let block_after = located_block_contents pp l in
           hvbox pp (fun () ->
               box pp (fun () ->
                   punctuation pp "}";
+                  print_trivia pp block_after;
                   space pp ();
                   keyword pp "catch";
                   space pp ();
@@ -1218,8 +1221,8 @@ let rec instr prec pp (i : _ instr) =
                 punctuation pp "=>";
                 space pp ();
                 punctuation pp "{");
-            located_block_contents pp body;
-            punctuation pp "}")
+            let after = located_block_contents pp body in
+            close_block pp after)
       in
       hvbox pp (fun () ->
           box pp (fun () ->
@@ -1365,8 +1368,8 @@ and block pp label kind bt (l : (_ instr list, location) annotated) =
             blocktype pp bt;
             space pp ());
           punctuation pp "{");
-      located_block_contents pp l;
-      punctuation pp "}")
+      let after = located_block_contents pp l in
+      close_block pp after)
 
 and deliminated_instr pp (i : _ instr) =
   if is_block i then instr Instruction pp i
@@ -1394,10 +1397,12 @@ and block_contents pp (l : _ instr list) =
 
 (* Print the contents of a brace-delimited block, looking the block's own
    location up so a comment opening the clause attaches here rather than to the
-   condition, and so an own-line comment trailing the last statement (anchored
-   before the [}], hence [within] the block's span) renders *inside* the block at
-   the statement indentation rather than leaking onto the next sibling. [before]
-   still precedes the body and [after] still follows it. *)
+   condition, and so an own-line comment trailing the last statement ([within]
+   the block's span) renders *inside* the block at the statement indentation.
+   [before] precedes the body; [within] closes it. The block's [after] (comments
+   past the closing [}]) is *returned*, not printed, so the caller can emit it on
+   the far side of the [}] — mirroring the WAT printer, where [within] prints
+   before the closing [)] and [after] after it. *)
 and located_block_contents pp (b : (_ instr list, location) annotated) =
   let assoc = get_trivia pp (Some b.info) in
   print_trivia pp assoc.before;
@@ -1410,7 +1415,15 @@ and located_block_contents pp (b : (_ instr list, location) annotated) =
           b.desc;
         print_trivia pp assoc.within);
     newline pp ());
-  print_trivia pp assoc.after
+  assoc.after
+
+(* Emit a block's closing [}] followed by the trailing comments [located_block_contents]
+   returned, so a comment anchored past the [}] renders after it (and, before an
+   [else]/[catch] continuation, back between the [}] and that keyword — where it
+   was written). *)
+and close_block pp after =
+  punctuation pp "}";
+  print_trivia pp after
 
 (*** Declarations, attributes, and module fields ***)
 
@@ -1897,8 +1910,7 @@ let rec modulefield pp field =
                 b.desc;
               print_trivia pp assoc.within);
           newline pp ());
-        print_trivia pp assoc.after;
-        punctuation pp "}"
+        close_block pp assoc.after
       in
       hvbox pp (fun () ->
           attribute pp (Printf.sprintf "#[if(%s)]" (cond_to_string cond));

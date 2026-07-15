@@ -215,17 +215,21 @@ fn caml_classify_float32_bytecode(a: f32) -> i32 {
     a = a.abs();
     if a >= 0x1p-126 {
         if a < inf {
-            0; // normal
-        } else {
+            0;
+        } // normal
+        else {
             3;
-        } // infinity
-    } else {
+        }
+    } // infinity
+    else {
         if a == 0 {
-            2; // zero
-        } else {
+            2;
+        } // zero
+        else {
             if a == a {
-                1; // subnormal
-            } else {
+                1;
+            } // subnormal
+            else {
                 4;
             }
         }

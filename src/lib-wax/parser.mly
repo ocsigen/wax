@@ -855,14 +855,13 @@ blockinstr:
       (Try {label; typ = blocktype bt; block = l; catches; catch_all}) }
 
 (* A brace-delimited statement list carrying a location spanning the whole
-   [{ … }] (including the braces), so an own-line comment trailing the last
-   statement — anchored before the [}] — falls *within* the block and stays
-   attached to it instead of leaking onto the next sibling (e.g. an [#[else]] or
-   the [else] arm of an [if]). A comment after the [}] is anchored past the
-   block's end, so it still attaches to the enclosing construct. *)
+   [{ … }], both braces included. An own-line comment trailing the last statement
+   falls *within* the block's span and renders inside it; a comment past the [}]
+   is the block's [after], which the printer emits on the far side of the closing
+   brace (see [located_block_contents]/[close_block] in [output.ml]). *)
 braced_block:
-| "{" l = statement_list rb = "}"
-  { ignore rb; with_loc ($startpos, $startpos(rb)) l }
+| "{" l = statement_list "}"
+  { with_loc $sloc l }
 
 parenthesized_expression: e = expression { e }
 (* The [descriptor(d)] clause shared by the custom-descriptors instructions
@@ -1238,12 +1237,12 @@ module_field:
 | "#" "[" IF "(" c = condition ")" "]" b = braced_fields { RF_if ($sloc, c, b) }
 | "#" "[" ELSE "]" b = braced_fields { RF_else ($sloc, b) }
 
-(* A brace-delimited, lowered field list carrying a location spanning through the
-   [}] (like [braced_block]), so a comment trailing the last field stays within
-   the branch. *)
+(* A brace-delimited, lowered field list carrying a location spanning the whole
+   [{ … }] (like [braced_block]); a comment past the [}] is the branch's [after],
+   emitted on the far side of the closing brace. *)
 braced_fields:
-| "{" fields = semi_list(module_field) rb = "}"
-  { ignore rb; with_loc ($startpos, $startpos(rb)) (lower_fields fields) }
+| "{" fields = semi_list(module_field) "}"
+  { with_loc $sloc (lower_fields fields) }
 
 (* One entry of an import block: an [fn]/[const]/[let]/[tag]/[memory]/[table]
    declaration, optionally carrying a name-only [#[import = "name"]] (imported
