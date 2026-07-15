@@ -1301,9 +1301,8 @@
     (func $throw_ebadf (param $cmd (ref eq))
       (throw $ocaml_exception
         (array.new_fixed $block 5 (ref.i31 (i32.const 0))
-          (call $get_unix_error_exn)
-          (ref.i31 (i32.const 3) ;; EBADF
-          ) (local.get $cmd) (global.get $no_arg))))
+          (call $get_unix_error_exn) (ref.i31 (i32.const 3)) ;; EBADF
+          (local.get $cmd) (global.get $no_arg))))
 
     (func $readdir_helper (param $dir (ref eq)) (result (ref eq))
       (block $end
@@ -1460,9 +1459,8 @@
         (then
           (throw $ocaml_exception
             (array.new_fixed $block 5 (ref.i31 (i32.const 0))
-              (call $get_unix_error_exn)
-              (ref.i31 (i32.const 25) ;; ENOSYS
-              ) (@string "link") (global.get $no_arg)))))
+              (call $get_unix_error_exn) (ref.i31 (i32.const 25)) ;; ENOSYS
+              (@string "link") (global.get $no_arg)))))
       (try
         (do
           (call $link
@@ -1818,8 +1816,7 @@
       ;; Like native [O_APPEND], the offset starts at 0; writes reposition to
       ;; EOF (see [unix_write]).
       (call $initialize_fd_offset (local.get $fd) (local.get $offset)
-        (i32.and (local.get $flags) (i32.const 8)) ;; O_APPEND
-      )
+        (i32.and (local.get $flags) (i32.const 8))) ;; O_APPEND
       (ref.i31 (local.get $fd))))
 )
 
@@ -2390,9 +2387,8 @@
         (block $bad (br_table $ok $bad $ok $bad $bad $ok (local.get $kind)))
         (throw $ocaml_exception
           (array.new_fixed $block 5 (ref.i31 (i32.const 0))
-            (call $get_unix_error_exn)
-            (ref.i31 (i32.const 12) ;; EINVAL
-            ) (call $channel_of_descr_name (local.get $out))
+            (call $get_unix_error_exn) (ref.i31 (i32.const 12)) ;; EINVAL
+            (call $channel_of_descr_name (local.get $out))
             (global.get $no_arg))))))
 )
 

@@ -380,11 +380,7 @@ fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
         // Like native [O_APPEND], the fd position starts at 0 (WASI's O_APPEND
         // fdflag makes each write go to EOF regardless), so [pos_out] reports 0
         // right after opening, matching native.
-        initialize_fd_offset(
-            fd,
-            offset,
-            flags & 0x100 // O_APPEND
-        );
+        initialize_fd_offset(fd, offset, flags & 0x100); // O_APPEND
         fd as &i31;
     }
 }
@@ -404,11 +400,7 @@ fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
         let offset: i64;
         // Like native [O_APPEND], the offset starts at 0; writes reposition to
         // EOF (see [caml_flush_partial]).
-        initialize_fd_offset(
-            fd,
-            offset,
-            flags & 8 // O_APPEND
-        );
+        initialize_fd_offset(fd, offset, flags & 8); // O_APPEND
         fd as &i31;
     }
 }

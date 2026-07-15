@@ -465,8 +465,7 @@
       ;; fdflag makes each write go to EOF regardless), so [pos_out] reports 0
       ;; right after opening, matching native.
       (call $initialize_fd_offset (local.get $fd) (local.get $offset)
-        (i32.and (local.get $flags) (i32.const 0x100)) ;; O_APPEND
-      )
+        (i32.and (local.get $flags) (i32.const 0x100))) ;; O_APPEND
       (ref.i31 (local.get $fd))))
   (@else
     (func $caml_sys_open (export "caml_sys_open")
@@ -487,8 +486,7 @@
       ;; Like native [O_APPEND], the offset starts at 0; writes reposition to
       ;; EOF (see [caml_flush_partial]).
       (call $initialize_fd_offset (local.get $fd) (local.get $offset)
-        (i32.and (local.get $flags) (i32.const 8)) ;; O_APPEND
-      )
+        (i32.and (local.get $flags) (i32.const 8))) ;; O_APPEND
       (ref.i31 (local.get $fd))))
 )
 

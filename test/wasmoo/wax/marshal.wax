@@ -416,9 +416,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
     if size {
         s.obj_table = [0 as &i31; size];
     }
-    let v: &eq =
-        0 // keep validator happy
-            as &i31;
+    let v: &eq = 0 as &i31; // keep validator happy
     'exit: do {
         let tg: i32;
         let len: i32;

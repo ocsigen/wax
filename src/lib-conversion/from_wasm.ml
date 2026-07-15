@@ -1857,9 +1857,15 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push input
         (with_loc
            (Br_on_cast_desc_eq_fail (label ctx i, t.nullable, sequence args, d)))
-  | Folded (i, l) ->
+  | Folded (head, l) ->
+      (* Carry the folded expression's full span (the [(…)]'s [$sloc]) onto its
+         head instruction, so the resulting Wax node encloses its operands rather
+         than covering just the opcode keyword. Otherwise a comment trailing the
+         [)] attaches to the last-ending operand — which, for [select]'s
+         value/condition reorder, is the ternary's *first* element (the
+         condition), not its last, breaking the wax→wat→wax round-trip. *)
       let* () = instructions ctx l in
-      instruction ctx i
+      instruction ctx { head with Ast.info = i.info }
   | LocalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Local x)))
   | GlobalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Global x)))
   | LocalSet x ->

@@ -1320,8 +1320,7 @@ fn caml_alloc_stat(
             [block|
                 0 as &i31,
                 get_unix_error_exn(),
-                3 // EBADF
-                    as &i31,
+                3 as &i31, // EBADF
                 cmd,
                 no_arg,
             ];
@@ -1495,8 +1494,7 @@ fn win_findfirst(vpath: &eq) -> &eq {
                 [block|
                     0 as &i31,
                     get_unix_error_exn(),
-                    25 // ENOSYS
-                        as &i31,
+                    25 as &i31, // ENOSYS
                     "link",
                     no_arg,
                 ];
@@ -1840,11 +1838,7 @@ type flags = [i16];
         let offset: i64;
         // Like native [O_APPEND], the offset starts at 0; writes reposition to
         // EOF (see [unix_write]).
-        initialize_fd_offset(
-            fd,
-            offset,
-            flags & 8 // O_APPEND
-        );
+        initialize_fd_offset(fd, offset, flags & 8); // O_APPEND
         fd as &i31;
     }
 }
@@ -2306,8 +2300,7 @@ fn channel_of_descr_name(out: i32) -> &eq {
                     [block|
                         0 as &i31,
                         get_unix_error_exn(),
-                        12 // EINVAL
-                            as &i31,
+                        12 as &i31, // EINVAL
                         channel_of_descr_name(out),
                         no_arg,
                     ];

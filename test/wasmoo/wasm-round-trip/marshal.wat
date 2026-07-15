@@ -572,9 +572,7 @@
     (then
       (struct.set $intern_state $obj_table (local.get $s)
         (array.new $block (ref.i31 (i32.const 0)) (local.get $size)))))
-  (local.set $v
-    (ref.i31 (i32.const 0) ;; keep validator happy
-    ))
+  (local.set $v (ref.i31 (i32.const 0))) ;; keep validator happy
   (block $exit
     (loop $loop
       (local.set $item (br_on_null $exit (local.get $sp)))
