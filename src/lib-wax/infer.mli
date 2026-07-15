@@ -8,6 +8,7 @@ module Output : sig
   val instr : Format.formatter -> _ Ast.instr -> unit
   val valtype : Format.formatter -> Ast.valtype -> unit
   val comptype : Format.formatter -> Ast.comptype -> unit
+  val fieldtype : Format.formatter -> Ast.fieldtype -> unit
 end
 
 (** A mutable cell carrying a value, backed by union-find: [merge] unifies two

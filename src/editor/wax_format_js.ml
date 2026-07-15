@@ -213,9 +213,11 @@ type analysis = {
       (* use -> definition(s) references, for go-to-definition. *)
   a_puns : Wax_utils.Ast.location list;
       (* punned struct-literal field spans, which rename must expand. *)
-  a_members : (Wax_utils.Ast.location * string list) list;
-      (* at each struct field access, the field span and the receiver's field
-         names, for member completion. *)
+  a_members :
+    (Wax_utils.Ast.location * Wax_lang.Typing.member_candidate list) list;
+      (* at each struct field access, the field span and the receiver's members
+         (fields, or a numeric / array receiver's value methods), for member
+         completion. *)
 }
 
 let analyze_uncached src =
@@ -1093,19 +1095,23 @@ let member_fields_at src line ch members =
   in
   let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
   List.find_map
-    (fun ((loc : Wax_utils.Ast.location), names) ->
+    (fun ((loc : Wax_utils.Ast.location), candidates) ->
       if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
-        Some names
+        Some candidates
       else None)
     members
+
+let member_completion (c : Wax_lang.Typing.member_candidate) =
+  {
+    k_name = c.member_name;
+    k_kind = (match c.member_kind with Field -> "field" | Method -> "method");
+    k_detail = c.member_detail;
+  }
 
 let completion_string src line ch =
   if is_member_position src line ch then
     match member_fields_at src line ch (analyze src).a_members with
-    | Some names ->
-        List.map
-          (fun n -> { k_name = n; k_kind = "field"; k_detail = "" })
-          names
+    | Some candidates -> List.map member_completion candidates
     | None -> (
         (* A bare [.]: the parser drops the field-less access, so nothing is
            recorded. Splice a sentinel field in so [recv.<sentinel>] parses and
@@ -1121,10 +1127,7 @@ let completion_string src line ch =
           member_fields_at repaired line ch
             (analyze_uncached repaired).a_members
         with
-        | Some names ->
-            List.map
-              (fun n -> { k_name = n; k_kind = "field"; k_detail = "" })
-              names
+        | Some candidates -> List.map member_completion candidates
         | None -> [])
   else
     let target = (line + 1, byte_column src line ch) in

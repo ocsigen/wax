@@ -23,15 +23,18 @@ pun "x" @ 2:42-2:43
 
 === member access ===
 "p"      @ 2:29-2:30 -> 2:9-2:10  [&point]
-"point"  @ 2:13-2:18 -> 1:5-1:10  [type point = { x: i32, y: i32 };]
-member @ 2:31-2:32 -> x, y
+"point"  @ 1:42-1:47 -> 1:5-1:10  [type point = { x: i32, y: mut i32, next: &point };]
+"point"  @ 2:13-2:18 -> 1:5-1:10  [type point = { x: i32, y: mut i32, next: &point };]
+member @ 2:31-2:32 -> x: i32, y: mut i32, next: &point
 
 === value methods ===
-"a"      @ 3:29-3:30 -> 2:21-2:22  [&arr]
-"arr"    @ 2:25-2:28 -> 1:5-1:8  [type arr = [i32];]
-"f"      @ 3:17-3:18 -> 2:13-2:14  [f32]
+"a"      @ 3:46-3:47 -> 2:29-2:30  [&arr]
+"arr"    @ 2:33-2:36 -> 1:5-1:8  [type arr = [i32];]
+"f"      @ 3:34-3:35 -> 2:21-2:22  [f32]
+"w"      @ 3:17-3:18 -> 2:13-2:14  [i64]
 "x"      @ 3:6-3:7   -> 2:5-2:6  [i32]
-member @ 3:8-3:11 -> clz, ctz, popcnt, extend8_s, extend16_s, from_bits, rotl, rotr
-member @ 3:19-3:23 -> abs, ceil, floor, trunc, nearest, sqrt, to_bits, min, max, copysign
-member @ 3:31-3:37 -> length
+member @ 3:8-3:11 -> clz: fn() -> i32, ctz: fn() -> i32, popcnt: fn() -> i32, extend8_s: fn() -> i32, extend16_s: fn() -> i32, from_bits: fn() -> f32, rotl: fn(i32) -> i32, rotr: fn(i32) -> i32
+member @ 3:19-3:28 -> clz: fn() -> i64, ctz: fn() -> i64, popcnt: fn() -> i64, extend8_s: fn() -> i64, extend16_s: fn() -> i64, from_bits: fn() -> f64, rotl: fn(i64) -> i64, rotr: fn(i64) -> i64
+member @ 3:36-3:40 -> abs: fn() -> f32, ceil: fn() -> f32, floor: fn() -> f32, trunc: fn() -> f32, nearest: fn() -> f32, sqrt: fn() -> f32, to_bits: fn() -> i32, min: fn(f32) -> f32, max: fn(f32) -> f32, copysign: fn(f32) -> f32
+member @ 3:48-3:54 -> length: fn() -> i32
 

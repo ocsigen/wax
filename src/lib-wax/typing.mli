@@ -34,13 +34,40 @@ val f :
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
 
-val integer_methods : string list
+type member_kind = Field | Method
 
-val float_methods : string list
+type member_candidate = {
+  member_name : string;
+  member_kind : member_kind;
+  member_detail : string;
+}
+(** A candidate for member completion at [recv.<here>]: a struct field or a
+    value method, with the [member_kind] driving the editor's icon and
+    [member_detail] a rendered type/signature — the field's declared type
+    ([i32], [mut i32], [&point]) or the method's signature ([fn() -> i32]).
+    Collected by {!f_infer} via [member_completions]. *)
+
+type method_result =
+  | Same
+  | Reinterpret
+      (** A value method's result type relative to its receiver: [Same] type, or
+          the equal-width opposite numeric family ([i32]<->[f32],
+          [i64]<->[f64]), as [from_bits] / [to_bits] reinterpret. *)
+
+type value_method = {
+  vm_name : string;
+  vm_binary : bool;  (** takes a second operand of the receiver's type *)
+  vm_result : method_result;
+}
+
+val integer_methods : value_method list
+
+val float_methods : value_method list
 (** The value methods member completion offers for an integer / float receiver
     (e.g. [x.sqrt()]). A curated registry, since the method dispatch is
     match-based and not enumerable; the test in test/method-consistency
-    type-checks each to keep it in step with the typer. *)
+    type-checks each — arity and result type included — to keep it in step with
+    the typer. *)
 
 type hover_target =
   | Value_type of Infer.inferred_valtype
@@ -66,7 +93,7 @@ val f_infer :
   ?warn_unused:bool ->
   ?resolve_links:reference list ref option ->
   ?pun_spans:Ast.location list ref option ->
-  ?member_completions:(Ast.location * string list) list ref option ->
+  ?member_completions:(Ast.location * member_candidate list) list ref option ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -84,8 +111,10 @@ val f_infer :
     [x] for [x: x]) is appended to it — such a span is both a field name and a
     variable use, so a rename must expand it rather than replace it. When
     [member_completions] is a [Some ref], each struct field access [recv.field]
-    appends the field's span and the receiver struct's field names, for member
-    completion. All default to [None], so an ordinary run records nothing. *)
+    appends the field's span and the receiver's members ({!member_candidate}
+    list: a struct's fields, or a numeric / array receiver's value methods), for
+    member completion. All default to [None], so an ordinary run records
+    nothing. *)
 
 val check :
   ?warn_unused:bool ->

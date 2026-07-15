@@ -54,46 +54,125 @@ let record_pun (sink : location list ref option) (name_info : location) =
   | Some r when is_source name_info -> r := name_info :: !r
   | _ -> ()
 
+(* A member-completion candidate for [recv.<here>]: a struct field or a value
+   method, its [member_kind] driving the editor's icon and [member_detail] a
+   rendered type/signature — the field's declared type or the method's
+   signature. *)
+type member_kind = Field | Method
+
+type member_candidate = {
+  member_name : string;
+  member_kind : member_kind;
+  member_detail : string;
+}
+
 (* Record, at a struct field access, the (possibly partial) field's span and the
-   receiver's members (a struct's fields, or the method names below), for member
-   completion. *)
-let record_members (sink : (location * string list) list ref option) field names
-    =
+   receiver's members (a struct's fields, or the value methods below), for
+   member completion. [candidates] is a thunk: rendering it (field types,
+   method signatures) is wasted work on the ordinary compile path, where the
+   sink is [None]. *)
+let record_members (sink : (location * member_candidate list) list ref option)
+    field candidates =
   match sink with
-  | Some r when is_source field -> r := (field, names) :: !r
+  | Some r when is_source field -> r := (field, candidates ()) :: !r
   | _ -> ()
 
-(* The value methods offered by member completion for a numeric receiver. This
-   is a curated registry: the method dispatch (see [type_unary_intrinsic_call] /
-   [type_binary_intrinsic_call]) is match-based and cannot be enumerated, so the
-   test in test/method-consistency type-checks each of these to keep them in
-   step with what the typer actually accepts. Vector ([v128]) and memory / table
+(* What a value method's result type is relative to its receiver: [Same] as the
+   receiver, or the equal-width opposite numeric family ([i32]<->[f32],
+   [i64]<->[f64]), as [from_bits] / [to_bits] reinterpret. *)
+type method_result = Same | Reinterpret
+
+type value_method = {
+  vm_name : string;
+  vm_binary : bool;  (** takes a second operand of the receiver's type *)
+  vm_result : method_result;
+}
+
+let meth ?(binary = false) ?(result = Same) vm_name =
+  { vm_name; vm_binary = binary; vm_result = result }
+
+(* The value methods offered by member completion for an integer / float
+   receiver. A curated registry: the method dispatch (see
+   [type_unary_intrinsic_call] / [type_binary_intrinsic_call]) is match-based
+   and cannot be enumerated, so the test in test/method-consistency type-checks
+   each of these — arity and result type included — to keep the registry in step
+   with what the typer actually accepts. Vector ([v128]) and memory / table
    methods (a different dispatch path) are not covered yet. *)
 let integer_methods =
   [
-    "clz";
-    "ctz";
-    "popcnt";
-    "extend8_s";
-    "extend16_s";
-    "from_bits";
-    "rotl";
-    "rotr";
+    meth "clz";
+    meth "ctz";
+    meth "popcnt";
+    meth "extend8_s";
+    meth "extend16_s";
+    meth ~result:Reinterpret "from_bits";
+    meth ~binary:true "rotl";
+    meth ~binary:true "rotr";
   ]
 
 let float_methods =
   [
-    "abs";
-    "ceil";
-    "floor";
-    "trunc";
-    "nearest";
-    "sqrt";
-    "to_bits";
-    "min";
-    "max";
-    "copysign";
+    meth "abs";
+    meth "ceil";
+    meth "floor";
+    meth "trunc";
+    meth "nearest";
+    meth "sqrt";
+    meth ~result:Reinterpret "to_bits";
+    meth ~binary:true "min";
+    meth ~binary:true "max";
+    meth ~binary:true "copysign";
   ]
+
+let numtype_name : Ast.valtype -> string = function
+  | I32 -> "i32"
+  | I64 -> "i64"
+  | F32 -> "f32"
+  | F64 -> "f64"
+  | V128 -> "v128"
+  | Ref _ -> "ref"
+
+(* The member-completion candidates for [methods] on numeric receiver [recv]:
+   each rendered with a real signature ([fn() -> i32], [fn(f32) -> f32]). *)
+let method_candidates recv methods =
+  let result m =
+    match m.vm_result with
+    | Same -> recv
+    | Reinterpret -> (
+        match recv with
+        | Ast.I32 -> Ast.F32
+        | I64 -> F64
+        | F32 -> I32
+        | F64 -> I64
+        | other -> other)
+  in
+  List.map
+    (fun m ->
+      let params = if m.vm_binary then numtype_name recv else "" in
+      {
+        member_name = m.vm_name;
+        member_kind = Method;
+        member_detail =
+          Printf.sprintf "fn(%s) -> %s" params (numtype_name (result m));
+      })
+    methods
+
+(* A struct field's declared type, rendered for the member-completion detail
+   (e.g. [i32], [mut i32], [&point]) as it reads in a type definition. [Output]
+   here is [Infer.Output] (open Infer), whose printers take a formatter. *)
+let render_fieldtype (f : Ast.fieldtype) =
+  String.trim (Format.asprintf "%a" Output.fieldtype f)
+
+(* The member candidates for a struct's [fields], for member completion. *)
+let struct_candidates fields =
+  Array.to_list fields
+  |> List.map (fun f ->
+      let nm, typ = f.Ast.desc in
+      {
+        member_name = nm.Ast.desc;
+        member_kind = Field;
+        member_detail = render_fieldtype typ;
+      })
 
 let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
   match sink with
@@ -1314,11 +1393,12 @@ type module_context = {
          both a field name and a variable use, so the editor must expand it
          ([x] -> [x: new]) rather than replace it on rename. [None] outside the
          editor. *)
-  member_completions : (location * string list) list ref option;
+  member_completions : (location * member_candidate list) list ref option;
       (* At each struct field access [recv.field], the field-name span paired
-         with the receiver struct's field names, for member completion. The
-         editor offers those names when the cursor is on the (possibly partial)
-         field. [None] outside the editor. *)
+         with the receiver's members (a struct's fields, or the value methods of
+         a numeric / array receiver), for member completion. The editor offers
+         those when the cursor is on the (possibly partial) field. [None]
+         outside the editor. *)
 }
 
 (* The subtyping info for the current type space, memoised on [type_context] and
@@ -5529,18 +5609,20 @@ and type_aggregate_access ctx i =
         (* A numeric receiver's methods, for member completion; a reference
            receiver's members are recorded in the struct/array arms below. *)
         (match Cell.get ty with
-        | Valtype { typ = I32 | I64; _ } ->
-            record_members ctx.member_completions field.info integer_methods
-        | Valtype { typ = F32 | F64; _ } ->
-            record_members ctx.member_completions field.info float_methods
+        | Valtype { typ = (I32 | I64) as recv; _ } ->
+            record_members ctx.member_completions field.info (fun () ->
+                method_candidates recv integer_methods)
+        | Valtype { typ = (F32 | F64) as recv; _ } ->
+            record_members ctx.member_completions field.info (fun () ->
+                method_candidates recv float_methods)
         | _ -> ());
         match (Cell.get ty, field.desc) with
         | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
             match def.typ with
             | Struct fields -> (
-                record_members ctx.member_completions field.info
-                  (Array.to_list fields |> List.map (fun f -> (fst f.desc).desc));
+                record_members ctx.member_completions field.info (fun () ->
+                    struct_candidates fields);
                 match
                   Array.find_map
                     (fun f ->
@@ -5556,8 +5638,14 @@ and type_aggregate_access ctx i =
             | Func _ | Array _ | Cont _ ->
                 (match def.typ with
                 | Array _ ->
-                    record_members ctx.member_completions field.info
-                      [ "length" ]
+                    record_members ctx.member_completions field.info (fun () ->
+                        [
+                          {
+                            member_name = "length";
+                            member_kind = Method;
+                            member_detail = "fn() -> i32";
+                          };
+                        ])
                 | _ -> ());
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics
@@ -5629,8 +5717,8 @@ and type_aggregate_access ctx i =
             match lookup_struct_type ctx ty with
             | None -> None
             | Some fields -> (
-                record_members ctx.member_completions field.info
-                  (Array.to_list fields |> List.map (fun f -> (fst f.desc).desc));
+                record_members ctx.member_completions field.info (fun () ->
+                    struct_candidates fields);
                 match
                   Array.find_map
                     (fun f ->

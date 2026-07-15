@@ -160,20 +160,23 @@ does not carry. Three distinct prerequisites:
   (nothing typed yet) is handled by splicing a sentinel field so the receiver
   types. Each item carries a type / signature rendered from the declaration
   (`fn(a: i32) -> i32`, `i32`, the type's definition), from the parse alone;
-  inferred locals without an annotation show none.
+  inferred locals without an annotation show none. Each struct field now shows
+  its declared type (`i32`, `mut i32`, `&point`), rendered by the typer from the
+  struct definition.
 
   **Value methods** after `.` are offered too: on a numeric receiver the typer
   records a curated registry (`Typing.integer_methods` / `float_methods` —
   `clz`, `sqrt`, `min`, …) at the same field-access choke point, and an array
   receiver records `length`. The registry is curated because the method dispatch
   is match-based, not enumerable; `test/method-consistency` type-checks each
-  entry so the list cannot drift from what the typer accepts. Follow-ups:
+  entry — arity and result type included — so the list cannot drift from what the
+  typer accepts. Each is offered with the "method" completion kind (a distinct
+  icon) and a rendered signature (`fn() -> i32`, `fn(f32) -> f32`); the member
+  sink carries a kind and detail per candidate, not a bare name. Follow-ups:
   memory/table method completion (a different dispatch path where the receiver
-  is not a value), v128 methods (enumerable from `Wax_wasm.Simd`), a distinct
-  "method" kind + signature detail for these entries (they currently render as
-  fields, since the recording sink carries only names), intrinsic namespaces
-  after `::`, per-point local scoping (currently every local in the function is
-  offered), and struct-field type details in member completion.
+  is not a value), v128 methods (enumerable from `Wax_wasm.Simd`), intrinsic
+  namespaces after `::`, and per-point local scoping (currently every local in
+  the function is offered).
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -190,10 +193,9 @@ hover, inlay hints, go-to-definition, find-references / document-highlight,
 rename, and completion (names and struct members). What is left refines them:
 
 - **Completion polish** — value methods after `.` are done (curated registry,
-  numeric + array receivers); still open are memory/table method completion,
-  v128 methods, a distinct method kind/signature for the value methods,
-  intrinsic namespaces after `::`, per-point local scoping, and struct-field
-  type details in member completion.
+  numeric + array receivers, with a method icon + signature), and struct fields
+  carry their type; still open are memory/table method completion, v128 methods,
+  intrinsic namespaces after `::`, and per-point local scoping.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 

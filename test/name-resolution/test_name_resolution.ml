@@ -70,11 +70,15 @@ let resolve name src =
       List.iter
         (fun l -> Printf.printf "pun %S @ %s\n" (slice src l) (span l))
         (List.sort_uniq compare !puns);
-      (* Member-completion candidates at each struct field access. *)
+      (* Member-completion candidates at each struct field access: name, kind
+         (a struct field, or a value method) and its rendered signature. *)
       List.iter
-        (fun (l, names) ->
+        (fun (l, candidates) ->
+          let show (c : Typing.member_candidate) =
+            Printf.sprintf "%s: %s" c.member_name c.member_detail
+          in
           Printf.printf "member @ %s -> %s\n" (span l)
-            (String.concat ", " names))
+            (String.concat ", " (List.map show candidates)))
         (List.sort_uniq compare !members);
       print_newline ()
 
@@ -91,12 +95,14 @@ let () =
   resolve "struct pun"
     "type point = { x: i32, y: i32 };\n\
      fn mk(x: i32, y: i32) -> &point { {point| x, y: y }; }\n";
+  (* Member candidates carry each field's rendered type (mut / ref included). *)
   resolve "member access"
-    "type point = { x: i32, y: i32 };\nfn get_x(p: &point) -> i32 { p.x; }\n";
+    "type point = { x: i32, y: mut i32, next: &point };\n\
+     fn get_x(p: &point) -> i32 { p.x; }\n";
   (* A partial member access (no call yet) is what completion sees mid-edit; on
      a numeric / array receiver it records the value-method registry. *)
   resolve "value methods"
     "type arr = [i32];\n\
-     fn m(x: i32, f: f32, a: &arr) {\n\
-    \  _ = x.clz; _ = f.sqrt; _ = a.length;\n\
+     fn m(x: i32, w: i64, f: f32, a: &arr) {\n\
+    \  _ = x.clz; _ = w.from_bits; _ = f.sqrt; _ = a.length;\n\
      }\n"

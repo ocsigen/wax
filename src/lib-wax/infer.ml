@@ -10,6 +10,7 @@ module Output = struct
 
   let valtype f t = Wax_utils.Printer.run f (fun pp -> Output.valtype pp t)
   let comptype f t = Wax_utils.Printer.run f (fun pp -> Output.comptype pp t)
+  let fieldtype f t = Wax_utils.Printer.run f (fun pp -> Output.fieldtype pp t)
   let instr f i = Wax_utils.Printer.run f (fun pp -> Output.instr pp i)
 end
 

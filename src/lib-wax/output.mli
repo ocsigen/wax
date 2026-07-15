@@ -9,6 +9,7 @@ val instr : Wax_utils.Printer.t -> _ Ast.instr -> unit
 val valtype : Wax_utils.Printer.t -> Ast.valtype -> unit
 val comptype : Wax_utils.Printer.t -> Ast.comptype -> unit
 val storagetype : Wax_utils.Printer.t -> Ast.storagetype -> unit
+val fieldtype : Wax_utils.Printer.t -> Ast.fieldtype -> unit
 
 val subtype :
   Wax_utils.Printer.t ->

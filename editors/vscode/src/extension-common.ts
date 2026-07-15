@@ -537,6 +537,8 @@ function completionKind(kind: string): vscode.CompletionItemKind {
       return vscode.CompletionItemKind.Field;
     case "field":
       return vscode.CompletionItemKind.Field;
+    case "method":
+      return vscode.CompletionItemKind.Method;
     case "parameter":
     case "local":
       return vscode.CompletionItemKind.Variable;
