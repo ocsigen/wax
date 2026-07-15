@@ -153,6 +153,9 @@ const LANGUAGES: LanguageSpec[] = [
     foldingRanges: (wax, src) => wax.foldingRangesWat(src),
     selectionRange: (wax, src, line, character) =>
       wax.selectionRangeWat(src, line, character),
+    semanticTokens: (wax, src) => wax.semanticTokensWat(src),
+    signatureHelp: (wax, src, line, character) =>
+      wax.signatureHelpWat(src, line, character),
   },
 ];
 

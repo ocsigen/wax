@@ -111,12 +111,16 @@ setting is `wax.define` (conditional-compilation defines, mirroring `-D`), read
 from `initializationOptions` and `workspace/didChangeConfiguration` and threaded
 into `check_string_with_defines`/`completion_string`. A `.wat` URI is served by
 the `*_wat_string` analyses (dispatched on `is_wat`): formatting, diagnostics,
-outline, hover (types from `Validation.f`'s `?record_types` sink), and
+outline, folding, selection-range; hover, signature-help and semantic-tokens
+(from `Validation.f`'s `?record_types` sink — each value at its instruction span,
+identifiers at their own span: a call's callee signature, a local/global's type,
+a type reference's source subtype; the subtype is kept in the reference-keyed
+`index_mapping` so deduplicated types still show their own definition); and
 navigation/rename (go-to-definition, references, document-highlight,
-prepare-rename, rename — all over `Wax_wasm.Resolve`, the WAT name-resolution
-pass), plus folding and selection-range. Still Wax-only for `.wat` (guarded to
-return empty): completion, signature-help, inlay-hint, type-definition, and
-semantic-tokens. `--stdio` is accepted and ignored. The
+prepare-rename, rename — over `Wax_wasm.Resolve`, the WAT name-resolution pass,
+which also classifies the semantic tokens). Still Wax-only for `.wat` (guarded to
+return empty): completion, inlay-hint, and type-definition. `--stdio` is accepted
+and ignored. The
 `wax` binary builds in both `exe` and `wasm` modes, and `lsp`/`jsonrpc` compile
 under wasm_of_ocaml, so the npm wasm CLI still builds with the subcommand linked
 in.

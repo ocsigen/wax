@@ -211,6 +211,15 @@ val signature_help_string :
   int ->
   (string * (int * int) list * int) option
 
+(* As [signature_help_string], but for a Wasm-text buffer: the signature of the
+   folded direct call enclosing the cursor. *)
+val signature_help_wat_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  (string * (int * int) list * int) option
+
 (* The chain of enclosing syntactic spans at the position, innermost first, each
    [(start line, start char, end line, end char)] (zero-based, UTF-16), for
    expand/shrink selection. Wax only. *)
@@ -231,6 +240,11 @@ val selection_range_wat_string :
 
 (* Every identifier occurrence classified for semantic highlighting. Wax only. *)
 val semantic_tokens_string :
+  ?encoding:position_encoding -> string -> sem_token list
+
+(* As [semantic_tokens_string], but for WAT: each index identifier classified by
+   the kind of definition it resolves to. *)
+val semantic_tokens_wat_string :
   ?encoding:position_encoding -> string -> sem_token list
 
 (* Foldable ranges — block bodies and multi-line block comments — each [(start

@@ -1928,6 +1928,133 @@ let positions ~encoding src offsets =
   flush !byte !line !col;
   tbl
 
+(* Iterate [f] over every WAT module field, descending into the branches of an
+   [(@if …)] conditional annotation (whose bodies hold nested fields), so a field
+   guarded by a condition is walked like any other. *)
+let rec wat_iter_fields f fields =
+  let open Wax_wasm.Ast in
+  List.iter
+    (fun (field :
+           ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
+             Wax_utils.Ast.location )
+           annotated) ->
+      f field;
+      match field.desc with
+      | Text.Module_if_annotation { then_fields; else_fields; _ } ->
+          wat_iter_fields f then_fields.desc;
+          Option.iter (fun b -> wat_iter_fields f b.desc) else_fields
+      | _ -> ())
+    fields
+
+(* Apply [f] to every instruction (recursively) in a WAT field's code — a
+   function body, or a global / elem / data / table initializer expression. *)
+let wat_field_iter_instr f
+    (field :
+      ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
+        Wax_utils.Ast.location )
+      Wax_wasm.Ast.annotated) =
+  let open Wax_wasm.Ast.Text in
+  let expr e = List.iter (Wax_wasm.Ast_utils.iter_instr f) e in
+  match field.desc with
+  | Func { instrs; _ } -> expr instrs
+  | Global { init; _ } -> expr init
+  | Elem { init; _ } -> List.iter expr init
+  | Data { mode = Active (_, e); _ } -> expr e
+  | Table { init = Init_expr e; _ } -> expr e
+  | Table { init = Init_segment es; _ } -> List.iter expr es
+  | _ -> ()
+
+(* As [signature_help_string], but for WAT: inside a folded direct call
+   [(call $f a b …)], the callee's signature with the operand under the cursor as
+   the active parameter. The signature is the validator's recorded type at the
+   callee identifier; the active parameter is how many operands end before the
+   cursor. Only folded direct calls ([call]/[return_call]) qualify — an unfolded
+   call takes its arguments off the stack, so there is no argument position to
+   track. *)
+let signature_help_wat_string ?(encoding = UTF16) src line ch =
+  let target = (line + 1, byte_column ~encoding src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let span (loc : Wax_utils.Ast.location) =
+    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+  in
+  let same_span (a : Wax_utils.Ast.location) (b : Wax_utils.Ast.location) =
+    a.loc_start.pos_cnum = b.loc_start.pos_cnum
+    && a.loc_end.pos_cnum = b.loc_end.pos_cnum
+  in
+  let ast_opt, _, _ =
+    Wat_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_wasm.Recover.sync
+      ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+      ~barrier:Wax_wasm.Recover.barrier src
+  in
+  match ast_opt with
+  | None -> None
+  | Some (_name, fields) -> (
+      (* The innermost folded direct call whose span covers the cursor. *)
+      let best = ref None in
+      let consider i =
+        let open Wax_wasm.Ast in
+        let open Text in
+        match i.desc with
+        | Folded ({ desc = Call idx | ReturnCall idx; _ }, args)
+          when contains i.info -> (
+            match !best with
+            | Some (bloc, _, _) when span bloc <= span i.info -> ()
+            | _ -> best := Some (i.info, idx, args))
+        | _ -> ()
+      in
+      wat_iter_fields (fun f -> wat_field_iter_instr consider f) fields;
+      match !best with
+      | None -> None
+      | Some (_, idx, args) -> (
+          let signature =
+            List.find_map
+              (fun (loc, rt) ->
+                if same_span loc idx.Wax_wasm.Ast.info then
+                  Wax_wasm.Validation.signature_labels rt
+                else None)
+              (wat_type_map src)
+          in
+          match signature with
+          | None -> None
+          | Some (params, results) ->
+              (* The active parameter: how many operands end before the cursor,
+                 clamped to the parameter count. *)
+              let active =
+                let open Wax_wasm.Ast in
+                List.fold_left
+                  (fun acc a ->
+                    if le (pos a.info.loc_end) target then acc + 1 else acc)
+                  0 args
+              in
+              let nparams = List.length params in
+              let active =
+                if nparams = 0 then 0 else min active (nparams - 1)
+              in
+              let buf = Buffer.create 64 in
+              Buffer.add_string buf "func (";
+              let ranges =
+                List.mapi
+                  (fun i p ->
+                    if i > 0 then Buffer.add_string buf ", ";
+                    let s = Buffer.length buf in
+                    Buffer.add_string buf p;
+                    (s, Buffer.length buf))
+                  params
+              in
+              Buffer.add_char buf ')';
+              (match results with
+              | [] -> ()
+              | _ ->
+                  Buffer.add_string buf " -> ";
+                  Buffer.add_string buf (String.concat ", " results));
+              Some (Buffer.contents buf, ranges, active)))
+
 (* Selection ranges (expand / shrink selection, Wax only): for the position, the
    chain of enclosing syntactic spans from the innermost node outward, so
    Shift+Alt+Right grows the selection expression -> statement -> block ->
@@ -1977,42 +2104,6 @@ let selection_range_string ?(encoding = UTF16) src line ch =
           | Some (sl, sc), Some (el, ec) -> Some (sl, sc, el, ec)
           | _ -> None)
         pairs
-
-(* Iterate [f] over every WAT module field, descending into the branches of an
-   [(@if …)] conditional annotation (whose bodies hold nested fields), so a field
-   guarded by a condition is walked like any other. *)
-let rec wat_iter_fields f fields =
-  let open Wax_wasm.Ast in
-  List.iter
-    (fun (field :
-           ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
-             Wax_utils.Ast.location )
-           annotated) ->
-      f field;
-      match field.desc with
-      | Text.Module_if_annotation { then_fields; else_fields; _ } ->
-          wat_iter_fields f then_fields.desc;
-          Option.iter (fun b -> wat_iter_fields f b.desc) else_fields
-      | _ -> ())
-    fields
-
-(* Apply [f] to every instruction (recursively) in a WAT field's code — a
-   function body, or a global / elem / data / table initializer expression. *)
-let wat_field_iter_instr f
-    (field :
-      ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
-        Wax_utils.Ast.location )
-      Wax_wasm.Ast.annotated) =
-  let open Wax_wasm.Ast.Text in
-  let expr e = List.iter (Wax_wasm.Ast_utils.iter_instr f) e in
-  match field.desc with
-  | Func { instrs; _ } -> expr instrs
-  | Global { init; _ } -> expr init
-  | Elem { init; _ } -> List.iter expr init
-  | Data { mode = Active (_, e); _ } -> expr e
-  | Table { init = Init_expr e; _ } -> expr e
-  | Table { init = Init_segment es; _ } -> List.iter expr es
-  | _ -> ()
 
 (* As [selection_range_string], but for WAT: the chain of enclosing field and
    instruction spans covering the cursor, innermost first, from the recovered
@@ -2406,6 +2497,67 @@ let semantic_tokens_string ?(encoding = UTF16) src =
           | _ -> None)
       |> List.sort (fun a b ->
           compare (a.st_line, a.st_char) (b.st_line, b.st_char))
+
+(* Semantic tokens for WAT: colour each index identifier by the kind of
+   definition it resolves to, so functions, types, globals, locals and struct
+   fields — all rendered the same by the grammar — are distinguished. Built from
+   the name-resolution bindings ([Wax_wasm.Resolve]); labels have no matching
+   token type in the legend and keep their grammar colour. Both symbolic ([$id])
+   and numeric index tokens are classified. *)
+let semantic_tokens_wat_string ?(encoding = UTF16) src =
+  let token_type : Wax_wasm.Resolve.kind -> string option = function
+    | Func -> Some "function"
+    | Type -> Some "type"
+    | Field -> Some "property"
+    | Param -> Some "parameter"
+    | Local | Global | Memory | Table | Tag | Elem | Data -> Some "variable"
+    | Label -> None
+  in
+  let toks =
+    List.concat_map
+      (fun (b : Wax_wasm.Resolve.binding) ->
+        match token_type b.kind with
+        | None -> []
+        | Some ty ->
+            let occ =
+              (match b.def with Some d -> [ d ] | None -> []) @ b.uses
+            in
+            List.map (fun loc -> (loc, ty)) occ)
+      (wat_bindings src)
+  in
+  let toks =
+    List.filter
+      (fun ((loc : Wax_utils.Ast.location), _) -> loc.loc_start.pos_cnum >= 0)
+      toks
+  in
+  let offsets =
+    List.concat_map
+      (fun ((loc : Wax_utils.Ast.location), _) ->
+        [ loc.loc_start.pos_cnum; loc.loc_end.pos_cnum ])
+      toks
+    |> List.sort_uniq compare
+  in
+  let pos = positions ~encoding src offsets in
+  let seen = Hashtbl.create 256 in
+  toks
+  |> List.filter_map (fun ((loc : Wax_utils.Ast.location), kind) ->
+      match
+        ( Hashtbl.find_opt pos loc.loc_start.pos_cnum,
+          Hashtbl.find_opt pos loc.loc_end.pos_cnum )
+      with
+      | Some (line, char), Some (_, ec) when not (Hashtbl.mem seen (line, char))
+        ->
+          Hashtbl.add seen (line, char) ();
+          Some
+            {
+              st_line = line;
+              st_char = char;
+              st_len = ec - char;
+              st_type = kind;
+            }
+      | _ -> None)
+  |> List.sort (fun a b ->
+      compare (a.st_line, a.st_char) (b.st_line, b.st_char))
 
 (* The source ranges made unreachable by the conditional-compilation [defines]
    (each a "name" or "name=value" as on the [-D] CLI): for every [#[if]] /

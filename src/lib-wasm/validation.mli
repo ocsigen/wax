@@ -15,6 +15,11 @@ val render_recorded_type : recorded_type -> string option
     produces no value (so hover shows nothing there), otherwise the rendered
     type ([Some "any"] for a value on an unreachable / polymorphic stack). *)
 
+val signature_labels : recorded_type -> (string list * string list) option
+(** For a recorded function signature (the identifier of a [call] / [ref.func]),
+    its parameter and result types rendered individually, for signature help;
+    [None] for any other recorded entry. *)
+
 val f :
   ?warn_unused:bool ->
   ?features:Wax_utils.Feature.set ->

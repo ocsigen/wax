@@ -277,10 +277,8 @@ let completion_result src line ch defines =
   in
   Js.array (Array.of_list (List.map js_completion items))
 
-let signature_result src line ch =
-  match
-    try signature_help_string (Js.to_string src) line ch with _ -> None
-  with
+let signature_result signature_help src line ch =
+  match try signature_help (Js.to_string src) line ch with _ -> None with
   | None -> Js.null
   | Some (label, ranges, active) ->
       Js.Opt.return
@@ -345,8 +343,8 @@ let folding_result folding src =
             end)
           folds))
 
-let semantic_result src =
-  let toks = try semantic_tokens_string (Js.to_string src) with _ -> [] in
+let semantic_result semantic_tokens src =
+  let toks = try semantic_tokens (Js.to_string src) with _ -> [] in
   Js.array
     (Array.of_list
        (List.map
@@ -385,12 +383,13 @@ let () =
       method completion src line ch defines =
         completion_result src line ch defines
 
-      method signatureHelp src line ch = signature_result src line ch
+      method signatureHelp src line ch =
+        signature_result signature_help_string src line ch
 
       method selectionRange src line ch =
         selection_range_result selection_range_string src line ch
 
-      method semanticTokens src = semantic_result src
+      method semanticTokens src = semantic_result semantic_tokens_string src
       method foldingRanges src = folding_result folding_string src
       method inactiveRanges src defines = inactive_ranges_result src defines
       method formatWat src = format_result format_wat_string src
@@ -416,4 +415,10 @@ let () =
         selection_range_result selection_range_wat_string src line ch
 
       method foldingRangesWat src = folding_result folding_wat_string src
+
+      method semanticTokensWat src =
+        semantic_result semantic_tokens_wat_string src
+
+      method signatureHelpWat src line ch =
+        signature_result signature_help_wat_string src line ch
     end

@@ -230,4 +230,58 @@ let () =
   hov5 "$a in struct.new" "struct.new $a" 12;
   hov5 "$a in (ref $a)" "result (ref $a)" 13;
   hov5 "$b in (ref $b)" "param (ref $b)" 12;
+  print_newline ();
+
+  (* Semantic tokens classify each index identifier by the kind it resolves to;
+     parameters and declared locals are distinct; a type reference inside a local
+     declaration is a type. Labels have no token type. *)
+  let src6 =
+    "(module\n\
+    \  (type $t (struct (field $f i32)))\n\
+    \  (global $g i32 (i32.const 0))\n\
+    \  (func $add (param $a i32) (result (ref $t))\n\
+    \    (local $x i32)\n\
+    \    (block $l (br $l))\n\
+    \    (drop (global.get $g))\n\
+    \    (drop (local.get $a))\n\
+    \    (struct.new_default $t)))\n"
+  in
+  Printf.printf "=== semantic tokens ===\n";
+  List.iter
+    (fun (t : Wax_editor.sem_token) ->
+      Printf.printf "  (%d,%d)+%d %s\n" t.st_line t.st_char t.st_len t.st_type)
+    (Wax_editor.semantic_tokens_wat_string src6);
+  print_newline ();
+
+  (* Signature help inside a folded call: the callee's signature and the active
+     parameter (which operand the cursor is in). *)
+  let src7 =
+    "(module\n\
+    \  (func $add (param i32) (param i32) (result i32) (local.get 0))\n\
+    \  (func (result i32)\n\
+    \    (call $add (i32.const 1) (i32.const 2))))\n"
+  in
+  let find7 sub off =
+    let i = Str.search_forward (Str.regexp_string sub) src7 0 in
+    let line = ref 0 and bol = ref 0 in
+    String.iteri
+      (fun j c ->
+        if j < i && c = '\n' then (
+          incr line;
+          bol := j + 1))
+      src7;
+    (!line, i - !bol + off)
+  in
+  let sig_help label sub off =
+    let l, c = find7 sub off in
+    match Wax_editor.signature_help_wat_string src7 l c with
+    | Some (lbl, ranges, active) ->
+        Printf.printf "  %s -> %s | active=%d params=[%s]\n" label lbl active
+          (String.concat ";"
+             (List.map (fun (s, e) -> Printf.sprintf "%d-%d" s e) ranges))
+    | None -> Printf.printf "  %s -> (none)\n" label
+  in
+  Printf.printf "=== signature help ===\n";
+  sig_help "in first arg" "(i32.const 1)" 2;
+  sig_help "in second arg" "(i32.const 2)" 2;
   print_newline ()
