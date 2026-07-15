@@ -85,7 +85,7 @@ trusted and not validated. `--validate` forces validation in every case.
 | `-s` | `--strict-validate` | Strict reference validation (Wasm Text) |
 | `-D` | `--define` | Set a conditional-compilation variable (as for convert); specializes `#[if]`/`(@if)` before validating. A partial set leaves the rest for the path-sensitive check. Repeatable |
 | `-W` | `--warn` | Set a warning's level (as for convert) |
-|      | `--all-errors` | Report every syntax error via panic-mode recovery instead of stopping at the first (Wax input only; ignored for Wat/Wasm). Routes through `Wax_conversion.Driver.wax_parse_recover`, then type-checks the recovered module with `Diagnostic.set_recovery` on (suppresses the `unbound_name` cascade from dropped constructs) so real type errors in intact regions still surface |
+|      | `--all-errors` | Report every syntax error via panic-mode recovery instead of stopping at the first (text input only, Wax and Wat; ignored for a Wasm binary). Routes Wax through `Wax_conversion.Driver.wax_parse_recover` (then `Typing.check`) and Wat through `wat_parse_recover` (then `Validation.f`), each with `Diagnostic.set_recovery` on so real type/validation errors in intact regions surface while the recovery cascades are suppressed — for Wax the `unbound_name` cascade; for Wat (in `lib-wasm/validation.ml`) all warnings plus the stack-shape errors (`empty_stack`/`non_empty_stack`/`leftover_values`) an auto-closed/dropped body triggers |
 |      | `--color` / `--debug` | As for convert |
 
 **lsp** — `dune exec wax -- lsp`. Runs a Language Server Protocol server over

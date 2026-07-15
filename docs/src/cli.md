@@ -354,13 +354,16 @@ wax check [OPTIONS] FILE…
   above.
 - **`--all-errors`**: report *every* syntax error instead of stopping at the
   first. Normally the parser gives up at the first unexpected token; with this
-  flag it uses panic-mode error recovery — resynchronizing at statement and
-  block boundaries (`;`, `}`, `)`, `]`, and the keywords that begin a new item
-  or statement) and continuing — so a single run lists all the syntax errors.
-  The recovered module is then type-checked too, so genuine type errors in the
-  intact regions surface alongside the syntax errors; the "not bound" errors
-  that a construct dropped during recovery would otherwise cascade are
-  suppressed. Wax input only (ignored for Wat/Wasm).
+  flag it uses panic-mode error recovery and continues, so a single run lists
+  all the syntax errors. Wax resynchronizes at statement and block boundaries
+  (`;`, `}`, `)`, `]`, and the keywords that begin a new item or statement); WAT,
+  being fully parenthesized, resynchronizes on the parentheses (dropping an
+  incomplete group, auto-closing an unclosed one). The recovered module is then
+  checked too — type-checked for Wax, validated for WAT — so genuine type or
+  validation errors in the intact regions surface alongside the syntax errors,
+  while the cascades a dropped construct would otherwise trigger (an unbound name
+  in Wax; a warning or wrong stack height in WAT) are suppressed. Text input
+  only, Wax and Wat (ignored for a Wasm binary).
 - **`--color`** *WHEN*: as above.
 - **`--error-format`** *FORMAT*: `human`, `json`, or `short`, as above.
 - **`--debug`** *CATEGORY*: as above.

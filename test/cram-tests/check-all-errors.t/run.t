@@ -110,4 +110,42 @@ same error state also arises for an invalid token inside an already-closed block
       ^
   [128]
 
+--all-errors also covers WAT input. WAT recovery resynchronizes on parentheses:
+here the incomplete (v128.const) group is dropped and the unclosed final func is
+auto-closed, so both syntax errors are reported, and the best-effort AST is
+validated — the genuine i64-into-i32.add type error in the intact middle func
+surfaces alongside them. The warnings and the stack-shape cascades a dropped or
+auto-closed body would otherwise trigger are suppressed in recovery mode:
+
+  $ wax check --all-errors wat-broken.wat
+  Error: Syntax error
+   ──➤  wat-broken.wat:2:20
+  1 │ (module
+  2 │   (func (v128.const))
+    ·                    ^
+  3 │   (func (result i32) (i32.add (i64.const 1)))
+  4 │   (func (i32.const 1)
+  Error: Expecting instructions.
+   ──➤  wat-broken.wat:5:1
+  3 │   (func (result i32) (i32.add (i64.const 1)))
+  4 │   (func (i32.const 1)
+  5 │ 
+      ^
+  Error:
+    Type mismatch: this produces a value of type 'i64', but type 'i32' is
+    expected.
+   ──➤  wat-broken.wat:3:32
+  1 │ (module
+  2 │   (func (v128.const))
+  3 │   (func (result i32) (i32.add (i64.const 1)))
+    ·                                ^^^^^^^^^^^
+    ·                       ^^^^^^^ expected here
+  4 │   (func (i32.const 1)
+  5 │ 
+  [128]
+
+A well-formed WAT file passes silently, exactly as without the flag:
+
+  $ wax check --all-errors wat-clean.wat
+
 

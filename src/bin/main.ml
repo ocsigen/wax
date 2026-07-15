@@ -685,6 +685,20 @@ let check format_opt strict color warnings features debug error_format defines
         (* Collect errors without printing or exiting, so every file is checked
            and all its errors are reported, then re-report them below. *)
         let d = Wax_utils.Diagnostic.collector ~source:text () in
+        (* Feed every recovered syntax error into [d] and put it into recovery
+           mode when there are any, so the downstream type-check / validation
+           suppresses the cascades from constructs dropped at a sync boundary
+           (see [Diagnostic.set_recovery]). Shared by the Wax and Wat
+           [--all-errors] arms. *)
+        let seed_recovery syntax_errors =
+          List.iter
+            (fun (e : Wax_wasm.Parsing.syntax_error) ->
+              Wax_utils.Diagnostic.report d ~location:e.location
+                ~severity:Wax_utils.Diagnostic.Error ~related:e.related
+                ~message:e.message ())
+            syntax_errors;
+          Wax_utils.Diagnostic.set_recovery d (syntax_errors <> [])
+        in
         (try
            match fmt with
            | Wax when all_errors -> (
@@ -692,25 +706,32 @@ let check format_opt strict color warnings features debug error_format defines
                      instead of stopping at the first, so they are all reported
                      together below, then type-check the best-effort AST too so
                      real type errors in the intact regions surface alongside
-                     them. In recovery mode (syntax errors present) the "not
-                     bound" cascades from constructs dropped at a sync boundary
-                     are suppressed (see [Diagnostic.set_recovery]).
-                     [--all-errors] is Wax-only; a forced Wat/Wasm format falls
-                     through to the normal single-error path. *)
+                     them. [--all-errors] covers text input (Wax and Wat); a Wasm
+                     binary has no syntax errors to recover from and falls through
+                     to the normal path. *)
                let ast_opt, syntax_errors, _ =
                  Wax_conversion.Driver.wax_parse_recover ~filename:file text
                in
-               List.iter
-                 (fun (e : Wax_wasm.Parsing.syntax_error) ->
-                   Wax_utils.Diagnostic.report d ~location:e.location
-                     ~severity:Wax_utils.Diagnostic.Error ~related:e.related
-                     ~message:e.message ())
-                 syntax_errors;
-               Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+               seed_recovery syntax_errors;
                match ast_opt with
                | Some ast ->
                    let ast = specialize_wax ~color ~text defines ast in
                    Wax_lang.Typing.check ~warn_unused:true d ast
+               | None -> ())
+           | Wat when all_errors -> (
+               (* As the Wax arm, for WAT: recover every syntax error, then
+                  validate the best-effort AST in recovery mode so genuine errors
+                  in the intact fields surface while the warnings and stack-shape
+                  cascades a dropped / auto-closed construct triggers are
+                  suppressed (see [Wax_wasm.Validation]). *)
+               let ast_opt, syntax_errors, _ =
+                 Wax_conversion.Driver.wat_parse_recover ~filename:file text
+               in
+               seed_recovery syntax_errors;
+               match ast_opt with
+               | Some ast ->
+                   let ast = specialize_wat ~color ~text defines ast in
+                   Wax_wasm.Validation.f d ast
                | None -> ())
            | Wax ->
                let ast, _ =
@@ -1152,9 +1173,9 @@ let check_files =
 let all_errors_flag =
   let doc =
     "Report every syntax error instead of stopping at the first, using \
-     panic-mode error recovery. Wax input only (ignored for Wat/Wasm). A \
-     module that has syntax errors is not type-checked; only its syntax errors \
-     are reported."
+     panic-mode error recovery, then check the best-effort AST so genuine \
+     type/validation errors in the intact regions surface alongside the syntax \
+     errors. Text input only, Wax and Wat (ignored for a Wasm binary)."
   in
   Arg.(value & flag & info [ "all-errors" ] ~doc)
 
