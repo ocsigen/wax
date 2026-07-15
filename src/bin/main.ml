@@ -25,14 +25,32 @@ module Wax_parser =
     (Wax_lang.Parser_messages)
     (Wax_lang.Lexer)
 
-let with_open_in file f =
+let with_open_in ~color file f =
   match file with
-  | Some file -> In_channel.with_open_bin file f
+  | Some file -> (
+      try In_channel.with_open_bin file f
+      with Sys_error msg ->
+        Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+          ~source:None (fun d ->
+            Wax_utils.Diagnostic.report d ~location:Wax_utils.Ast.dummy_loc
+              ~severity:Wax_utils.Diagnostic.Error
+              ~message:(Wax_utils.Message.text msg)
+              ();
+            Wax_utils.Diagnostic.abort ()))
   | None -> f stdin
 
-let with_open_out file f =
+let with_open_out ~color file f =
   match file with
-  | Some file -> Out_channel.with_open_bin file f
+  | Some file -> (
+      try Out_channel.with_open_bin file f
+      with Sys_error msg ->
+        Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+          ~source:None (fun d ->
+            Wax_utils.Diagnostic.report d ~location:Wax_utils.Ast.dummy_loc
+              ~severity:Wax_utils.Diagnostic.Error
+              ~message:(Wax_utils.Message.text msg)
+              ();
+            Wax_utils.Diagnostic.abort ()))
   | None -> f stdout
 
 (* Apply the [-D]/[--define] bindings to a freshly-parsed source module,
@@ -123,7 +141,7 @@ let fold_module ~fold_mode ~color ~source ast =
   | Unfold -> Wax_wasm.Folding.unfold ast
 
 let output_wat ?(tail = []) ~output_file ~color ~trivia ast =
-  with_open_out output_file (fun oc ->
+  with_open_out ~color output_file (fun oc ->
       let print_wat f m =
         Wax_utils.Printer.run f (fun p ->
             Wax_wasm.Output.module_ ~color ~out_channel:oc ~tail p ~trivia m)
@@ -180,7 +198,7 @@ let usage_error msg =
 
 let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines ~desugar ~source_map_file:_ =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let ast, ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -199,7 +217,7 @@ let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
 
 let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map_file:_ =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let ast, ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -226,7 +244,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
       ~retarget:(Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
       ctx wax_ast
   in
-  with_open_out output_file (fun oc ->
+  with_open_out ~color output_file (fun oc ->
       let print_wax f m =
         Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
             Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
@@ -237,7 +255,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
 
 let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines ~desugar ~source_map_file:_ =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let ast, ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -275,7 +293,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
 
 let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map_file:_ =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let ast, ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -286,7 +304,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d -> Wax_lang.Typing.check ~warn_unused d ast);
   let trivia, tail = wax_trivia ctx ast in
-  with_open_out output_file (fun oc ->
+  with_open_out ~color output_file (fun oc ->
       let print_wax f m =
         Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
             Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
@@ -298,7 +316,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
 let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color:_ ~fold_mode:_ ~defines ~desugar:_
     ~source_map_file:(opt_source_map_file : string option) =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let ast, _ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -320,14 +338,14 @@ let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast_text);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) wasm_ast_text in
-  with_open_out output_file (fun oc ->
+  with_open_out ~color output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file
         ?opt_source_map_file wasm_ast_binary)
 
 let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color:_ ~fold_mode:_ ~defines ~desugar:_
     ~source_map_file:opt_source_map_file =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let ast, _ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -341,7 +359,7 @@ let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
-  with_open_out output_file (fun oc ->
+  with_open_out ~color output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file
         ?opt_source_map_file wasm_ast_binary)
 
@@ -354,16 +372,16 @@ let parse_wasm ~color ?filename text =
 let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~warn_unused:_
     ~color ~output_color:_ ~fold_mode:_ ~defines:_ ~desugar:_
     ~source_map_file:opt_source_map_file =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wax_wasm.Validation.f ast; *)
-  with_open_out output_file (fun oc ->
+  with_open_out ~color output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file
         ?opt_source_map_file ast)
 
 let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines:_ ~desugar:_ ~source_map_file:_ =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
@@ -375,7 +393,7 @@ let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
 
 let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines:_ ~desugar:_ ~source_map_file:_ =
-  let text = with_open_in input_file In_channel.input_all in
+  let text = with_open_in ~color input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
@@ -392,7 +410,7 @@ let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
       ~source:None (fun d -> Wax_lang.Typing.f ~simplify:true d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
-  with_open_out output_file (fun oc ->
+  with_open_out ~color output_file (fun oc ->
       let print_wax f m =
         Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
             Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
@@ -680,7 +698,7 @@ let check format_opt strict color warnings features debug error_format defines
         (* A Wasm binary is always checked strictly (see [convert]); text inputs
            honour [--strict-validate]. *)
         Wax_wasm.Validation.validate_refs := strict || fmt = Wasm;
-        let text = with_open_in (Some file) In_channel.input_all in
+        let text = with_open_in ~color (Some file) In_channel.input_all in
         let source = match fmt with Wasm -> None | Wat | Wax -> Some text in
         (* Collect errors without printing or exiting, so every file is checked
            and all its errors are reported, then re-report them below. *)
