@@ -415,6 +415,49 @@ module Make (T : Theory) : sig
       number of atomic constraints (shortest path in the BDD DAG). Returns
       [None] if unsatisfiable. *)
 
+  val irredundant_sop : t -> atomic_constraint list list
+  (** [irredundant_sop expr] computes an irredundant sum-of-products (ISOP)
+      cover of [expr] using the Minato-Morreale algorithm.
+
+      The result is a disjunction (outer list) of cubes (inner lists), where
+      each cube is a conjunction of atomic constraints (literals). The
+      disjunction of all cubes is logically equivalent to [expr]:
+      [sop_to_bdd (irredundant_sop expr)] equals [expr].
+
+      An empty outer list denotes [false_]; a single empty cube [\[\[\]\]]
+      denotes [true_].
+
+      The cover is irredundant {e modulo the theory}: impossible combinations of
+      atoms (e.g. [v < 1] and [v >= 3] can never hold together) are exploited as
+      don't-cares. Concretely, no cube can be dropped while staying equivalent to
+      [expr], and each cube is a prime implicant modulo theory -- no literal can
+      be removed even accounting for theory implications between atoms. For
+      instance the cover of [¬(v<1) ∧ ((v<2) ∨ ¬(v<3))] contains the single
+      literal cube [¬(v<3)] rather than [¬(v<1) ∧ ¬(v<3)], since [¬(v<3)] already
+      entails [¬(v<1)].
+
+      Implementation note: the raw Minato-Morreale recursion yields a cover that
+      is irredundant only over the atoms treated as independent Booleans; this
+      function additionally post-processes it with theory-aware implication and
+      equivalence checks to reach theory-level irredundancy. The post-processing
+      is skipped when no variable carries two related atoms (in particular for
+      purely Boolean expressions), since it cannot change the cover then.
+
+      Complexity: the Minato-Morreale recursion is memoized on the [(lower,
+      upper)] interval. Producing [k] cubes then costs O(k²) theory-aware BDD
+      operations for the post-processing when it runs. Note [k], the size of an
+      irredundant cover, can itself be exponential in the number of atoms in the
+      worst case. *)
+
+  val of_cube : atomic_constraint list -> t
+  (** [of_cube cube] builds the conjunction (product) of the literals in [cube].
+      Returns [true_] for the empty cube. This is the inverse of a single cube
+      produced by {!irredundant_sop} or {!sat}. *)
+
+  val sop_to_bdd : atomic_constraint list list -> t
+  (** [sop_to_bdd cubes] builds the disjunction of the cubes, i.e. the BDD of
+      the sum-of-products [cubes]. Inverse of {!irredundant_sop}. *)
+
   (** {1 Batch Operations} *)
 
   val and_list : t list -> t

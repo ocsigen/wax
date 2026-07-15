@@ -661,9 +661,10 @@ module Make (T : Theory) = struct
 
   type constant_result = Constant of bool | NonConstant
 
-  (* Constant_cache: Memoization for ite_constant checks. Keyed by (f, |g|, h);
-   [g]'s polarity selects a cell field, since [ite_constant f g h] and
-   [ite_constant f (not g) h] differ (mirrors {!ITE_cache}). *)
+  (* Constant_cache: Memoization for ite_constant checks. Like [ITE_cache],
+   the key is (f, |g|, h) and both polarities of g are stored in the same
+   cell, since ite_constant(f, g, h) and ite_constant(f, !g, h) generally
+   differ and must not collide. *)
   module ITE_constant_cache = struct
     type cell = {
       mutable pos : constant_result option;
@@ -1220,6 +1221,156 @@ module Make (T : Theory) = struct
     | Bdd False -> None
     | Bdd (Not u) -> Some (trace u false)
     | Bdd (If _ as u) -> Some (trace u true)
+
+  let of_cube (cube : atomic_constraint list) : t =
+    List.fold_left
+      (fun acc { atom; value } ->
+        let lit = if value then make_atom atom else not (make_atom atom) in
+        and_ acc lit)
+      true_ cube
+
+  let sop_to_bdd (cubes : atomic_constraint list list) : t =
+    or_list (List.map of_cube cubes)
+
+  (* Minato-Morreale ISOP: computes an irredundant sum-of-products cover.
+
+     The recursion operates on an interval [fl, fu]: [fl] is the lower bound
+     (the on-set that must be covered) and [fu] the upper bound (the on-set
+     plus don't-care set, i.e. the largest function the cover may equal). The
+     returned cover [c] satisfies [fl ⊆ c ⊆ fu]; over independent (Boolean)
+     atoms it is irredundant and every cube is a prime implicant of [fu].
+
+     Cofactors are theory-aware (see [cofactors]), so the Shannon expansion
+     [c = ¬x·c0 ∨ x·c1 ∨ c2] remains valid even when atoms of the same variable
+     imply one another (e.g. [v <= 3] entails [v <= 5]); the resulting cover is
+     always equivalent to the input, though such implications are not exploited
+     to reduce it further. That refinement is done by [irredundant_sop], which
+     is the exposed entry point; this raw form stays internal. *)
+  let minato_sop (t : t) : atomic_constraint list list =
+    (* Cache keyed on (fl, fu). isop returns cubes with no path prefix, so the
+       cached cover/cubes are reusable across every occurrence of (fl, fu). *)
+    let cache = Hashtbl.create 256 in
+    let rec isop fl fu =
+      (* [fl] empty: nothing must be covered, so the empty cover suffices. This
+         also handles [fu] empty, since [fl ⊆ fu]. *)
+      if Bdd.equal fl false_ then (false_, [])
+        (* [fl] full forces [fu] full too: the universal cube covers it. *)
+      else if Bdd.equal fl true_ then (true_, [ [] ])
+      else
+        let key = (Bdd.id fl, Bdd.id fu) in
+        match Hashtbl.find_opt cache key with
+        | Some res -> res
+        | None ->
+            let x = Atom.min (top_atom fl) (top_atom fu) in
+            let fl1, fl0 = cofactors x fl in
+            let fu1, fu0 = cofactors x fu in
+            (* Cubes carrying the literal ¬x: cover the part of [fl0] that the
+               x=1 branch cannot help with, staying within [fu0]. *)
+            let c0, cubes0 = isop (and_ fl0 (not fu1)) fu0 in
+            (* Cubes carrying the literal x. *)
+            let c1, cubes1 = isop (and_ fl1 (not fu0)) fu1 in
+            (* Remaining points not yet covered must be covered by cubes that
+               mention neither x nor ¬x, and must fit in both cofactors. *)
+            let fl2 = or_ (and_ fl0 (not c0)) (and_ fl1 (not c1)) in
+            let fu2 = and_ fu0 fu1 in
+            let c2, cubes2 = isop fl2 fu2 in
+            let cx = make_atom x in
+            let c = or_ (or_ (and_ (not cx) c0) (and_ cx c1)) c2 in
+            let neg = { atom = x; value = false } in
+            let pos = { atom = x; value = true } in
+            let cubes =
+              List.map (fun cube -> neg :: cube) cubes0
+              @ List.map (fun cube -> pos :: cube) cubes1
+              @ cubes2
+            in
+            let res = (c, cubes) in
+            Hashtbl.add cache key res;
+            res
+    in
+    snd (isop t t)
+
+  (* Whether the theory post-processing below can actually change the cover.
+     Redundancy modulo theory can only arise from an implication between two
+     atoms, which requires two distinct theory (comparison/equality) atoms on
+     the {e same} variable -- ordered [Leq] bounds or mutually exclusive [Eq]
+     constants (a variable has a fixed kind, so its atoms share a category).
+     With fewer than two such atoms per variable [minato_sop] is already
+     irredundant modulo theory, and the post-processing is a pure no-op. *)
+  let needs_theory_refinement t =
+    let exception Found in
+    let visited = IdTbl.create 64 in
+    (* Maps a variable to one theory-atom id already seen on it. *)
+    let seen = Hashtbl.create 16 in
+    let rec go (u : positive u) =
+      let id = Node.id u in
+      if Stdlib.not (IdTbl.mem visited id) then (
+        IdTbl.add visited id ();
+        match u with
+        | False -> ()
+        | If { atom = Atom { var; category; id = aid; _ }; high; low; _ } ->
+            (match category with
+            | Bool -> ()
+            | Leq | Eq -> (
+                match Hashtbl.find_opt seen var with
+                | Some aid' when aid' <> aid -> raise Found
+                | Some _ -> ()
+                | None -> Hashtbl.add seen var aid));
+            go high;
+            go low)
+    in
+    let _, u = split t in
+    match go u with () -> false | exception Found -> true
+
+  (* Theory-aware ISOP: an irredundant cover modulo theory.
+
+     The natural way to exploit impossible theory combinations would be to feed
+     [minato_sop] the interval [f, f ∨ impossible], turning the unreachable
+     assignments into don't-cares. Here that is a no-op: the BDD representation
+     is already canonical modulo theory, so the "impossible" set is [false_] as
+     a BDD (e.g. [(v<1) ∧ (v>=3)] is literally [false_], and [(v<1) => (v<3)] is
+     [true_]). The redundancy left by [minato_sop] is therefore not in the cover
+     BDD but in the syntactic cubes: the recursion prepends a splitting literal
+     (say [¬(v<1)]) to a sub-cube that another literal ([¬(v<3)]) already entails
+     modulo theory.
+
+     We remove it by post-processing. Both [logical_implies] and [equal]
+     ([equivalent]) are theory-aware, so the impossible combinations act as
+     don't-cares "for free" inside these checks: a literal or cube that only
+     matters on unreachable assignments is detected as removable. When no
+     variable carries two related atoms there is nothing to exploit, so the
+     post-processing is skipped (see [needs_theory_refinement]). *)
+  let irredundant_sop (t : t) : atomic_constraint list list =
+    (* Expand a cube into a theory prime implicant of [t] by dropping every
+       literal implied (modulo theory) by the remaining literals. Any drop order
+       yields a prime cube. *)
+    let prime_cube cube =
+      let rec go kept remaining =
+        match remaining with
+        | [] -> kept
+        | lit :: rest ->
+            (* [kept @ rest] is the cube with [lit] removed. *)
+            if logical_implies (of_cube (kept @ rest)) t then go kept rest
+            else go (kept @ [ lit ]) rest
+      in
+      go [] cube
+    in
+    (* Drop any cube whose removal leaves the cover equivalent (modulo theory)
+       to [t]. Maintains the invariant that [kept @ remaining] still covers
+       [t]. *)
+    let drop_redundant_cubes cubes =
+      let rec go kept remaining =
+        match remaining with
+        | [] -> kept
+        | cube :: rest ->
+            if equal (sop_to_bdd (kept @ rest)) t then go kept rest
+            else go (kept @ [ cube ]) rest
+      in
+      go [] cubes
+    in
+    let cubes = minato_sop t in
+    if needs_theory_refinement t then
+      drop_redundant_cubes (List.map prime_cube cubes)
+    else cubes
 
   let print_stats () =
     Printf.printf "Cache Statistics:\n";
