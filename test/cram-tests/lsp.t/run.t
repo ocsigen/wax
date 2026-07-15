@@ -287,6 +287,7 @@ module and drive one request of each kind:
   >    {"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":td,"position":{"line":4,"character":11}}},
   >    {"jsonrpc":"2.0","id":4,"method":"textDocument/references","params":{"textDocument":td,"position":{"line":1,"character":9},"context":{"includeDeclaration":True}}},
   >    {"jsonrpc":"2.0","id":5,"method":"textDocument/rename","params":{"textDocument":td,"position":{"line":4,"character":11},"newName":"sum"}},
+  >    {"jsonrpc":"2.0","id":8,"method":"textDocument/rename","params":{"textDocument":td,"position":{"line":1,"character":9},"newName":"main"}},
   >    {"jsonrpc":"2.0","id":6,"method":"textDocument/foldingRange","params":{"textDocument":td}},
   >    {"jsonrpc":"2.0","id":7,"method":"textDocument/documentSymbol","params":{"textDocument":td}},
   >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
@@ -295,7 +296,7 @@ module and drive one request of each kind:
   > while i<len(o) and o[i:].startswith(b"Content-Length:"):
   >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
   >     r=json.loads(o[s:s+n]); i=s+n
-  >     if "id" in r: by[r["id"]]=r["result"]
+  >     if "id" in r: by[r["id"]]=r.get("result", r.get("error"))
   >     elif r.get("method")=="textDocument/publishDiagnostics": pubs.append(r["params"]["diagnostics"])
   > def rng(r): return "(%d,%d)-(%d,%d)"%(r["start"]["line"],r["start"]["character"],r["end"]["line"],r["end"]["character"])
   > print("diagnostics:", len(pubs[0]) if pubs else "none")
@@ -304,6 +305,7 @@ module and drive one request of each kind:
   > print("references:", ", ".join(rng(l["range"]) for l in by[4]))
   > ch=by[5]["changes"]
   > print("rename:", ", ".join("%s=%s"%(rng(e["range"]),e["newText"]) for lst in ch.values() for e in lst))
+  > print("rename-clash:", by[8]["message"])
   > print("folding:", ", ".join("%d-%d"%(f["startLine"],f["endLine"]) for f in by[6]))
   > print("symbols:", ", ".join(s["name"] for s in by[7]))
   > print("stderr:", p.stderr.decode().strip() or "(empty)")
@@ -313,6 +315,7 @@ module and drive one request of each kind:
   definition: (1,8)-(1,12)
   references: (1,8)-(1,12), (4,10)-(4,14)
   rename: (1,8)-(1,12)=$sum, (4,10)-(4,14)=$sum
+  rename-clash: Cannot rename to "$main": that name is already in use, and the rename would change which definition one or more names refer to.
   folding: 1-2, 3-4
   symbols: $add, $main
   stderr: (empty)

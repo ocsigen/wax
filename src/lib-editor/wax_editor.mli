@@ -71,17 +71,11 @@ val rename_prepare_string :
   int ->
   Wax_utils.Ast.location option
 
-(* The outcome of a rename. [Rename_edits] carries [(span, replacement)] for
-   every occurrence (a punned struct field expanded to [x: newname]), and is
-   empty when the position is not on a renameable symbol. [Rename_conflict]
-   carries a message rejecting the rename: [newname] is not a usable identifier,
-   or carrying it out would change which definition some name resolves to (a
-   collision with an existing name, or a local silently shadowing another
-   binding). *)
-type rename_outcome =
-  | Rename_conflict of string
-  | Rename_edits of (Wax_utils.Ast.location * string) list
-
+(* The outcome of a rename: the shared {!Editor_common.rename_outcome}. For Wax,
+   [Rename_edits] expands a punned struct field to [x: newname], and
+   [Rename_conflict] rejects a name that is not a usable identifier or whose
+   rename would change which definition some name resolves to (a collision with
+   an existing name, or a local silently shadowing another binding). *)
 val rename_string :
   ?encoding:position_encoding ->
   string ->

@@ -58,6 +58,15 @@ let () =
     Printf.sprintf "(%d,%d)" loc.loc_start.pos_lnum
       (loc.loc_start.pos_cnum - loc.loc_start.pos_bol)
   in
+  let show_rename outcome =
+    match outcome with
+    | Editor_common.Rename_edits edits ->
+        List.iter
+          (fun (loc, repl) -> Printf.printf "  %s := %s\n" (show_loc loc) repl)
+          edits
+    | Editor_common.Rename_conflict message ->
+        Printf.printf "  conflict: %s\n" message
+  in
 
   (* Definition / references / rename, driven from the `call $add` use on line
      11 (0-based 10) — should point back to the `$add` definition on line 2. *)
@@ -70,9 +79,7 @@ let () =
     (fun loc -> Printf.printf "  %s\n" (show_loc loc))
     (Wat_editor.references_string src 10 11);
   Printf.printf "=== rename $add -> $sum2 ===\n";
-  List.iter
-    (fun (loc, repl) -> Printf.printf "  %s := %s\n" (show_loc loc) repl)
-    (Wat_editor.rename_string src 10 11 "sum2");
+  show_rename (Wat_editor.rename_string src 10 11 "sum2");
   Printf.printf "=== references (local $sum, line 3) ===\n";
   List.iter
     (fun loc -> Printf.printf "  %s\n" (show_loc loc))
@@ -122,9 +129,13 @@ let () =
     Wat_editor.references_string "$mk" 0;
   let l, c = find "$mk" 0 in
   Printf.printf "=== rename $mk -> $make (numeric call 0 untouched) ===\n";
-  List.iter
-    (fun (loc, repl) -> Printf.printf "  %s := %s\n" (show_loc loc) repl)
-    (Wat_editor.rename_string src2 l c "make");
+  show_rename (Wat_editor.rename_string src2 l c "make");
+  Printf.printf
+    "=== rename func $mk -> $point (type name; different space, ok) ===\n";
+  show_rename (Wat_editor.rename_string src2 l c "point");
+  Printf.printf "=== rename field $x -> $y (clashes with sibling field) ===\n";
+  let lx, cx = find "$x" 0 in
+  show_rename (Wat_editor.rename_string src2 lx cx "y");
   probe "=== references type $point ===" Wat_editor.references_string "$point" 0;
   probe "=== references field $x ===" Wat_editor.references_string "$x" 0;
   print_newline ();
@@ -384,7 +395,5 @@ let () =
     (fun loc -> Printf.printf "  %s\n" (show_loc loc))
     (Wat_editor.references_string config_varying cv_l cv_c);
   Printf.printf "=== rename config-varying $f -> $g ===\n";
-  List.iter
-    (fun (loc, repl) -> Printf.printf "  %s := %s\n" (show_loc loc) repl)
-    (Wat_editor.rename_string config_varying cv_l cv_c "g");
+  show_rename (Wat_editor.rename_string config_varying cv_l cv_c "g");
   print_newline ()

@@ -573,10 +573,8 @@ let rename_prepare_string ?(encoding = UTF16) src line ch =
    the buffer with the edits applied, not from diagnostics: a parse error
    suppresses the "already bound" message but the graph still resolves what it
    can, so the check keeps working — it only loses coverage, never gains false
-   positives — on a buffer that does not fully parse. *)
-type rename_outcome =
-  | Rename_conflict of string
-  | Rename_edits of (Wax_utils.Ast.location * string) list
+   positives — on a buffer that does not fully parse. The [rename_outcome] type
+   is shared with the WAT side ({!Editor_common}). *)
 
 (* Splice the rename edits into [src], returning the new buffer and, in the new
    buffer's byte offsets, the span of each replaced identifier. The new name

@@ -181,6 +181,16 @@ type sem_token = {
   st_type : string;
 }
 
+(* The outcome of a rename. [Rename_edits] carries [(span, replacement)] for
+   every occurrence, and is empty when the position is not on a renameable
+   symbol. [Rename_conflict] carries a message rejecting the rename: [newname] is
+   not a usable identifier, or carrying it out would change which definition some
+   name resolves to (a collision with an existing name, or a local silently
+   shadowing another binding). Shared by both languages. *)
+type rename_outcome =
+  | Rename_conflict of string
+  | Rename_edits of (Wax_utils.Ast.location * string) list
+
 (* Map each byte offset in [offsets] (sorted ascending) to its (0-based line,
    0-based column, in [encoding] units) in [src], in a single left-to-right pass
    — so the whole token list is converted in O(src + offsets) rather than
