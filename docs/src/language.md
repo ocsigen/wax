@@ -146,6 +146,11 @@ fn example() -> i32 {
 }
 ```
 
+Unlike Rust, a local is freely mutable: there is no `let mut`, and no
+immutable-local form. (`mut` exists in Wax, but it marks
+[struct fields](#structs) and array element types, not bindings; the
+immutable module-level form is [`const`](#global-variables).)
+
 A local declared without an initializer starts at its type's zero value (`0`,
 `0.0`, or `null`). When the type is omitted, it is taken from the initializer;
 an otherwise-unconstrained integer literal then defaults to `i32` and a float to
@@ -316,6 +321,10 @@ identity, not a numeric comparison.
 !x          // Logical not / is_null for references
 ```
 
+Unlike Rust, `!` on an integer is *logical* not, not bitwise complement: it
+yields `1` for `0` and `0` for any non-zero value (Wasm's `eqz`), so `!5` is
+`0`, not `-6`. For a bitwise complement, write `x ^ -1`.
+
 ### Operator Precedence
 
 Operators are listed below from highest precedence (binds tightest) to lowest.
@@ -447,7 +456,9 @@ This maps directly to Wasm's `select` instruction.
 ## Control Flow
 
 Statements are terminated by `;`, including the final one that produces the
-block's or function's value. The block-shaped statements below
+block's or function's value. Unlike Rust, this trailing `;` is required and does
+not discard that value: the value stays on the stack and becomes the result.
+The block-shaped statements below
 (`do`, `if`, `while`, `loop`, `dispatch`, `match`, and `try`) are the
 exception: their closing `}` ends the statement, so no `;` is needed. A bare
 `;` is an empty statement (it does nothing), so a redundant one is harmless
