@@ -189,7 +189,14 @@ module Error = struct
       "Operator precedence here is easy to misread."
 
   let empty_stack context ~location =
-    report context ~location "The stack is empty."
+    (* Like [unbound_name], suppress this in error-recovery mode: a stack
+       underflow while type-checking a best-effort AST is usually a cascade from
+       a value-producing construct dropped at a sync boundary, not a real
+       mistake. Both callers ([pop_any]/[pop]) recover with [Error]/[()], so
+       nothing downstream cascades; genuine underflows in intact code still
+       surface on a clean re-check once the syntax errors are fixed. *)
+    if not (Wax_utils.Diagnostic.in_recovery context) then
+      report context ~location "The stack is empty."
 
   let let_in_conditional context ~location =
     report context ~location

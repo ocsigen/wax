@@ -78,3 +78,22 @@ suppressed as a recovery cascade (only the genuine diagnostics remain):
     ·                 ^^^
   3 │ 
   [128]
+
+Recovery drops the value-producing code at a sync boundary, so type-checking
+the best-effort AST would find a bare stack underflow ("The stack is empty.")
+where the dropped value should have been. That is a cascade from the syntax
+error, not a separate mistake, so it is suppressed in recovery mode. Only the
+real syntax error is reported (a genuine underflow in intact code still surfaces
+on a clean re-check):
+
+  $ wax check --all-errors stack-cascade.wax
+  Error: Expecting a statement list.
+  
+   ──➤  stack-cascade.wax:2:5
+  1 │ fn f() -> i32 {
+  2 │     @
+    ·     ^
+  3 │ }
+  4 │ 
+  [128]
+
