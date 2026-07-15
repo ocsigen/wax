@@ -35,6 +35,8 @@ export interface WaxRelated extends WaxRange {
 export interface WaxDiagnostic extends WaxRange {
   severity: "error" | "warning";
   message: string;
+  // The `-W` name of a lint warning (e.g. "unused-local"), or null.
+  warning: string | null;
   hint: string | null;
   related: WaxRelated[];
 }

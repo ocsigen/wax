@@ -251,6 +251,9 @@ function registerDiagnostics(
       const message = d.hint ? `${d.message}\n${d.hint}` : d.message;
       const diagnostic = new vscode.Diagnostic(range, message, severity);
       diagnostic.source = "wax";
+      // Surface a lint's -W name as the diagnostic code (shown as "wax(name)"
+      // in the Problems panel, and usable in rule-based filtering).
+      if (d.warning) diagnostic.code = d.warning;
       if (d.related.length > 0) {
         diagnostic.relatedInformation = d.related.map(
           (r) =>

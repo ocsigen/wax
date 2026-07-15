@@ -7,8 +7,9 @@
      with its comments preserved (mirrors [wax_to_wax] / [wat_to_wat] in
      bin/main.ml), or report why it could not.
    - [check src] / [checkWat src] -> array of { severity; message; startLine;
-     startChar; endLine; endChar; hint; related }: parse and check (type-check
-     for Wax, validate for Wasm text), returning diagnostics for the editor.
+     startChar; endLine; endChar; warning; hint; related }: parse and check
+     (type-check for Wax, validate for Wasm text), returning diagnostics for the
+     editor. [warning] is the [-W] name of a lint warning, or null.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
@@ -112,6 +113,7 @@ type diag = {
   severity : Wax_utils.Diagnostic.severity;
   location : Wax_utils.Ast.location;
   message : string;
+  warning : string option; (* the [-W] name of a lint warning, if any *)
   hint : string option;
   related : (string * Wax_utils.Ast.location) list;
       (* a message and the source span it points at (e.g. the matching opener) *)
@@ -131,6 +133,7 @@ let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
     severity = Wax_utils.Diagnostic.Error;
     location = e.location;
     message = e.message;
+    warning = None;
     hint = None;
     related = render_labels e.related;
   }
@@ -144,6 +147,9 @@ let collected_diags d =
         severity = Wax_utils.Diagnostic.entry_severity e;
         location = Wax_utils.Diagnostic.entry_location e;
         message = render (Wax_utils.Diagnostic.entry_message e);
+        warning =
+          Option.map Wax_utils.Warning.name
+            (Wax_utils.Diagnostic.entry_warning e);
         hint = Option.map render (Wax_utils.Diagnostic.entry_hint e);
         related = render_labels (Wax_utils.Diagnostic.entry_related e);
       })
@@ -280,6 +286,9 @@ let js_diagnostic d =
     val startChar = start_char
     val endLine = end_line
     val endChar = end_char
+
+    val warning =
+      match d.warning with Some w -> Js.some (Js.string w) | None -> Js.null
 
     val hint =
       match d.hint with
