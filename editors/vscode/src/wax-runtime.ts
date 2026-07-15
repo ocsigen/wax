@@ -77,6 +77,9 @@ export interface Wax {
   hover(src: string, line: number, character: number): WaxHover | null;
   // Inferred-type inlay hints, one per un-annotated `let` binding. Wax only.
   inlays(src: string): WaxInlay[];
+  // Definition span(s) of the name/label use at the (zero-based) position, for
+  // go-to-definition; several only across conditional branches. Wax only.
+  definition(src: string, line: number, character: number): WaxRange[];
   symbols(src: string): WaxSymbol[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;

@@ -17,6 +17,10 @@
    - [inlays src] -> array of { line; char; label }: the inferred type on each
      un-annotated [let] binding ([: i32] after [x] in [let x = 3]), for inlay
      hints. Wax only.
+   - [definition src line ch] -> array of { startLine; startChar; endLine;
+     endChar }: the definition span(s) for the name or label use at the
+     (zero-based) position, for go-to-definition. Several only for a name defined
+     in multiple conditional-compilation branches. Wax only.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
@@ -185,6 +189,8 @@ type analysis = {
   a_type : diag list;
   a_typed :
     Wax_lang.Typing.inferred_module_annotation Wax_lang.Ast.module_ option;
+  a_defs : Wax_lang.Typing.reference list;
+      (* use -> definition(s) references, for go-to-definition. *)
 }
 
 let analyze_uncached src =
@@ -194,19 +200,25 @@ let analyze_uncached src =
   in
   let a_syntax = List.map syntax_error_diag syntax_errors in
   match ast_opt with
-  | None -> { a_syntax; a_type = []; a_typed = None }
+  | None -> { a_syntax; a_type = []; a_typed = None; a_defs = [] }
   | Some ast ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
       (* [f_infer] may abort mid-pass; the diagnostics it collected up to that
          point still stand (as with [check] before), so read [d] regardless. It
-         emits the same diagnostics as [f]/[check] but keeps the inference cells,
-         which hover renders via [Infer.output_inferred_type]. *)
+         emits the same diagnostics as [f]/[check] but keeps the inference cells
+         (which hover renders via [Infer.output_inferred_type]) and, given a
+         sink, records the use -> definition references go-to-definition needs. *)
+      let links = ref [] in
       let a_typed =
-        try Some (snd (Wax_lang.Typing.f_infer ~warn_unused:true d ast))
+        try
+          Some
+            (snd
+               (Wax_lang.Typing.f_infer ~warn_unused:true
+                  ~resolve_links:(Some links) d ast))
         with Wax_utils.Diagnostic.Aborted -> None
       in
-      { a_syntax; a_type = collected_diags d; a_typed }
+      { a_syntax; a_type = collected_diags d; a_typed; a_defs = !links }
 
 (* Cache the analysis, keyed by the exact source, so hover — invoked repeatedly
    on an unchanged buffer, once per mouse-hover — does not re-parse and
@@ -358,6 +370,31 @@ let inlays_string src =
       in
       Wax_lang.Ast_utils.iter_module_instr visit typed;
       List.rev !hints
+
+(* Go-to-definition (Wax only): the definition span(s) for the name or label use
+   under the cursor. [analyze] records every resolved reference (use span ->
+   definition spans) while type-checking; find the innermost use span covering
+   the position and return its definitions — usually one, several only for a name
+   defined in multiple conditional-compilation branches. *)
+let definition_string src line ch =
+  let target = (line + 1, byte_column src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let best =
+    List.fold_left
+      (fun best (r : Wax_lang.Typing.reference) ->
+        let loc = r.use in
+        if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
+          let span = loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum in
+          match best with
+          | Some (best_span, _) when best_span <= span -> best
+          | _ -> Some (span, r.definitions)
+        else best)
+      None (analyze src).a_defs
+  in
+  match best with None -> [] | Some (_, defs) -> defs
 
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
@@ -556,6 +593,22 @@ let inlays_result src =
   let s = Js.to_string src in
   let hints = try inlays_string s with _ -> [] in
   Js.array (Array.of_list (List.map (js_inlay s) hints))
+
+(* Each definition as a plain range object; empty array when nothing resolves. *)
+let js_range src (loc : Wax_utils.Ast.location) =
+  let start_line, start_char = js_position src loc.loc_start in
+  let end_line, end_char = js_position src loc.loc_end in
+  object%js
+    val startLine = start_line
+    val startChar = start_char
+    val endLine = end_line
+    val endChar = end_char
+  end
+
+let definition_result src line ch =
+  let s = Js.to_string src in
+  let defs = try definition_string s line ch with _ -> [] in
+  Js.array (Array.of_list (List.map (js_range s) defs))
 
 (* Document outline: the module's top-level definitions (functions, globals,
    types, memories, tags, tables, elems, data, imports) with their spans, for the
@@ -768,6 +821,7 @@ let () =
       method check src = check_result check_string src
       method hover src line ch = hover_result src line ch
       method inlays src = inlays_result src
+      method definition src line ch = definition_result src line ch
       method symbols src = symbols_result symbols_string src
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src

@@ -105,16 +105,31 @@ does not carry. Three distinct prerequisites:
   whose type is unknown/error are skipped. An `InlayHintsProvider` in
   `extension-common.ts` renders them (no padding, so `: i32` reads as written).
   Wax only.
-- [ ] **Go to definition / find references / rename.** *Needs name resolution*
-  (prereq 2): the typed tree has spans but not the binding target each identifier
-  resolves to.
+- [x] **Name resolution.** *Was prereq 2.* The type checker now records, when
+  given a `resolve_links` sink, each name/label *use* span paired with its
+  *definition* span(s) — `Typing.reference`, `Typing.f_infer`. Module-field
+  references (functions/globals/types/tags/memories/tables/data/elem) are caught
+  at the single choke point `Tbl.resolve` (the `Namespace` already stored each
+  definition's location); locals carry their binder span in `ctx.locals`, recorded
+  at `resolve_variable`; labels carry the label ident in `control_types`, recorded
+  at `branch_target`. Recording during type checking means the typer's own scope
+  decides — shadowing and repeated same-name locals resolve to the right binder
+  for free. Synthesized (dummy-location) and self references are dropped.
+- [x] **Go to definition.** Built on the above: `definition` export walks the
+  recorded references for the use under the cursor and returns its definition
+  span(s) (several only across conditional branches); a `DefinitionProvider` in
+  `extension-common.ts`. Wax only.
+- [ ] **Find references / rename.** The inverse of the same `reference` links
+  (group uses by definition). Recording currently keeps only the resolved
+  definition per use, which suffices for go-to-def and could be inverted for
+  find-references; rename additionally needs every occurrence (including the
+  declaration) and edit safety.
 - [ ] **Semantic tokens.** Distinguishing locals / params / functions / types
-  also *needs name resolution* (prereq 2) for the precise version; a coarser one
-  could come from parse-tree structure alone.
+  could reuse the resolution now recorded (classify each use by its binder kind);
+  a coarser version could come from parse-tree structure alone.
 - [ ] **Completion** (locals, functions, types, intrinsics) beyond the current
-  snippets. *Now needs only name resolution* (prereq 2) — error tolerance
-  (prereq 3), which completion also relies on since the buffer is usually invalid
-  when it is invoked, is already done.
+  snippets. Both prerequisites — name resolution (in-scope binders) and error
+  tolerance — are now in place; remaining work is the provider itself.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -126,10 +141,10 @@ does not carry. Three distinct prerequisites:
 
 ## Suggested next step
 
-The indexing-only features (hover types, inlay hints) and error-tolerant parsing
-(multi-error recovery) are done, so **name resolution is the single remaining
-prerequisite** — it gates every feature left (go-to-def, find-references, rename,
-precise semantic tokens, and completion). **Go-to-definition** is the natural
-next target: it exercises the resolver end-to-end and is the smallest feature
-built on it. The resolver needs to record, per identifier occurrence, the binder
-it resolves to.
+Name resolution now records use -> definition links during type checking, and
+go-to-definition ships on top. The remaining language-server features all build
+on the same foundation: **find-references / rename** invert the links (and rename
+needs every occurrence + edit safety), **semantic tokens** classify each use by
+its binder kind, and **completion** enumerates the in-scope binders. Any of these
+is now a provider-level task rather than a new prerequisite. Find-references is
+the natural next step, closest to what is already recorded.

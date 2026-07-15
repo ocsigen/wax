@@ -10,6 +10,9 @@
 - Fixed editor positions (diagnostics, outline, hover, inlay hints) drifting on
   lines that contain non-ASCII characters: columns are now counted in UTF-16
   code units, matching VS Code, instead of UTF-8 bytes.
+- Go to definition for `.wax`: jump from a use to its definition (function,
+  global, type, tag, `let`/parameter, or block/loop label), resolving through
+  shadowing to the binding actually in scope.
 
 ## 0.2.2
 

@@ -14,6 +14,37 @@ open Infer
    which resolution discards). *)
 type inferred_module_annotation = inferred_type Cell.t array * Ast.location
 
+(* A resolved name or label reference: the source span of a *use*, and the
+   span(s) of the *definition(s)* it binds to. There is more than one definition
+   only under conditional compilation (a name declared in several mutually
+   exclusive branches). Accumulated during type checking into a [reference list
+   ref] when the caller supplies one, for the editor's go-to-definition; nil
+   otherwise, so an ordinary compile pays nothing. *)
+type reference = { use : Ast.location; definitions : Ast.location list }
+type resolve_sink = reference list ref option
+
+(* A synthesized node (an interned function type looked up for a call, a
+   desugared construct) carries [Ast.dummy_loc] rather than a source span; skip
+   those, so only genuine source references are recorded. *)
+let is_source (l : location) = l.loc_start.Lexing.pos_cnum >= 0
+
+let same_span (a : location) (b : location) =
+  a.loc_start.Lexing.pos_cnum = b.loc_start.Lexing.pos_cnum
+  && a.loc_end.Lexing.pos_cnum = b.loc_end.Lexing.pos_cnum
+
+let record_reference (sink : resolve_sink) use definitions =
+  match sink with
+  | Some r when is_source use -> (
+      (* Drop synthesized definitions and the self-reference a name's own
+         declaration makes when it looks itself up (go-to-definition on a
+         definition has nowhere useful to go). *)
+      match
+        List.filter (fun d -> is_source d && not (same_span d use)) definitions
+      with
+      | [] -> ()
+      | definitions -> r := { use; definitions } :: !r)
+  | _ -> ()
+
 (*** Diagnostics ***)
 
 module Error = struct
@@ -641,9 +672,12 @@ module Namespace = struct
   type t = {
     cond : Cond.t ref;
     tbl : (string, (string * location * Cond.t) list) Hashtbl.t;
+    links : resolve_sink;
+        (* Where [Tbl.resolve] records a use -> definition(s) reference, shared
+           across the namespaces of one module; [None] disables recording. *)
   }
 
-  let make cond = { cond; tbl = Hashtbl.create 16 }
+  let make ?(links = None) cond = { cond; tbl = Hashtbl.create 16; links }
   let entries ns x = try Hashtbl.find ns.tbl x.desc with Not_found -> []
 
   (* A name conflicts with an earlier declaration only if their assumptions can
@@ -720,7 +754,17 @@ module Tbl = struct
               | Some _ as r -> r
               | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
     in
-    (match r with Some _ -> Hashtbl.replace env.used x.desc () | None -> ());
+    (match r with
+    | Some _ ->
+        Hashtbl.replace env.used x.desc ();
+        (* Link this use to every definition of the name (several only across
+           conditional branches); [resolve] handles only references, so [x.info]
+           is a use site. *)
+        record_reference env.namespace.links x.info
+          (List.map
+             (fun (_, loc, _) -> loc)
+             (Namespace.entries env.namespace x))
+    | None -> ());
     r
 
   let find d env x =
@@ -1143,10 +1187,12 @@ type module_context = {
          alone (and the name be dropped when the fields make it unambiguous).
          Built once at module-context creation. *)
   (* --- Per-function state (reset on entry to each function) --- *)
-  mutable locals : inferred_valtype option StringMap.t;
-      (* The local's type, or [None] when it could not be determined because its
-         initializer failed to type — an error-recovery "poison" local, read as
-         the [Error] type so its uses don't cascade into further errors. *)
+  mutable locals : (inferred_valtype option * location) StringMap.t;
+      (* The local's type paired with its binding site's source span (for
+         go-to-definition). The type is [None] when it could not be determined
+         because its initializer failed to type — an error-recovery "poison"
+         local, read as the [Error] type so its uses don't cascade into further
+         errors. *)
   mutable initialized_locals : StringSet.t;
       (* Locals known to hold a value at the current point. A non-defaultable
          (non-nullable reference) local starts uninitialized and must be
@@ -1174,13 +1220,21 @@ type module_context = {
          which may narrow to [e]'s subtype just like an immutable global — from
          one a later assignment still needs the wider [T] for. Reset per
          function. *)
-  control_types : (string option * inferred_type Cell.t array) list;
+  control_types : (label option * inferred_type Cell.t array) list;
+      (* Each enclosing control frame's label (kept as its [ident], so a branch
+         can be linked to the labelled construct for go-to-definition) and the
+         types it delivers. *)
   return_types : inferred_type Cell.t array;
   (* --- Conditional-compilation branch assumption --- *)
   cond : Cond.t ref;
       (* Current branch assumption (shared with every namespace/table above);
          set while typing a conditional branch so names resolve per branch. *)
   cond_env : Cond.env;
+  resolve_links : resolve_sink;
+      (* Where use -> definition references are recorded (locals via
+         [resolve_variable], labels via [branch_target]; module fields via
+         [Tbl.resolve] through the namespaces). The same sink the namespaces
+         hold; [None] outside the editor. *)
 }
 
 (* The subtyping info for the current type space, memoised on [type_context] and
@@ -1848,14 +1902,17 @@ let branch_target ctx label =
         let suggestions =
           Wax_utils.Spell_check.f
             (fun f ->
-              List.iter (fun (l, _) -> Option.iter f l) ctx.control_types)
+              List.iter
+                (fun (l, _) -> Option.iter (fun l -> f l.desc) l)
+                ctx.control_types)
             label.desc
         in
         Error.unbound_name ctx.diagnostics ~location:label.info ~suggestions
           "label" label;
         [||]
-    | (Some label', res) :: _ when label.desc = label' ->
+    | (Some label', res) :: _ when label.desc = label'.desc ->
         ctx.used_labels := StringSet.add label.desc !(ctx.used_labels);
+        record_reference ctx.resolve_links label.info [ label'.info ];
         res
     | _ :: rem -> find rem label
   in
@@ -1897,7 +1954,9 @@ type resolved_var =
 
 let resolve_variable ctx idx =
   match StringMap.find_opt idx.desc ctx.locals with
-  | Some ty -> Local ty
+  | Some (ty, def) ->
+      record_reference ctx.resolve_links idx.info [ def ];
+      Local ty
   | None -> (
       match Tbl.find_opt ctx.globals idx with
       | Some (mut, ty) -> Global (mut, ty)
@@ -2456,7 +2515,8 @@ let bind_let_value ctx ~location result_ty (name, typ) =
            check_subtype ctx ~location result_ty (valtype_cell ity);
            Option.iter
              (fun name ->
-               ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
+               ctx.locals <-
+                 StringMap.add name.desc (Some ity, name.info) ctx.locals;
                ctx.local_decls := name :: !(ctx.local_decls);
                mark_initialized ctx name.desc)
              name;
@@ -2474,7 +2534,7 @@ let bind_let_value ctx ~location result_ty (name, typ) =
              poison ([None]) rather than defaulting to [i32], and an [Unknown]
              initializer is additionally reported (see [bound_value_type]). *)
           let ity = bound_value_type ctx ~location result_ty in
-          ctx.locals <- StringMap.add name.desc ity ctx.locals;
+          ctx.locals <- StringMap.add name.desc (ity, name.info) ctx.locals;
           ctx.local_decls := name :: !(ctx.local_decls);
           mark_initialized ctx name.desc)
         name;
@@ -5733,7 +5793,8 @@ and type_let ctx i =
           in
           Option.iter
             (fun name ->
-              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
+              ctx.locals <-
+                StringMap.add name.desc (Some ity, name.info) ctx.locals;
               ctx.local_decls := name :: !(ctx.local_decls);
               mark_initialized ctx name.desc)
             name_opt;
@@ -5779,7 +5840,8 @@ and type_let ctx i =
           match (name, typ) with
           | Some name, Some typ ->
               let>@ ity = internalize_valtype ctx typ in
-              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
+              ctx.locals <-
+                StringMap.add name.desc (Some ity, name.info) ctx.locals;
               ctx.local_decls := name :: !(ctx.local_decls);
               (* A defaultable local holds its zero value; a non-defaultable one
                  stays uninitialized until assigned. *)
@@ -8100,12 +8162,7 @@ and block ctx loc label params results br_params block =
      in
      let* block' =
        block_contents
-         {
-           ctx with
-           control_types =
-             (Option.map (fun l -> l.desc) label, br_params)
-             :: ctx.control_types;
-         }
+         { ctx with control_types = (label, br_params) :: ctx.control_types }
          results block
      in
      let* () = pop_args ctx ~location:loc results in
@@ -8159,11 +8216,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* block' =
        block_contents
-         {
-           ctx with
-           control_types =
-             (Option.map (fun l -> l.desc) label, br) :: ctx.control_types;
-         }
+         { ctx with control_types = (label, br) :: ctx.control_types }
          [| result_routing |] body
      in
      fun st ->
@@ -8407,11 +8460,7 @@ and collect_into ctx loc label ~cs ~r instrs =
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* body' =
        block_contents
-         {
-           ctx with
-           control_types =
-             (Option.map (fun l -> l.desc) label, [| r |]) :: ctx.control_types;
-         }
+         { ctx with control_types = (label, [| r |]) :: ctx.control_types }
          [| r |] instrs
      in
      fun st ->
@@ -8998,7 +9047,8 @@ let rec functions ctx fields =
                   match id with
                   | Some id ->
                       let>@ typ = internalize_valtype ctx typ in
-                      locals := StringMap.add id.desc (Some typ) !locals
+                      locals :=
+                        StringMap.add id.desc (Some typ, id.info) !locals
                   | None -> ())
                 params
           | _ -> ());
@@ -9024,8 +9074,7 @@ let rec functions ctx fields =
                  traversal per function, not per binding). *)
               assigned_locals =
                 List.fold_left collect_assigned_locals StringSet.empty body;
-              control_types =
-                [ (Option.map (fun l -> l.desc) label, return_types) ];
+              control_types = [ (label, return_types) ];
               return_types;
             }
           in
@@ -9265,13 +9314,15 @@ let check_attributes diagnostics field =
 (*** Type-checking a configuration ***)
 
 let type_configuration ?(warn_unused = false) ?(build = true)
-    ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
+    ?(resolve_links = None) ?(features = Wax_utils.Feature.default ()) ~simplify
+    diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
+  let links = resolve_links in
   let type_context =
     {
       internal_types = Wax_wasm.Types.create ();
-      types = Tbl.make (Namespace.make cond) "type";
+      types = Tbl.make (Namespace.make ~links cond) "type";
       features;
       subtyping_info_cache = None;
     }
@@ -9323,7 +9374,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
           | Some _ -> Hashtbl.replace structs_by_fields key None)
       | Func _ | Array _ | Cont _ -> ());
   let ctx =
-    let namespace = Namespace.make cond in
+    let namespace = Namespace.make ~links cond in
     {
       diagnostics;
       type_context;
@@ -9333,10 +9384,10 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       globals = Tbl.make namespace "global";
       import_globals = Tbl.make namespace "global";
       memories = Tbl.make namespace "memory";
-      datas = Tbl.make (Namespace.make cond) "data segment";
+      datas = Tbl.make (Namespace.make ~links cond) "data segment";
       tables = Tbl.make namespace "table";
-      elems = Tbl.make (Namespace.make cond) "element segment";
-      tags = Tbl.make (Namespace.make cond) "tag";
+      elems = Tbl.make (Namespace.make ~links cond) "element segment";
+      tags = Tbl.make (Namespace.make ~links cond) "tag";
       locals = StringMap.empty;
       warn_unused;
       read_locals = ref StringSet.empty;
@@ -9349,6 +9400,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       return_types = [||];
       cond;
       cond_env;
+      resolve_links = links;
       simplify;
     }
   in
@@ -10059,12 +10111,13 @@ let check_configurations ~warn_unused ~features ~simplify diagnostics fields =
           : _ * _))
     ()
 
-let f_infer ?(simplify = false) ?(warn_unused = false)
+let f_infer ?(simplify = false) ?(warn_unused = false) ?(resolve_links = None)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   check_let_bindings diagnostics fields;
   if not (List.exists field_has_conditional fields) then
-    type_configuration ~warn_unused ~features ~simplify diagnostics fields
+    type_configuration ~warn_unused ~resolve_links ~features ~simplify
+      diagnostics fields
   else begin
     check_configurations ~warn_unused ~features ~simplify diagnostics fields;
     (* Build the typed module (consumed only by the deferred WAT conversion and
@@ -10072,8 +10125,9 @@ let f_infer ?(simplify = false) ?(warn_unused = false)
        typing the module with conditionals preserved. [type_configuration]
        resolves names per branch (condition-aware tables), so each branch is
        typed under its own assumption. Diagnostics are discarded —
-       [check_configurations] above did the real checking. *)
-    type_configuration ~features ~simplify
+       [check_configurations] above did the real checking; references are
+       recorded here, off the single tree the editor consumes. *)
+    type_configuration ~resolve_links ~features ~simplify
       (Wax_utils.Diagnostic.collector ())
       fields
   end

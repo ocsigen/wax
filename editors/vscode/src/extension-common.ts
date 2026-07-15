@@ -12,6 +12,7 @@ import {
   WaxSymbol,
   WaxHover,
   WaxInlay,
+  WaxRange,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
@@ -29,6 +30,8 @@ interface LanguageSpec {
   hover?(wax: Wax, src: string, line: number, character: number): WaxHover | null;
   // Inferred-type inlay hints. Wax only, for the same reason.
   inlays?(wax: Wax, src: string): WaxInlay[];
+  // Definition span(s) at a position, for go-to-definition. Wax only.
+  definition?(wax: Wax, src: string, line: number, character: number): WaxRange[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -39,6 +42,8 @@ const LANGUAGES: LanguageSpec[] = [
     symbols: (wax, src) => wax.symbols(src),
     hover: (wax, src, line, character) => wax.hover(src, line, character),
     inlays: (wax, src) => wax.inlays(src),
+    definition: (wax, src, line, character) =>
+      wax.definition(src, line, character),
   },
   {
     id: "wat",
@@ -61,6 +66,7 @@ export function activateWith(
     registerOutline(context, opts, lang);
     if (lang.hover) registerHover(context, opts, lang);
     if (lang.inlays) registerInlayHints(context, opts, lang);
+    if (lang.definition) registerDefinition(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -313,6 +319,51 @@ function registerInlayHints(
 
   context.subscriptions.push(
     vscode.languages.registerInlayHintsProvider(lang.id, provider),
+  );
+}
+
+function registerDefinition(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const definition = lang.definition;
+  if (!definition) return;
+
+  const provider: vscode.DefinitionProvider = {
+    async provideDefinition(document, position, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return undefined;
+      }
+      if (token.isCancellationRequested) return undefined;
+      let ranges: WaxRange[];
+      try {
+        ranges = definition(
+          wax,
+          document.getText(),
+          position.line,
+          position.character,
+        );
+      } catch {
+        return undefined;
+      }
+      // Every definition is in the same document (a module field or an
+      // enclosing local/label binding).
+      return ranges.map(
+        (r) =>
+          new vscode.Location(
+            document.uri,
+            new vscode.Range(r.startLine, r.startChar, r.endLine, r.endChar),
+          ),
+      );
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerDefinitionProvider(lang.id, provider),
   );
 }
 

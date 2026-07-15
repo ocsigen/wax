@@ -34,9 +34,15 @@ val f :
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
 
+type reference = { use : Ast.location; definitions : Ast.location list }
+(** A resolved name or label reference: the source span of a *use* and the
+    span(s) of the *definition(s)* it binds to — several only under conditional
+    compilation. Collected by {!f_infer} for go-to-definition. *)
+
 val f_infer :
   ?simplify:bool ->
   ?warn_unused:bool ->
+  ?resolve_links:reference list ref option ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -45,7 +51,12 @@ val f_infer :
     than resolved to storage types — {!f} is exactly [f_infer] followed by that
     resolution, and both emit the same diagnostics. Lets a consumer render types
     the way diagnostics do (via {!Infer.output_inferred_type}); used by the
-    editor for hover. *)
+    editor for hover.
+
+    When [resolve_links] is a [Some ref], every name and label reference
+    resolved while type checking is appended to it as a {!reference} (use span
+    -> definition spans), for go-to-definition. Left [None] (the default) an
+    ordinary run records nothing. *)
 
 val check :
   ?warn_unused:bool ->
