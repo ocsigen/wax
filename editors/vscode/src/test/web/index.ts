@@ -37,18 +37,38 @@ export async function run(): Promise<void> {
   }
 
   // check(): a valid module has no diagnostics; a broken one reports at least one.
-  if (wax.check("fn f() -> i32 { 1; }").length !== 0) {
+  if (wax.check("fn f() -> i32 { 1; }", []).length !== 0) {
     throw new Error("web: valid module should have no diagnostics");
   }
-  const diags = wax.check("fn bad( {");
+  const diags = wax.check("fn bad( {", []);
   if (diags.length === 0 || diags[0].severity !== "error") {
     throw new Error("web: expected an error diagnostic: " + JSON.stringify(diags));
   }
 
   // Related labels are surfaced: an unclosed delimiter points back at its opener.
-  const unclosed = wax.check("fn f() -> i32 { (i32.add 1 2 }");
+  const unclosed = wax.check("fn f() -> i32 { (i32.add 1 2 }", []);
   if (unclosed.length === 0 || unclosed[0].related.length === 0) {
     throw new Error("web: expected a related label: " + JSON.stringify(unclosed));
+  }
+
+  // check() specialized to defines: a type error confined to the #[else] branch
+  // is silenced when the defines pick the #[if] branch (mirroring `wax -D`), and
+  // surfaces when they pick the #[else] branch.
+  const condSrc =
+    "fn f() -> i32 {\n" +
+    "  let x: i32;\n" +
+    "  #[if(debug)] { x = 1; }\n" +
+    "  #[else] { x = 2.0; }\n" +
+    "  x;\n" +
+    "}";
+  if (wax.check(condSrc, ["debug=true"]).some((d) => d.severity === "error")) {
+    throw new Error(
+      "web: #[else] type error should be silenced when debug=true: " +
+        JSON.stringify(wax.check(condSrc, ["debug=true"])),
+    );
+  }
+  if (!wax.check(condSrc, ["debug=false"]).some((d) => d.severity === "error")) {
+    throw new Error("web: #[else] type error should surface when debug=false");
   }
 
   // Document outline: top-level definitions become symbols.

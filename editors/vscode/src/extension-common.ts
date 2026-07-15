@@ -39,7 +39,9 @@ const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend(SEMANTIC_TYPES, []);
 interface LanguageSpec {
   id: string;
   format(wax: Wax, src: string): FormatResult;
-  check(wax: Wax, src: string): WaxDiagnostic[];
+  // Diagnostics, specialized to the active `wax.define` set (mirroring `-D`).
+  // WAT ignores the defines (it has no Wax-side conditional dimming).
+  check(wax: Wax, src: string, defines: string[]): WaxDiagnostic[];
   symbols(wax: Wax, src: string): WaxSymbol[];
   // Type of the expression at a position, for hover. Only Wax has a typed tree;
   // omitted for WAT (its validator builds none), so no hover is registered there.
@@ -88,7 +90,7 @@ const LANGUAGES: LanguageSpec[] = [
   {
     id: "wax",
     format: (wax, src) => wax.format(src),
-    check: (wax, src) => wax.check(src),
+    check: (wax, src, defines) => wax.check(src, defines),
     symbols: (wax, src) => wax.symbols(src),
     hover: (wax, src, line, character) => wax.hover(src, line, character),
     inlays: (wax, src) => wax.inlays(src),
@@ -109,7 +111,7 @@ const LANGUAGES: LanguageSpec[] = [
   {
     id: "wat",
     format: (wax, src) => wax.formatWat(src),
-    check: (wax, src) => wax.checkWat(src),
+    check: (wax, src, _defines) => wax.checkWat(src),
     symbols: (wax, src) => wax.symbolsWat(src),
   },
 ];
@@ -749,7 +751,12 @@ function registerDiagnostics(
       // The formatter path surfaces load failures; here just skip diagnostics.
       return;
     }
-    const items = lang.check(wax, document.getText()).map((d) => {
+    // Specialize diagnostics to the chosen conditional-compilation defines, so
+    // the Problems match a `wax -D … check` (WAT ignores them).
+    const defines = vscode.workspace
+      .getConfiguration("wax")
+      .get<string[]>("define", []);
+    const items = lang.check(wax, document.getText(), defines).map((d) => {
       const range = new vscode.Range(
         d.startLine,
         d.startChar,
@@ -808,6 +815,12 @@ function registerDiagnostics(
       if (existing) clearTimeout(existing);
       timers.delete(key);
       collection.delete(document.uri);
+    }),
+    // Re-check every open document when the defines change, so diagnostics track
+    // the new configuration the way the dimming does.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (!e.affectsConfiguration("wax.define")) return;
+      for (const document of vscode.workspace.textDocuments) schedule(document);
     }),
   );
 

@@ -73,6 +73,11 @@
   makes unreachable are greyed out as dead code. A status-bar item shows the
   active defines when a `.wax` file is focused; clicking it (or the "Wax:
   Configure conditional-compilation defines" command) edits them.
+- Diagnostics for `.wax` now specialize to the `wax.define` configuration
+  (mirroring `wax -D … check`): the `#[if]`/`#[else]` branches that set rules out
+  are dropped before type-checking, so a type error confined to an inactive
+  branch no longer shows and the Problems match what a `-D` build sees. A partial
+  set leaves the remaining `#[if]`s for the all-configurations check.
 
 ## 0.2.2
 

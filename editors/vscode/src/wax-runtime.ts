@@ -103,7 +103,9 @@ export interface WaxSymbol {
 export interface Wax {
   // Wax language.
   format(src: string): FormatResult;
-  check(src: string): WaxDiagnostic[];
+  // Diagnostics, specialized to the given conditional-compilation defines
+  // (mirroring `-D`); an empty array runs the all-configurations check.
+  check(src: string, defines: string[]): WaxDiagnostic[];
   // The type of the innermost expression at the (zero-based) position, or null
   // if there is none. Wax only — WAT builds no typed tree.
   hover(src: string, line: number, character: number): WaxHover | null;

@@ -50,7 +50,9 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   `["debug=true", "arch=wasm64"]`, mirroring the `-D` flag) and the `#[if]` /
   `#[else]` branches that configuration makes unreachable are dimmed as dead
   code, like a preprocessor greying out inactive `#ifdef` regions. A status-bar
-  item shows the active defines and edits them in a click.
+  item shows the active defines and edits them in a click. Diagnostics
+  specialize to the same configuration (like `wax -D … check`), so a type error
+  that lives only in a branch the defines rule out is not reported.
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

@@ -159,9 +159,14 @@ does not carry. Three distinct prerequisites:
   each branch's own `#[if]/#[else] { … }` span (marker and braces) on its
   located body, so a single dead branch can be located precisely. A status-bar
   item shows the active defines when a `.wax` file is focused and edits them (the
-  `wax.configureDefines` command). Follow-ups:
-  feeding the defines into diagnostics/completion so they specialise to the
-  configuration too. Wax only.
+  `wax.configureDefines` command). Diagnostics now specialise to the same
+  defines: `check` takes them and, when non-empty, drops the ruled-out
+  `#[if]`/`#[else]` branches (`Cond_specialize.module_`, as `main.ml`'s
+  `specialize_wax` does) before type-checking, so the Problems match a
+  `wax -D … check` (a type error confined to the inactive branch disappears; a
+  partial set leaves the rest for the path-sensitive check). Follow-up: feeding
+  the defines into completion so it specialises to the configuration too. Wax
+  only.
 - [x] **Completion.** A `completion` export offers the names in scope at a
   position — the module's top-level definitions (reusing the outline walk), the
   enclosing function's parameters and locals, and the keywords — each tagged with

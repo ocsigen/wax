@@ -300,6 +300,45 @@ let check_string src =
   let a = analyze src in
   a.a_syntax @ a.a_type
 
+(* Diagnostics specialized to a chosen conditional-compilation configuration,
+   mirroring [wax -D … check]. With no (parseable) defines this is the plain
+   [check_string] — the all-configurations path-sensitive check. With defines,
+   the [#[if]]/[#[else]] branches the configuration rules out are dropped
+   ([Cond_specialize.module_], exactly as [main.ml]'s [specialize_wax] does)
+   before type-checking, so a branch that only type-checks under the *other*
+   configuration no longer reports errors and the editor's Problems match what a
+   [-D] build sees. A partial set leaves the remaining [#[if]]s in place for the
+   path-sensitive check. Specialization runs in the same collector as the check,
+   so a define used inconsistently (bound as a boolean where a version is
+   wanted) still surfaces. Syntax errors are configuration-independent and always
+   reported. *)
+let check_string_with_defines src defines =
+  let bindings =
+    Wax_wasm.Cond_specialize.of_list
+      (List.filter_map
+         (fun s ->
+           match Wax_wasm.Cond_specialize.parse_define s with
+           | Ok b -> Some b
+           | Error _ -> None)
+         defines)
+  in
+  if Wax_wasm.Cond_specialize.is_empty bindings then check_string src
+  else
+    let ast_opt, syntax_errors, _ctx =
+      Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+        ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
+    in
+    let a_syntax = List.map syntax_error_diag syntax_errors in
+    match ast_opt with
+    | None -> a_syntax
+    | Some ast ->
+        let d = Wax_utils.Diagnostic.collector ~source:src () in
+        Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+        let ast, _dropped = Wax_lang.Cond_specialize.module_ d bindings ast in
+        (try Wax_lang.Typing.check ~warn_unused:true d ast
+         with Wax_utils.Diagnostic.Aborted -> ());
+        a_syntax @ collected_diags d
+
 (* Hover types (Wax only). Reads the cell-annotated tree [analyze] built (every
    node's [info] is the inference cells for the values it leaves on the stack,
    paired with its source span), then keeps the smallest span that covers the
@@ -764,6 +803,18 @@ let format_result format_fn src =
 let check_result check_fn src =
   let s = Js.to_string src in
   let diagnostics = try check_fn s with _ -> [] in
+  Js.array (Array.of_list (List.map (js_diagnostic s) diagnostics))
+
+(* [check] with the editor's [wax.define] configuration threaded in: the
+   diagnostics are specialized to that set (see [check_string_with_defines]). A
+   missing / empty array leaves the ordinary path-sensitive check. *)
+let check_result_defines src defines =
+  let s = Js.to_string src in
+  let defines =
+    try Js.to_array defines |> Array.to_list |> List.map Js.to_string
+    with _ -> []
+  in
+  let diagnostics = try check_string_with_defines s defines with _ -> [] in
   Js.array (Array.of_list (List.map (js_diagnostic s) diagnostics))
 
 (* [null] when there is no typed node under the cursor (or anything went wrong):
@@ -1903,9 +1954,7 @@ let signature_result src line ch =
         end
 
 let inactive_ranges_result src defines =
-  let defines =
-    Js.to_array defines |> Array.to_list |> List.map Js.to_string
-  in
+  let defines = Js.to_array defines |> Array.to_list |> List.map Js.to_string in
   let ranges =
     try inactive_ranges_string (Js.to_string src) defines with _ -> []
   in
@@ -1939,7 +1988,7 @@ let () =
   Js.export "wax"
     object%js
       method format src = format_result format_string src
-      method check src = check_result check_string src
+      method check src defines = check_result_defines src defines
       method hover src line ch = hover_result src line ch
       method inlays src = inlays_result src
       method definition src line ch = definition_result src line ch
