@@ -189,13 +189,16 @@ does not carry. Three distinct prerequisites:
 
   A **memory or table receiver** — a name, not a value — is handled at the same
   `.` choke point by matching the receiver's `Get name` against
-  `memory_receiver`/`table_receiver`: `mem.` offers the scalar loads/stores and
-  `size`/`grow`/`fill`/`copy`/`init` (`Typing.memory_method_candidates`), `tab.`
-  the management ops (`table_method_candidates`), each signature rendered with
-  the object's own address type (and, for a table, element type). The
-  SIMD-memory (`mem.v128_load`) and atomic (`mem.i32_atomic_load`) accesses are
-  not offered yet — they need name registries in `Wax_wasm.Simd`/`Atomics`, and
-  atomics a shared memory.
+  `memory_receiver`/`table_receiver`: `mem.` offers the scalar loads/stores,
+  `size`/`grow`/`fill`/`copy`/`init`, and the atomic (`i32_atomic_load`,
+  `i64_atomic_rmw_add`, …) and SIMD (`v128_load`, `v128_load8_lane`, …) memory
+  accesses (`Typing.memory_method_candidates`); `tab.` the management ops
+  (`table_method_candidates`). Each signature is rendered with the object's own
+  address type (and, for a table, element type). The atomic set is enumerated
+  from `Wax_wasm.Atomics` (`all`/`method_name`/`signature`) and the SIMD-memory
+  set from a new `Wax_wasm.Simd.mem_method_names`, so neither can drift from the
+  typer; atomics are not gated on a shared memory because the typer accepts them
+  on any.
 
   **Intrinsic namespaces** after `::` are offered too: `v128::` (the SIMD const
   constructors and `bitselect`), `i64::` (the wide-arithmetic ops) and
@@ -204,9 +207,8 @@ does not carry. Three distinct prerequisites:
   Since the namespaces are keywords, the editor detects `ns::` textually (no
   parse needed, so it survives a broken buffer), on the `:` trigger.
 
-  Follow-ups: the SIMD-memory / atomic memory accesses, offering the namespace
-  names themselves before `::`, and per-point local scoping (currently every
-  local in the function is offered).
+  Follow-ups: offering the namespace names themselves before `::`, and
+  per-point local scoping (currently every local in the function is offered).
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -225,7 +227,7 @@ rename, and completion (names and struct members). What is left refines them:
 - **Completion polish** — value methods after `.` are done (numeric, array,
   v128, and memory/table receivers, with a method icon + signature), struct
   fields carry their type, and intrinsic namespaces after `::` are offered;
-  still open are the SIMD-memory / atomic memory accesses and per-point local
+  still open are the namespace names themselves before `::` and per-point local
   scoping.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.

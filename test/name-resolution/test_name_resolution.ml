@@ -106,5 +106,7 @@ let () =
      fn m(x: i32, w: i64, f: f32, a: &arr) {\n\
     \  _ = x.clz; _ = w.from_bits; _ = f.sqrt; _ = a.length;\n\
      }\n";
-  (* A memory receiver (a name, not a value) records that object's methods. *)
-  resolve "memory receiver" "memory mem: i32 [1];\nfn f() { _ = mem.load8; }\n"
+  (* A memory / table receiver (a name, not a value) records that object's
+     methods; a table's short list keeps the golden readable (the memory list,
+     including atomic and SIMD accesses, is exercised in test/method-consistency). *)
+  resolve "table receiver" "table tab: &?func [1];\nfn f() { _ = tab.size; }\n"

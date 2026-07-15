@@ -619,6 +619,26 @@ let mem_method name : mem_intrinsic option =
 
 let is_mem_method name = mem_method name <> None
 
+(* Every SIMD memory-access method name ([v128_load], [v128_store8_lane], …),
+   for completion after [mem.]. The set [mem_method] recognises. *)
+let mem_method_names =
+  let widths = [ `I8; `I16; `I32; `I64 ] in
+  List.map vec_load_name
+    [
+      Load128;
+      Load8x8S;
+      Load8x8U;
+      Load16x4S;
+      Load16x4U;
+      Load32x2S;
+      Load32x2U;
+      Load32Zero;
+      Load64Zero;
+    ]
+  @ (store_name :: List.map load_splat_name widths)
+  @ List.map load_lane_name widths
+  @ List.map store_lane_name widths
+
 (* {1 WebAssembly text (WAT) mnemonics for plain vector instructions}
 
    The "plain" vector instructions are those the WAT lexer emits as a single

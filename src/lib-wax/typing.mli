@@ -87,9 +87,9 @@ val numeric_receiver_candidates :
 
 val memory_method_candidates : addr_name:string -> member_candidate list
 (** The methods member completion offers on a memory receiver
-    ([mem.load8(addr)]) — the scalar loads/stores and size/grow/fill/copy/init —
-    with [addr_name] the memory's address type ([i32]/[i64]) for their
-    signatures. The SIMD-memory and atomic accesses are not included yet. *)
+    ([mem.load8(addr)]) — the scalar loads/stores, size/grow/fill/copy/init, and
+    the atomic and SIMD memory accesses — with [addr_name] the memory's address
+    type ([i32]/[i64]) for their signatures. *)
 
 val table_method_candidates :
   addr_name:string -> elem_name:string -> member_candidate list

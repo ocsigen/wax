@@ -44,9 +44,9 @@
   float methods (the literal can still narrow either way), `(3.0).` the float
   methods. Signatures render by family (`fn() -> int`) for such a receiver.
 - Member completion on a memory or table receiver: `mem.` offers the scalar
-  loads/stores and `size`/`grow`/`fill`/`copy`/`init`, `tab.` the management
-  ops, each with its signature. (SIMD-memory and atomic accesses are not offered
-  yet.)
+  loads/stores, `size`/`grow`/`fill`/`copy`/`init`, and the atomic
+  (`i32_atomic_load`, …) and SIMD (`v128_load`, …) memory accesses; `tab.` the
+  management ops. Each carries its signature.
 
 ## 0.2.2
 

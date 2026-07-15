@@ -254,50 +254,57 @@ let () =
         members)
     [ "v128"; "i64"; "atomic" ];
   (* Memory / table receiver methods (the receiver is a memory or table name,
-     not a value). Type-check every offered method with a valid call on a memory
-     / table fixture, so a curated signature that drifts from the typer shows. *)
+     not a value), including the atomic and SIMD memory accesses. Type-check
+     every offered method with a call built by reading its own rendered
+     signature — one literal per parameter type — so a signature whose arity or
+     shape the typer rejects shows up. The `mem` fixture is [shared] and carries
+     a [v128] (for atomic and lane operands) plus a data segment; the `table`
+     one a same-typed element segment. *)
   let is_void (c : Typing.member_candidate) =
     let suf = "-> ()" and d = c.member_detail in
     String.length d >= String.length suf
     && String.sub d (String.length d - String.length suf) (String.length suf)
        = suf
   in
+  (* The parameter type names inside [fn(<params>) -> ...]. *)
+  let params_of detail =
+    match String.index_opt detail '(' with
+    | None -> []
+    | Some lp ->
+        let rp = String.index_from detail lp ')' in
+        let inner = String.sub detail (lp + 1) (rp - lp - 1) in
+        if inner = "" then []
+        else List.map String.trim (String.split_on_char ',' inner)
+  in
+  let arg_for = function
+    | "v128" -> "v"
+    | "f32" | "f64" -> "0.0"
+    | "data" -> "d"
+    | "elem" -> "e"
+    | "&?func" -> "null"
+    | _ -> "0" (* i32, i64, lane index *)
+  in
   let mem_fixture body =
-    Printf.sprintf "memory mem: i32 [1];\ndata d = \"x\";\nfn t() { %s }\n" body
+    Printf.sprintf
+      "memory mem: i32 [1, 1] shared;\ndata d = \"x\";\nfn t(v: v128) { %s }\n"
+      body
   in
   let tab_fixture body =
     Printf.sprintf
       "table tab: &?func [1];\nelem e: &?func = [];\nfn t() { %s }\n" body
   in
-  let mem_args = function
-    | "load8" | "load16" | "load32" | "load64" | "loadf32" | "loadf64" -> "0"
-    | "store8" | "store16" | "store32" | "store64" -> "0, 0"
-    | "storef32" | "storef64" -> "0, 0.0"
-    | "size" -> ""
-    | "grow" -> "1"
-    | "fill" | "copy" -> "0, 0, 1"
-    | "init" -> "d, 0, 0, 1"
-    | _ -> ""
-  in
-  let tab_args = function
-    | "size" -> ""
-    | "grow" -> "null, 1"
-    | "fill" -> "0, null, 1"
-    | "copy" -> "0, 0, 1"
-    | "init" -> "e, 0, 0, 1"
-    | _ -> ""
-  in
-  let check_obj label fixture recv args_of cands =
+  let check_obj label fixture recv cands =
     Printf.printf "  %s (%d)\n" label (List.length cands);
     List.iter
       (fun (c : Typing.member_candidate) ->
-        let call =
-          Printf.sprintf "%s.%s(%s)" recv c.member_name (args_of c.member_name)
+        let args =
+          String.concat ", " (List.map arg_for (params_of c.member_detail))
         in
+        let call = Printf.sprintf "%s.%s(%s)" recv c.member_name args in
         let body =
           if is_void c then call ^ ";" else Printf.sprintf "_ = %s;" call
         in
-        Printf.printf "    %-9s %-32s %s\n" c.member_name c.member_detail
+        Printf.printf "    %-24s %-36s %s\n" c.member_name c.member_detail
           (match error_count (fixture body) with
           | 0 -> "ok"
           | -1 -> "PARSE ERROR"
@@ -305,7 +312,7 @@ let () =
       cands
   in
   Printf.printf "\nmemory / table methods:\n";
-  check_obj "memory" mem_fixture "mem" mem_args
+  check_obj "memory" mem_fixture "mem"
     (Typing.memory_method_candidates ~addr_name:"i32");
-  check_obj "table" tab_fixture "tab" tab_args
+  check_obj "table" tab_fixture "tab"
     (Typing.table_method_candidates ~addr_name:"i32" ~elem_name:"&?func")

@@ -111,6 +111,10 @@ type mem_intrinsic = {
 val mem_method : string -> mem_intrinsic option
 val is_mem_method : string -> bool
 
+val mem_method_names : string list
+(** Every SIMD memory-access method name ([v128_load] … [v128_store64_lane]),
+    for completion after [mem.]. The names {!mem_method} recognises. *)
+
 (** {1 WAT mnemonics for plain vector instructions}
 
     The plain vector instructions are those the WAT lexer emits as a single

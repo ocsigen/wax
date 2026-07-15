@@ -4021,13 +4021,65 @@ let address_type_name : [ `I32 | `I64 ] -> string = function
   | `I32 -> "i32"
   | `I64 -> "i64"
 
+(* [fn(<params>) -> <result>], with an empty result rendered [()] and several
+   as a tuple. *)
+let render_signature params result =
+  let result =
+    match result with
+    | [] -> "()"
+    | [ r ] -> r
+    | rs -> "(" ^ String.concat ", " rs ^ ")"
+  in
+  Printf.sprintf "fn(%s) -> %s" (String.concat ", " params) result
+
+(* The atomic memory accesses ([mem.i32_atomic_load(addr)],
+   [mem.i32_atomic_rmw_add(addr, v)], …), enumerated from {!Wax_wasm.Atomics};
+   the address takes [addr_name], the remaining operands and the results their
+   own types. *)
+let atomic_method_candidates ~addr_name =
+  let ty_name = function `I32 -> "i32" | `I64 -> "i64" in
+  List.map
+    (fun op ->
+      let operands, results = Wax_wasm.Atomics.signature op in
+      {
+        member_name = Wax_wasm.Atomics.method_name op;
+        member_kind = Method;
+        member_detail =
+          render_signature
+            (addr_name :: List.map ty_name operands)
+            (List.map ty_name results);
+      })
+    Wax_wasm.Atomics.all
+
+(* The SIMD memory accesses ([mem.v128_load(addr)],
+   [mem.v128_load8_lane(addr, v, lane)], …), enumerated from
+   {!Wax_wasm.Simd.mem_method_names}; the first operand is the address. *)
+let simd_mem_method_candidates ~addr_name =
+  List.map
+    (fun name ->
+      let mi : Simd.mem_intrinsic = Option.get (Simd.mem_method name) in
+      let rest =
+        match mi.m_operands with
+        | _addr :: r -> List.map simd_ty_name r
+        | [] -> []
+      in
+      let params =
+        (addr_name :: rest) @ if mi.m_lane then [ "lane index" ] else []
+      in
+      {
+        member_name = name;
+        member_kind = Method;
+        member_detail =
+          render_signature params
+            (match mi.m_result with Some t -> [ simd_ty_name t ] | None -> []);
+      })
+    Simd.mem_method_names
+
 (* The value methods member completion offers on a memory receiver
    [mem.load8(addr)], with [addr_name] the memory's address type: the scalar
-   loads/stores and the size/grow/fill/copy/init management ops (a trailing
-   [align]/[offset] immediate, allowed on loads/stores, is omitted). The
-   SIMD-memory ([mem.v128_load]) and atomic ([mem.i32_atomic_load]) accesses are
-   not offered yet — they need the vector / atomics name registries, and atomics
-   a shared memory. *)
+   loads/stores, the size/grow/fill/copy/init management ops (a trailing
+   [align]/[offset] immediate, allowed on loads/stores, is omitted), and the
+   atomic and SIMD memory accesses. *)
 let memory_method_candidates ~addr_name =
   let m member_name member_detail =
     { member_name; member_kind = Method; member_detail }
@@ -4054,6 +4106,8 @@ let memory_method_candidates ~addr_name =
       (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name addr_name addr_name);
     m "init" (Printf.sprintf "fn(data, %s, i32, i32) -> ()" addr_name);
   ]
+  @ atomic_method_candidates ~addr_name
+  @ simd_mem_method_candidates ~addr_name
 
 (* The value methods member completion offers on a table receiver [tab.size()],
    with [addr_name] the table's address type and [elem_name] its element type:
