@@ -15,6 +15,7 @@ import {
   WaxRange,
   WaxEdit,
   WaxCompletion,
+  WaxSignature,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
@@ -59,6 +60,13 @@ interface LanguageSpec {
     line: number,
     character: number,
   ): WaxCompletion[];
+  // The enclosing call's signature at a position, for signature help. Wax only.
+  signatureHelp?(
+    wax: Wax,
+    src: string,
+    line: number,
+    character: number,
+  ): WaxSignature | null;
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -79,6 +87,8 @@ const LANGUAGES: LanguageSpec[] = [
       wax.rename(src, line, character, newName),
     completion: (wax, src, line, character) =>
       wax.completion(src, line, character),
+    signatureHelp: (wax, src, line, character) =>
+      wax.signatureHelp(src, line, character),
   },
   {
     id: "wat",
@@ -105,6 +115,7 @@ export function activateWith(
     if (lang.references) registerReferences(context, opts, lang);
     if (lang.rename) registerRename(context, opts, lang);
     if (lang.completion) registerCompletion(context, opts, lang);
+    if (lang.signatureHelp) registerSignatureHelp(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -595,6 +606,59 @@ function registerCompletion(
     // "." triggers member completion, ":" the "ns::" namespace paths;
     // identifier typing triggers the rest.
     vscode.languages.registerCompletionItemProvider(lang.id, provider, ".", ":"),
+  );
+}
+
+function registerSignatureHelp(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const signatureHelp = lang.signatureHelp;
+  if (!signatureHelp) return;
+
+  const provider: vscode.SignatureHelpProvider = {
+    async provideSignatureHelp(document, position, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return null;
+      }
+      if (token.isCancellationRequested) return null;
+      let sig: WaxSignature | null;
+      try {
+        sig = signatureHelp(
+          wax,
+          document.getText(),
+          position.line,
+          position.character,
+        );
+      } catch {
+        return null;
+      }
+      if (!sig) return null;
+      const info = new vscode.SignatureInformation(sig.label);
+      // Highlight the active parameter by its [start, end) offsets in the label.
+      info.parameters = sig.parameters.map(
+        (p) => new vscode.ParameterInformation([p.startOff, p.endOff]),
+      );
+      const help = new vscode.SignatureHelp();
+      help.signatures = [info];
+      help.activeSignature = 0;
+      help.activeParameter = sig.active;
+      return help;
+    },
+  };
+
+  context.subscriptions.push(
+    // "(" opens an argument list, "," advances to the next parameter.
+    vscode.languages.registerSignatureHelpProvider(
+      lang.id,
+      provider,
+      "(",
+      ",",
+    ),
   );
 }
 

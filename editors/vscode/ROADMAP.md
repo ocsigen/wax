@@ -221,6 +221,19 @@ does not carry. Three distinct prerequisites:
   parse needed, so it survives a broken buffer), on the `:` trigger. The
   namespace names themselves (`Typing.intrinsic_namespaces`) are offered in
   general completion too, so `::` is discoverable.
+- [x] **Signature help.** A `signatureHelp` export returns the enclosing call's
+  signature at the cursor — the callee's rendered label, each parameter's
+  `[start, end)` offset within it, and the active-argument index. It finds the
+  innermost `Call` node whose parenthesised span contains the cursor (so it
+  needs the call to parse — a balanced, auto-closed `f(|)` does; a genuinely
+  unclosed `f(1,` is dropped by recovery until that is improved) and reads the
+  callee's signature from its definition: a named function (`Get`, defined or
+  imported) rendered via `render_signature`, or an intrinsic namespace path
+  (`Path`, `i64::add128`) from `Typing.namespace_members`. The active parameter
+  is the number of arguments ending before the cursor. A `SignatureHelpProvider`
+  in `extension-common.ts` (triggers `(` and `,`) highlights the active
+  parameter by its label offsets. Method receivers (`x.f(`) need the receiver's
+  type, so are a follow-up. Wax only.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.

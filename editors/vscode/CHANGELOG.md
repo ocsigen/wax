@@ -57,6 +57,9 @@
   branch is offered only where its condition is compatible with the cursor's, so
   an `#[else]` function is not suggested while editing the matching `#[if]`
   branch (even when the branch is an `#[if]` inside a function body).
+- Signature help for `.wax`: while typing a call, the callee's signature is
+  shown with the active argument highlighted (functions, imported functions, and
+  `ns::` intrinsics). Triggers on `(` and `,`.
 
 ## 0.2.2
 

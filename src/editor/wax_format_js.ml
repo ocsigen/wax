@@ -45,6 +45,12 @@
      bound before the cursor, the keywords, and the intrinsic namespace names.
      [detail] is a one-line type / signature (empty when none). The editor
      filters by the typed prefix. Wax only.
+   - [signatureHelp src line ch] -> { label; parameters; active } or null: the
+     enclosing call's signature at the (zero-based) position — [label] the
+     callee's rendered signature, [parameters] the [start, end) offset of each
+     parameter within it, [active] the argument index the cursor is on. Found
+     from the innermost [Call] node containing the cursor, so it needs the call
+     to parse (a balanced, auto-closed [f(|)] does). Wax only.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
      side-by-side preview commands.
@@ -1421,6 +1427,110 @@ let symbols_result symbols_fn src =
   let syms = try symbols_fn s with _ -> [] in
   Js.array (Array.of_list (List.map (js_symbol s) syms))
 
+(* The signature label of the callee of a call [callee(args)], for signature
+   help: a named function ([Get name], defined or imported) rendered as
+   [fn(a: i32) -> i32], or an intrinsic namespace path ([ns::name]) from its
+   registered signature. [None] for a method receiver or an unknown callee. *)
+let callee_label ast (callee : Wax_lang.Ast.location Wax_lang.Ast.instr) =
+  let open Wax_lang.Ast in
+  match callee.desc with
+  | Get name ->
+      let found = ref None in
+      let consider (decl : import_decl) =
+        match decl with
+        | { id; kind = Import_func { sign; typ; _ }; _ }
+          when id.desc = name.desc ->
+            found := Some (render_signature typ sign)
+        | _ -> ()
+      in
+      Wax_lang.Ast_utils.iter_fields
+        (fun field ->
+          if Option.is_none !found then
+            match field.desc with
+            | Func { name = n; sign; typ; _ } when n.desc = name.desc ->
+                found := Some (render_signature typ sign)
+            | Import { decl; _ } -> consider decl.desc
+            | Import_group { decls; _ } ->
+                List.iter (fun d -> consider d.desc) decls
+            | _ -> ())
+        ast;
+      !found
+  | Path (ns, nm) ->
+      List.find_map
+        (fun (c : Wax_lang.Typing.member_candidate) ->
+          if c.member_name = nm.desc then Some c.member_detail else None)
+        (Wax_lang.Typing.namespace_members ns.desc)
+  | _ -> None
+
+(* The [start, end) offsets of each top-level parameter within a rendered
+   [fn(<params>) -> …] label — the region between the outer parentheses, split
+   at depth-1 commas (so a function-typed parameter's own [(…)] is not split).
+   Used to highlight the active parameter. *)
+let param_ranges label =
+  let n = String.length label in
+  match String.index_opt label '(' with
+  | Some lp when lp + 1 < n && label.[lp + 1] <> ')' ->
+      let rec scan i depth start acc =
+        if i >= n then List.rev acc
+        else
+          match label.[i] with
+          | '(' -> scan (i + 1) (depth + 1) start acc
+          | ')' when depth = 1 -> List.rev ((start, i) :: acc)
+          | ')' -> scan (i + 1) (depth - 1) start acc
+          | ',' when depth = 1 -> scan (i + 2) depth (i + 2) ((start, i) :: acc)
+          | _ -> scan (i + 1) depth start acc
+      in
+      scan (lp + 1) 1 (lp + 1) []
+  | _ -> []
+
+(* Signature help at the cursor: the innermost call whose parenthesised span
+   contains it (from the recovered parse), rendered as a label with the source
+   offsets of each parameter and the active-parameter index (the number of
+   arguments that end before the cursor). [None] when the cursor is in no call,
+   or the callee has no known signature. *)
+let signature_help_string src line ch =
+  let ast_opt, _, _ =
+    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+      ~insert:Wax_lang.Recover.insert src
+  in
+  match ast_opt with
+  | None -> None
+  | Some ast -> (
+      let cursor = line_start_offset src line + byte_column src line ch in
+      let contains (l : Wax_utils.Ast.location) =
+        l.loc_start.pos_cnum <= cursor && cursor <= l.loc_end.pos_cnum
+      in
+      (* the innermost (smallest-span) call containing the cursor *)
+      let best = ref None in
+      Wax_lang.Ast_utils.iter_module_instr
+        (fun i ->
+          match i.desc with
+          | Wax_lang.Ast.Call (callee, args) when contains i.info -> (
+              let size = i.info.loc_end.pos_cnum - i.info.loc_start.pos_cnum in
+              match !best with
+              | Some (sz, _, _) when sz <= size -> ()
+              | _ -> best := Some (size, callee, args))
+          | _ -> ())
+        ast;
+      match !best with
+      | None -> None
+      | Some (_, callee, args) -> (
+          match callee_label ast callee with
+          | None -> None
+          | Some label ->
+              let ranges = param_ranges label in
+              let n = List.length ranges in
+              let active =
+                List.length
+                  (List.filter
+                     (fun a ->
+                       let l : Wax_utils.Ast.location = a.Wax_lang.Ast.info in
+                       l.loc_end.pos_cnum < cursor)
+                     args)
+              in
+              let active = if n = 0 then 0 else min active (n - 1) in
+              Some (label, ranges, active)))
+
 let js_completion c =
   object%js
     val name = Js.string c.k_name
@@ -1431,6 +1541,30 @@ let js_completion c =
 let completion_result src line ch =
   let items = try completion_string (Js.to_string src) line ch with _ -> [] in
   Js.array (Array.of_list (List.map js_completion items))
+
+let signature_result src line ch =
+  match
+    try signature_help_string (Js.to_string src) line ch with _ -> None
+  with
+  | None -> Js.null
+  | Some (label, ranges, active) ->
+      Js.Opt.return
+        object%js
+          val label = Js.string label
+
+          val parameters =
+            Js.array
+              (Array.of_list
+                 (List.map
+                    (fun (s, e) ->
+                      object%js
+                        val startOff = s
+                        val endOff = e
+                      end)
+                    ranges))
+
+          val active = active
+        end
 
 let () =
   Js.export "wax"
@@ -1445,6 +1579,7 @@ let () =
       method rename src line ch newname = rename_result src line ch newname
       method symbols src = symbols_result symbols_string src
       method completion src line ch = completion_result src line ch
+      method signatureHelp src line ch = signature_result src line ch
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
       method symbolsWat src = symbols_result symbols_wat_string src

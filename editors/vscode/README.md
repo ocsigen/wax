@@ -39,6 +39,9 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   on a memory or table); after `::`, an intrinsic namespace's functions
   (`v128::`, `i64::`, `atomic::`). Works while the file is
   mid-edit.
+- **Signature help** (`.wax`): while typing a call, shows the callee's signature
+  with the active argument highlighted (functions, imported functions, and
+  `ns::` intrinsics).
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

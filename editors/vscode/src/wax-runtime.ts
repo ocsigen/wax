@@ -68,6 +68,15 @@ export interface WaxCompletion {
   detail: string;
 }
 
+export interface WaxSignature {
+  // The callee's rendered signature, e.g. "fn(a: i32, b: i32) -> i32".
+  label: string;
+  // The [start, end) offset of each parameter within `label`, for highlighting.
+  parameters: { startOff: number; endOff: number }[];
+  // Index into `parameters` of the argument the cursor is on.
+  active: number;
+}
+
 export interface WaxSymbol {
   name: string;
   kind: string;
@@ -111,6 +120,13 @@ export interface Wax {
   // Names in scope at the position (module defs, the enclosing function's
   // params/locals, keywords), for completion. Wax only.
   completion(src: string, line: number, character: number): WaxCompletion[];
+  // The enclosing call's signature at the position, or null if the cursor is
+  // not inside a call to a named function. Wax only.
+  signatureHelp(
+    src: string,
+    line: number,
+    character: number,
+  ): WaxSignature | null;
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;
   checkWat(src: string): WaxDiagnostic[];
