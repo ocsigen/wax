@@ -2045,10 +2045,22 @@ let rec pop_many ctx i n accu =
 let pop ctx ~location ty st =
   match st with
   | Unreachable -> (st, ())
-  | Cons (loc, ty', r) ->
-      if not (subtype ctx ty' ty) then
-        Error.type_mismatch ctx.diagnostics ~location:loc ty' ty;
-      (r, ())
+  | Cons (loc, ty', r) -> (
+      match Cell.get ty' with
+      | Error ->
+          (* The top value is the poison of an already-reported error. Leave it
+             on the stack instead of consuming it — like the polymorphic
+             [Unreachable] case above — so it keeps suppressing leftover-stack
+             diagnostics in this scope (see [with_empty_stack]). Consuming it
+             would strip the poison and let a cascade surface: e.g. a rejected
+             instruction recovers as an [Error] value where the correct one was
+             void, and popping that phantom as the block's result leaves the
+             genuine value below it reading as a bogus leftover. *)
+          (st, ())
+      | _ ->
+          if not (subtype ctx ty' ty) then
+            Error.type_mismatch ctx.diagnostics ~location:loc ty' ty;
+          (r, ()))
   | Empty ->
       Error.empty_stack ctx.diagnostics ~location;
       (st, ())
