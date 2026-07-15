@@ -24,6 +24,7 @@ let rec occurs name i =
       || List.exists (fun (_, b) -> in_list b.desc) catches
       || match catch_all with Some b -> in_list b.desc | None -> false)
   | Call (t, args) | TailCall (t, args) -> occurs name t || in_list args
+  | Labelled (_, e)
   | Cast (e, _)
   | Test (e, _)
   | NonNull e
@@ -158,6 +159,7 @@ let rec first_access name i =
            (match catch_all with Some b -> fl b.desc | None -> None)
            catches)
   | Call (t, args) | TailCall (t, args) -> fst2 (fl args) (first_access name t)
+  | Labelled (_, e)
   | Cast (e, _)
   | Test (e, _)
   | NonNull e

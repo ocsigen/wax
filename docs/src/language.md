@@ -1492,10 +1492,11 @@ mem0.load32(p) as i64_s     // load then widen to i64
 
 mem0.store32(p, v);         // store (width by method, type by value)
 mem0.store16(p, v);
-mem0.store32(p, v, 1, 16);  // align=1, offset=16
+mem0.store32(p, v, offset: 16, align: 1);
 ```
 
-The two optional trailing arguments are the access `align` and `offset` (constant integers).
+The optional `offset` and `align` of the access are labelled arguments
+(constant integers), written after the operands in either order.
 
 A `load8` or `load16` returns raw bits, so it needs an explicit `as i32_s`/`as i32_u`
 (or `as i64_s`/`as i64_u`) cast to extend to the value type, as the lines above

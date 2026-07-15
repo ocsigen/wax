@@ -5,9 +5,9 @@ A memory-access alignment may not exceed the access's natural alignment:
 
   $ wax check align.wax
   Error: The memory alignment is larger than the natural alignment 1.
-   ──➤  align.wax:1:44
-  1 │ memory m: i32 [0]; fn f() { _ = m.load8(0, 2) as i32_s; }
-    ·                                            ^
+   ──➤  align.wax:1:51
+  1 │ memory m: i32 [0]; fn f() { _ = m.load8(0, align: 2) as i32_s; }
+    ·                                                   ^
   2 │ 
   [128]
 
@@ -47,9 +47,9 @@ A memory offset immediate must fit the address type:
 
   $ wax check offset.wax
   Error: The memory offset should be less than 0x100000000.
-   ──➤  offset.wax:1:48
-  1 │ memory m: i32 [1]; fn f() { _ = m.load32(0, 4, 4294967296); }
-    ·                                                ^^^^^^^^^^
+   ──➤  offset.wax:1:53
+  1 │ memory m: i32 [1]; fn f() { _ = m.load32(0, offset: 4294967296); }
+    ·                                                     ^^^^^^^^^^
   2 │ 
   [128]
 

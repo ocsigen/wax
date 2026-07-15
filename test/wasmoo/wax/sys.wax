@@ -107,7 +107,7 @@ fn caml_sys_exit(code: &eq) -> &eq {
                 caml_handle_sys_error(0 as &i31, res);
             }
             let env = checked_malloc(m.load32(buffer) << 2);
-            let dat = checked_malloc(m.load32(buffer, 4, 4));
+            let dat = checked_malloc(m.load32(buffer, offset: 4));
             res = environ_get(env, dat);
             if res {
                 free(env);
@@ -200,7 +200,7 @@ fn caml_sys_getenv_opt(name: &eq) -> &eq {
             br_if 'error res;
             let argc = m.load32(buffer);
             argv_ptr = checked_malloc(argc << 2);
-            argv_buf = checked_malloc(m.load32(buffer, 4, 4));
+            argv_buf = checked_malloc(m.load32(buffer, offset: 4));
             res = args_get(argv_ptr, argv_buf);
             br_if 'error res;
             let args: &block = [0 as &i31; argc + 1];

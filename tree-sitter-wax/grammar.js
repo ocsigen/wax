@@ -322,7 +322,13 @@ module.exports = grammar({
       field('arguments', $.argument_list),
     )),
 
-    argument_list: $ => seq('(', sepByTrailing(',', $._expression), ')'),
+    argument_list: $ => seq('(',
+      sepByTrailing(',', choice($.labelled_argument, $._expression)), ')'),
+
+    // A labelled immediate argument of a memory access:
+    // m.store32(p, v, offset: 16, align: 1), m.v128_load8_lane(p, v, lane: 3).
+    labelled_argument: $ => seq(
+      field('label', $.identifier), ':', field('value', $._expression)),
 
     typed_string_expression: $ => prec(PREC.postfix, seq(
       field('type', $.identifier),

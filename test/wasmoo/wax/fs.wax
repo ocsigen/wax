@@ -149,7 +149,7 @@ type block = [mut &eq];
                 br_if 'done res == 8; // EBADF
                 'skip: do {
                     br_if 'skip !(!res & !(m.load8(buffer) as i32_u));
-                    let len = m.load32(buffer, 4, 4);
+                    let len = m.load32(buffer, offset: 4);
                     res = fd_prestat_dir_name(fd, buffer, len);
                     br_if 'skip res;
                     preopens =
@@ -380,7 +380,7 @@ type block = [mut &eq];
         let res = path_filestat_get(p_fd, 1, p_addr, p_len, buffer);
         free(p_addr);
         caml_handle_sys_error_if(name, res);
-        let kind = m.load8(buffer, 1, 16) as i32_u;
+        let kind = m.load8(buffer, offset: 16) as i32_u;
         if kind != 3 {
             caml_handle_sys_error(name, 54);
         } // ENOTDIR
@@ -460,7 +460,7 @@ type block = [mut &eq];
                 let left = available - pos;
                 br_if 'refill left <u 24;
                 let entry = buf + pos;
-                let namelen = m.load32(entry, 4, 16);
+                let namelen = m.load32(entry, offset: 16);
                 entry_size = namelen + 24;
                 br_if 'refill left <u entry_size;
                 pos += entry_size;
@@ -700,7 +700,7 @@ fn caml_fs_init() -> &eq {
         let res = path_filestat_get(p_fd, 1, p_addr, p_len, buffer);
         free(p_addr);
         caml_handle_sys_error_if(name, res);
-        m.load8(buffer, 1, 16) as i32_u;
+        m.load8(buffer, offset: 16) as i32_u;
     }
 
     #[export]

@@ -67,6 +67,7 @@ let rec map_instr f instr =
         x
     | Set (idx, op, v) -> Set (idx, op, map_instr f v)
     | Tee (idx, v) -> Tee (idx, map_instr f v)
+    | Labelled (l, v) -> Labelled (l, map_instr f v)
     | Call (target, args) ->
         Call (map_instr f target, List.map (map_instr f) args)
     | TailCall (target, args) ->
@@ -207,6 +208,7 @@ let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
   | ArraySet (a, b, c) | Select (a, b, c) -> [ a; b; c ]
   | Set (_, _, i)
   | Tee (_, i)
+  | Labelled (_, i)
   | Cast (i, _)
   | Test (i, _)
   | NonNull i

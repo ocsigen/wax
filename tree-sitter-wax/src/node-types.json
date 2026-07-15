@@ -426,6 +426,10 @@
         {
           "type": "_expression",
           "named": true
+        },
+        {
+          "type": "labelled_argument",
+          "named": true
         }
       ]
     }
@@ -2983,6 +2987,32 @@
           {
             "type": "while",
             "named": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "labelled_argument",
+    "named": true,
+    "fields": {
+      "label": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_expression",
+            "named": true
           }
         ]
       }

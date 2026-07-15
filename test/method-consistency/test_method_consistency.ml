@@ -282,6 +282,13 @@ let () =
     | "data" -> "d"
     | "elem" -> "e"
     | "&?func" -> "null"
+    (* The labelled immediates of a memory access: the mandatory lane, the
+       optional (rendered with [?]) offset/align. [align: 1] is valid for
+       every non-atomic access — a power of two no larger than any natural
+       alignment (the atomic signatures offer no [align?]). *)
+    | "lane: int" -> "lane: 0"
+    | "offset?: int" -> "offset: 0"
+    | "align?: int" -> "align: 1"
     | _ -> "0" (* i32, i64, lane index *)
   in
   let mem_fixture body =

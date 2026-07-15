@@ -53,9 +53,9 @@ rejected.
 
   $ wax check bad-align.wax
   Error: The alignment of an atomic access must be its natural alignment 4.
-   ──➤  bad-align.wax:2:46
+   ──➤  bad-align.wax:2:53
   1 │ memory mem: i32 [1, 1] shared;
-  2 │ fn f(p: i32) -> i32 { mem.i32_atomic_load(p, 1); }
-    ·                                              ^
+  2 │ fn f(p: i32) -> i32 { mem.i32_atomic_load(p, align: 1); }
+    ·                                                     ^
   3 │ 
   [128]

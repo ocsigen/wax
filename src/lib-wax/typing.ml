@@ -776,6 +776,40 @@ module Error = struct
     report context ~location
       (text "The lane value does not fit in" ++ Message.int bits ++ text "bits.")
 
+  let labelled_argument_not_allowed context ~location =
+    report context ~location
+      (text "Labelled arguments are only allowed for the"
+      ++ (kw "offset" ^^ text ",")
+      ++ kw "align" ++ text "and" ++ kw "lane"
+      ++ text "immediates of a memory access.")
+
+  let unknown_argument_label context ~location ~suggestions x =
+    report ?hint:(did_you_mean suggestions) context ~location
+      ((text "Unknown argument label" ++ name x) ^^ text ".")
+
+  let duplicate_argument_label context ~location x =
+    report context ~location
+      (text "The argument label" ++ name x ++ text "is given several times.")
+
+  let positional_argument_after_label context ~location =
+    report context ~location
+      (text "A positional argument cannot follow a labelled argument.")
+
+  (* The pre-labelled-arguments syntax passed the [align]/[offset] (and SIMD
+     [lane]) immediates positionally; give old code a targeted migration
+     message rather than a generic arity error. *)
+  let positional_memory_immediate context ~location ~example =
+    report context ~location
+      (text "The static immediates of a memory access must be labelled, e.g."
+       ++ kw example
+      ^^ text ".")
+
+  let missing_lane_immediate context ~location =
+    report context ~location
+      (text "This memory access needs a"
+       ++ kw "lane:" ++ text "immediate (e.g." ++ kw "lane: 0"
+      ^^ text ").")
+
   let limit_too_large context ~location kind max =
     report context ~location
       (text "The" ++ text kind
@@ -3052,6 +3086,7 @@ let rec count_holes i =
   | Let (_, Some i)
   | Set (_, _, i)
   | Tee (_, i)
+  | Labelled (_, i)
   | UnOp (_, i)
   | Cast (i, _)
   | Test (i, _)
@@ -3154,6 +3189,7 @@ let rec collect_assigned_locals acc i =
   | UnOp (_, e)
   | Br_if (_, e)
   | Hinted (_, e)
+  | Labelled (_, e)
   | Br_table (_, e)
   | Br_on_null (_, e)
   | Br_on_non_null (_, e)
@@ -3250,6 +3286,7 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | Call (t, args) | TailCall (t, args) -> in_list (collect_labels acc t) args
   | Set (_, _, e)
   | Tee (_, e)
+  | Labelled (_, e)
   | Cast (e, _)
   | Test (e, _)
   | NonNull e
@@ -3342,6 +3379,7 @@ let rec find_eager_hazard (e : _ Ast.instr) =
   | UnOp (_, a)
   | Cast (a, _)
   | Test (a, _)
+  | Labelled (_, a)
   | ArrayDefault (_, a)
   | StructDefaultDesc a ->
       find_eager_hazard a
@@ -3480,6 +3518,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
       | _ -> ());
       lint_source ctx e
   | Tee (_, e)
+  | Labelled (_, e)
   | Cast (e, _)
   | Test (e, _)
   | NonNull e
@@ -3753,6 +3792,7 @@ let rec check_hole_order_rec ctx i n =
         | Let (_, Some i)
         | Set (_, _, i)
         | Tee (_, i)
+        | Labelled (_, i)
         | UnOp (_, i)
         | Cast (i, _)
         | Test (i, _)
@@ -4223,7 +4263,7 @@ let atomic_method_candidates ~addr_name =
         member_kind = Method;
         member_detail =
           render_signature
-            (addr_name :: List.map ty_name operands)
+            ((addr_name :: List.map ty_name operands) @ [ "offset?: int" ])
             (List.map ty_name results);
       })
     Wax_wasm.Atomics.all
@@ -4241,7 +4281,9 @@ let simd_mem_method_candidates ~addr_name =
         | [] -> []
       in
       let params =
-        (addr_name :: rest) @ if mi.m_lane then [ "lane index" ] else []
+        (addr_name :: rest)
+        @ (if mi.m_lane then [ "lane: int" ] else [])
+        @ [ "offset?: int"; "align?: int" ]
       in
       {
         member_name = name;
@@ -4254,15 +4296,21 @@ let simd_mem_method_candidates ~addr_name =
 
 (* The value methods member completion offers on a memory receiver
    [mem.load8(addr)], with [addr_name] the memory's address type: the scalar
-   loads/stores, the size/grow/fill/copy/init management ops (a trailing
-   [align]/[offset] immediate, allowed on loads/stores, is omitted), and the
-   atomic and SIMD memory accesses. *)
+   loads/stores (with their optional labelled [offset]/[align] immediates),
+   the size/grow/fill/copy/init management ops, and the atomic and SIMD memory
+   accesses. *)
 let memory_method_candidates ~addr_name =
   let m member_name member_detail =
     { member_name; member_kind = Method; member_detail }
   in
-  let load name r = m name (Printf.sprintf "fn(%s) -> %s" addr_name r) in
-  let store name v = m name (Printf.sprintf "fn(%s, %s) -> ()" addr_name v) in
+  let load name r =
+    m name
+      (Printf.sprintf "fn(%s, offset?: int, align?: int) -> %s" addr_name r)
+  in
+  let store name v =
+    m name
+      (Printf.sprintf "fn(%s, %s, offset?: int, align?: int) -> ()" addr_name v)
+  in
   [
     load "load8" "i32";
     load "load16" "i32";
@@ -4460,6 +4508,86 @@ let check_memarg ctx ~address_type ~natural ~align ~offset =
         | 1 | 2 | 4 | 8 | 16 -> ()
         | _ -> Error.bad_memory_align ctx.diagnostics ~location:(snd align.info)
       )
+
+(* Split a memory-access call's (typed) argument list into the positional
+   stack operands and the labelled immediates. A positional argument after a
+   labelled one is reported and kept positional, for recovery. *)
+let split_labelled_args ctx args =
+  let rec split positional labelled = function
+    | [] -> (List.rev positional, List.rev labelled)
+    | a :: rest -> (
+        match a.Ast.desc with
+        | Ast.Labelled (l, e) -> split positional ((l, e) :: labelled) rest
+        | _ ->
+            if labelled <> [] then
+              Error.positional_argument_after_label ctx.diagnostics
+                ~location:(snd a.Ast.info);
+            split (a :: positional) labelled rest)
+  in
+  split [] [] args
+
+(* Check the labelled immediates of a memory access against the label names
+   [allowed] for it — an unknown or duplicate label is reported, and the
+   payload of an accepted label must be an integer literal — and return a
+   by-name lookup of the payloads. *)
+let take_labels ctx ~allowed labelled =
+  let take (seen, acc) ((l : Ast.ident), e) =
+    if not (List.mem l.desc allowed) then (
+      Error.unknown_argument_label ctx.diagnostics ~location:l.info
+        ~suggestions:
+          (Wax_utils.Spell_check.f (fun f -> List.iter f allowed) l.desc)
+        l;
+      (seen, acc))
+    else if StringSet.mem l.desc seen then (
+      Error.duplicate_argument_label ctx.diagnostics ~location:l.info l;
+      (seen, acc))
+    else
+      match e.Ast.desc with
+      | Ast.Int _ -> (StringSet.add l.desc seen, (l.desc, e) :: acc)
+      | _ ->
+          (* Report it and drop the pair, so [check_memarg] (which would also
+             fail to read it as a literal) does not report it again. *)
+          Error.constant_expression_required ctx.diagnostics
+            ~location:(snd e.Ast.info);
+          (StringSet.add l.desc seen, acc)
+  in
+  let _, acc = List.fold_left take (StringSet.empty, []) labelled in
+  fun name -> List.assoc_opt name acc
+
+(* The [lane]/[align]/[offset] immediates of a memory access with [nstack]
+   stack operands, from the label lookup [find]. Extra positional arguments
+   are the pre-labelled-arguments syntax when they are integer literals — the
+   targeted migration error is reported and they still fill the immediates in
+   the old positional order ([lane,] align, offset), so old code gets exactly
+   one error and no cascade — and an ordinary arity error otherwise. *)
+let mem_immediates ctx ~location ~example ~nstack ~has_lane find positional =
+  let nargs = List.length positional in
+  let extra = List.filteri (fun k _ -> k >= nstack) positional in
+  (if nargs < nstack then
+     Error.value_count_mismatch ctx.diagnostics ~location ~expected:nstack
+       ~provided:nargs
+   else
+     match extra with
+     | [] -> ()
+     | a :: _ ->
+         let nimms = if has_lane then 3 else 2 in
+         if
+           List.length extra <= nimms
+           && List.for_all
+                (fun a ->
+                  match a.Ast.desc with Ast.Int _ -> true | _ -> false)
+                extra
+         then
+           Error.positional_memory_immediate ctx.diagnostics
+             ~location:(snd a.Ast.info) ~example
+         else
+           Error.value_count_mismatch ctx.diagnostics ~location ~expected:nstack
+             ~provided:nargs);
+  let pick name k =
+    match find name with Some e -> Some e | None -> List.nth_opt extra k
+  in
+  if has_lane then (pick "lane" 0, pick "align" 1, pick "offset" 2)
+  else (None, pick "align" 0, pick "offset" 1)
 
 (* [min(2^bits - 1, 2^(bits - p))]; mirrors [Validation.max_memory_size]. *)
 let max_memory_size address_type page_size_log2 =
@@ -4850,6 +4978,13 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              here; propagate the failed result rather than re-reporting or
              [assert false]. *)
           return typed)
+  | Labelled (_, e) ->
+      (* A labelled argument is only meaningful as a direct argument of a
+         memory-access call, whose typers consume the labels before typing the
+         rest; reaching here means it appeared anywhere else (a plain call, a
+         non-memory method, …). Recover by typing the payload in place. *)
+      Error.labelled_argument_not_allowed ctx.diagnostics ~location:i.info;
+      instruction ctx e
   | Char _ as desc -> return_expression i desc i32_cell
   | Int s as desc ->
       (* Pick the lattice type from the magnitude (the sign is a separate [Neg],
@@ -6753,12 +6888,17 @@ and type_mem_method_call ctx i func recv memname meth args =
   let addr_vt = address_cell address_type in
   let is_store = mem_store_method meth.desc in
   let nstack = if is_store then 2 else 1 in
-  let* args' = instructions ctx args in
-  let nargs = List.length args' in
-  if nargs < nstack || nargs > nstack + 2 then
-    Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:nstack
-      ~provided:nargs;
-  (match args' with
+  let* args' = mem_call_arguments ctx args in
+  let positional, labelled = split_labelled_args ctx args' in
+  let find = take_labels ctx ~allowed:[ "offset"; "align" ] labelled in
+  let example =
+    memname.desc ^ "." ^ meth.desc ^ "(..., offset: 16, align: 1)"
+  in
+  let _, align, offset =
+    mem_immediates ctx ~location:i.info ~example ~nstack ~has_lane:false find
+      positional
+  in
+  (match positional with
   | addr' :: rest -> (
       check_type ctx addr' addr_vt;
       if is_store then
@@ -6782,19 +6922,9 @@ and type_mem_method_call ctx i func recv memname meth args =
                       ~location:(snd value'.info) vty (Cell.make Int)))
         | [] -> ())
   | [] -> ());
-  List.iteri
-    (fun k a ->
-      if k >= nstack then
-        match a.desc with
-        | Ast.Int _ -> ()
-        | _ ->
-            Error.constant_expression_required ctx.diagnostics
-              ~location:(snd a.info))
-    args';
   check_memarg ctx ~address_type
     ~natural:(mem_natural_align meth.desc)
-    ~align:(List.nth_opt args' nstack)
-    ~offset:(List.nth_opt args' (nstack + 1));
+    ~align ~offset;
   let result =
     if is_store then [||]
     else
@@ -6819,14 +6949,17 @@ and type_atomic_method_call ctx i func recv memname meth op args =
     | `I64 -> valtype_cell i64_valtype
   in
   let operands, results = Wax_wasm.Atomics.signature op in
-  (* The address, then the value operands; then optional align/offset literals. *)
+  (* The address, then the value operands; then optional labelled immediates. *)
   let nstack = 1 + List.length operands in
-  let* args' = instructions ctx args in
-  let nargs = List.length args' in
-  if nargs < nstack || nargs > nstack + 2 then
-    Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:nstack
-      ~provided:nargs;
-  (match args' with
+  let* args' = mem_call_arguments ctx args in
+  let positional, labelled = split_labelled_args ctx args' in
+  let find = take_labels ctx ~allowed:[ "offset"; "align" ] labelled in
+  let example = memname.desc ^ "." ^ meth.desc ^ "(..., offset: 16)" in
+  let _, align, offset =
+    mem_immediates ctx ~location:i.info ~example ~nstack ~has_lane:false find
+      positional
+  in
+  (match positional with
   | addr' :: rest ->
       check_type ctx addr' (address_cell address_type);
       List.iteri
@@ -6836,21 +6969,11 @@ and type_atomic_method_call ctx i func recv memname meth op args =
           | None -> ())
         operands
   | [] -> ());
-  List.iteri
-    (fun k a ->
-      if k >= nstack then
-        match a.desc with
-        | Ast.Int _ -> ()
-        | _ ->
-            Error.constant_expression_required ctx.diagnostics
-              ~location:(snd a.info))
-    args';
   let natural = 1 lsl Wax_wasm.Atomics.natural_align_log2 op in
   (* Only the offset immediate is range-checked here; an atomic access requires
      exactly its natural alignment, not merely at most, so check that below. *)
-  check_memarg ctx ~address_type ~natural ~align:None
-    ~offset:(List.nth_opt args' (nstack + 1));
-  (match List.nth_opt args' nstack with
+  check_memarg ctx ~address_type ~natural ~align:None ~offset;
+  (match align with
   | Some a -> (
       match int_literal a with
       | Some v
@@ -6875,45 +6998,60 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
   let addr_vt = address_cell address_type in
   let nstack = List.length mop.m_operands in
-  let nimm = if mop.m_lane then 1 else 0 in
-  let* args' = instructions ctx args in
-  let nargs = List.length args' in
-  if nargs < nstack + nimm || nargs > nstack + nimm + 2 then
-    Error.value_count_mismatch ctx.diagnostics ~location:i.info
-      ~expected:(nstack + nimm) ~provided:nargs;
+  let* args' = mem_call_arguments ctx args in
+  let positional, labelled = split_labelled_args ctx args' in
+  let allowed =
+    if mop.m_lane then [ "lane"; "offset"; "align" ] else [ "offset"; "align" ]
+  in
+  let find = take_labels ctx ~allowed labelled in
+  let example =
+    memname.desc ^ "." ^ meth.desc
+    ^ if mop.m_lane then "(..., lane: 0, offset: 16)" else "(..., offset: 16)"
+  in
+  let lane, align, offset =
+    mem_immediates ctx ~location:i.info ~example ~nstack ~has_lane:mop.m_lane
+      find positional
+  in
   List.iteri
     (fun k a ->
       if k = 0 then check_type ctx a addr_vt
       else if k < nstack then
-        check_type ctx a (simd_cell (List.nth mop.m_operands k))
-      else
-        match a.desc with
-        | Ast.Int _ -> ()
-        | _ ->
-            Error.constant_expression_required ctx.diagnostics
-              ~location:(snd a.info))
-    args';
+        check_type ctx a (simd_cell (List.nth mop.m_operands k)))
+    positional;
   (if mop.m_lane then
-     let>@ lane = List.nth_opt args' nstack in
-     let max_lane = 16 / mop.m_nat_align in
-     (* Compare unsigned, and reject an [Ast.Int] too large even for [u64]
-        ([int_literal] = [None]): otherwise it slips past this check and crashes
-        [to_wasm]'s [int_of_string] (as for the SIMD lane index in
-        [type_simd_method_call]). A non-constant lane is reported above. *)
-     match lane.desc with
-     | Ast.Int _ -> (
-         match int_literal lane with
-         | Some l
-           when Wax_utils.Uint64.compare l (Wax_utils.Uint64.of_int max_lane)
-                < 0 ->
-             ()
-         | _ ->
-             Error.invalid_lane_index ctx.diagnostics ~location:(snd lane.info)
-               max_lane)
-     | _ -> ());
-  check_memarg ctx ~address_type ~natural:mop.m_nat_align
-    ~align:(List.nth_opt args' (nstack + nimm))
-    ~offset:(List.nth_opt args' (nstack + nimm + 1));
+     match lane with
+     | None ->
+         (* Only when the stack operands are exactly accounted for and no
+            (possibly ill-formed, already reported) [lane:] was written: too
+            few or extra positional arguments were reported just above, a
+            non-constant lane payload by [take_labels]. *)
+         if
+           List.length positional = nstack
+           && not
+                (List.exists
+                   (fun ((l : Ast.ident), _) -> l.desc = "lane")
+                   labelled)
+         then Error.missing_lane_immediate ctx.diagnostics ~location:i.info
+     | Some lane -> (
+         let max_lane = 16 / mop.m_nat_align in
+         (* Compare unsigned, and reject an [Ast.Int] too large even for [u64]
+            ([int_literal] = [None]): otherwise it slips past this check and
+            crashes [to_wasm]'s [int_of_string] (as for the SIMD lane index in
+            [type_simd_method_call]). A non-constant lane is reported by
+            [take_labels]. *)
+         match lane.desc with
+         | Ast.Int _ -> (
+             match int_literal lane with
+             | Some l
+               when Wax_utils.Uint64.compare l
+                      (Wax_utils.Uint64.of_int max_lane)
+                    < 0 ->
+                 ()
+             | _ ->
+                 Error.invalid_lane_index ctx.diagnostics
+                   ~location:(snd lane.info) max_lane)
+         | _ -> ()));
+  check_memarg ctx ~address_type ~natural:mop.m_nat_align ~align ~offset;
   let result =
     match mop.m_result with Some t -> [| simd_cell t |] | None -> [||]
   in
@@ -8521,6 +8659,26 @@ and instructions ctx l : _ -> _ * _ list =
       let* r' = instructions ctx r in
       return (i' :: r')
 
+(* Type a memory-access call's argument list: a [Labelled] immediate has its
+   payload typed and is re-wrapped — preserving the label for [check_memarg],
+   printing and lowering — while the other arguments are typed as ordinary
+   expressions. Only the memory-access typers accept labels; everywhere else
+   [instructions] sends a [Labelled] node to the catch-all error. *)
+and mem_call_arguments ctx l : _ -> _ * _ list =
+  match l with
+  | [] -> return []
+  | i :: r -> (
+      match i.desc with
+      | Ast.Labelled (lbl, e) ->
+          let* e' = instruction ctx e in
+          let* r' = mem_call_arguments ctx r in
+          return
+            ({ desc = Labelled (lbl, e'); info = (fst e'.info, i.info) } :: r')
+      | _ ->
+          let* i' = instruction ctx i in
+          let* r' = mem_call_arguments ctx r in
+          return (i' :: r'))
+
 and toplevel_instruction ctx i : stack -> stack * 'b =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
@@ -9431,7 +9589,7 @@ let rec check_constant_instruction ctx i =
   | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
   | Br_on_cast_desc_eq_fail _ | Hinted _ | Throw _ | ThrowRef _ | ContBind _
   | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
-  | Return _ | Sequence _ | Select _ | If_annotation _ ->
+  | Return _ | Sequence _ | Select _ | If_annotation _ | Labelled _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 (* A struct-literal field in a constant expression. An explicit value is checked
@@ -10477,6 +10635,7 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       || instr_has_conditional c
   | Set (_, _, i)
   | Tee (_, i)
+  | Labelled (_, i)
   | Cast (i, _)
   | Test (i, _)
   | NonNull i
@@ -10606,6 +10765,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
           }
     | Set (idx, op, v) -> Set (idx, op, sone asm v)
     | Tee (idx, v) -> Tee (idx, sone asm v)
+    | Labelled (l, v) -> Labelled (l, sone asm v)
     | Call (t, args) -> Call (sone asm t, List.map (sone asm) args)
     | TailCall (t, args) -> TailCall (sone asm t, List.map (sone asm) args)
     | Cast (v, t) -> Cast (sone asm v, t)

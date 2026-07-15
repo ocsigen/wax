@@ -552,14 +552,14 @@ const no_arg = "";
         [block|
             0 as &i31,
             m.load32(tm) as &i31,
-            m.load32(tm, 4, 4) as &i31,
-            m.load32(tm, 4, 8) as &i31,
-            m.load32(tm, 4, 12) as &i31,
-            m.load32(tm, 4, 16) as &i31,
-            m.load32(tm, 4, 20) as &i31,
-            m.load32(tm, 4, 24) as &i31,
-            m.load32(tm, 4, 28) as &i31,
-            (m.load32(tm, 4, 32)?1:0) as &i31,
+            m.load32(tm, offset: 4) as &i31,
+            m.load32(tm, offset: 8) as &i31,
+            m.load32(tm, offset: 12) as &i31,
+            m.load32(tm, offset: 16) as &i31,
+            m.load32(tm, offset: 20) as &i31,
+            m.load32(tm, offset: 24) as &i31,
+            m.load32(tm, offset: 28) as &i31,
+            (m.load32(tm, offset: 32)?1:0) as &i31,
         ];
     }
 }
@@ -666,14 +666,14 @@ const no_arg = "";
         let t = v as &block;
         let tm = get_buffer();
         m.store32(tm, t[1] as i32_s);
-        m.store32(tm, t[2] as i32_s, 4, 4);
-        m.store32(tm, t[3] as i32_s, 4, 8);
-        m.store32(tm, t[4] as i32_s, 4, 12);
-        m.store32(tm, t[5] as i32_s, 4, 16);
-        m.store32(tm, t[6] as i32_s, 4, 20);
-        m.store32(tm, t[7] as i32_s, 4, 24);
-        m.store32(tm, t[8] as i32_s, 4, 28);
-        m.store32(tm, -1, 4, 32);
+        m.store32(tm, t[2] as i32_s, offset: 4);
+        m.store32(tm, t[3] as i32_s, offset: 8);
+        m.store32(tm, t[4] as i32_s, offset: 12);
+        m.store32(tm, t[5] as i32_s, offset: 16);
+        m.store32(tm, t[6] as i32_s, offset: 20);
+        m.store32(tm, t[7] as i32_s, offset: 24);
+        m.store32(tm, t[8] as i32_s, offset: 28);
+        m.store32(tm, -1, offset: 32);
         let time = mktime(tm);
         if time == -1 {
             caml_unix_error(68 /* ERANGE */ , "mktime", no_arg);
@@ -762,21 +762,21 @@ const no_arg = "";
         [block|
             0 as &i31,
             m.load64(p) as &i31,
-            m.load64(p, 8, 8) as &i31,
-            file_kinds[m.load8(p, 1, 16) as i32_u] as i32_s as &i31,
+            m.load64(p, offset: 8) as &i31,
+            file_kinds[m.load8(p, offset: 16) as i32_u] as i32_s as &i31,
             384 /*0600*/ as &i31,
-            m.load64(p, 8, 24) as &i31,
+            m.load64(p, offset: 24) as &i31,
             1 as &i31,
             1 as &i31,
             0 as &i31,
             if large {
-                caml_copy_int64(m.load64(p, 8, 32));
+                caml_copy_int64(m.load64(p, offset: 32));
             } else {
-                m.load64(p, 8, 32) as &i31;
+                m.load64(p, offset: 32) as &i31;
             },
-            { f: 1e-9 * m.load64(p, 8, 40) as f64_s },
-            { f: 1e-9 * m.load64(p, 8, 48) as f64_s },
-            { f: 1e-9 * m.load64(p, 8, 56) as f64_s },
+            { f: 1e-9 * m.load64(p, offset: 40) as f64_s },
+            { f: 1e-9 * m.load64(p, offset: 48) as f64_s },
+            { f: 1e-9 * m.load64(p, offset: 56) as f64_s },
         ];
     }
 }
@@ -1077,7 +1077,7 @@ fn caml_alloc_stat(
         let res = path_filestat_get(p_fd, 1, p_addr, p_len, buffer);
         free(p_addr);
         caml_unix_error_if(res, chdir_str, name);
-        let kind = m.load8(buffer, 1, 16) as i32_u;
+        let kind = m.load8(buffer, offset: 16) as i32_u;
         if kind != 3 {
             caml_unix_error(
                 54, // ENOTDIR
@@ -1196,7 +1196,7 @@ fn caml_alloc_stat(
             return m.load8(addr) as i32_u == 0x2e;
         }
         if len == 2 {
-            return (m.load8(addr) as i32_u == 0x2e) & (m.load8(addr, 1, 1) as i32_u == 0x2e);
+            return (m.load8(addr) as i32_u == 0x2e) & (m.load8(addr, offset: 1) as i32_u == 0x2e);
         }
         0;
     }
@@ -1222,7 +1222,7 @@ fn caml_alloc_stat(
                 let left = dir.available - dir.pos;
                 br_if 'refill left <u 24;
                 let entry = dir.buffer + dir.pos;
-                let namelen = m.load32(entry, 4, 16);
+                let namelen = m.load32(entry, offset: 16);
                 entry_size = namelen + 24;
                 br_if 'refill left <u entry_size;
                 dir.pos = dir.pos + entry_size;
@@ -1881,7 +1881,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         while len >u 0 : (len -= n) {
             let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
             blit_substring_to_memory(buffer, s, pos, numbytes);
-            m.store32(iovs, numbytes, 4, 4);
+            m.store32(iovs, numbytes, offset: 4);
             let res = fd_write(fd, iovs, iovs_len, nwritten);
             caml_unix_error_if(res, "write", no_arg);
             let n = m.load32(nwritten);
@@ -1911,7 +1911,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let iovs_len = 1;
         let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
         blit_substring_to_memory(buffer, s, pos, numbytes);
-        m.store32(iovs, numbytes, 4, 4);
+        m.store32(iovs, numbytes, offset: 4);
         let res = fd_write(fd, iovs, iovs_len, nwritten);
         caml_unix_error_if(res, "write", no_arg);
         m.load32(nwritten) as &i31;
@@ -1931,7 +1931,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let iovs = buffer + 4;
         buffer += 12;
         m.store32(iovs, buffer);
-        m.store32(iovs, len, 4, 4);
+        m.store32(iovs, len, offset: 4);
         let iovs_len = 1;
         let res = fd_read(fd, iovs, iovs_len, nread);
         caml_unix_error_if(res, "read", no_arg);
@@ -1961,7 +1961,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             if len >u 0 {
                 let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
                 blit_substring_to_memory(buffer, buf, pos, numbytes);
-                m.store32(iovs, numbytes, 4, 4);
+                m.store32(iovs, numbytes, offset: 4);
                 let res = fd_write(fd, iovs, iovs_len, nwritten);
                 caml_unix_error_if(res, "write", no_arg);
                 let n = m.load32(nwritten);
@@ -1990,7 +1990,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let iovs = buffer + 4;
         buffer += 12;
         m.store32(iovs, buffer);
-        m.store32(iovs, len, 4, 4);
+        m.store32(iovs, len, offset: 4);
         let iovs_len = 1;
         let res = fd_read(fd, iovs, iovs_len, nread);
         caml_unix_error_if(res, "read", no_arg);
@@ -2272,7 +2272,7 @@ fn channel_of_descr_name(out: i32) -> &eq {
         let buffer = get_buffer();
         let res = fd_filestat_get(fd as i32_u, buffer);
         caml_unix_error_if(res, channel_of_descr_name(out), no_arg);
-        let kind = m.load8(buffer, 1, 16) as i32_u;
+        let kind = m.load8(buffer, offset: 16) as i32_u;
         dispatch kind [ 'ok 'bad 'ok 'bad 'ok 'bad 'ok else 'bad ] {
             'bad: {
                 caml_unix_error(28 /* EINVAL */ , channel_of_descr_name(out), no_arg);

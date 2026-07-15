@@ -578,7 +578,7 @@ let rec get_prec (i : _ Ast.instr) =
   | BinOp (op, _, _) ->
       let out, _, _ = prec_op op.desc in
       out
-  | Let _ -> Instruction
+  | Let _ | Labelled _ -> Instruction
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
   | Throw _ | ThrowRef _ | Return _ ->
@@ -600,7 +600,7 @@ let rec is_block (i : _ Ast.instr) =
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
   | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
   | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
-  | Return _ | Sequence _ | Select _ ->
+  | Return _ | Sequence _ | Select _ | Labelled _ ->
       false
 
 let rec starts_with_block_prec prec (i : 'a Ast.instr) =
@@ -631,7 +631,8 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
     | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
     | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _ | Resume _
-    | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ ->
+    | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Return _ | Sequence _
+    | Labelled _ ->
         false
 
 let starts_with_block i = starts_with_block_prec Instruction i
@@ -943,6 +944,7 @@ let rec instr prec pp (i : _ instr) =
           instr Instruction pp i)
   | Call (i, l) -> call_instr instr pp i l
   | TailCall (i, l) -> call_instr instr pp ~prefix:"become" i l
+  | Labelled (l, i) -> print_key_value pp l.desc (instr Instruction) i
   | Char c ->
       let n = Uchar.utf_8_byte_length c in
       let b = Bytes.create n in
