@@ -2,6 +2,8 @@ name: tree-sitter-wax
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "tree-sitter-wax/**"
       - "src/lib-wax/parser.mly"
