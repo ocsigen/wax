@@ -47,6 +47,10 @@
   loads/stores, `size`/`grow`/`fill`/`copy`/`init`, and the atomic
   (`i32_atomic_load`, …) and SIMD (`v128_load`, …) memory accesses; `tab.` the
   management ops. Each carries its signature.
+- Local completions are now scoped to the cursor: a `let` is offered only after
+  it is bound and only within its block, so a local declared later in the
+  function, or inside a sibling block, no longer appears. Parameters are always
+  offered.
 
 ## 0.2.2
 

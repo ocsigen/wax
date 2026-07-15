@@ -149,7 +149,10 @@ does not carry. Three distinct prerequisites:
   a kind for its icon. It works off the recovered parse alone (no typing), so it
   survives the half-written buffer completion is invoked in, and the editor
   filters by the typed prefix. A `CompletionItemProvider` (with `.` as a trigger)
-  maps the kinds to `CompletionItemKind`.
+  maps the kinds to `CompletionItemKind`. The locals are scoped to the point
+  (`function_locals`'s `scope` walk): every parameter, plus each `let` bound
+  before the cursor in its block or an enclosing block — a `let` declared later,
+  or in a sibling block, is not offered.
 
   Member completion after `.` **is** done: at a struct field access `recv.field`
   the typer records the receiver struct's field names keyed by the field span
@@ -207,8 +210,7 @@ does not carry. Three distinct prerequisites:
   Since the namespaces are keywords, the editor detects `ns::` textually (no
   parse needed, so it survives a broken buffer), on the `:` trigger.
 
-  Follow-ups: offering the namespace names themselves before `::`, and
-  per-point local scoping (currently every local in the function is offered).
+  Follow-ups: offering the namespace names themselves before `::`.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -226,9 +228,9 @@ rename, and completion (names and struct members). What is left refines them:
 
 - **Completion polish** — value methods after `.` are done (numeric, array,
   v128, and memory/table receivers, with a method icon + signature), struct
-  fields carry their type, and intrinsic namespaces after `::` are offered;
-  still open are the namespace names themselves before `::` and per-point local
-  scoping.
+  fields carry their type, intrinsic namespaces after `::` are offered, and
+  locals are scoped to the cursor point; the one remaining bit is offering the
+  namespace names themselves before `::`.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 

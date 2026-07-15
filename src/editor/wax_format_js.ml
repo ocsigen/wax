@@ -997,10 +997,11 @@ let field_completions
   | Import_group { decls; _ } -> List.map import_completion decls
   | Module_annotation _ | Conditional _ -> []
 
-(* Parameters and [let] locals of the function whose span covers the cursor
-   (over-approximate: every local in the function, not only those in scope at the
-   point). [iter_fields] descends into conditional branches, so a function
-   defined under [#[if]] is found too. *)
+(* Parameters and the [let] locals in scope at the cursor, for the function
+   whose span covers it: every parameter, plus each [let] bound before the
+   cursor in its block or an enclosing block (see [scope] below).
+   [iter_fields] descends into conditional branches, so a function defined
+   under [#[if]] is found too. *)
 let function_locals ast target =
   let open Wax_lang.Ast in
   let contains (loc : Wax_utils.Ast.location) =
@@ -1031,30 +1032,46 @@ let function_locals ast target =
                     | None, _ -> None)
             | None -> []
           in
-          let lets = ref [] in
-          List.iter
-            (Wax_lang.Ast_utils.iter_instr (fun i ->
-                 match i.desc with
-                 | Let (bindings, _) ->
-                     List.iter
-                       (fun (id_opt, vt_opt) ->
-                         match id_opt with
-                         | Some id ->
-                             lets :=
-                               {
-                                 k_name = id.desc;
-                                 k_kind = "local";
-                                 k_detail =
-                                   (match vt_opt with
-                                   | Some vt -> render_valtype vt
-                                   | None -> "");
-                               }
-                               :: !lets
-                         | None -> ())
-                       bindings
-                 | _ -> ()))
-            instrs;
-          acc := !acc @ params @ List.rev !lets
+          (* The [let] locals in scope at the cursor: at each block level, those
+             bound before the cursor, descending only into the sub-instruction
+             that contains it. A [let] in a sibling block that precedes the
+             cursor is not a preceding statement here, so it is not collected;
+             the cursor's own enclosing [let] init likewise sees only earlier
+             bindings, not itself. *)
+          let pos (p : Lexing.position) =
+            (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+          in
+          let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+          let binding_completions bindings =
+            List.filter_map
+              (fun (id_opt, vt_opt) ->
+                match id_opt with
+                | Some id ->
+                    Some
+                      {
+                        k_name = id.desc;
+                        k_kind = "local";
+                        k_detail =
+                          (match vt_opt with
+                          | Some vt -> render_valtype vt
+                          | None -> "");
+                      }
+                | None -> None)
+              bindings
+          in
+          let rec scope instrs =
+            List.concat_map
+              (fun (i : _ Wax_lang.Ast.instr) ->
+                if le (pos i.info.loc_end) target then
+                  match i.desc with
+                  | Let (bindings, _) -> binding_completions bindings
+                  | _ -> []
+                else if le (pos i.info.loc_start) target then
+                  scope (Wax_lang.Ast_utils.sub_instrs i)
+                else [])
+              instrs
+          in
+          acc := !acc @ params @ scope instrs
       | _ -> ())
     ast;
   !acc
