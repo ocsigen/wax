@@ -226,7 +226,11 @@ module Error = struct
           Colors.escape_sequence sp.Styled_printer.theme Colors.Type = ""
         in
         if quote then Printer.string sp.Styled_printer.printer "'";
-        Infer.output_inferred_type_styled sp ty;
+        (* Render the whole type in the [Type] colour as one unit, rather than
+           syntax-highlighting its innards (parens, [&], keywords) in separate
+           role colours — a type in a message reads as a single concept. *)
+        Styled_printer.with_style sp Colors.Type (fun () ->
+            Infer.output_inferred_type_styled sp ty);
         if quote then Printer.string sp.Styled_printer.printer "'")
 
   (* All errors share the same envelope: severity [Error], a message, and an

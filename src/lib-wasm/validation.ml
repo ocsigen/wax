@@ -246,14 +246,16 @@ module Error = struct
 
   (* Render an AST fragment ([render], drawing into the styled printer) as one
      emphasized atom: coloured when the theme is coloured, wrapped in ['…'] when
-     it is not. [style] is the representative style whose colour decides the
-     quoting. *)
+     it is not. [style] is the atom's colour — forced over the whole fragment
+     (via [with_style]) so a type reads as one unit rather than syntax-
+     highlighting its parens/keywords/idents in separate role colours — and it
+     also decides the quoting. *)
   let styled_atom style render =
     Message.raw (fun pp ->
         let p = pp.Styled_printer.printer in
         let quote = Colors.escape_sequence pp.Styled_printer.theme style = "" in
         if quote then Printer.string p "'";
-        render pp;
+        Styled_printer.with_style pp style (fun () -> render pp);
         if quote then Printer.string p "'")
 
   let styp source =
