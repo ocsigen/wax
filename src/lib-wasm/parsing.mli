@@ -110,6 +110,7 @@ end) : sig
     sync:(Tokens.token -> sync_class) ->
     ?insert:(Tokens.token * Wax_utils.Message.t) list ->
     ?closers:Tokens.token list ->
+    ?barrier:Tokens.token * (Tokens.token -> bool) ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
   (** Parse with panic-mode error recovery, collecting {e every} syntax error
@@ -215,6 +216,7 @@ end) : sig
     sync:(Tokens.token -> sync_class) ->
     ?insert:(Tokens.token * Wax_utils.Message.t) list ->
     ?closers:Tokens.token list ->
+    ?barrier:Tokens.token * (Tokens.token -> bool) ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
   (** As {!Make.parse_recover}. (Recovery always uses the incremental engine;

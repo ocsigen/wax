@@ -32,3 +32,18 @@ let closers = [ Tokens.RPAREN ]
    best-effort AST with a "Missing integer" diagnostic instead of the whole
    group being dropped. Passed as [?insert]. *)
 let insert = [ (Tokens.NAT "0", Wax_utils.Message.text "Missing integer.") ]
+
+(* A missing closer — [(module (func … (func …] with a [)] left out — surfaces
+   as a field-opening keyword offered where an instruction was expected. This
+   [barrier] (the [(] to re-offer, and the predicate recognizing those keywords)
+   lets [Parsing.parse_recover] close the enclosing field and restart at the new
+   one instead of letting paren-depth counting swallow it. Only the bare field
+   keywords (not the compound [(type]/[(import]/… openers, which also occur
+   nested) are treated as barriers. Passed as [?barrier]. *)
+let barrier =
+  ( Tokens.LPAREN,
+    function
+    | Tokens.FUNC | Tokens.GLOBAL | Tokens.MEMORY | Tokens.TABLE | Tokens.ELEM
+    | Tokens.DATA | Tokens.TAG | Tokens.START | Tokens.REC | Tokens.MODULE ->
+        true
+    | _ -> false )

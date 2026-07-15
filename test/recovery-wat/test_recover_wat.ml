@@ -33,4 +33,12 @@ let () =
   report "junk instruction, later field survives"
     "(module (func @@@ zzz) (func (nop)))\n";
   (* Unclosed construct at end of input: auto-closed with ')'. *)
-  report "unclosed func body at EOF" "(module (func (i32.const 1)\n"
+  report "unclosed func body at EOF" "(module (func (i32.const 1)\n";
+  (* Missing closer mid-module: a field keyword ("func"/"global") is offered
+     where an instruction was expected. The barrier closes the enclosing field
+     and restarts at the new one, so paren-depth counting does not swallow the
+     sibling. *)
+  report "missing ')' between two funcs"
+    "(module (func (i32.const 1) (func (nop)))\n";
+  report "missing ')' before a global"
+    "(module (func (nop) (global i32 (i32.const 0)))\n"

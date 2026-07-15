@@ -12,3 +12,11 @@ errors: 2
 === unclosed func body at EOF ===
 errors: 1
 (func (i32.const 1))
+=== missing ')' between two funcs ===
+errors: 1
+(func (i32.const 1))
+(func (nop))
+=== missing ')' before a global ===
+errors: 1
+(func (nop))
+(global i32 (i32.const 0))

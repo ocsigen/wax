@@ -30,7 +30,8 @@ let wax_parse_recover ~filename text =
 
 let wat_parse_recover ~filename text =
   Wat_parser.parse_recover ~filename ~sync:Wax_wasm.Recover.sync
-    ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers text
+    ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
+    ~barrier:Wax_wasm.Recover.barrier text
 
 let wat_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(name_functions = false)

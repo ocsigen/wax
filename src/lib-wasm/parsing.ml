@@ -259,7 +259,8 @@ struct
        to a state that [acceptable] confirms can shift it, [offer] it, and carry
        on. Every error is collected; the returned AST is whatever the parser
        reduces to, with holes where erroneous spans were skipped. *)
-    let parse_recover ~filename ~sync ?(insert = []) ?(closers = []) text =
+    let parse_recover ~filename ~sync ?(insert = []) ?(closers = []) ?barrier
+        text =
       let module MI = P.MenhirInterpreter in
       let lexbuf = initialize_lexing filename text in
       let errors = ref [] in
@@ -483,6 +484,54 @@ struct
             loop (MI.input_needed env) false 1000
         | _ -> None
       in
+      (* A fully-parenthesized grammar (WAT) has no separator or leader token, so
+         a {e missing closer} — [(module (func (i32.const 1) (func …] — surfaces
+         as a field-opening keyword offered where an instruction was expected:
+         the [(] before it shifted as a folded-instruction opener, then the
+         keyword ([func]) errors. Depth-counting would then swallow the sibling.
+         [barrier] names that shape: a token [(] to re-offer and a predicate
+         recognizing the keyword. On such an error, pop the spurious [(] off the
+         stack ([MI.pop]) and, from the state before it, insert closers until
+         re-offering [(] leaves the keyword acceptable (i.e. we have climbed to
+         the field level, closing the enclosing construct on the way) — then
+         offer [(] and the keyword, so the enclosing field reduces into the AST
+         and the new one starts. [None] falls through to [skip]. The two-token
+         trial (offer [(], test the keyword) is why a bare "[(] is acceptable"
+         check is not enough: [(] is acceptable at every nesting level. *)
+      let try_barrier env last =
+        match (barrier, last) with
+        | Some (lparen, is_leader), Some ((t, pos, _) : _ * Lexing.position * _)
+          when is_leader t -> (
+            match MI.pop env with
+            | None -> None
+            | Some env' ->
+                let rec climb checkpoint fuel =
+                  if fuel <= 0 then None
+                  else
+                    let trial =
+                      settle (MI.offer checkpoint (lparen, pos, pos))
+                    in
+                    match trial with
+                    | MI.InputNeeded _ when MI.acceptable trial t pos -> (
+                        match settle (MI.offer trial (t, pos, pos)) with
+                        | (MI.InputNeeded _ | MI.Accepted _) as done_ ->
+                            Some done_
+                        | _ -> None)
+                    | _ -> (
+                        match
+                          List.find_opt
+                            (fun c -> MI.acceptable checkpoint c pos)
+                            closers
+                        with
+                        | Some c ->
+                            climb
+                              (settle (MI.offer checkpoint (c, pos, pos)))
+                              (fuel - 1)
+                        | None -> None)
+                in
+                climb (MI.input_needed env') 1000)
+        | _ -> None
+      in
       (* Main loop: [last] is the most recently offered token, so at a
          [HandlingError] it is the token that provoked the error. *)
       let rec run checkpoint last =
@@ -504,7 +553,10 @@ struct
             record checkpoint;
             match close_pending env last with
             | Some checkpoint -> run checkpoint None
-            | None -> skip env last)
+            | None -> (
+                match try_barrier env last with
+                | Some checkpoint -> run checkpoint None
+                | None -> skip env last))
       and skip env last =
         let ((tok, _, _) as sync_tok) = find_sync 0 last in
         match unwind env sync_tok with
@@ -575,7 +627,7 @@ struct
     | Ok ast -> Ok (ast, ctx)
     | Error e -> Error e
 
-  let parse_recover ~filename ~sync ?insert ?closers text =
+  let parse_recover ~filename ~sync ?insert ?closers ?barrier text =
     Wax_utils.Debug.timed "parse" @@ fun () ->
     let ctx = Wax_utils.Trivia.make () in
     let module Context = struct
@@ -584,7 +636,9 @@ struct
       let context = ctx
     end in
     let module I = Inner (Context) in
-    let ast, errors = I.parse_recover ~filename ~sync ?insert ?closers text in
+    let ast, errors =
+      I.parse_recover ~filename ~sync ?insert ?closers ?barrier text
+    in
     (ast, errors, ctx)
 end
 

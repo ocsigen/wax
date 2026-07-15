@@ -18,3 +18,9 @@ val insert : (Tokens.token * Wax_utils.Message.t) list
     construct missing a required token — a zero-width [0] for a missing numeric
     operand or index — each with the diagnostic to report. Passed as its
     [?insert] argument. *)
+
+val barrier : Tokens.token * (Tokens.token -> bool)
+(** The [(] token and the field-keyword predicate {!Parsing.Make.parse_recover}
+    uses to recognize a missing closer (a field keyword offered where an
+    instruction was expected) and restart at the new field. Passed as its
+    [?barrier] argument. *)
