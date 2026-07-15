@@ -351,13 +351,36 @@ let decl_sign loc t sign =
 
 (* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
    Used for memory/table limits; a table64 bound may exceed [Int64.max_int],
-   so parse across the full unsigned range. *)
-let u64_of_int_literal n = Wax_utils.Uint64.of_string n
+   so parse across the full unsigned range. Bounds-check first: an out-of-range
+   literal must surface as a recoverable syntax error, not crash
+   [Uint64.of_string] (whose .mli contract requires callers to bound-check).
+   The Wasm parser guards the same way ([check_constant]); the [INT] token is
+   digit/hex only (never signed), so [is_int64] and [Uint64.of_string] agree. *)
+let u64_of_int_literal loc n =
+  if not (Wax_wasm.Misc.is_int64 n) then
+    raise
+      (Wax_wasm.Parsing.Syntax_error
+         ( loc,
+           Wax_utils.Message.text
+             (Printf.sprintf "The integer literal %s is out of range.\n" n) ))
+  else Wax_utils.Uint64.of_string n
 
 module V128 = Wax_utils.V128
 
 let syntax_error loc (msg : Wax_utils.Message.t) =
   raise (Wax_wasm.Parsing.Syntax_error (loc, msg))
+
+(* A version component of a conditional-compilation predicate ([#[if version =
+   (1, 2, 3)]]), converted to a native [int]. Guarded with [int_of_string_opt] so
+   an over-long component surfaces as a recoverable syntax error rather than
+   crashing [int_of_string]. *)
+let int_of_version_component loc s =
+  match int_of_string_opt s with
+  | Some i -> i
+  | None ->
+      syntax_error loc
+        (Wax_utils.Message.text
+           (Printf.sprintf "The version component %s is out of range.\n" s))
 
 
 (* The scalar storage type named by a data-segment numeric run [[f32: …]].
@@ -431,8 +454,9 @@ let page_size_log2 loc n =
   (* Compute the base-2 logarithm on the 64-bit value directly, without first
      narrowing to [int]: a literal above [max_int] would overflow
      [Uint64.to_int]. A power of two has a single set bit; its log2 is that
-     bit's position, which always fits an [int]. *)
-  let v = Wax_utils.Uint64.to_int64 (Wax_utils.Uint64.of_string n) in
+     bit's position, which always fits an [int]. [u64_of_int_literal] rejects an
+     out-of-range literal with a recoverable syntax error. *)
+  let v = Wax_utils.Uint64.to_int64 (u64_of_int_literal loc n) in
   if (not (Int64.equal v 0L)) && Int64.equal (Int64.logand v (Int64.sub v 1L)) 0L
   then
     let rec exp x p =
@@ -1122,8 +1146,8 @@ address_type:
            Wax_utils.Message.text ("Expected a memory address type 'i32' or 'i64'.\n") )) }
 
 mem_limits:
-| "[" mi = INT ma = ioption("," m = INT { u64_of_int_literal m }) "]"
-  { (u64_of_int_literal mi, ma) }
+| "[" mi = INT ma = ioption("," m = INT { u64_of_int_literal $loc(m) m }) "]"
+  { (u64_of_int_literal $loc(mi) mi, ma) }
 
 data_name:
 | "_" { None }
@@ -1290,7 +1314,9 @@ condition:
 
 condition_literal:
 | "(" a = INT "," b = INT "," c = INT ")"
-  { Wax_wasm.Ast.Cond_version (int_of_string a, int_of_string b, int_of_string c) }
+  { Wax_wasm.Ast.Cond_version
+      (int_of_version_component $loc(a) a, int_of_version_component $loc(b) b,
+       int_of_version_component $loc(c) c) }
 | s = STRING { Wax_wasm.Ast.Cond_string s }
 
 condition_relop:
