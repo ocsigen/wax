@@ -219,8 +219,8 @@ let hinted loc h (i : _ instr) =
     raise
       (Wax_wasm.Parsing.Syntax_error
          (loc,
-          "A branch hint may only prefix a conditional branch (if, br_if, or \
-           br_on_*).\n"))
+           Wax_utils.Message.text ("A branch hint may only prefix a conditional branch (if, br_if, or \
+           br_on_*).\n") ))
 
 (* [#[likely]]/[#[unlikely]] are parsed as ordinary attributes (the lexer no
    longer has dedicated tokens); recover the hint's boolean, rejecting any other
@@ -232,7 +232,8 @@ let branch_hint_of_attr loc (name, value, _guard) =
   | _ ->
       raise
         (Wax_wasm.Parsing.Syntax_error
-           (loc, "Expected a branch hint '#[likely]' or '#[unlikely]'.\n"))
+           (loc,
+           Wax_utils.Message.text ("Expected a branch hint '#[likely]' or '#[unlikely]'.\n") ))
 
 (* Statement-level conditional annotations. The parser cannot pair [#[if]] with a
    following [#[else]] itself: with [#[else]] no longer a single token, that
@@ -273,7 +274,8 @@ let rec process_stmts = function
   | RS_else (loc, _) :: _ ->
       raise
         (Wax_wasm.Parsing.Syntax_error
-           (loc, "An '#[else]' must directly follow an '#[if(...)]' group.\n"))
+           (loc,
+           Wax_utils.Message.text ("An '#[else]' must directly follow an '#[if(...)]' group.\n") ))
 
 (* Build a binary/unary operator node, giving the operator itself a source
    location (its token span [oploc]) so a comment sitting between an operand and
@@ -330,7 +332,8 @@ let rec lower_fields = function
   | RF_else (loc, _) :: _ ->
       raise
         (Wax_wasm.Parsing.Syntax_error
-           (loc, "An '#[else]' must directly follow an '#[if(...)]' field.\n"))
+           (loc,
+           Wax_utils.Message.text ("An '#[else]' must directly follow an '#[if(...)]' field.\n") ))
 
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 
@@ -342,7 +345,8 @@ let decl_sign loc t sign =
   match (t, sign) with
   | None, None ->
       raise (Wax_wasm.Parsing.Syntax_error
-               (loc, "A parameter list is required; write '()' for none.\n"))
+               (loc,
+           Wax_utils.Message.text ("A parameter list is required; write '()' for none.\n") ))
   | _ -> sign
 
 (* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
@@ -352,7 +356,9 @@ let u64_of_int_literal n = Wax_utils.Uint64.of_string n
 
 module V128 = Wax_utils.V128
 
-let syntax_error loc msg = raise (Wax_wasm.Parsing.Syntax_error (loc, msg ^ "\n"))
+let syntax_error loc (msg : Wax_utils.Message.t) =
+  raise (Wax_wasm.Parsing.Syntax_error (loc, msg))
+
 
 (* The scalar storage type named by a data-segment numeric run [[f32: …]].
    [i8]/[i16] are [Packed]; the rest are [Value]. *)
@@ -366,8 +372,18 @@ let scalar_storagetype loc (t : ident) : storagetype =
   | "f64" -> Value F64
   | _ ->
       syntax_error loc
-        "A data numeric run needs a scalar element type (i8, i16, i32, i64, \
-         f32, or f64)."
+        Wax_utils.Message.(
+          text "A data numeric run needs a scalar element type ("
+          ^^ enumerate ~conj:"or"
+               [
+                 type_ "i8";
+                 type_ "i16";
+                 type_ "i32";
+                 type_ "i64";
+                 type_ "f32";
+                 type_ "f64";
+               ]
+          ^^ text ").")
 
 (* The vector shape named by a [v128] run element [i32x4(…)]. *)
 let vec_shape loc (s : ident) : V128.shape =
@@ -380,14 +396,15 @@ let vec_shape loc (s : ident) : V128.shape =
   | "f64x2" -> F64x2
   | _ ->
       syntax_error loc
-        "A v128 run element is a lane group like i32x4(1, 2, 3, 4)."
+        (Wax_utils.Message.text
+           "A v128 run element is a lane group like i32x4(1, 2, 3, 4).")
 
 (* Build a data numeric run [[t: …]]: a [v128] run of lane groups, or a scalar
    run of literals. Elements are tagged [`Vec]/[`Num] by their shape; the wrong
    kind for the run type is a syntax error. *)
 let data_run loc (t : ident) items =
   let bad (info : location) msg =
-    syntax_error (info.loc_start, info.loc_end) msg
+    syntax_error (info.loc_start, info.loc_end) (Wax_utils.Message.text msg)
   in
   if t.desc = "v128" then
     Data_v128
@@ -425,7 +442,8 @@ let page_size_log2 loc n =
   else
     raise
       (Wax_wasm.Parsing.Syntax_error
-         (loc, "The page size must be a power of two.\n"))
+         (loc,
+           Wax_utils.Message.text ("The page size must be a power of two.\n") ))
 %}
 
 %start <location module_> parse
@@ -521,7 +539,8 @@ reference_type:
         | Type t -> Exact t
         | _ ->
             raise (Wax_wasm.Parsing.Syntax_error
-                     ($sloc, "Only a concrete type can be exact.\n"))
+                     ($sloc,
+           Wax_utils.Message.text ("Only a concrete type can be exact.\n") ))
       else typ
     in
     { nullable; typ } }
@@ -529,7 +548,8 @@ reference_type:
 value_type:
 | t = IDENT
    { try Hashtbl.find valtype_tbl t with Not_found ->
-       raise (Wax_wasm.Parsing.Syntax_error ($sloc, Printf.sprintf "Identifier '%s' is not a value type.\n" t )) }
+       raise (Wax_wasm.Parsing.Syntax_error ($sloc,
+           Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a value type.\n" t) )) }
 | t = reference_type { Ref t }
 
 cast_type:
@@ -537,7 +557,8 @@ cast_type:
    { try Valtype (Hashtbl.find valtype_tbl t) with Not_found ->
        try Hashtbl.find casttype_tbl t with Not_found ->
          raise (Wax_wasm.Parsing.Syntax_error
-                  ($sloc, Printf.sprintf "Identifier '%s' is not a cast type.\n" t )) }
+                  ($sloc,
+           Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a cast type.\n" t) )) }
 | t = reference_type { Valtype (Ref t) }
 | "&" nullable = boption("?") FN s = function_type
    { Functype { nullable; sign = s } }
@@ -560,7 +581,8 @@ function_type_definition:
 storage_type:
 | t = IDENT
    { try Hashtbl.find storagetype_tbl t with Not_found ->
-       raise (Wax_wasm.Parsing.Syntax_error ($sloc, Printf.sprintf "Identifier '%s' is not a storage type.\n" t )) }
+       raise (Wax_wasm.Parsing.Syntax_error ($sloc,
+           Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a storage type.\n" t) )) }
 | t = reference_type { Value (Ref t) }
 
 field_type:
@@ -685,7 +707,8 @@ optional_function_type: sign = option (function_type) { sign }
       match t with Some (e, t) -> (e, Some t) | None -> (false, None) in
     if ex1 && ex2 then
       raise (Wax_wasm.Parsing.Syntax_error
-               ($sloc, "Duplicate exact marker '!'.\n"));
+               ($sloc,
+           Wax_utils.Message.text ("Duplicate exact marker '!'.\n") ));
     (name, t, decl_sign $sloc t sign, ex1 || ex2) }
 
 func:
@@ -694,8 +717,9 @@ func:
     let (name, typ, sign, exact) = f in
     if exact then
       raise (Wax_wasm.Parsing.Syntax_error
-               ($sloc, "A function definition is always exact; the '!' marker \
-                        is only allowed on an (imported) function declaration.\n"));
+               ($sloc,
+           Wax_utils.Message.text ("A function definition is always exact; the '!' marker \
+                        is only allowed on an (imported) function declaration.\n") ));
     with_loc $sloc (Func {name; typ; sign; body; attributes}) }
 
 tag_name:
@@ -1095,7 +1119,8 @@ address_type:
     | "i64" -> `I64
     | _ ->
         raise (Wax_wasm.Parsing.Syntax_error
-                 ($sloc, "Expected a memory address type 'i32' or 'i64'.\n")) }
+                 ($sloc,
+           Wax_utils.Message.text ("Expected a memory address type 'i32' or 'i64'.\n") )) }
 
 mem_limits:
 | "[" mi = INT ma = ioption("," m = INT { u64_of_int_literal m }) "]"
@@ -1261,7 +1286,8 @@ condition:
     | _ ->
       raise
         (Wax_wasm.Parsing.Syntax_error
-           ($loc, "Expected 'all', 'any', or 'not(<cond>)' in a condition.")) }
+           ($loc,
+           Wax_utils.Message.text ("Expected 'all', 'any', or 'not(<cond>)' in a condition.") )) }
 
 condition_literal:
 | "(" a = INT "," b = INT "," c = INT ")"

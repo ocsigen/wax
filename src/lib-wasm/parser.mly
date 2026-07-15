@@ -265,7 +265,8 @@ let page_size_log2 loc (n : Uint32.t) =
     exp n 0
   else
     raise
-      (Parsing.Syntax_error (loc, "The page size must be a power of two.\n"))
+      (Parsing.Syntax_error
+         (loc, Wax_utils.Message.text "The page size must be a power of two."))
 
 let with_loc loc desc =
   Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
@@ -277,7 +278,7 @@ let check_constant f loc s =
     raise
       (Parsing.Syntax_error
          ( loc,
-           Printf.sprintf "Constant %s is out of range.\n" s))
+             Wax_utils.Message.text (Printf.sprintf "Constant %s is out of range.\n" s) ))
 
 (* Build a compact import group [(import "m" (item …) …)] from its elements
    (compact-import-section proposal). Each item is [(item $id? "name" <type>?)]:
@@ -290,7 +291,8 @@ let compact_import loc module_ elems : _ Ast.Text.modulefield =
     | `Item it -> it
     | `Type _ ->
         raise (Parsing.Syntax_error
-                 (loc, "A shared import type must be the group's last element.\n"))
+                 (loc,
+             Wax_utils.Message.text ("A shared import type must be the group's last element.\n") ))
   in
   let items, trailing =
     match List.rev elems with
@@ -301,10 +303,12 @@ let compact_import loc module_ elems : _ Ast.Text.modulefield =
   | Some (tid, tdesc) ->
       if Option.is_some tid then
         raise (Parsing.Syntax_error
-                 (loc, "A shared import type may not bind an identifier.\n"));
+                 (loc,
+             Wax_utils.Message.text ("A shared import type may not bind an identifier.\n") ));
       if List.exists (fun (_, _, t) -> Option.is_some t) items then
         raise (Parsing.Syntax_error
-                 (loc, "With a shared type, each import item names only.\n"));
+                 (loc,
+             Wax_utils.Message.text ("With a shared type, each import item names only.\n") ));
       Import_group2
         { module_; desc = tdesc; items = List.map (fun (id, name, _) -> (name, id)) items }
   | None ->
@@ -315,11 +319,13 @@ let compact_import loc module_ elems : _ Ast.Text.modulefield =
             | Some (tid, desc) ->
                 if Option.is_some id then
                   raise (Parsing.Syntax_error
-                           (loc, "An import item with its own type binds its id in that type.\n"));
+                           (loc,
+             Wax_utils.Message.text ("An import item with its own type binds its id in that type.\n") ));
                 (name, tid, desc)
             | None ->
                 raise (Parsing.Syntax_error
-                         (loc, "This import item needs a type, or a shared final type.\n")))
+                         (loc,
+             Wax_utils.Message.text ("This import item needs a type, or a shared final type.\n") )))
           items
       in
       Import_group1 { module_; items }
@@ -344,7 +350,7 @@ let check_labels lab (lab' : Ast.Text.name option) =
         raise
           (Parsing.Syntax_error
              ( (lab'.info.loc_start, lab'.info.loc_end),
-               Printf.sprintf "Label mismatch.\n"))
+             Wax_utils.Message.text (Printf.sprintf "Label mismatch.\n") ))
 
 (* Branch-hinting proposal: decode a [(@metadata.code.branch_hint "…")] payload.
    The string is a single byte: 0x00 = unlikely, otherwise likely. *)
@@ -355,7 +361,8 @@ let branch_hint_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
   | _ ->
       raise
         (Parsing.Syntax_error
-           (loc, "A branch hint must be \"\\00\" or \"\\01\".\n"))
+           (loc,
+             Wax_utils.Message.text ("A branch hint must be \"\\00\" or \"\\01\".\n") ))
 
 (* The branch hint wraps the instruction that follows it. Whether that
    instruction is a legal target (only [if]/[br_if]/[br_on_*]) is a *validation*
@@ -428,8 +435,8 @@ name: s = STRING
       raise
         (Parsing.Syntax_error
            ( (s.info.Ast.loc_start, s.info.loc_end),
-             Printf.sprintf "Malformed name \"%s\".\n"
-               (snd (Wax_utils.Unicode.escape_string s.desc))));
+             Wax_utils.Message.text (Printf.sprintf "Malformed name \"%s\".\n"
+               (snd (Wax_utils.Unicode.escape_string s.desc))) ));
     s
   }
 
@@ -967,8 +974,8 @@ folded_instruction:
         raise
           (Parsing.Syntax_error
              ( $sloc,
-               Printf.sprintf "Malformed char \"%s\".\n"
-                 (snd (Wax_utils.Unicode.escape_string s.desc))));
+             Wax_utils.Message.text (Printf.sprintf "Malformed char \"%s\".\n"
+                 (snd (Wax_utils.Unicode.escape_string s.desc))) ));
       with_loc $sloc (Char (Uchar.utf_decode_uchar c)) }
 
 (* The (then ...) / (else ...) clauses of a folded if. Each carries the

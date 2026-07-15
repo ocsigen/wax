@@ -53,7 +53,7 @@ let report name source =
     (fun (e : Wax_wasm.Parsing.syntax_error) ->
       Printf.printf "  %s-%s: %s\n" (pos e.location.loc_start)
         (pos e.location.loc_end)
-        (first_line (String.trim e.message)))
+        (first_line (String.trim (Wax_utils.Message.to_plain_string e.message))))
     errors;
   print_newline ()
 

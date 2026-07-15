@@ -41,7 +41,9 @@ let render_hover ~name = function
 let resolve name src =
   Printf.printf "=== %s ===\n" name;
   match P.parse_diagnostics ~filename:"t.wax" src with
-  | Error e -> Printf.printf "parse error: %s\n\n" (String.trim e.message)
+  | Error e ->
+      Printf.printf "parse error: %s\n\n"
+        (String.trim (Wax_utils.Message.to_plain_string e.message))
   | Ok (ast, _ctx) ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       let links = ref [] in

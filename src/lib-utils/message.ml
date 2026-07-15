@@ -16,6 +16,7 @@ type t =
 let text s = Words s
 let ident s = Atom (Colors.Identifier, true, s)
 let code s = Atom (Colors.Keyword, true, s)
+let type_ s = Atom (Colors.Type, true, s)
 let styled style s = Atom (style, false, s)
 let int n = Atom (Colors.Constant, false, string_of_int n)
 let int64 n = Atom (Colors.Constant, false, Int64.to_string n)

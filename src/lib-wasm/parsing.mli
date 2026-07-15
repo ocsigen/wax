@@ -1,12 +1,13 @@
 (** Generic parsing utilities. *)
 
-exception Syntax_error of (Lexing.position * Lexing.position) * string
+exception
+  Syntax_error of (Lexing.position * Lexing.position) * Wax_utils.Message.t
 (** Exception raised when a syntax error occurs, with location range and
     message. *)
 
 type syntax_error = {
   location : Wax_utils.Ast.location;
-  message : string;
+  message : Wax_utils.Message.t;
   related : Wax_utils.Diagnostic.label list;
 }
 (** A syntax error returned as data by [parse_diagnostics]: the location range,

@@ -78,7 +78,7 @@ let rec comment_rec lexbuf =
       raise
         (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Malformed comment.\n" ))
+             Wax_utils.Message.text (Printf.sprintf "Malformed comment.\n") ))
 
 let comment lexbuf =
   Buffer.add_string string_buffer "/*";
@@ -94,7 +94,8 @@ let unicode_escape lexbuf s =
       raise
         (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Malformed Unicode escape.\n" ))
+             Wax_utils.Message.text
+               (Printf.sprintf "Malformed Unicode escape.\n") ))
 
 let rec string lexbuf =
   match%sedlex lexbuf with
@@ -137,7 +138,7 @@ let rec string lexbuf =
       raise
         (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Malformed string.\n" ))
+             Wax_utils.Message.text (Printf.sprintf "Malformed string.\n") ))
 
 let with_loc f lexbuf =
   let loc_start = Sedlexing.lexing_bytes_position_start lexbuf in
@@ -297,8 +298,9 @@ let rec token_rec ctx lexbuf =
           raise
             (Wax_wasm.Parsing.Syntax_error
                ( (p0, p1),
-                 Printf.sprintf "Unexpected character '%s'.\n"
-                   (String.sub s off len) )))
+                 Wax_utils.Message.text
+                   (Printf.sprintf "Unexpected character '%s'.\n"
+                      (String.sub s off len)) )))
   | '"' -> STRING (with_loc string lexbuf)
   | "'", Sub (any, (0 .. 31 | 0x7f | '"' | '\\')), "'" ->
       (* One code point between the quotes; it may be multibyte (e.g. an emoji),
@@ -323,20 +325,22 @@ let rec token_rec ctx lexbuf =
         raise
           (Wax_wasm.Parsing.Syntax_error
              ( Sedlexing.lexing_bytes_positions lexbuf,
-               Printf.sprintf "Invalid Unicode character.\n" ));
+               Wax_utils.Message.text
+                 (Printf.sprintf "Invalid Unicode character.\n") ));
       CHAR (Uchar.of_int n)
   | eof -> EOF
   | Compl 'x' ->
       raise
         (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Unexpected character '%s'.\n"
-               (Sedlexing.Utf8.lexeme lexbuf) ))
+             Wax_utils.Message.text
+               (Printf.sprintf "Unexpected character '%s'.\n"
+                  (Sedlexing.Utf8.lexeme lexbuf)) ))
   | _ ->
       raise
         (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Syntax error.\n" ))
+             Wax_utils.Message.text (Printf.sprintf "Syntax error.\n") ))
 
 (* The Wax lexer never combines tokens, so a token's lexbuf position is always
    its true start; the [start_override] ref (part of the shared lexer interface,

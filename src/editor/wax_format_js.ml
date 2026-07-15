@@ -127,7 +127,8 @@ let wat_trivia ?retarget ctx ast =
 
 let format_string src =
   match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error { message; _ } -> Error (String.trim message)
+  | Error { message; _ } ->
+      Error (String.trim (Wax_utils.Message.to_plain_string message))
   | Ok (ast, ctx) ->
       let trivia, tail = wax_trivia ctx ast in
       let buf = Buffer.create (String.length src) in
@@ -141,7 +142,8 @@ let format_string src =
 
 let format_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error { message; _ } -> Error (String.trim message)
+  | Error { message; _ } ->
+      Error (String.trim (Wax_utils.Message.to_plain_string message))
   | Ok (ast, ctx) ->
       let trivia, tail = wat_trivia ctx ast in
       let buf = Buffer.create (String.length src) in
@@ -176,7 +178,7 @@ let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
   {
     severity = Wax_utils.Diagnostic.Error;
     location = e.location;
-    message = e.message;
+    message = Wax_utils.Message.to_plain_string e.message;
     warning = None;
     hint = None;
     related = render_labels e.related;
@@ -727,7 +729,8 @@ let errors_string d =
    onto them once their delimiters are retargeted to the other syntax. *)
 let to_wat_string src =
   match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error { message; _ } -> Error (String.trim message)
+  | Error { message; _ } ->
+      Error (String.trim (Wax_utils.Message.to_plain_string message))
   | Ok (ast, ctx) -> (
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       try
@@ -754,7 +757,8 @@ let to_wat_string src =
 
 let to_wax_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error { message; _ } -> Error (String.trim message)
+  | Error { message; _ } ->
+      Error (String.trim (Wax_utils.Message.to_plain_string message))
   | Ok (ast, ctx) -> (
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       try

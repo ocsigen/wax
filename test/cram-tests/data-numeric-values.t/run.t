@@ -70,8 +70,8 @@ A run needs a scalar (or v128) element type:
 
   $ echo 'data c = [foo: 1, 2];' | wax -f wat -i wax
   Error:
-    A data numeric run needs a scalar element type (i8, i16, i32, i64, f32, or
-    f64).
+    A data numeric run needs a scalar element type ('i8', 'i16', 'i32', 'i64',
+    'f32' or 'f64').
    ──➤  -:1:11
   1 │ data c = [foo: 1, 2];
     ·           ^^^

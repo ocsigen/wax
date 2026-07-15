@@ -67,7 +67,7 @@ let rec comment_rec lexbuf =
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Malformed comment.\n" ))
+             Wax_utils.Message.text (Printf.sprintf "Malformed comment.\n") ))
 
 let comment lexbuf =
   Buffer.add_string string_buffer "(;";
@@ -83,7 +83,8 @@ let unicode_escape lexbuf s =
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Malformed Unicode escape.\n" ))
+             Wax_utils.Message.text
+               (Printf.sprintf "Malformed Unicode escape.\n") ))
 
 let rec string lexbuf =
   match%sedlex lexbuf with
@@ -95,8 +96,9 @@ let rec string lexbuf =
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Unknown token '%s'.\n"
-               (Sedlexing.Utf8.lexeme lexbuf) ))
+             Wax_utils.Message.text
+               (Printf.sprintf "Unknown token '%s'.\n"
+                  (Sedlexing.Utf8.lexeme lexbuf)) ))
   | Plus (Sub (any, (0 .. 31 | 0x7f | '"' | '\\'))) ->
       Buffer.add_string string_buffer (Sedlexing.Utf8.lexeme lexbuf);
       string lexbuf
@@ -132,7 +134,7 @@ let rec string lexbuf =
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Malformed string.\n" ))
+             Wax_utils.Message.text (Printf.sprintf "Malformed string.\n") ))
 
 let rec scan_string lexbuf =
   match%sedlex lexbuf with
@@ -143,7 +145,8 @@ let rec scan_string lexbuf =
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Unclosed string in annotation.\n" ))
+             Wax_utils.Message.text
+               (Printf.sprintf "Unclosed string in annotation.\n") ))
 
 let rec skip_annotation depth lexbuf =
   match%sedlex lexbuf with
@@ -162,7 +165,7 @@ let rec skip_annotation depth lexbuf =
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Illegal character.\n" ))
+             Wax_utils.Message.text (Printf.sprintf "Illegal character.\n") ))
 
 let with_loc ctx f lexbuf =
   let loc_start = Sedlexing.lexing_bytes_position_start lexbuf in
@@ -631,12 +634,14 @@ let rec token_rec ctx lexbuf =
         raise
           (Parsing.Syntax_error
              ( (s.info.loc_start, s.info.loc_end),
-               "Identifier contains malformed UTF-8 byte sequences" ));
+               Wax_utils.Message.text
+                 "Identifier contains malformed UTF-8 byte sequences" ));
       if s.desc = "" then
         raise
           (Parsing.Syntax_error
              ( (s.info.loc_start, s.info.loc_end),
-               "An identifier cannot be the empty string" ));
+               Wax_utils.Message.text "An identifier cannot be the empty string"
+             ));
       ID s
   | newline ->
       Wax_utils.Trivia.report_newline ctx;
@@ -673,12 +678,15 @@ let rec token_rec ctx lexbuf =
           raise
             (Parsing.Syntax_error
                ( Sedlexing.lexing_bytes_positions lexbuf,
-                 "The annotation id contains malformed UTF-8 byte sequences." ));
+                 Wax_utils.Message.text
+                   "The annotation id contains malformed UTF-8 byte sequences."
+               ));
         if s = "" then
           raise
             (Parsing.Syntax_error
                ( Sedlexing.lexing_bytes_positions lexbuf,
-                 "An annotation id cannot be the empty string." ));
+                 Wax_utils.Message.text
+                   "An annotation id cannot be the empty string." ));
         skip_annotation 1 lexbuf;
         Wax_utils.Trivia.report_item ctx Annotation "";
         token_rec ctx lexbuf)
@@ -711,18 +719,20 @@ let rec token_rec ctx lexbuf =
           raise
             (Parsing.Syntax_error
                ( Sedlexing.lexing_bytes_positions lexbuf,
-                 Printf.sprintf "Unknown keyword '%s'.\n" s )))
+                 Wax_utils.Message.text
+                   (Printf.sprintf "Unknown keyword '%s'.\n" s) )))
   | reserved, Opt '"' ->
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Unknown token '%s'.\n"
-               (Sedlexing.Utf8.lexeme lexbuf) ))
+             Wax_utils.Message.text
+               (Printf.sprintf "Unknown token '%s'.\n"
+                  (Sedlexing.Utf8.lexeme lexbuf)) ))
   | _ ->
       raise
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Syntax error.\n" ))
+             Wax_utils.Message.text (Printf.sprintf "Syntax error.\n") ))
 
 (*** Entry points ***)
 
@@ -759,8 +769,9 @@ let token ctx =
           raise
             (Parsing.Syntax_error
                ( Sedlexing.lexing_bytes_positions lexbuf,
-                 Printf.sprintf "Unexpected keyword '%s'.\n"
-                   (Sedlexing.Utf8.lexeme lexbuf) ))
+                 Wax_utils.Message.text
+                   (Printf.sprintf "Unexpected keyword '%s'.\n"
+                      (Sedlexing.Utf8.lexeme lexbuf)) ))
       | None, LPAREN ->
           paren_start := fst (Sedlexing.lexing_bytes_positions lexbuf);
           prev_token := Some t;

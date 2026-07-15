@@ -30,6 +30,11 @@ val code : string -> t
 (** An emphasized inline code token (an instruction, an operator, a literal
     snippet): coloured [Keyword] when the theme is coloured, else quoted. *)
 
+val type_ : string -> t
+(** An emphasized type name given as a string (e.g. [i32]): coloured [Type] when
+    the theme is coloured, else quoted. The string-level analogue of a rendered
+    type. *)
+
 val styled : Colors.style -> string -> t
 (** One unbreakable styled atom, never quoted. *)
 

@@ -178,7 +178,7 @@ let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines ~desugar ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
-    Wat_parser.parse_from_string
+    Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
@@ -197,7 +197,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
-    Wat_parser.parse_from_string
+    Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
@@ -235,7 +235,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines ~desugar ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
-    Wax_parser.parse_from_string
+    Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
@@ -272,7 +272,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
-    Wax_parser.parse_from_string
+    Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
@@ -295,7 +295,7 @@ let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
     ~source_map_file:(opt_source_map_file : string option) =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
-    Wax_parser.parse_from_string
+    Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
@@ -323,7 +323,7 @@ let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
     ~source_map_file:opt_source_map_file =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
-    Wat_parser.parse_from_string
+    Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
@@ -698,8 +698,7 @@ let check format_opt strict color warnings features debug error_format defines
                  (fun (e : Wax_wasm.Parsing.syntax_error) ->
                    Wax_utils.Diagnostic.report d ~location:e.location
                      ~severity:Wax_utils.Diagnostic.Error ~related:e.related
-                     ~message:(Wax_utils.Message.text e.message)
-                     ())
+                     ~message:e.message ())
                  syntax_errors;
                Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
                match ast_opt with

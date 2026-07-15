@@ -1,8 +1,9 @@
-exception Syntax_error of (Lexing.position * Lexing.position) * string
+exception
+  Syntax_error of (Lexing.position * Lexing.position) * Wax_utils.Message.t
 
 type syntax_error = {
   location : Wax_utils.Ast.location;
-  message : string;
+  message : Wax_utils.Message.t;
   related : Wax_utils.Diagnostic.label list;
 }
 
@@ -26,8 +27,7 @@ let show text positions =
 let report_syntax_error ?(related = []) ~color source (loc_start, loc_end) msg =
   let theme = Wax_utils.Diagnostic.get_theme ?color () in
   Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
-    ~location:{ loc_start; loc_end } ~related
-    (Wax_utils.Message.text msg);
+    ~location:{ loc_start; loc_end } ~related msg;
   (* The diagnostic has been printed; re-raise so the caller decides how to
      terminate rather than exiting the process here. The CLI maps this to exit
      code 128 (rejected input, like a validation or type error, not the
@@ -207,7 +207,11 @@ struct
       in
       raise
         (Detailed_error
-           { location = { Wax_utils.Ast.loc_start; loc_end }; message; related })
+           {
+             location = { Wax_utils.Ast.loc_start; loc_end };
+             message = Wax_utils.Message.text message;
+             related;
+           })
 
     (* Parse, returning the AST or a structured syntax error, without printing:
        the incremental parser produces both, in a single pass. *)
@@ -239,7 +243,9 @@ struct
           Error
             {
               location = { Wax_utils.Ast.loc_start; loc_end };
-              message = "Input file contains malformed UTF-8 byte sequences\n";
+              message =
+                Wax_utils.Message.text
+                  "Input file contains malformed UTF-8 byte sequences";
               related = [];
             }
 
@@ -298,7 +304,8 @@ struct
             let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
             record_error
               { Wax_utils.Ast.loc_start; loc_end }
-              "Input file contains malformed UTF-8 byte sequences\n";
+              (Wax_utils.Message.text
+                 "Input file contains malformed UTF-8 byte sequences");
             resume ()
       in
       let buffer, supplier = E.wrap_supplier recovering_supplier in
@@ -307,7 +314,11 @@ struct
           build_syntax_error text buffer checkpoint
         in
         errors :=
-          { location = { Wax_utils.Ast.loc_start; loc_end }; message; related }
+          {
+            location = { Wax_utils.Ast.loc_start; loc_end };
+            message = Wax_utils.Message.text message;
+            related;
+          }
           :: !errors
       in
       (* A missing token, reported as a zero-width caret just before the
@@ -316,7 +327,7 @@ struct
         errors :=
           {
             location = { Wax_utils.Ast.loc_start = pos; loc_end = pos };
-            message = Printf.sprintf "Missing '%s'\n" label;
+            message = Wax_utils.Message.(text "Missing" ++ code label);
             related = [];
           }
           :: !errors
@@ -507,7 +518,8 @@ struct
             let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
             record_error
               { Wax_utils.Ast.loc_start; loc_end }
-              "Input file contains malformed UTF-8 byte sequences\n";
+              (Wax_utils.Message.text
+                 "Input file contains malformed UTF-8 byte sequences");
             None
       in
       (ast, List.rev !errors)
