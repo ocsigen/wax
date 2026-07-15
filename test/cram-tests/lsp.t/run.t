@@ -186,3 +186,38 @@ only the taken branch's unused-global warning.
   > PY
   on open (no defines):  [('error', None)]
   after debug=true:      [('warning', 'unused-field')]
+
+Diagnostics on `didChange` are debounced: a burst of edits coalesces into one
+analysis (published once the client falls quiet, or on end of input), rather
+than re-checking the whole buffer on every keystroke. Open a clean module, send
+three rapid edits (the last introducing a type error), and close the stream: the
+open publishes once, and the three changes collapse to a single publish.
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///d.wax"
+  > def change(txt, v):
+  >     return {"jsonrpc":"2.0","method":"textDocument/didChange",
+  >             "params":{"textDocument":{"uri":uri,"version":v},
+  >                       "contentChanges":[{"text":txt}]}}
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wax","version":1,"text":"fn f() -> i32 { 0; }\n"}}},
+  >    change("fn f() -> i32 { 1; }\n", 2),
+  >    change("fn f() -> i32 { 2; }\n", 3),
+  >    change("fn f() -> i32 { 1.5; }\n", 4)]
+  > # No shutdown/exit: closing the stream makes the server flush pending on EOF.
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),
+  >                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=10)
+  > o,i,pubs=p.stdout,0,[]
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if r.get("method")=="textDocument/publishDiagnostics":
+  >         pubs.append(["error" if d["severity"]==1 else "warning"
+  >                      for d in r["params"]["diagnostics"]])
+  > print("publishes:", pubs)
+  > PY
+  publishes: [[], ['error']]

@@ -4,4 +4,4 @@
 
 (library
  (name wax_lsp)
- (libraries wax_utils wax_editor lsp jsonrpc))
+ (libraries wax_utils wax_editor lsp jsonrpc unix))

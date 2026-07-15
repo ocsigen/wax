@@ -20,19 +20,75 @@ open Lsp.Types
 
 (* [Lsp.Io.Make] is written against an IO monad; a synchronous server uses the
    identity monad, so [read]/[write] are ordinary blocking calls. *)
-module Io =
+module Id = struct
+  type 'a t = 'a
+
+  let return x = x
+  let raise = raise
+
+  module O = struct
+    let ( let+ ) x f = f x
+    let ( let* ) x f = f x
+  end
+end
+
+(* Read [len] bytes into [buf] at [off], retrying across [EINTR]. *)
+let rec read_retry fd buf off len =
+  try Unix.read fd buf off len
+  with Unix.Unix_error (Unix.EINTR, _, _) -> read_retry fd buf off len
+
+(* Two transports over the same framing. [Io_fd] reads a raw file descriptor
+   *without over-reading past the current frame* (header a byte at a time, then
+   the exact body length), so [Unix.select] on the fd is an accurate "more input
+   pending?" test — the debounce in [run_native] relies on that. [Io_chan] reads
+   an ordinary [in_channel]; it uses no [Unix] and backs [run_fallback], for
+   backends without a working [Unix.select] (js_of_ocaml / wasm_of_ocaml).
+   Writing is identical (buffered [out_channel], flushed per packet), so
+   [send_packet] can use either. *)
+module Io_fd =
   Lsp.Io.Make
+    (Id)
     (struct
-      type 'a t = 'a
+      type input = Unix.file_descr
+      type output = out_channel
 
-      let return x = x
-      let raise = raise
+      (* A line up to (not including) '\n', keeping any trailing '\r' — the
+         shape [Lsp.Io]'s header parser expects. [None] at end of input. *)
+      let read_line fd =
+        let buf = Buffer.create 64 in
+        let b = Bytes.create 1 in
+        let rec go () =
+          match read_retry fd b 0 1 with
+          | 0 ->
+              if Buffer.length buf = 0 then None else Some (Buffer.contents buf)
+          | _ ->
+              let c = Bytes.get b 0 in
+              if c = '\n' then Some (Buffer.contents buf)
+              else (
+                Buffer.add_char buf c;
+                go ())
+        in
+        go ()
 
-      module O = struct
-        let ( let+ ) x f = f x
-        let ( let* ) x f = f x
-      end
+      let read_exactly fd n =
+        let b = Bytes.create n in
+        let rec go off =
+          if off = n then Some (Bytes.unsafe_to_string b)
+          else
+            match read_retry fd b off (n - off) with
+            | 0 -> None
+            | k -> go (off + k)
+        in
+        if n = 0 then Some "" else go 0
+
+      let write oc segments =
+        List.iter (output_string oc) segments;
+        flush oc
     end)
+
+module Io_chan =
+  Lsp.Io.Make
+    (Id)
     (struct
       type input = in_channel
       type output = out_channel
@@ -51,7 +107,7 @@ module Io =
         flush oc
     end)
 
-let send_packet packet = Io.write stdout packet
+let send_packet packet = Io_fd.write stdout packet
 
 let send_notification n =
   send_packet
@@ -64,6 +120,17 @@ let doc_key uri = Lsp.Uri.to_string uri
 let get_doc uri = Hashtbl.find_opt documents (doc_key uri)
 let set_doc uri text = Hashtbl.replace documents (doc_key uri) text
 let remove_doc uri = Hashtbl.remove documents (doc_key uri)
+
+(* Diagnostics debounce: a document edited by [didChange] is marked dirty rather
+   than re-checked on the spot, and (in [run_native]) its diagnostics are
+   published only once the client has been quiet for [diagnostics_debounce]
+   seconds. This coalesces a burst of edits into one analysis, so fast typing on
+   a large file does not re-check the whole buffer on every keystroke. The
+   deadline itself is a local of [run_native]; [mark_dirty] only records which
+   documents are pending (so it needs no clock, and [run_fallback] can flush
+   them eagerly). *)
+let diagnostics_debounce = 0.15
+let dirty : (string, unit) Hashtbl.t = Hashtbl.create 8
 
 (* Wasm text is served by the [*_wat_string] analysis; everything else is Wax. *)
 let is_wat uri = Filename.check_suffix (Lsp.Uri.to_string uri) ".wat"
@@ -210,6 +277,19 @@ let publish_diagnostics uri src =
   send_notification
     (Lsp.Server_notification.PublishDiagnostics
        (PublishDiagnosticsParams.create ~uri ~diagnostics ()))
+
+(* Record a document as needing a re-check. *)
+let mark_dirty uri = Hashtbl.replace dirty (doc_key uri) ()
+
+(* Publish diagnostics for every dirty document, then clear the pending set. *)
+let flush_dirty () =
+  Hashtbl.iter
+    (fun key () ->
+      match Hashtbl.find_opt documents key with
+      | Some src -> publish_diagnostics (Lsp.Uri.of_string key) src
+      | None -> ())
+    dirty;
+  Hashtbl.reset dirty
 
 (* --- request handlers --- *)
 
@@ -530,18 +610,22 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
 let on_notification (n : Lsp.Client_notification.t) =
   match n with
   | Lsp.Client_notification.TextDocumentDidOpen { textDocument } ->
+      (* Open is a one-off, not a burst: publish at once for instant feedback. *)
       set_doc textDocument.uri textDocument.text;
       publish_diagnostics textDocument.uri textDocument.text
   | Lsp.Client_notification.TextDocumentDidChange
       { textDocument; contentChanges } -> (
-      (* Full sync: the last change event carries the entire new buffer. *)
+      (* Full sync: the last change event carries the entire new buffer. The
+         re-check is debounced (see [mark_dirty] / [run]) so a run of edits
+         coalesces into one analysis. *)
       match List.rev contentChanges with
       | { text; _ } :: _ ->
           set_doc textDocument.uri text;
-          publish_diagnostics textDocument.uri text
+          mark_dirty textDocument.uri
       | [] -> ())
   | Lsp.Client_notification.TextDocumentDidClose { textDocument } ->
       remove_doc textDocument.uri;
+      Hashtbl.remove dirty (doc_key textDocument.uri);
       (* Clear the editor's diagnostics for a closed document. *)
       send_notification
         (Lsp.Server_notification.PublishDiagnostics
@@ -587,24 +671,77 @@ let handle_notification (n : Jsonrpc.Notification.t) =
   | Error _ -> ()
   | Ok notif -> ( try on_notification notif with _ -> ())
 
-let run () =
+let dispatch packet =
+  match packet with
+  | Jsonrpc.Packet.Request req -> handle_request req
+  | Jsonrpc.Packet.Notification n -> handle_notification n
+  | Jsonrpc.Packet.Response _ | Jsonrpc.Packet.Batch_response _
+  | Jsonrpc.Packet.Batch_call _ ->
+      ()
+
+(* The native loop: read from the raw fd (never [Stdlib.stdin], whose buffering
+   would both swallow bytes the fd read expects and hide pending input from
+   [select]) and debounce diagnostics. The publish deadline is a local: after a
+   packet leaves a document dirty it is (re)armed [diagnostics_debounce] seconds
+   out, so a continuing burst keeps deferring; when [select] times out with the
+   client quiet, the coalesced diagnostics are published. *)
+let run_native () =
+  set_binary_mode_out stdout true;
+  let fd = Unix.stdin in
+  let rec loop deadline =
+    let timeout =
+      match deadline with
+      | None -> -1.0 (* nothing pending: block until input arrives *)
+      | Some t -> Float.max 0. (t -. Unix.gettimeofday ())
+    in
+    match
+      try Some (Unix.select [ fd ] [] [] timeout)
+      with Unix.Unix_error (Unix.EINTR, _, _) -> None
+    with
+    | None -> loop deadline (* interrupted before the timeout: retry *)
+    | Some ([], _, _) ->
+        (* Timed out (only reachable with a deadline set): the quiet window
+           elapsed, so publish the coalesced diagnostics. *)
+        flush_dirty ();
+        loop None
+    | Some _ -> (
+        (* A malformed packet (bad JSON, or params that are not a structured
+           value) makes [read] raise; the frame has already been consumed, so
+           drop it and carry on rather than crashing the session. *)
+        match try `Packet (Io_fd.read fd) with _ -> `Skip with
+        | `Skip -> loop deadline
+        | `Packet None -> flush_dirty () (* EOF: publish pending, then stop *)
+        | `Packet (Some packet) ->
+            dispatch packet;
+            (* Arm/refresh the window while anything is pending. *)
+            let deadline =
+              if Hashtbl.length dirty > 0 then
+                Some (Unix.gettimeofday () +. diagnostics_debounce)
+              else deadline
+            in
+            loop deadline)
+  in
+  loop None
+
+(* The fallback loop, for backends without a working [Unix.select]
+   (js_of_ocaml / wasm_of_ocaml, where the server is linked into the wasm CLI
+   but rarely run): a plain blocking read over an [in_channel], publishing
+   diagnostics eagerly (no debounce) after each message. *)
+let run_fallback () =
   set_binary_mode_in stdin true;
   set_binary_mode_out stdout true;
   let rec loop () =
-    (* A malformed packet (bad JSON, or params that are not a structured value)
-       makes [Io.read] raise; the frame has already been consumed, so drop it
-       and carry on rather than crashing the session. Only a clean EOF ([None])
-       ends the loop. *)
-    match try `Packet (Io.read stdin) with _ -> `Skip with
+    match try `Packet (Io_chan.read stdin) with _ -> `Skip with
     | `Skip -> loop ()
-    | `Packet None -> () (* EOF: the client closed the stream *)
+    | `Packet None -> () (* EOF *)
     | `Packet (Some packet) ->
-        (match packet with
-        | Jsonrpc.Packet.Request req -> handle_request req
-        | Jsonrpc.Packet.Notification n -> handle_notification n
-        | Jsonrpc.Packet.Response _ | Jsonrpc.Packet.Batch_response _
-        | Jsonrpc.Packet.Batch_call _ ->
-            ());
+        dispatch packet;
+        flush_dirty ();
         loop ()
   in
   loop ()
+
+let run () =
+  match Sys.backend_type with
+  | Sys.Other _ -> run_fallback () (* js_of_ocaml / wasm_of_ocaml *)
+  | Sys.Native | Sys.Bytecode -> run_native ()
