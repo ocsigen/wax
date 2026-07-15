@@ -82,6 +82,11 @@
   branch no longer shows and the Problems match what a `-D` build sees. A partial
   set leaves the remaining `#[if]`s for the all-configurations check.
 
+- Expand / shrink selection for `.wax` (`SelectionRangeProvider`): Shift+Alt+→
+  grows the selection along the syntax tree — identifier, expression, statement,
+  block, function, whole file — and Shift+Alt+← shrinks it back. Built from the
+  recovered parse, so it works mid-edit.
+
 ## 0.2.2
 
 - Large `.wat` / `.wax` files now format in the editor; a non-tail recursion in

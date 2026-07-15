@@ -47,6 +47,10 @@ Syntax highlighting, formatting, diagnostics, and snippets for
 - **Semantic highlighting** (`.wax`): colours identifiers by role — functions,
   parameters, locals/globals, types (including references like `&point`), struct
   fields, and intrinsic namespaces — refining the grammar's coarser colouring.
+- **Expand / shrink selection** (`.wax`): Shift+Alt+→ grows the selection along
+  the syntax tree — identifier, expression, statement, block, function, whole
+  file — and Shift+Alt+← shrinks it back. Works mid-edit through the recovering
+  parser.
 - **Conditional-compilation dimming** (`.wax`): set `wax.define` (e.g.
   `["debug=true", "arch=wasm64"]`, mirroring the `-D` flag) and the `#[if]` /
   `#[else]` branches that configuration makes unreachable are dimmed as dead

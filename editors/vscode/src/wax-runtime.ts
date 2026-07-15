@@ -145,6 +145,9 @@ export interface Wax {
     line: number,
     character: number,
   ): WaxSignature | null;
+  // The chain of enclosing syntactic spans at the position, innermost first, for
+  // expand/shrink selection. Wax only.
+  selectionRange(src: string, line: number, character: number): WaxRange[];
   // Every classified identifier occurrence, for semantic highlighting. Wax only.
   semanticTokens(src: string): WaxSemanticToken[];
   // The source ranges made unreachable by the given `-D` defines (dead

@@ -87,6 +87,14 @@ interface LanguageSpec {
   ): WaxSignature | null;
   // Classified identifier occurrences, for semantic highlighting. Wax only.
   semanticTokens?(wax: Wax, src: string): WaxSemanticToken[];
+  // The chain of enclosing spans at a position, innermost first, for
+  // expand/shrink selection. Wax only.
+  selectionRange?(
+    wax: Wax,
+    src: string,
+    line: number,
+    character: number,
+  ): WaxRange[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -110,6 +118,8 @@ const LANGUAGES: LanguageSpec[] = [
     signatureHelp: (wax, src, line, character) =>
       wax.signatureHelp(src, line, character),
     semanticTokens: (wax, src) => wax.semanticTokens(src),
+    selectionRange: (wax, src, line, character) =>
+      wax.selectionRange(src, line, character),
   },
   {
     id: "wat",
@@ -138,6 +148,7 @@ export function activateWith(
     if (lang.completion) registerCompletion(context, opts, lang);
     if (lang.signatureHelp) registerSignatureHelp(context, opts, lang);
     if (lang.semanticTokens) registerSemanticTokens(context, opts, lang);
+    if (lang.selectionRange) registerSelectionRanges(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerInactiveDimming(context, opts);
@@ -731,6 +742,60 @@ function registerSemanticTokens(
       provider,
       SEMANTIC_LEGEND,
     ),
+  );
+}
+
+function registerSelectionRanges(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const selectionRange = lang.selectionRange;
+  if (!selectionRange) return;
+
+  const provider: vscode.SelectionRangeProvider = {
+    async provideSelectionRanges(document, positions, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return [];
+      }
+      if (token.isCancellationRequested) return [];
+      return positions.map((position) => {
+        let ranges: WaxRange[];
+        try {
+          ranges = selectionRange(
+            wax,
+            document.getText(),
+            position.line,
+            position.character,
+          );
+        } catch {
+          ranges = [];
+        }
+        // The bridge lists the enclosing spans innermost-first; VS Code wants the
+        // innermost `SelectionRange` with `.parent` chaining outward, so fold
+        // from the outermost inward.
+        let sel: vscode.SelectionRange | undefined;
+        for (let i = ranges.length - 1; i >= 0; i--) {
+          const r = ranges[i];
+          sel = new vscode.SelectionRange(
+            new vscode.Range(r.startLine, r.startChar, r.endLine, r.endChar),
+            sel,
+          );
+        }
+        // Fall back to the cursor itself when nothing was returned, so the
+        // provider still yields a valid (degenerate) range for this position.
+        return (
+          sel ?? new vscode.SelectionRange(new vscode.Range(position, position))
+        );
+      });
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerSelectionRangeProvider(lang.id, provider),
   );
 }
 

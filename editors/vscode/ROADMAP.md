@@ -151,6 +151,15 @@ does not carry. Three distinct prerequisites:
   in one linear pass (`utf16_positions`), not a per-token line-prefix rescan. A
   `DocumentSemanticTokensProvider` in `extension-common.ts` renders them against
   a standard legend. Wax only.
+- [x] **Expand / shrink selection** (`SelectionRangeProvider`). A
+  `selectionRange` export returns, for a position, the chain of enclosing
+  syntactic spans innermost-first: it collects every field and instruction span
+  covering the cursor from the recovered parse (no typing, so it works mid-edit),
+  and since the covering nodes are nested it dedups by byte span and orders by
+  width to get the chain, with the whole buffer always the outermost step
+  (select-all). Byte offsets go through the same one-pass `utf16_positions`
+  conversion the other range features use. The provider folds the list into
+  linked `vscode.SelectionRange`s (parent chaining outward). Wax only.
 - [x] **Config-aware editing (dimming).** With a `wax.define` setting (the `-D`
   bindings, e.g. `["debug=true"]`), an `inactiveRanges` export returns the
   `#[if]`/`#[else]` branch bodies the configuration makes unreachable

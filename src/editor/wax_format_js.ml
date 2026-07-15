@@ -1730,6 +1730,56 @@ let utf16_positions src offsets =
   flush !byte !line !col;
   tbl
 
+(* Selection ranges (expand / shrink selection, Wax only): for the position, the
+   chain of enclosing syntactic spans from the innermost node outward, so
+   Shift+Alt+Right grows the selection expression -> statement -> block ->
+   function -> whole file precisely, rather than by the editor's word / bracket
+   heuristic. Built from the recovered parse alone (no typing), so it survives a
+   mid-edit buffer. Every field and instruction span covering the cursor is
+   collected; since the covering nodes are nested (siblings do not overlap) they
+   already form a chain, and deduping by byte span then ordering by width yields
+   it innermost-first. The whole buffer is always the outermost step (select
+   all). *)
+let selection_range_string src line ch =
+  let target = (line + 1, byte_column src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let ast_opt, _, _ =
+    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+      ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
+  in
+  match ast_opt with
+  | None -> []
+  | Some ast ->
+      let spans = ref [ (0, String.length src) ] in
+      let add (loc : Wax_utils.Ast.location) =
+        if loc.loc_start.pos_cnum >= 0 && contains loc then
+          spans := (loc.loc_start.pos_cnum, loc.loc_end.pos_cnum) :: !spans
+      in
+      Wax_lang.Ast_utils.iter_fields (fun f -> add f.info) ast;
+      Wax_lang.Ast_utils.iter_module_instr (fun i -> add i.info) ast;
+      (* Dedup identical spans, then order by width. Nested distinct spans have
+         distinct widths, so width order is the innermost-first chain. *)
+      let pairs =
+        List.sort_uniq compare !spans
+        |> List.sort (fun (s1, e1) (s2, e2) -> compare (e1 - s1) (e2 - s2))
+      in
+      let offsets =
+        List.concat_map (fun (s, e) -> [ s; e ]) pairs |> List.sort_uniq compare
+      in
+      let posn = utf16_positions src offsets in
+      List.filter_map
+        (fun (s, e) ->
+          match (Hashtbl.find_opt posn s, Hashtbl.find_opt posn e) with
+          | Some (sl, sc), Some (el, ec) -> Some (sl, sc, el, ec)
+          | _ -> None)
+        pairs
+
 (* Classify every identifier occurrence for semantic highlighting. The *uses*
    come from the recorded references ([a_defs]): a use is classified by its
    definition's kind, which the structural walk below records — so a `Get` reads
@@ -1996,6 +2046,22 @@ let inactive_ranges_result src defines =
             end)
           ranges))
 
+let selection_range_result src line ch =
+  let ranges =
+    try selection_range_string (Js.to_string src) line ch with _ -> []
+  in
+  Js.array
+    (Array.of_list
+       (List.map
+          (fun (sl, sc, el, ec) ->
+            object%js
+              val startLine = sl
+              val startChar = sc
+              val endLine = el
+              val endChar = ec
+            end)
+          ranges))
+
 let semantic_result src =
   let toks = try semantic_tokens_string (Js.to_string src) with _ -> [] in
   Js.array
@@ -2027,6 +2093,7 @@ let () =
         completion_result src line ch defines
 
       method signatureHelp src line ch = signature_result src line ch
+      method selectionRange src line ch = selection_range_result src line ch
       method semanticTokens src = semantic_result src
       method inactiveRanges src defines = inactive_ranges_result src defines
       method formatWat src = format_result format_wat_string src

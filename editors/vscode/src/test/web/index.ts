@@ -4,7 +4,7 @@
 // otherwise swallow it into the output channel).
 
 import * as vscode from "vscode";
-import { loadWax } from "../../wax-runtime";
+import { loadWax, WaxRange } from "../../wax-runtime";
 
 const EXPECTED = "fn f(x: i32) -> i32 {\n    x;\n}\n";
 
@@ -227,6 +227,62 @@ export async function run(): Promise<void> {
       if (!set.has(want)) {
         throw new Error("web: semantic token missing " + want + ": " + [...set]);
       }
+    }
+  }
+
+  // selection ranges: from a cursor on the identifier `a` inside `a + 1`, the
+  // enclosing spans grow innermost-first — the identifier, then the `a + 1`
+  // expression, … out to the whole file — each strictly containing the last.
+  {
+    const p = at("fn g(a: i32) -> i32 {\n  a‸ + 1\n}\n");
+    const chain = wax.selectionRange(p.src, p.line, p.character);
+    if (chain.length < 3) {
+      throw new Error("web: selectionRange too short: " + JSON.stringify(chain));
+    }
+    const before = (o: WaxRange, i: WaxRange) =>
+      o.startLine < i.startLine ||
+      (o.startLine === i.startLine && o.startChar <= i.startChar);
+    const after = (o: WaxRange, i: WaxRange) =>
+      o.endLine > i.endLine ||
+      (o.endLine === i.endLine && o.endChar >= i.endChar);
+    for (let i = 1; i < chain.length; i++) {
+      const inner = chain[i - 1];
+      const outer = chain[i];
+      const strict =
+        before(outer, inner) &&
+        after(outer, inner) &&
+        !(
+          outer.startChar === inner.startChar &&
+          outer.startLine === inner.startLine &&
+          outer.endChar === inner.endChar &&
+          outer.endLine === inner.endLine
+        );
+      if (!strict) {
+        throw new Error(
+          "web: selectionRange not strictly nested at " +
+            i +
+            ": " +
+            JSON.stringify(chain),
+        );
+      }
+    }
+    const first = chain[0];
+    if (
+      first.startLine !== 1 ||
+      first.endLine !== 1 ||
+      first.endChar - first.startChar !== 1
+    ) {
+      throw new Error(
+        "web: selectionRange innermost should be the identifier `a`: " +
+          JSON.stringify(first),
+      );
+    }
+    const last = chain[chain.length - 1];
+    if (last.startLine !== 0 || last.startChar !== 0) {
+      throw new Error(
+        "web: selectionRange outermost should be the whole file: " +
+          JSON.stringify(last),
+      );
     }
   }
 
