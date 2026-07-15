@@ -374,7 +374,7 @@ and gen_vec d : Ast.location Ast.instr =
       | 4 -> meth (gen F32 (d - 1)) "splat_f32x4" []
       | _ -> meth (gen F64 (d - 1)) "splat_f64x2" [])
   | n when n < 66 ->
-      path "const_i32x4"
+      path "i32x4"
         [
           nl (Ast.Int "1"); nl (Ast.Int "2"); nl (Ast.Int "3"); nl (Ast.Int "4");
         ]

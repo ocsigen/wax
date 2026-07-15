@@ -15,10 +15,10 @@ The lane index of a SIMD lane operation must be in range for the shape:
 
   $ wax check lane.wax
   Error: The lane index should be less than 16.
-   ──➤  lane.wax:2:90
+   ──➤  lane.wax:2:84
   1 │ fn f() -> i32 {
-  2 │   v128::const_i8x16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0).extract_lane_s_i8x16(16);
-    ·                                                                                          ^^
+  2 │   v128::i8x16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0).extract_lane_s_i8x16(16);
+    ·                                                                                    ^^
   3 │ }
   4 │ 
   [128]

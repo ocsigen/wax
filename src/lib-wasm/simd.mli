@@ -75,13 +75,13 @@ val classify : string -> intrinsic option
 (** Recognise a method or free-function SIMD intrinsic by name. *)
 
 val is_free_intrinsic : string -> bool
-(** A reserved free-function name ([v128_const_*], [v128_bitselect]); these
-    shadow a user function of the same name only when it is unbound. *)
+(** A reserved free-function name (a [v128_<shape>] constant, [v128_bitselect]);
+    these shadow a user function of the same name only when it is unbound. *)
 
 val const_shape_of_name : string -> Wax_utils.V128.shape option
 
 val const_arity : Wax_utils.V128.shape -> int
-(** Number of lane literals in a [v128_const_<shape>] call. *)
+(** Number of lane literals in a [v128_<shape>] const call. *)
 
 val const_is_float : Wax_utils.V128.shape -> bool
 

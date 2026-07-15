@@ -590,7 +590,7 @@ let atomic_memarg op nstack args : Ast.memarg =
   in
   { offset; align }
 
-(* Literal value of a [v128_const_*] lane argument, as a string for
+(* Literal value of a [v128::<shape>] lane argument, as a string for
    [Wax_utils.V128.t]; a negative literal is [UnOp (Neg, _)]. *)
 let rec literal_string a =
   match a.desc with
@@ -797,7 +797,7 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Call (f, args) -> (
       let arg_code = List.concat_map (instruction ret ctx) args in
       match f.desc with
-      (* Qualified-path intrinsics. [v128::const_<shape>(..)] / [v128::bitselect]
+      (* Qualified-path intrinsics. [v128::<shape>(..)] / [v128::bitselect]
          are the SIMD free functions; [i64::add128(..)] etc. are wide arithmetic
          (operands already on the stack in call order, low/high of each input). *)
       | Path ({ desc = "v128"; _ }, name) -> (

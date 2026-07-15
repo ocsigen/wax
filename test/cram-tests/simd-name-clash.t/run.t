@@ -9,11 +9,7 @@ the user function stays a plain call.
       0;
   }
   fn use() -> v128 {
-      v128::bitselect(
-          v128::const_i32x4(0, 0, 0, 0),
-          v128::const_i32x4(1, 1, 1, 1),
-          v128::const_i32x4(2, 2, 2, 2),
-      );
+      v128::bitselect(v128::i32x4(0, 0, 0, 0), v128::i32x4(1, 1, 1, 1), v128::i32x4(2, 2, 2, 2));
   }
   fn also() -> i32 {
       v128_bitselect();

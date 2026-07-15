@@ -380,9 +380,9 @@ Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `
 
 | Wasm | Wax |
 |------|-----|
-| `v128.const i32x4 1 2 3 4` | `v128::const_i32x4(1, 2, 3, 4)` |
-| `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::const_f32x4(1.5, 2.5, 3.5, 4.5)` |
-| `v128.const i8x16 0 1 ... 15` | `v128::const_i8x16(0, 1, ..., 15)` |
+| `v128.const i32x4 1 2 3 4` | `v128::i32x4(1, 2, 3, 4)` |
+| `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::f32x4(1.5, 2.5, 3.5, 4.5)` |
+| `v128.const i8x16 0 1 ... 15` | `v128::i8x16(0, 1, ..., 15)` |
 
 Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional trailing `align`/`offset` arguments work the same way):
 

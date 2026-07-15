@@ -8613,7 +8613,7 @@ let rec check_constant_instruction ctx i =
       then Error.constant_expression_required ctx.diagnostics ~location
   | UnOp ({ desc = Pos; _ }, i') -> check_constant_instruction ctx i'
   | UnOp ({ desc = Neg; _ }, { desc = Float _ | Int _; _ }) -> ()
-  (* [v128::const_<shape>(..)] is a constant expression; its lanes are literals.
+  (* [v128::<shape>(..)] is a constant expression; its lanes are literals.
      Other SIMD ops are not constant. *)
   | Call ({ desc = Path (ns, name); _ }, args)
     when ns.desc = Simd.free_namespace

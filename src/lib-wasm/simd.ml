@@ -7,7 +7,7 @@
    lane shape baked into the name, e.g. [a.add_i32x4(b)], [v.splat_i32x4()],
    [v.extract_lane_s_i8x16(0)]. The wax name is the WAT mnemonic [A.B] rewritten
    as [B_A] (so [i32x4.add] -> [add_i32x4], [v128.and] -> [and_v128]). Constants
-   and bitselect are free functions ([v128_const_i32x4(...)], [v128_bitselect]);
+   and bitselect are free functions ([v128_i32x4(...)], [v128_bitselect]);
    loads/stores are methods on a memory object ([mem.v128_load(addr)]). *)
 
 module Text = Ast.Text
@@ -190,7 +190,7 @@ let splat_name s = "splat_" ^ shape_str s
 let replace_name s = "replace_lane_" ^ shape_str s
 let shuffle_name = "shuffle_i8x16"
 let bitselect_name = "v128_bitselect"
-let const_name (s : Wax_utils.V128.shape) = "v128_const_" ^ v128_shape_str s
+let const_name (s : Wax_utils.V128.shape) = "v128_" ^ v128_shape_str s
 
 (* The free-function intrinsics are spelled [v128::<member>] in Wax; the registry
    keys them by the full [v128_<member>] mnemonic. These convert between the two:
@@ -478,7 +478,7 @@ let table : (string, intrinsic) Hashtbl.t =
 let classify name = Hashtbl.find_opt table name
 
 let const_shape_of_name name : Wax_utils.V128.shape option =
-  let prefix = "v128_const_" in
+  let prefix = "v128_" in
   if
     String.length name > String.length prefix
     && String.sub name 0 (String.length prefix) = prefix
@@ -500,7 +500,7 @@ let const_shape_of_name name : Wax_utils.V128.shape option =
 let is_free_intrinsic name =
   name = bitselect_name || const_shape_of_name name <> None
 
-(* Number of lane literals in a [v128_const_<shape>] call. *)
+(* Number of lane literals in a [v128_<shape>] const call. *)
 let const_arity : Wax_utils.V128.shape -> int = function
   | I8x16 -> 16
   | I16x8 -> 8

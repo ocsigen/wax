@@ -393,8 +393,8 @@ Two families use this syntax today.
 lane) and `bitselect`, which have no receiver:
 
 ```wax
-v128::const_i32x4(1, 2, 3, 4)         // a v128 constant (also a constant expression)
-v128::const_f32x4(1.5, 2.5, 3.5, 4.5)
+v128::i32x4(1, 2, 3, 4)         // a v128 constant (also a constant expression)
+v128::f32x4(1.5, 2.5, 3.5, 4.5)
 v128::bitselect(a, b, mask)           // per-bit select
 ```
 
@@ -1392,7 +1392,7 @@ fn lane0(v: v128) -> i32 {
 Constants are `v128::` free functions, one argument per lane:
 
 ```wax,check
-const ones: v128 = v128::const_i32x4(1, 1, 1, 1);
+const ones: v128 = v128::i32x4(1, 1, 1, 1);
 ```
 
 See [Instructions › SIMD](./correspondence/instructions.md#simd-vector-instructions) for the full
