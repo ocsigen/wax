@@ -34,7 +34,7 @@ For Wat input the check runs under `--validate`. Both named and unnamed locals
 are reported; a name starting with `_` is intentionally unused:
 
   $ wax --validate unused.wat -f wat
-  Warning: The local variable $dead is never used.
+  Warning: The local variable '$dead' is never used.
    ──➤  unused.wat:3:30
   1 │ (module
   2 │   (func $f (param $n i32) (result i32)
@@ -63,7 +63,7 @@ configuration leaves it unread; `$never_used` is read in no branch, so it is
 reported (with no "reachable when" qualifier, as it holds unconditionally):
 
   $ wax --validate cond.wat -f wat
-  Warning: The local variable $never_used is never used.
+  Warning: The local variable '$never_used' is never used.
    ──➤  cond.wat:3:40
   1 │ (module
   2 │   (func $f (param $n i32) (result i32)

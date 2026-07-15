@@ -12,8 +12,9 @@ A switch tag whose results (i32) do not match the continuation's (i64) is
 rejected:
 
   $ wax check mismatch.wat
-  Error: Type mismatch in this stack switching instruction:
-    the results of a 'switch' handler's tag must match the resumed continuation's results.
+  Error:
+    Type mismatch in this stack switching instruction: the results of a 'switch'
+    handler's tag must match the resumed continuation's results.
    ──➤  mismatch.wat:7:6
   5 │   (tag $t (type $tag_ft))
   6 │   (func (export "f") (result i64)
@@ -26,8 +27,9 @@ A subtype is not enough: a `nullfuncref`-result tag on a `funcref`-result
 continuation is rejected even though `nullfuncref <: funcref`:
 
   $ wax check subtype.wat
-  Error: Type mismatch in this stack switching instruction:
-    the results of a 'switch' handler's tag must match the resumed continuation's results.
+  Error:
+    Type mismatch in this stack switching instruction: the results of a 'switch'
+    handler's tag must match the resumed continuation's results.
    ──➤  subtype.wat:7:6
   5 │   (tag $t (type $tag_ft))
   6 │   (func (export "f") (result funcref)

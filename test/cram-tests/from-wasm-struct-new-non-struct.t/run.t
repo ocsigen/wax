@@ -6,7 +6,7 @@ types, and a miss used to raise Not_found -- an uncaught exception -- rather tha
 reporting a conversion error.)
 
   $ wax -i wat -f wax bad.wat -o /dev/null
-  Error: Type $f should be a struct type.
+  Error: Type '$f' should be a struct type.
    ──➤  bad.wat:4:16
   2 │   (type $f (func))
   3 │   (func (result (ref $f))

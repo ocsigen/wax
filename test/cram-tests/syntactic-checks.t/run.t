@@ -5,7 +5,7 @@ part of the main validation, so the CLI enforces them.
 A duplicate function identifier:
 
   $ wax --validate dup_function.wat -o out.wat
-  Error: The function index $f is already bound.
+  Error: The function index '$f' is already bound.
    ──➤  dup_function.wat:3:9
   1 │ (module
   2 │   (func $f)
@@ -29,7 +29,7 @@ An inline type annotation that disagrees with the named type:
 A duplicate local name:
 
   $ wax --validate dup_local.wat -o out.wat
-  Error: The local $x is already defined.
+  Error: The local '$x' is already defined.
    ──➤  dup_local.wat:2:31
   1 │ (module
   2 │   (func (local $x i32) (local $x i32)))

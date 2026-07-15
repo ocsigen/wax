@@ -63,7 +63,8 @@ instruction stream, out of the checker's reach, so it is not flagged:
 
   $ wax check -W eager-select=warning eager.wat
   Warning:
-    This operation is evaluated even when the condition selects the other operand.
+    This operation is evaluated even when the condition selects the other
+    operand.
    ──➤  eager.wat:3:14
   1 │ (module
   2 │   (func $div (export "div") (param $c i32) (param $x i32) (result i32)

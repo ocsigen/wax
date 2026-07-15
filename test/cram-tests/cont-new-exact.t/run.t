@@ -35,8 +35,9 @@ Diagnostics render the source type with the same exactness as the internal
 type. Under custom-descriptors the `cont.new` result is reported exact:
 
   $ wax check -X custom-descriptors bad-source.wat
-  Error: Type mismatch: this produces a value of type (ref (exact $ct)),
-    but type i32 is expected.
+  Error:
+    Type mismatch: this produces a value of type '(ref (exact $ct))', but type
+    'i32' is expected.
    ──➤  bad-source.wat:6:6
   4 │   (func $g)
   5 │   (func (export "f") (result i32)
@@ -50,8 +51,9 @@ Without the proposal exact reference types are not expressible, so the same
 diagnostic falls back to the plain reference:
 
   $ wax check bad-source.wat
-  Error: Type mismatch: this produces a value of type (ref $ct), but type 
-    i32 is expected.
+  Error:
+    Type mismatch: this produces a value of type '(ref $ct)', but type 'i32' is
+    expected.
    ──➤  bad-source.wat:6:6
   4 │   (func $g)
   5 │   (func (export "f") (result i32)

@@ -5,7 +5,7 @@ that is never referenced, exported, or used as the start function — the import
 analog of `unused-field`. A name starting with `_` is intentionally unused.
 
   $ wax check -W unused=warning imports.wat
-  Warning: The imported function $dead is never used.
+  Warning: The imported function '$dead' is never used.
    ──➤  imports.wat:3:28
   1 │ (module
   2 │   (import "m" "used" (func $used (result i32)))

@@ -34,8 +34,9 @@ descriptor, so the result must not be typed exact. The diagnostic names the
 descriptor ($b), not the described type.
 
   $ wax check -X custom-descriptors -f wat bad.wat
-  Error: Type mismatch: this produces a value of type (ref $b), but type
-    (ref (exact $b)) is expected.
+  Error:
+    Type mismatch: this produces a value of type '(ref $b)', but type
+    '(ref (exact $b))' is expected.
    ──➤  bad.wat:8:6
   6 │     (type $d (sub $b (describes $c) (struct))))
   7 │   (func (param (ref (exact $c))) (result (ref (exact $b)))

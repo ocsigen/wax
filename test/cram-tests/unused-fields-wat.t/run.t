@@ -10,7 +10,7 @@ This directory sets `WAX_WARN=correctness=hidden` (see the `dune` in the parent)
 so re-enable the `unused` group explicitly:
 
   $ wax check -W unused=warning unused.wat
-  Warning: The label $unused_block is never used.
+  Warning: The label '$unused_block' is never used.
     ──➤  unused.wat:10:12
    8 │   (func $main (export "main") (result i32) (call $helper))
    9 │   (func $labels (export "labels")
@@ -18,7 +18,7 @@ so re-enable the `unused` group explicitly:
      ·            ^^^^^^^^^^^^^
   11 │       (nop))
   12 │     (block $used_by_name
-  Warning: The function $unused_fn is never used.
+  Warning: The function '$unused_fn' is never used.
    ──➤  unused.wat:7:9
   5 │   (global $inline_exported (export "g") i32 (i32.const 4))
   6 │   (func $helper (result i32) (global.get $used))
@@ -26,7 +26,7 @@ so re-enable the `unused` group explicitly:
     ·         ^^^^^^^^^^
   8 │   (func $main (export "main") (result i32) (call $helper))
   9 │   (func $labels (export "labels")
-  Warning: The global $unused is never used.
+  Warning: The global '$unused' is never used.
    ──➤  unused.wat:3:11
   1 │ (module
   2 │   (global $used i32 (i32.const 1))

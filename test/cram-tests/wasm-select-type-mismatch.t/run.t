@@ -9,7 +9,7 @@ type, rather than only at the `select` keyword:
   2 │   (func (param i32)
   3 │     (drop (select (i32.const 1) (i64.const 2) (local.get 0)))))
     ·            ^^^^^^
-    ·                                  ^^^^^^^^^^^ i64
-    ·                    ^^^^^^^^^^^ i32
+    ·                                  ^^^^^^^^^^^ 'i64'
+    ·                    ^^^^^^^^^^^ 'i32'
   4 │ 
   [128]

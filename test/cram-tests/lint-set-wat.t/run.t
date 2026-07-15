@@ -28,7 +28,8 @@ the constant-operand and dead-code checks (see `unused-fields-wat.t` for those):
   7 │   (func $trunc (result i32)
   8 │     (i32.trunc_f64_s (f64.const 1e30)))
   Warning:
-    This conversion always traps: the constant is out of the target type's range.
+    This conversion always traps: the constant is out of the target type's
+    range.
     ──➤  lints.wat:8:6
    6 │     (i32.div_s (local.get 0) (i32.const 0)))
    7 │   (func $trunc (result i32)

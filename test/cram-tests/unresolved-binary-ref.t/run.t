@@ -6,7 +6,7 @@ validated before it is converted, so validation reports the unresolved reference
 A branch to a label that is not in scope:
 
   $ wax -i wat -f wasm badlabel.wat -o /dev/null
-  Error: Unknown label: $nope is not bound.
+  Error: Unknown label: '$nope' is not bound.
    ──➤  badlabel.wat:1:19
   1 │ (module (func (br $nope)))
     ·                   ^^^^^
@@ -16,7 +16,7 @@ A branch to a label that is not in scope:
 A call to a function identifier that is not defined:
 
   $ wax -i wat -f wasm badcall.wat -o /dev/null
-  Error: Unknown function: index $nope is not bound.
+  Error: Unknown function: index '$nope' is not bound.
    ──➤  badcall.wat:1:21
   1 │ (module (func (call $nope)))
     ·                     ^^^^^
