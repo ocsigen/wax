@@ -86,6 +86,13 @@ export interface WaxSemanticToken {
   kind: string;
 }
 
+export interface WaxFolding {
+  startLine: number;
+  endLine: number;
+  // "region" (a block body), "comment" (a block comment), or "imports".
+  kind: string;
+}
+
 export interface WaxSymbol {
   name: string;
   kind: string;
@@ -154,6 +161,8 @@ export interface Wax {
   selectionRange(src: string, line: number, character: number): WaxRange[];
   // Every classified identifier occurrence, for semantic highlighting. Wax only.
   semanticTokens(src: string): WaxSemanticToken[];
+  // Foldable regions — block bodies and multi-line block comments. Wax only.
+  foldingRanges(src: string): WaxFolding[];
   // The source ranges made unreachable by the given `-D` defines (dead
   // `#[if]`/`#[else]` branch bodies), for dimming. Empty with no defines. Wax
   // only.

@@ -53,6 +53,9 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   the syntax tree — identifier, expression, statement, block, function, whole
   file — and Shift+Alt+← shrinks it back. Works mid-edit through the recovering
   parser.
+- **Code folding** (`.wax`): fold block bodies (functions, `if`/`loop`/`while`/
+  `match`/`try` blocks), `#[if]`/`#[else]` branches, and multi-line block
+  comments, from the parse tree rather than by indentation.
 - **Conditional-compilation dimming** (`.wax`): set `wax.define` (e.g.
   `["debug=true", "arch=wasm64"]`, mirroring the `-D` flag) and the `#[if]` /
   `#[else]` branches that configuration makes unreachable are dimmed as dead

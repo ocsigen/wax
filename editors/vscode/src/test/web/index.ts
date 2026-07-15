@@ -247,6 +247,23 @@ export async function run(): Promise<void> {
     }
   }
 
+  // folding ranges: a multi-line block comment folds as a comment region, and a
+  // multi-line function body folds as a region.
+  {
+    const src = "/* a\n   block comment */\nfn g() -> i32 {\n  1\n}\n";
+    const folds = wax.foldingRanges(src);
+    const has = (start: number, end: number, kind: string) =>
+      folds.some(
+        (f) => f.startLine === start && f.endLine === end && f.kind === kind,
+      );
+    if (!has(0, 1, "comment")) {
+      throw new Error("web: foldingRanges missing comment: " + JSON.stringify(folds));
+    }
+    if (!has(2, 4, "region")) {
+      throw new Error("web: foldingRanges missing function: " + JSON.stringify(folds));
+    }
+  }
+
   // selection ranges: from a cursor on the identifier `a` inside `a + 1`, the
   // enclosing spans grow innermost-first — the identifier, then the `a + 1`
   // expression, … out to the whole file — each strictly containing the last.

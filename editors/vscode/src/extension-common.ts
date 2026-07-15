@@ -17,6 +17,7 @@ import {
   WaxCompletion,
   WaxSignature,
   WaxSemanticToken,
+  WaxFolding,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
@@ -95,6 +96,8 @@ interface LanguageSpec {
   ): WaxSignature | null;
   // Classified identifier occurrences, for semantic highlighting. Wax only.
   semanticTokens?(wax: Wax, src: string): WaxSemanticToken[];
+  // Foldable regions (block bodies, block comments). Wax only.
+  foldingRanges?(wax: Wax, src: string): WaxFolding[];
   // The chain of enclosing spans at a position, innermost first, for
   // expand/shrink selection. Wax only.
   selectionRange?(
@@ -128,6 +131,7 @@ const LANGUAGES: LanguageSpec[] = [
     signatureHelp: (wax, src, line, character) =>
       wax.signatureHelp(src, line, character),
     semanticTokens: (wax, src) => wax.semanticTokens(src),
+    foldingRanges: (wax, src) => wax.foldingRanges(src),
     selectionRange: (wax, src, line, character) =>
       wax.selectionRange(src, line, character),
   },
@@ -159,6 +163,7 @@ export function activateWith(
     if (lang.completion) registerCompletion(context, opts, lang);
     if (lang.signatureHelp) registerSignatureHelp(context, opts, lang);
     if (lang.semanticTokens) registerSemanticTokens(context, opts, lang);
+    if (lang.foldingRanges) registerFoldingRanges(context, opts, lang);
     if (lang.selectionRange) registerSelectionRanges(context, opts, lang);
   }
   registerDiagnostics(context, opts);
@@ -797,6 +802,49 @@ function registerSemanticTokens(
       provider,
       SEMANTIC_LEGEND,
     ),
+  );
+}
+
+function registerFoldingRanges(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const foldingRanges = lang.foldingRanges;
+  if (!foldingRanges) return;
+
+  const kindOf = (k: string): vscode.FoldingRangeKind | undefined =>
+    k === "comment"
+      ? vscode.FoldingRangeKind.Comment
+      : k === "imports"
+        ? vscode.FoldingRangeKind.Imports
+        : k === "region"
+          ? vscode.FoldingRangeKind.Region
+          : undefined;
+
+  const provider: vscode.FoldingRangeProvider = {
+    async provideFoldingRanges(document, _context, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return [];
+      }
+      if (token.isCancellationRequested) return [];
+      let folds: WaxFolding[];
+      try {
+        folds = foldingRanges(wax, document.getText());
+      } catch {
+        return [];
+      }
+      return folds.map(
+        (f) => new vscode.FoldingRange(f.startLine, f.endLine, kindOf(f.kind)),
+      );
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerFoldingRangeProvider(lang.id, provider),
   );
 }
 

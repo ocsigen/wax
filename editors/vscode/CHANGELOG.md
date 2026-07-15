@@ -90,6 +90,10 @@
   grows the selection along the syntax tree — identifier, expression, statement,
   block, function, whole file — and Shift+Alt+← shrinks it back. Built from the
   recovered parse, so it works mid-edit.
+- Code folding for `.wax` (`FoldingRangeProvider`): fold block bodies
+  (functions, `if`/`loop`/`while`/`match`/`try` blocks), `#[if]`/`#[else]`
+  branches, and multi-line block comments, from the parse tree instead of by
+  indentation.
 
 ## 0.2.2
 

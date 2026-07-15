@@ -158,6 +158,14 @@ does not carry. Three distinct prerequisites:
   in one linear pass (`utf16_positions`), not a per-token line-prefix rescan. A
   `DocumentSemanticTokensProvider` in `extension-common.ts` renders them against
   a standard legend. Wax only.
+- [x] **Code folding** (`FoldingRangeProvider`). A `foldingRanges` export walks
+  the recovered parse (no typing, so it works mid-edit) collecting each field
+  span (functions, multi-line `type`s, import groups), every braced instruction
+  body (`block`/`loop`/`while`/`if`/`try`/`match`/`dispatch` arm) and each
+  `#[if]`/`#[else]` branch body, plus a source scan for multi-line block comments
+  (string- and nesting-aware). Ranges are line-based: kept only when spanning
+  more than one line, at most one per start line (the widest) so fold arrows do
+  not collide. Kinds map to `Comment`/`Imports`/`Region`. Wax only.
 - [x] **Expand / shrink selection** (`SelectionRangeProvider`). A
   `selectionRange` export returns, for a position, the chain of enclosing
   syntactic spans innermost-first: it collects every field and instruction span

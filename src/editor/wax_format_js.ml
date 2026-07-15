@@ -1854,6 +1854,124 @@ let selection_range_string src line ch =
           | _ -> None)
         pairs
 
+(* Multi-line block-comment spans as (0-based start line, end line), for comment
+   folding. One left-to-right scan tracks string literals (so a [/*] inside a
+   string is not a comment) and skips line comments; block comments nest
+   ([/* … /* … */ … */]). A comment that stays on one line is not foldable. *)
+let block_comment_folds src =
+  let n = String.length src in
+  let at j = if j < n then src.[j] else '\000' in
+  let folds = ref [] and line = ref 0 and i = ref 0 in
+  while !i < n do
+    let c = src.[!i] in
+    if c = '"' then begin
+      (* skip a string literal, honoring backslash escapes *)
+      incr i;
+      let stop = ref false in
+      while (not !stop) && !i < n do
+        (match src.[!i] with
+        | '\\' -> incr i
+        | '"' -> stop := true
+        | '\n' -> incr line
+        | _ -> ());
+        incr i
+      done
+    end
+    else if c = '/' && at (!i + 1) = '*' then begin
+      let start_line = !line in
+      i := !i + 2;
+      let depth = ref 1 in
+      while !depth > 0 && !i < n do
+        if src.[!i] = '/' && at (!i + 1) = '*' then (
+          incr depth;
+          i := !i + 2)
+        else if src.[!i] = '*' && at (!i + 1) = '/' then (
+          decr depth;
+          i := !i + 2)
+        else begin
+          if src.[!i] = '\n' then incr line;
+          incr i
+        end
+      done;
+      if !line > start_line then folds := (start_line, !line) :: !folds
+    end
+    else if c = '/' && at (!i + 1) = '/' then
+      while !i < n && src.[!i] <> '\n' do
+        incr i
+      done
+    else begin
+      if c = '\n' then incr line;
+      incr i
+    end
+  done;
+  !folds
+
+(* Folding ranges (Wax only): the block bodies and multi-line block comments the
+   editor can collapse. From the recovered parse (so it works mid-edit) it takes
+   each field's span (a function, a multi-line [type]/global, …), every braced
+   instruction body ([block]/[loop]/[if]/[while]/[try]/[match]/[dispatch] arm),
+   and each [#[if]]/[#[else]] branch body; the block-comment scan adds the
+   comment folds. Ranges are line-based (VS Code folds whole lines): a range is
+   kept only when it spans more than one line, and at most one range per start
+   line (the widest) so the fold arrows do not collide. *)
+let folding_string src =
+  let ast_opt, _, _ =
+    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+      ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
+  in
+  (* start line -> (end line, kind), keeping the widest fold per start line. *)
+  let tbl = Hashtbl.create 64 in
+  let add start_line end_line kind =
+    if end_line > start_line then
+      match Hashtbl.find_opt tbl start_line with
+      | Some (e, _) when e >= end_line -> ()
+      | _ -> Hashtbl.replace tbl start_line (end_line, kind)
+  in
+  let add_loc kind (loc : Wax_utils.Ast.location) =
+    if loc.loc_start.pos_cnum >= 0 then
+      add (loc.loc_start.pos_lnum - 1) (loc.loc_end.pos_lnum - 1) kind
+  in
+  (match ast_opt with
+  | None -> ()
+  | Some ast ->
+      let open Wax_lang.Ast in
+      Wax_lang.Ast_utils.iter_fields
+        (fun field ->
+          match (field.desc : _ modulefield) with
+          | Import_group _ -> add_loc "imports" field.info
+          | Conditional { then_fields; else_fields; _ } ->
+              add_loc "region" then_fields.info;
+              Option.iter (fun b -> add_loc "region" b.info) else_fields
+          | _ -> add_loc "region" field.info)
+        ast;
+      Wax_lang.Ast_utils.iter_module_instr
+        (fun i ->
+          match i.desc with
+          | Block { block; _ }
+          | Loop { block; _ }
+          | While { block; _ }
+          | TryTable { block; _ } ->
+              add_loc "region" block.info
+          | If { if_block; else_block; _ } ->
+              add_loc "region" if_block.info;
+              Option.iter (fun b -> add_loc "region" b.info) else_block
+          | Try { block; catches; catch_all; _ } ->
+              add_loc "region" block.info;
+              List.iter (fun (_, b) -> add_loc "region" b.info) catches;
+              Option.iter (fun b -> add_loc "region" b.info) catch_all
+          | Match { arms; default; _ } ->
+              List.iter (fun (_, b) -> add_loc "region" b.info) arms;
+              add_loc "region" default.info
+          | Dispatch { arms; _ } ->
+              List.iter (fun (_, b) -> add_loc "region" b.info) arms
+          | If_annotation { then_body; else_body; _ } ->
+              add_loc "region" then_body.info;
+              Option.iter (fun b -> add_loc "region" b.info) else_body
+          | _ -> ())
+        ast);
+  List.iter (fun (s, e) -> add s e "comment") (block_comment_folds src);
+  Hashtbl.fold (fun s (e, k) acc -> (s, e, k) :: acc) tbl []
+
 (* Classify every identifier occurrence for semantic highlighting. The *uses*
    come from the recorded references ([a_defs]): a use is classified by its
    definition's kind, which the structural walk below records — so a `Get` reads
@@ -2136,6 +2254,19 @@ let selection_range_result src line ch =
             end)
           ranges))
 
+let folding_result src =
+  let folds = try folding_string (Js.to_string src) with _ -> [] in
+  Js.array
+    (Array.of_list
+       (List.map
+          (fun (s, e, kind) ->
+            object%js
+              val startLine = s
+              val endLine = e
+              val kind = Js.string kind
+            end)
+          folds))
+
 let semantic_result src =
   let toks = try semantic_tokens_string (Js.to_string src) with _ -> [] in
   Js.array
@@ -2170,6 +2301,7 @@ let () =
       method signatureHelp src line ch = signature_result src line ch
       method selectionRange src line ch = selection_range_result src line ch
       method semanticTokens src = semantic_result src
+      method foldingRanges src = folding_result src
       method inactiveRanges src defines = inactive_ranges_result src defines
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
