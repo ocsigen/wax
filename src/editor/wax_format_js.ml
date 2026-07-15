@@ -76,6 +76,8 @@ let js_diagnostic src d =
     val warning =
       match d.warning with Some w -> Js.some (Js.string w) | None -> Js.null
 
+    val unnecessary = Js.bool d.unnecessary
+
     val hint =
       match d.hint with
       | Some h -> Js.some (Js.string (String.trim h))

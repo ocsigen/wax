@@ -80,6 +80,12 @@ val name : t -> string
 val description : t -> string
 (** A one-line human-readable description, used in help text. *)
 
+val is_unnecessary : t -> bool
+(** Whether the warning flags code that can be removed with no change in
+    behaviour (an unused binding, import, or label, or unreachable code), so an
+    editor can render it faded — LSP's [DiagnosticTag.Unnecessary], VS Code's
+    greyed-out dead code. *)
+
 (** {1 Levels and policies} *)
 
 type level =

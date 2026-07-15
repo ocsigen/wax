@@ -151,11 +151,16 @@ let diagnostic_of_diag uri src (d : Wax_editor.diag) =
           ~message:msg)
       d.related
   in
+  (* A lint that flags removable/unreachable code is tagged [Unnecessary], so
+     the client fades it (VS Code's greyed-out dead code). *)
+  let tags =
+    if d.unnecessary then Some [ DiagnosticTag.Unnecessary ] else None
+  in
   Diagnostic.create
     ~range:(range_of_location src d.location)
     ~severity ~source:"wax"
     ?code:(Option.map (fun w -> `String w) d.warning)
-    ~message:(`String message) ~relatedInformation ()
+    ?tags ~message:(`String message) ~relatedInformation ()
 
 let publish_diagnostics uri src =
   let diags =

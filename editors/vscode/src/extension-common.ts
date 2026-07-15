@@ -950,6 +950,9 @@ function registerDiagnostics(
       // Surface a lint's -W name as the diagnostic code (shown as "wax(name)"
       // in the Problems panel, and usable in rule-based filtering).
       if (d.warning) diagnostic.code = d.warning;
+      // A lint that flags removable/unreachable code is tagged Unnecessary, so
+      // VS Code renders the range faded (its greyed-out dead-code style).
+      if (d.unnecessary) diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];
       if (d.related.length > 0) {
         diagnostic.relatedInformation = d.related.map(
           (r) =>

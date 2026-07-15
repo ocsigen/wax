@@ -125,3 +125,29 @@ that sits after the `é`-bearing comment):
   > PY
   offered utf-16 -> negotiated=utf-16 hover char=30 range=(30,31)
   offered utf-8  -> negotiated=utf-8 hover char=31 range=(31,32)
+
+A lint that flags removable or unreachable code (an unused local, import, field,
+or label, or dead code) carries LSP's `DiagnosticTag.Unnecessary` (the value
+`1`), so the editor fades the range as it does other dead code. A module with an
+unused local:
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///u.wax"
+  > src="fn f() -> i32 {\n  let x = 1;\n  0;\n}\n"
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wax","version":1,"text":src}}},
+  >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i=p.stdout,0
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if r.get("method")=="textDocument/publishDiagnostics":
+  >         for d in r["params"]["diagnostics"]:
+  >             print("%s: severity=%s tags=%s" % (d.get("code"), d["severity"], d.get("tags")))
+  > PY
+  unused-local: severity=2 tags=[1]

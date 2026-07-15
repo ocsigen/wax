@@ -37,6 +37,9 @@ export interface WaxDiagnostic extends WaxRange {
   message: string;
   // The `-W` name of a lint warning (e.g. "unused-local"), or null.
   warning: string | null;
+  // Whether the warning flags removable/unreachable code, for faded rendering
+  // (VS Code's DiagnosticTag.Unnecessary).
+  unnecessary: boolean;
   hint: string | null;
   related: WaxRelated[];
 }

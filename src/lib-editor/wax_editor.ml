@@ -164,6 +164,9 @@ type diag = {
   location : Wax_utils.Ast.location;
   message : string;
   warning : string option; (* the [-W] name of a lint warning, if any *)
+  unnecessary : bool;
+      (* the warning flags removable/unreachable code ([Warning.is_unnecessary]),
+         so an editor can render it faded *)
   hint : string option;
   related : (string * Wax_utils.Ast.location) list;
       (* a message and the source span it points at (e.g. the matching opener) *)
@@ -183,6 +186,7 @@ let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
     location = e.location;
     message = Wax_utils.Message.to_plain_string e.message;
     warning = None;
+    unnecessary = false;
     hint = None;
     related = render_labels e.related;
   }
@@ -192,13 +196,16 @@ let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
 let collected_diags d =
   List.map
     (fun e ->
+      let warning = Wax_utils.Diagnostic.entry_warning e in
       {
         severity = Wax_utils.Diagnostic.entry_severity e;
         location = Wax_utils.Diagnostic.entry_location e;
         message = render (Wax_utils.Diagnostic.entry_message e);
-        warning =
-          Option.map Wax_utils.Warning.name
-            (Wax_utils.Diagnostic.entry_warning e);
+        warning = Option.map Wax_utils.Warning.name warning;
+        unnecessary =
+          (match warning with
+          | Some w -> Wax_utils.Warning.is_unnecessary w
+          | None -> false);
         hint = Option.map render (Wax_utils.Diagnostic.entry_hint e);
         related = render_labels (Wax_utils.Diagnostic.entry_related e);
       })

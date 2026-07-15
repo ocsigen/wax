@@ -20,6 +20,8 @@ type diag = {
   location : Wax_utils.Ast.location;
   message : string;
   warning : string option;
+  unnecessary : bool;
+      (* the warning marks removable/unreachable code, for faded rendering *)
   hint : string option;
   related : (string * Wax_utils.Ast.location) list;
 }

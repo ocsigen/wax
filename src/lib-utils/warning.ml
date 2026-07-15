@@ -103,6 +103,20 @@ let description = function
   | Generated_name ->
       "An unnamed but used parameter was given a generated name."
 
+(* Whether the warning flags code that can be removed with no change in
+   behaviour: an unused binding, import, or label, or an unreachable statement.
+   An editor renders such a diagnostic faded (LSP's [DiagnosticTag.Unnecessary]
+   / VS Code's greyed-out dead code). Kept here, with the warning definitions,
+   so the LSP server and the VS Code extension classify from one source. *)
+let is_unnecessary = function
+  | Unused_local | Unused_field | Unused_import | Unused_label | Dead_code ->
+      true
+  | Shift_overflow | Constant_trap | Tautological_comparison
+  | Constant_condition | Unused_result | Cast_always_fails | Eager_select
+  | Precedence | Redundant_operation | Truncated_coverage | Naming_conflict
+  | Reserved_word_rename | Generated_name ->
+      false
+
 (* Group name -> members. The special group "all" is handled separately by
    [set] so it need not be listed here. *)
 let group_table =
