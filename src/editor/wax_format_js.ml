@@ -1077,6 +1077,91 @@ let function_locals ast target =
     ast;
   !acc
 
+(* The module-level definitions in scope at the cursor, conditional compilation
+   taken into account: each definition is guarded by the [#[if]] arms
+   ([Conditional]) enclosing it, and the cursor sits under the [#[if]] arms
+   ([Conditional] at module level, [If_annotation] within its function) enclosing
+   *it*. A definition is offered only when its guard is satisfiable together with
+   the cursor's — so a definition in a branch mutually exclusive with the cursor's
+   position (an [#[else]] when the cursor is in the [#[if]], say) is dropped. With
+   no conditionals every guard is [true], so all definitions are offered. *)
+let module_completions src ast target =
+  let open Wax_lang.Ast in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  let env = Wax_wasm.Cond_solver.create () in
+  let dctx = Wax_utils.Diagnostic.collector ~source:src () in
+  let formula loc c = Wax_wasm.Cond_solver.of_cond env dctx ~location:loc c in
+  let ( &&& ) = Wax_wasm.Cond_solver.and_ in
+  let neg = Wax_wasm.Cond_solver.not_ in
+  (* The cursor's path condition. *)
+  let ctx = ref Wax_wasm.Cond_solver.true_ in
+  let add loc c pol =
+    let f = formula loc c in
+    ctx := !ctx &&& if pol then f else neg f
+  in
+  let rec ctx_instr i =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } -> (
+        if contains then_body.info then (
+          add i.info cond true;
+          List.iter ctx_instr then_body.desc)
+        else
+          match else_body with
+          | Some b when contains b.info ->
+              add i.info cond false;
+              List.iter ctx_instr b.desc
+          | _ -> ())
+    | _ ->
+        List.iter
+          (fun c -> if contains c.info then ctx_instr c)
+          (Wax_lang.Ast_utils.sub_instrs i)
+  in
+  let rec ctx_fields fields =
+    List.iter
+      (fun field ->
+        match field.desc with
+        | Conditional { cond; then_fields; else_fields } -> (
+            if contains then_fields.info then (
+              add field.info cond true;
+              ctx_fields then_fields.desc)
+            else
+              match else_fields with
+              | Some b when contains b.info ->
+                  add field.info cond false;
+                  ctx_fields b.desc
+              | _ -> ())
+        | Func { body = _, instrs; _ } when contains field.info ->
+            List.iter ctx_instr instrs
+        | _ -> ())
+      fields
+  in
+  ctx_fields ast;
+  (* Each definition with the module condition guarding it, kept when compatible
+     with the cursor's path condition. *)
+  let rec defs guard fields =
+    List.concat_map
+      (fun field ->
+        match field.desc with
+        | Conditional { cond; then_fields; else_fields } ->
+            let f = formula field.info cond in
+            defs (guard &&& f) then_fields.desc
+            @ Option.fold ~none:[]
+                ~some:(fun b -> defs (guard &&& neg f) b.desc)
+                else_fields
+        | _ -> List.map (fun c -> (c, guard)) (field_completions field))
+      fields
+  in
+  defs Wax_wasm.Cond_solver.true_ ast
+  |> List.filter_map (fun (c, guard) ->
+      if Wax_wasm.Cond_solver.is_satisfiable (!ctx &&& guard) then Some c
+      else None)
+
 let is_ident_char c =
   (c >= 'a' && c <= 'z')
   || (c >= 'A' && c <= 'Z')
@@ -1205,14 +1290,10 @@ let completion_string src line ch =
         match ast_opt with
         | None -> keywords @ namespaces
         | Some ast ->
-            (* [iter_fields] descends into conditional branches, so a definition
-           under [#[if]] (or a function with several conditional definitions) is
-           included, not just the top-level fields. *)
-            let module_ = ref [] in
-            Wax_lang.Ast_utils.iter_fields
-              (fun field -> module_ := !module_ @ field_completions field)
-              ast;
-            let module_ = !module_ in
+            (* The module's definitions in scope at the cursor (descending into
+               conditional branches, but dropping ones a mutually-exclusive
+               [#[if]] arm guards; see [module_completions]). *)
+            let module_ = module_completions src ast target in
             let locals = function_locals ast target in
             (* Locals shadow module names of the same name; keep the first
            occurrence of each (name, kind). *)

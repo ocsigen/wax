@@ -53,6 +53,10 @@
   offered.
 - The intrinsic namespace names (`v128`, `i64`, `atomic`) are offered in general
   completion, so the `::` intrinsics are discoverable.
+- Completion respects conditional compilation: a definition in a `#[if]`/`#[else]`
+  branch is offered only where its condition is compatible with the cursor's, so
+  an `#[else]` function is not suggested while editing the matching `#[if]`
+  branch (even when the branch is an `#[if]` inside a function body).
 
 ## 0.2.2
 

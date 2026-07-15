@@ -154,6 +154,16 @@ does not carry. Three distinct prerequisites:
   before the cursor in its block or an enclosing block — a `let` declared later,
   or in a sibling block, is not offered.
 
+  Module definitions are scoped by conditional compilation too
+  (`module_completions`): each definition is guarded by the `#[if]` arms
+  (`Conditional`) enclosing it, the cursor sits under the arms enclosing *it*
+  (module `Conditional` plus `If_annotation` within its function), and a
+  definition is offered only when its guard is satisfiable together with the
+  cursor's path condition (`Wax_wasm.Cond_solver`). So an `#[else]` definition
+  is dropped when the cursor is in the matching `#[if]`, even across the
+  module/function boundary; with no conditionals every guard is `true` and all
+  definitions are offered.
+
   Member completion after `.` **is** done: at a struct field access `recv.field`
   the typer records the receiver struct's field names keyed by the field span
   (`member_completions`), and completion returns those when the cursor is on the
