@@ -212,17 +212,30 @@ Works: single-token-repairable operands (`(i32.const)`→`(i32.const 0)`, `(br)`
 balanced garbage, unclosed-at-EOF. Fuzz clean (Wax + WAT, ~50k). Tests:
 `test/recovery-wat/`.
 
-### Next: group-drop (the deferred piece)
+### Group-drop (done)
 
 Un-repairable constructs whose repair needs *multiple* tokens — `(v128.const)`
-(shape + 16 lanes), `(import "m")` (name + descriptor) — currently drop the whole
-enclosing field (sibling survives, 1 field). The fix is **group-drop**: on such
-an error, drop the innermost open group (pop its `(` off the stack, skip its
-matching `)` in the input) and resume before it, so `(func (v128.const))` becomes
-`(func)` + the sibling. Add it as a strategy between barrier and `skip`. The
-snapshot stack the early design proposed is unnecessary — `MI.pop` on the live
-error env plus depth-counted input-skip suffices (as `try_barrier`/`place_pair`
-already do). Not yet wired into any consumer; `symbolsWat` (the editor outline,
+(shape + 16 lanes), `(import "m")` (name + descriptor) — used to drop the whole
+enclosing field. **Group-drop** now fires inside `skip`'s `Sync` handler when the
+resync token is a closer `)` the error state cannot itself shift (guarded on
+`barrier <> None`, so Wax is untouched): the closer belongs to an *inner* group
+whose production is incomplete, and offering it via `unwind` would climb to an
+ancestor and steal *that* construct's closer. Instead `pop_to` climbs past the
+broken group's opener on the live error env, its `)` is discarded, and the *next*
+boundary is resynchronized from the enclosing state — so `(func (v128.const))`
+becomes `(func)` + sibling, and `(import "m")` drops cleanly without absorbing the
+following `(func …)` as its descriptor. No snapshot stack (the reviewer was
+right). Tests in `test/recovery-wat/`; WAT recovery fuzz-clean at 240k.
+
+Aside (pre-existing, unrelated): `wax_parse_recover` can still raise
+`Failure "Int64.of_string"` on an overlong integer literal (a semantic action
+overflows and escapes recovery) — a huge `memory`/`data` size crashes it. Caught
+by `fuzz_recover` at seed 0; predates the recovery work and wants a separate fix
+(clamp/catch the literal conversion so it degrades to a diagnostic).
+
+### Next: wire consumers
+
+Group-drop is not yet wired into any consumer; `symbolsWat` (the editor outline,
 no validator changes) is the first, cleanest target; `checkWat` diagnostics need
 recovery-mode suppression in `validation.ml` (the WAT validator has none, unlike
 the Wax typer's `Diagnostic.set_recovery`).

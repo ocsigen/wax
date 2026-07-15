@@ -383,6 +383,19 @@ struct
           | Some env' -> unwind env' sync_tok
           | None -> None
       in
+      (* Like [unwind] but stops one step short: pop to the closest state that
+         {e could} shift [tok] and return that env {e without} offering [tok].
+         Used by group-drop to climb out of a broken inner group — the state
+         reached is the enclosing context, past the group's opener, from which
+         the {e next} boundary (not this closer) is resynchronized. [None] if no
+         stacked state accepts [tok]. *)
+      let rec pop_to env tok (startp : Lexing.position) =
+        if MI.acceptable (MI.input_needed env) tok startp then Some env
+        else
+          match MI.pop env with
+          | Some env' -> pop_to env' tok startp
+          | None -> None
+      in
       (* Drive a checkpoint through shifts and reductions to the next decision
          point ([InputNeeded]/[Accepted]/[HandlingError]/[Rejected]). *)
       let rec settle checkpoint =
@@ -618,25 +631,58 @@ struct
                 | None -> skip env last))
       and skip env last =
         match find_sync 0 last with
-        | `Barrier (lparen, (kw, pos, _)) -> (
-            (* A new field starts here: place the [( <keyword>] pair, closing or
-               re-opening the enclosing construct as needed. A false barrier (a
-               [(func] nested in a [(type] being skipped) makes [place_pair] fail;
-               drop it and scan on. *)
-            match place_pair env lparen kw pos with
-            | Some checkpoint -> run checkpoint None
-            | None -> skip env None)
-        | `Sync ((tok, _, _) as sync_tok) -> (
-            match unwind env sync_tok with
-            | Some checkpoint -> run checkpoint None
-            | None -> (
-                (* No stacked state can shift this boundary. At end of input there
-                   is nothing left to try; otherwise drop this boundary and scan
-                   on for the next one, keeping the same error state to unwind
-                   from. *)
-                match sync tok with
-                | Terminal -> None
-                | _ -> skip env None))
+        | `Barrier (lparen, (kw, pos, _)) -> place_barrier env lparen kw pos
+        | `Sync ((tok, startp, _) as sync_tok) ->
+            (* Group-drop (parenthesized grammars only, hence the [barrier]
+               guard): the resync token is a closer [)] that the error state
+               cannot itself shift — it closes an {e inner} group whose
+               production is still incomplete, e.g. the missing multi-token
+               operand of [(v128.const)]. Offering it via [unwind] would climb to
+               an ancestor and consume {e that} ancestor's closer instead,
+               dropping the enclosing field ([(func (v128.const))] would lose the
+               whole [func]). So drop the broken group — pop past its opener and
+               discard its closer — and resynchronize on the next boundary, which
+               the enclosing construct can then close normally. A closer that the
+               error state {e can} shift closes the construct legitimately (junk
+               in an otherwise-complete body), so it is offered as before.
+               Progresses — a token is consumed — so recovery still terminates. *)
+            if
+              barrier <> None
+              && (match sync tok with Close -> true | _ -> false)
+              && not (MI.acceptable (MI.input_needed env) tok startp)
+            then group_drop env tok startp sync_tok
+            else offer_sync env sync_tok
+      and group_drop env tok startp sync_tok =
+        (* Pop past the broken group's opener so the barrier or the next closer
+           lands in the enclosing context, not grafted onto the incomplete group
+           (e.g. [(import "m")] must not absorb the following [(func …)] as its
+           descriptor). If the stack cannot be climbed, fall back to offering the
+           closer where the error left us. *)
+        match pop_to env tok startp with
+        | None -> offer_sync env sync_tok
+        | Some env' -> (
+            match find_sync 0 None with
+            | `Barrier (lparen, (kw, pos, _)) ->
+                place_barrier env' lparen kw pos
+            | `Sync sync_tok -> offer_sync env' sync_tok)
+      and place_barrier env lparen kw pos =
+        (* A new field starts here: place the [( <keyword>] pair, closing or
+           re-opening the enclosing construct as needed. A false barrier (a
+           [(func] nested in a [(type] being skipped) makes [place_pair] fail;
+           drop it and scan on. *)
+        match place_pair env lparen kw pos with
+        | Some checkpoint -> run checkpoint None
+        | None -> skip env None
+      and offer_sync env ((tok, _, _) as sync_tok) =
+        match unwind env sync_tok with
+        | Some checkpoint -> run checkpoint None
+        | None -> (
+            (* No stacked state can shift this boundary. At end of input there is
+               nothing left to try; otherwise drop this boundary and scan on for
+               the next one, keeping the same error state to unwind from. *)
+            match sync tok with
+            | Terminal -> None
+            | _ -> skip env None)
       in
       (* Lexer errors are handled by [recovering_supplier] above (recorded, then
          skipped). [Lexing_gave_up] means it could not make progress, so stop —

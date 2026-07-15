@@ -51,4 +51,16 @@ let () =
      written "( keyword", so this degrades to two functions, not a spurious
      memory field. *)
   report "bare field keyword in a body is not a barrier"
-    "(module (func (nop) memory) (func (nop)))\n"
+    "(module (func (nop) memory) (func (nop)))\n";
+  (* Group-drop: a folded instruction whose operand needs more than one token
+     ((v128.const) wants a shape and 16 lanes) cannot be repaired by inserting a
+     placeholder. The broken group is dropped whole — its opener popped off the
+     stack, its ")" discarded — so the enclosing "func" keeps its own closer and
+     survives as "(func)", and the sibling is preserved. *)
+  report "unrepairable operand drops the group, keeps the func"
+    "(module (func (v128.const)) (func (nop)))\n";
+  (* Group-drop when the broken group is itself the field: (import "m") lacks its
+     descriptor. Dropping the group climbs all the way to the module body, so the
+     following "(func …)" is not mistakenly grafted on as the import descriptor. *)
+  report "unrepairable field drops without absorbing its sibling"
+    "(module (import \"m\") (func (nop)))\n"
