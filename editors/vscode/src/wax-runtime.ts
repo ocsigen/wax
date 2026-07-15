@@ -219,6 +219,8 @@ export interface Wax {
     character: number,
     defines: string[],
   ): WaxCompletion[];
+  // The resolved definition name after each numeric index, as inlay hints.
+  inlaysWat(src: string): WaxInlay[];
   // Cross-language conversion (for the preview commands).
   toWat(src: string): FormatResult;
   toWax(src: string): FormatResult;

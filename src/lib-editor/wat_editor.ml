@@ -263,6 +263,31 @@ let references_string ?(encoding = UTF16) src line ch =
   | Some (b, _) -> wat_occurrences b
   | None -> []
 
+(* Inlay hints for WAT: after a numeric index that resolves to a named
+   definition, show that definition's name, so [(local.get 0)] reads as
+   [(local.get 0 $x)] and [(call 2)] as [(call 2 $foo)]. Only numeric uses of a
+   named definition qualify — a symbolic [$id] use already shows the name, and an
+   anonymous definition has none to show — so a fully-named module produces no
+   hints (nothing implicit) and a fully-numeric one none either (nothing to
+   name); the hints appear exactly where a numeric reference points at a name.
+   This is the WAT counterpart of the Wax inferred-type inlay: WAT is explicitly
+   typed, so what is implicit is the name behind an index, not a type. *)
+let inlays_string src =
+  List.concat_map
+    (fun (b : Wax_wasm.Resolve.binding) ->
+      match b.defs with
+      | [] -> []
+      | def :: _ ->
+          let name = slice src def in
+          List.filter_map
+            (fun (loc : Wax_utils.Ast.location) ->
+              let text = slice src loc in
+              if String.length text > 0 && text.[0] <> '$' then
+                Some { n_pos = loc.loc_end; n_label = " " ^ name }
+              else None)
+            b.uses)
+    (wat_bindings src)
+
 (* As [rename_prepare_string], but for WAT: the span at the cursor, if it sits on
    a symbolic ([$id]) occurrence of a named definition. A numeric index use or an
    anonymous definition is not renameable. *)

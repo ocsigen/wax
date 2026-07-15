@@ -588,18 +588,20 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
                 ~activeParameter:(Some active) ()))
   | Lsp.Client_request.InlayHint { textDocument; _ } ->
       let uri = textDocument.uri in
-      if is_wat uri then None
-      else
-        with_doc uri (fun src ->
-            Some
-              (List.map
-                 (fun (h : Editor_common.inlay) ->
-                   let line, character =
-                     Editor_common.position ~encoding:!encoding src h.n_pos
-                   in
-                   InlayHint.create ~position:(position line character)
-                     ~label:(`String h.n_label) ~kind:InlayHintKind.Type ())
-                 (Wax_editor.inlays_string src)))
+      let inlays =
+        if is_wat uri then Wat_editor.inlays_string
+        else Wax_editor.inlays_string
+      in
+      with_doc uri (fun src ->
+          Some
+            (List.map
+               (fun (h : Editor_common.inlay) ->
+                 let line, character =
+                   Editor_common.position ~encoding:!encoding src h.n_pos
+                 in
+                 InlayHint.create ~position:(position line character)
+                   ~label:(`String h.n_label) ~kind:InlayHintKind.Type ())
+               (inlays src)))
   | Lsp.Client_request.TextDocumentFoldingRange { textDocument; _ } ->
       let uri = textDocument.uri in
       with_doc uri (fun src ->

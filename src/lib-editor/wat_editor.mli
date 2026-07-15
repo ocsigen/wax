@@ -45,6 +45,11 @@ val references_string :
   int ->
   Wax_utils.Ast.location list
 
+(* Inlay hints: after each numeric index that resolves to a named definition,
+   that definition's name (so [(local.get 0)] shows [$x]). Empty for a symbolic
+   use (the name is already there) or an anonymous target. *)
+val inlays_string : string -> inlay list
+
 (* The span of the renameable symbol at the position, or [None]. *)
 val rename_prepare_string :
   ?encoding:position_encoding ->

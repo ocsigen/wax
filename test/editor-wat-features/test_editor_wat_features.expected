@@ -130,3 +130,9 @@
   bare $ (one error, not two) -> [Unknown token '$'.]
   bare $ then space (one error) -> [Unknown token '$'.]
 
+=== inlay hints (numeric index -> name) ===
+  local / global / label by number -> (5,17) $g (5,30) $x (4,22) $done
+  numeric call to a named func -> (1,36) $helper
+  symbolic uses (no hints) -> (none)
+  numeric use of an anonymous func (no name) -> (none)
+

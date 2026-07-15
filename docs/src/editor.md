@@ -30,10 +30,12 @@ WebAssembly text (`.wat`) gets most of the same features: formatting,
 diagnostics, the outline, hover types, go-to-definition, go-to-type-definition,
 find references, document highlight, rename, folding, selection ranges, signature
 help, semantic tokens (identifiers coloured by the kind of index they resolve
-to), and completion (where an index is expected, the names of the space it wants
-— functions, globals, locals, types, labels — since the instruction fixes the
-kind). Inlay hints are Wax-only for now. Syntax highlighting otherwise comes from
-the extension's own grammar in VS Code and from `tree-sitter-wax` elsewhere.
+to), completion (where an index is expected, the names of the space it wants —
+functions, globals, locals, types, labels — since the instruction fixes the
+kind), and inlay hints (after a numeric index, the name of the definition it
+refers to, so `(local.get 0)` reads as `(local.get 0 $x)`). Syntax highlighting
+otherwise comes from the extension's own grammar in VS Code and from
+`tree-sitter-wax` elsewhere.
 
 ## Visual Studio Code
 
