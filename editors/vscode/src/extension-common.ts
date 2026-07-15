@@ -16,9 +16,22 @@ import {
   WaxEdit,
   WaxCompletion,
   WaxSignature,
+  WaxSemanticToken,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
+
+// Legend for semantic highlighting; the bridge's token kinds are exactly these
+// standard types, so a theme colours them without extra configuration.
+const SEMANTIC_TYPES = [
+  "namespace",
+  "type",
+  "function",
+  "parameter",
+  "variable",
+  "property",
+];
+const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend(SEMANTIC_TYPES, []);
 
 // One entry per language this extension serves. Both dispatch into the same
 // wasm module (see wax_format_js.ml); they differ only in which method they call
@@ -67,6 +80,8 @@ interface LanguageSpec {
     line: number,
     character: number,
   ): WaxSignature | null;
+  // Classified identifier occurrences, for semantic highlighting. Wax only.
+  semanticTokens?(wax: Wax, src: string): WaxSemanticToken[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -89,6 +104,7 @@ const LANGUAGES: LanguageSpec[] = [
       wax.completion(src, line, character),
     signatureHelp: (wax, src, line, character) =>
       wax.signatureHelp(src, line, character),
+    semanticTokens: (wax, src) => wax.semanticTokens(src),
   },
   {
     id: "wat",
@@ -116,6 +132,7 @@ export function activateWith(
     if (lang.rename) registerRename(context, opts, lang);
     if (lang.completion) registerCompletion(context, opts, lang);
     if (lang.signatureHelp) registerSignatureHelp(context, opts, lang);
+    if (lang.semanticTokens) registerSemanticTokens(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -658,6 +675,50 @@ function registerSignatureHelp(
       provider,
       "(",
       ",",
+    ),
+  );
+}
+
+function registerSemanticTokens(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const semanticTokens = lang.semanticTokens;
+  if (!semanticTokens) return;
+
+  const provider: vscode.DocumentSemanticTokensProvider = {
+    async provideDocumentSemanticTokens(document, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return null;
+      }
+      if (token.isCancellationRequested) return null;
+      let toks: WaxSemanticToken[];
+      try {
+        toks = semanticTokens(wax, document.getText());
+      } catch {
+        return null;
+      }
+      const builder = new vscode.SemanticTokensBuilder(SEMANTIC_LEGEND);
+      // The bridge returns tokens sorted and non-overlapping, exactly as the
+      // builder expects.
+      for (const t of toks) {
+        const type = SEMANTIC_TYPES.indexOf(t.kind);
+        if (type < 0) continue;
+        builder.push(t.line, t.character, t.length, type, 0);
+      }
+      return builder.build();
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerDocumentSemanticTokensProvider(
+      lang.id,
+      provider,
+      SEMANTIC_LEGEND,
     ),
   );
 }

@@ -1619,6 +1619,176 @@ let signature_help_string src line ch =
               let active = if n = 0 then 0 else min active (n - 1) in
               Some (label, ranges, active)))
 
+(* A semantic token: 0-based line, 0-based UTF-16 character, UTF-16 length, and
+   the token-type name (from the provider legend). *)
+type sem_token = {
+  st_line : int;
+  st_char : int;
+  st_len : int;
+  st_type : string;
+}
+
+(* Map each byte offset in [offsets] (sorted ascending) to its (0-based line,
+   0-based UTF-16 column) in [src], in a single left-to-right pass — so the
+   whole token list is converted in O(src + offsets) rather than re-scanning a
+   line prefix per token (quadratic on a long line). *)
+let utf16_positions src offsets =
+  let tbl = Hashtbl.create (List.length offsets * 2) in
+  let remaining = ref offsets in
+  let flush byte line col =
+    while match !remaining with o :: _ -> o <= byte | [] -> false do
+      match !remaining with
+      | o :: rest ->
+          Hashtbl.replace tbl o (line, col);
+          remaining := rest
+      | [] -> ()
+    done
+  in
+  let n = String.length src in
+  let byte = ref 0 and line = ref 0 and col = ref 0 in
+  while !byte < n && !remaining <> [] do
+    flush !byte !line !col;
+    let d = String.get_utf_8_uchar src !byte in
+    let u = Uchar.utf_decode_uchar d in
+    if Uchar.to_int u = Char.code '\n' then (
+      incr line;
+      col := 0)
+    else col := !col + if Uchar.to_int u > 0xFFFF then 2 else 1;
+    byte := !byte + max 1 (Uchar.utf_decode_length d)
+  done;
+  flush !byte !line !col;
+  tbl
+
+(* Classify every identifier occurrence for semantic highlighting. The *uses*
+   come from the recorded references ([a_defs]): a use is classified by its
+   definition's kind, which the structural walk below records — so a `Get` reads
+   as a function / variable / parameter, and a type reference (which resolves to
+   a type definition) reads as a type, without re-deriving scope here. The
+   *definitions* (function / type / variable / parameter names) come from that
+   same walk, and struct fields ([property]) and intrinsic namespace paths from a
+   pass over the instructions. *)
+let semantic_tokens_string src =
+  let a = analyze src in
+  match a.a_typed with
+  | None -> []
+  | Some ast ->
+      let open Wax_lang.Ast in
+      let toks = ref [] in
+      let add (loc : Wax_utils.Ast.location) kind =
+        toks := (loc, kind) :: !toks
+      in
+      (* definitions, and each function's parameters and locals *)
+      let import_tok = function
+        | Import_func _ -> "function"
+        | _ -> "variable"
+      in
+      Wax_lang.Ast_utils.iter_fields
+        (fun field ->
+          match field.desc with
+          | Func { name; sign; body = _, instrs; _ } ->
+              add name.info "function";
+              (match sign with
+              | Some { params; _ } ->
+                  Array.iter
+                    (fun p ->
+                      match p.desc with
+                      | Some id, _ -> add id.info "parameter"
+                      | None, _ -> ())
+                    params
+              | None -> ());
+              List.iter
+                (Wax_lang.Ast_utils.iter_instr (fun i ->
+                     match i.desc with
+                     | Let (bs, _) ->
+                         List.iter
+                           (function
+                             | Some id, _ -> add id.info "variable"
+                             | None, _ -> ())
+                           bs
+                     | _ -> ()))
+                instrs
+          | Global { name; _ }
+          | Tag { name; _ }
+          | Memory { name; _ }
+          | Table { name; _ }
+          | Elem { name; _ } ->
+              add name.info "variable"
+          | Data { name = Some n; _ } -> add n.info "variable"
+          | Type rectype ->
+              Array.iter (fun e -> add (fst e.desc).info "type") rectype
+          | Import { decl; _ } ->
+              add decl.desc.id.info (import_tok decl.desc.kind)
+          | Import_group { decls; _ } ->
+              List.iter
+                (fun d -> add d.desc.id.info (import_tok d.desc.kind))
+                decls
+          | Data { name = None; _ } | Module_annotation _ | Conditional _ -> ())
+        ast;
+      (* struct fields and intrinsic namespace paths, from the instructions *)
+      Wax_lang.Ast_utils.iter_module_instr
+        (fun i ->
+          match i.desc with
+          | Path (ns, m) ->
+              add ns.info "namespace";
+              add m.info "function"
+          | StructGet (_, f) | StructSet (_, f, _) -> add f.info "property"
+          | Struct (_, fields) | StructDesc (_, fields) ->
+              List.iter (fun (id, _) -> add id.info "property") fields
+          | _ -> ())
+        ast;
+      (* uses: classify by the definition's recorded kind *)
+      let key (l : Wax_utils.Ast.location) =
+        (l.loc_start.pos_cnum, l.loc_end.pos_cnum)
+      in
+      let kinds = Hashtbl.create 128 in
+      List.iter (fun (l, k) -> Hashtbl.replace kinds (key l) k) !toks;
+      List.iter
+        (fun (r : Wax_lang.Typing.reference) ->
+          match r.definitions with
+          | d :: _ -> (
+              match Hashtbl.find_opt kinds (key d) with
+              | Some k -> add r.use k
+              | None -> ())
+          | [] -> ())
+        a.a_defs;
+      (* Resolve all byte offsets to UTF-16 positions in one pass (see
+         [utf16_positions]), then one token per span, sorted; synthesized
+         (negative) spans are dropped. *)
+      let toks =
+        List.filter
+          (fun ((loc : Wax_utils.Ast.location), _) ->
+            loc.loc_start.pos_cnum >= 0)
+          !toks
+      in
+      let offsets =
+        List.concat_map
+          (fun ((loc : Wax_utils.Ast.location), _) ->
+            [ loc.loc_start.pos_cnum; loc.loc_end.pos_cnum ])
+          toks
+        |> List.sort_uniq compare
+      in
+      let pos = utf16_positions src offsets in
+      let seen = Hashtbl.create 256 in
+      toks
+      |> List.filter_map (fun ((loc : Wax_utils.Ast.location), kind) ->
+          match
+            ( Hashtbl.find_opt pos loc.loc_start.pos_cnum,
+              Hashtbl.find_opt pos loc.loc_end.pos_cnum )
+          with
+          | Some (line, char), Some (_, ec)
+            when not (Hashtbl.mem seen (line, char)) ->
+              Hashtbl.add seen (line, char) ();
+              Some
+                {
+                  st_line = line;
+                  st_char = char;
+                  st_len = ec - char;
+                  st_type = kind;
+                }
+          | _ -> None)
+      |> List.sort (fun a b ->
+          compare (a.st_line, a.st_char) (b.st_line, b.st_char))
+
 let js_completion c =
   object%js
     val name = Js.string c.k_name
@@ -1654,6 +1824,20 @@ let signature_result src line ch =
           val active = active
         end
 
+let semantic_result src =
+  let toks = try semantic_tokens_string (Js.to_string src) with _ -> [] in
+  Js.array
+    (Array.of_list
+       (List.map
+          (fun t ->
+            object%js
+              val line = t.st_line
+              val character = t.st_char
+              val length = t.st_len
+              val kind = Js.string t.st_type
+            end)
+          toks))
+
 let () =
   Js.export "wax"
     object%js
@@ -1668,6 +1852,7 @@ let () =
       method symbols src = symbols_result symbols_string src
       method completion src line ch = completion_result src line ch
       method signatureHelp src line ch = signature_result src line ch
+      method semanticTokens src = semantic_result src
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
       method symbolsWat src = symbols_result symbols_wat_string src

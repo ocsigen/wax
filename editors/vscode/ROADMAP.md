@@ -140,9 +140,17 @@ does not carry. Three distinct prerequisites:
   is not on a recorded symbol, so fields / intrinsics / keywords are never
   half-renamed. Deeper new-name conflict/shadowing detection (beyond a
   non-empty check) is a follow-up. Wax only.
-- [ ] **Semantic tokens.** Distinguishing locals / params / functions / types
-  could reuse the resolution now recorded (classify each use by its binder kind);
-  a coarser version could come from parse-tree structure alone.
+- [x] **Semantic tokens.** A `semanticTokens` export classifies every
+  identifier occurrence (types: namespace / type / function / parameter /
+  variable / property). It reuses the recorded references (`a_defs`): a *use* is
+  classified by its *definition's* kind — which a structural walk records — so a
+  `Get` reads as a function / variable / parameter and a type reference reads as
+  a type (it resolves to a type definition), without re-deriving scope. The
+  definitions come from that same walk, and struct fields / intrinsic-namespace
+  paths from an instruction pass. Byte offsets are converted to UTF-16 columns
+  in one linear pass (`utf16_positions`), not a per-token line-prefix rescan. A
+  `DocumentSemanticTokensProvider` in `extension-common.ts` renders them against
+  a standard legend. Wax only.
 - [x] **Completion.** A `completion` export offers the names in scope at a
   position — the module's top-level definitions (reusing the outline walk), the
   enclosing function's parameters and locals, and the keywords — each tagged with
@@ -265,6 +273,5 @@ rename, and completion (names and struct members). What is left refines them:
   and locals are scoped to the cursor point. Completion is essentially
   feature-complete.
 - **Deeper rename** conflict/shadowing detection.
-- **Semantic tokens** — low value given the TextMate grammar.
 
 Member completion is the natural next target if the LSP work continues.

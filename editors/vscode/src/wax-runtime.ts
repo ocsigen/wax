@@ -77,6 +77,15 @@ export interface WaxSignature {
   active: number;
 }
 
+export interface WaxSemanticToken {
+  line: number;
+  character: number;
+  length: number;
+  // One of the legend types: "namespace" | "type" | "function" | "parameter" |
+  // "variable" | "property".
+  kind: string;
+}
+
 export interface WaxSymbol {
   name: string;
   kind: string;
@@ -127,6 +136,8 @@ export interface Wax {
     line: number,
     character: number,
   ): WaxSignature | null;
+  // Every classified identifier occurrence, for semantic highlighting. Wax only.
+  semanticTokens(src: string): WaxSemanticToken[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;
   checkWat(src: string): WaxDiagnostic[];

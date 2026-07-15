@@ -64,6 +64,10 @@
   receiver's type. Triggers on `(` and `,`.
 - Member completion on an array receiver now offers the bulk operations
   `fill`/`copy`/`init` alongside `length` (previously only `length`).
+- Semantic highlighting for `.wax`: identifiers are coloured by role —
+  functions, parameters, locals/globals, types (including type references like
+  `&point`), struct fields, and intrinsic namespaces — beyond what the grammar
+  can distinguish.
 
 ## 0.2.2
 

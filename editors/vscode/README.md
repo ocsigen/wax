@@ -43,6 +43,9 @@ Syntax highlighting, formatting, diagnostics, and snippets for
 - **Signature help** (`.wax`): while typing a call, shows the callee's signature
   with the active argument highlighted — for functions, imported functions,
   `ns::` intrinsics, and methods (`x.min(…)`, `mem.load8(…)`).
+- **Semantic highlighting** (`.wax`): colours identifiers by role — functions,
+  parameters, locals/globals, types (including references like `&point`), struct
+  fields, and intrinsic namespaces — refining the grammar's coarser colouring.
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

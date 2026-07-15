@@ -160,6 +160,33 @@ export async function run(): Promise<void> {
     }
   }
 
+  // semantic tokens: identifiers classified by role — a function name, a
+  // parameter (definition and use), a type (definition and reference), a struct
+  // field access.
+  {
+    const src =
+      "type t = { f: i32 };\nfn g(a: i32) -> i32 { a; }\nfn h(p: &t) -> i32 { p.f; }\n";
+    const lines = src.split("\n");
+    const set = new Set(
+      wax
+        .semanticTokens(src)
+        .map(
+          (t) => lines[t.line].slice(t.character, t.character + t.length) + ":" + t.kind,
+        ),
+    );
+    for (const want of [
+      "t:type",
+      "g:function",
+      "a:parameter",
+      "p:parameter",
+      "f:property",
+    ]) {
+      if (!set.has(want)) {
+        throw new Error("web: semantic token missing " + want + ": " + [...set]);
+      }
+    }
+  }
+
   // WAT support shares the same wasm module. Formatting is idempotent, a syntax
   // error is rejected, a clean module has no diagnostics, and an invalid one
   // reports at least one error. (The clean module exports its function so the
