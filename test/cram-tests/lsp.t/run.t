@@ -322,3 +322,34 @@ module and drive one request of each kind:
   symbols: $add, $main
   completion: $add, $main
   stderr: (empty)
+
+The language is taken from the `languageId` the client declares at open, not the
+URI's extension: a buffer opened as `wat` under a non-`.wat` URI is served as
+Wasm text (its outline lists the function), while the same text opened as `wax`
+is parsed as Wax (which cannot read it, so no outline). The extension is only a
+fallback for a client that sends an unrecognized id.
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > wat="(module (func $f (result i32) (i32.const 1)))\n"
+  > def doc(uri,lang): return {"uri":uri,"languageId":lang,"version":1,"text":wat}
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":doc("file:///scratch","wat")}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":doc("file:///m2.wat","wax")}},
+  >    {"jsonrpc":"2.0","id":2,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///scratch"}}},
+  >    {"jsonrpc":"2.0","id":3,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///m2.wat"}}},
+  >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i,by=p.stdout,0,{}
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if "id" in r: by[r["id"]]=r.get("result")
+  > print("wat-id, no extension:", ", ".join(s["name"] for s in by[2]) or "(empty)")
+  > print("wax-id, .wat extension:", ", ".join(s["name"] for s in by[3]) or "(empty)")
+  > PY
+  wat-id, no extension: $f
+  wax-id, .wat extension: (empty)
