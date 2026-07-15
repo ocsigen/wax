@@ -55,12 +55,45 @@ let record_pun (sink : location list ref option) (name_info : location) =
   | _ -> ()
 
 (* Record, at a struct field access, the (possibly partial) field's span and the
-   receiver struct's field names, for member completion. *)
+   receiver's members (a struct's fields, or the method names below), for member
+   completion. *)
 let record_members (sink : (location * string list) list ref option) field names
     =
   match sink with
   | Some r when is_source field -> r := (field, names) :: !r
   | _ -> ()
+
+(* The value methods offered by member completion for a numeric receiver. This
+   is a curated registry: the method dispatch (see [type_unary_intrinsic_call] /
+   [type_binary_intrinsic_call]) is match-based and cannot be enumerated, so the
+   test in test/method-consistency type-checks each of these to keep them in
+   step with what the typer actually accepts. Vector ([v128]) and memory / table
+   methods (a different dispatch path) are not covered yet. *)
+let integer_methods =
+  [
+    "clz";
+    "ctz";
+    "popcnt";
+    "extend8_s";
+    "extend16_s";
+    "from_bits";
+    "rotl";
+    "rotr";
+  ]
+
+let float_methods =
+  [
+    "abs";
+    "ceil";
+    "floor";
+    "trunc";
+    "nearest";
+    "sqrt";
+    "to_bits";
+    "min";
+    "max";
+    "copysign";
+  ]
 
 let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
   match sink with
@@ -5493,6 +5526,14 @@ and type_aggregate_access ctx i =
       let* i' = instruction ctx i' in
       let*! ty =
         let ty = expression_type ctx i' in
+        (* A numeric receiver's methods, for member completion; a reference
+           receiver's members are recorded in the struct/array arms below. *)
+        (match Cell.get ty with
+        | Valtype { typ = I32 | I64; _ } ->
+            record_members ctx.member_completions field.info integer_methods
+        | Valtype { typ = F32 | F64; _ } ->
+            record_members ctx.member_completions field.info float_methods
+        | _ -> ());
         match (Cell.get ty, field.desc) with
         | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
@@ -5513,6 +5554,11 @@ and type_aggregate_access ctx i =
                       field;
                     None)
             | Func _ | Array _ | Cont _ ->
+                (match def.typ with
+                | Array _ ->
+                    record_members ctx.member_completions field.info
+                      [ "length" ]
+                | _ -> ());
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics
                     ~location:field.info field.desc

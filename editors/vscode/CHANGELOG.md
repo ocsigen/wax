@@ -30,6 +30,9 @@
   after `.` the fields of a struct value (including chained accesses), working
   even while the file is mid-edit. Each item shows its type / signature (e.g.
   `fn(a: i32) -> i32`) where the declaration gives one.
+- Member completion after `.` now also offers the value methods that apply to
+  the receiver: the numeric methods (`clz`, `sqrt`, `min`, …) on an integer or
+  float value, and `length` on an array.
 
 ## 0.2.2
 

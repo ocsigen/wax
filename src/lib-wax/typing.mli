@@ -34,6 +34,14 @@ val f :
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
 
+val integer_methods : string list
+
+val float_methods : string list
+(** The value methods member completion offers for an integer / float receiver
+    (e.g. [x.sqrt()]). A curated registry, since the method dispatch is
+    match-based and not enumerable; the test in test/method-consistency
+    type-checks each to keep it in step with the typer. *)
+
 type hover_target =
   | Value_type of Infer.inferred_valtype
   | Type_def of Ast.subtype

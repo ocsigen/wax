@@ -92,4 +92,11 @@ let () =
     "type point = { x: i32, y: i32 };\n\
      fn mk(x: i32, y: i32) -> &point { {point| x, y: y }; }\n";
   resolve "member access"
-    "type point = { x: i32, y: i32 };\nfn get_x(p: &point) -> i32 { p.x; }\n"
+    "type point = { x: i32, y: i32 };\nfn get_x(p: &point) -> i32 { p.x; }\n";
+  (* A partial member access (no call yet) is what completion sees mid-edit; on
+     a numeric / array receiver it records the value-method registry. *)
+  resolve "value methods"
+    "type arr = [i32];\n\
+     fn m(x: i32, f: f32, a: &arr) {\n\
+    \  _ = x.clz; _ = f.sqrt; _ = a.length;\n\
+     }\n"
