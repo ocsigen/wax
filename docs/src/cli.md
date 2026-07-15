@@ -67,10 +67,12 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
         - `custom-descriptors`: exact reference types (`&!t`), `descriptor`/`describes`
           struct clauses, and the descriptor instructions. Without it these
           constructs are rejected during validation.
-        - `compact-import-section`: group a module's consecutive same-module
-          imports under one module name in the binary import section. Gated on
-          *output* only: it is emitted just when enabled, but the compact form is
-          always accepted on input.
+        - `compact-import-section`: coalesce a module's consecutive same-module
+          imports under one module name in the binary import section. The flag
+          gates only this *deriving* of groups from plain imports on output.
+          Groups written explicitly — in WAT via `(import "m" (item …) …)`, or
+          already present in a binary — are preserved through WAT↔WAT and
+          WASM↔WASM round-trips on their own, no flag needed.
 
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
     - Set the reporting level of a warning produced during validation.

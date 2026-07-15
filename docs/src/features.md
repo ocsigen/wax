@@ -29,7 +29,7 @@ Off by default; turn one on with `-X NAME` (see the [CLI reference](./cli.md)):
 | Feature | What it adds |
 |---------|--------------|
 | `custom-descriptors` | exact reference types, descriptor structs, and the descriptor instructions (`descriptor` / `describes`) |
-| `compact-import-section` | groups same-module imports in the binary, a binary-encoding option gated on output but always accepted on input |
+| `compact-import-section` | coalesces consecutive same-module imports into one group when emitting the binary. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag; the flag only gates *deriving* groups from plain imports |
 
 ## Not supported
 
