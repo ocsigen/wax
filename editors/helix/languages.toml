@@ -8,11 +8,18 @@ file-types = ["wax"]
 comment-tokens = ["//"]
 block-comment-tokens = { start = "/*", end = "*/" }
 indent = { tab-width = 4, unit = "    " }
-# Helix feeds the buffer to the formatter on stdin and reads stdout; `wax
-# format` with no file does exactly that. `wax` must be on PATH.
-formatter = { command = "wax", args = ["format", "-f", "wax"] }
+# The language server gives diagnostics, hover, go-to-definition, references,
+# rename, completion, signature help and formatting. `wax` must be on PATH.
+language-servers = ["wax"]
+# Uses the language server's formatting; drop this line to format on demand
+# only. (For a standalone formatter instead, see README.md.)
 auto-format = true
 grammar = "wax"
+
+# Helix starts this itself, the same way it runs the formatter.
+[language-server.wax]
+command = "wax"
+args = ["lsp"]
 
 [[grammar]]
 name = "wax"

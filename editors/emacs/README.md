@@ -28,6 +28,25 @@ selects `wax-ts-mode` (it adds itself to `auto-mode-alist`).
 
 Check the grammar is available with `M-: (treesit-ready-p 'wax)` → `t`.
 
+## Language server
+
+`wax lsp` is the built-in language server. Eglot (built into Emacs ≥ 29, the
+same version `wax-ts-mode` needs) drives it for diagnostics, hover, go to
+definition, go to type definition, find references, rename, completion, and
+signature help:
+
+```elisp
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs '(wax-ts-mode . ("wax" "lsp"))))
+
+(add-hook 'wax-ts-mode-hook #'eglot-ensure)
+```
+
+`wax` must be on `exec-path`. Errors and warnings show inline through Flymake
+(which Eglot manages), with the warning's `-W` name in the message. The
+tree-sitter mode still provides highlighting, indentation, and `imenu`; the
+server adds the language intelligence on top.
+
 ## Formatting
 
 `M-x wax-format-buffer` reformats the buffer by piping it through
@@ -41,19 +60,6 @@ Format on save:
 (add-hook 'wax-ts-mode-hook
           (lambda () (add-hook 'before-save-hook #'wax-format-buffer nil t)))
 ```
-
-## Diagnostics (errors & warnings)
-
-The mode registers a Flymake backend that runs
-`wax check --error-format=short` over the buffer and reports errors and warnings
-inline. Turn it on with `M-x flymake-mode` (or automatically):
-
-```elisp
-(add-hook 'wax-ts-mode-hook #'flymake-mode)
-```
-
-Warnings carry their `-W` name in the message (`… [unused-local]`). Override the
-command via `wax-check-command`.
 
 ## What you get
 

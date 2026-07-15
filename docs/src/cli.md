@@ -407,34 +407,10 @@ flag is accepted (and ignored) for the editors that pass it by convention.
 ### Editor setup
 
 Most editors just need the launch command `wax lsp` bound to the `wax` (and, if
-desired, `wat`) file types. For example, Helix (`languages.toml`):
-
-```toml
-[language-server.wax]
-command = "wax"
-args = ["lsp"]
-
-[[language]]
-name = "wax"
-file-types = ["wax"]
-language-servers = ["wax"]
-```
-
-Neovim (0.11+), in `init.lua`:
-
-```lua
-vim.filetype.add({ extension = { wax = "wax" } })
-vim.lsp.config("wax", { cmd = { "wax", "lsp" }, filetypes = { "wax" } })
-vim.lsp.enable("wax")
-```
-
-Emacs (Eglot):
-
-```elisp
-(add-to-list 'auto-mode-alist '("\\.wax\\'" . prog-mode))
-(with-eval-after-load 'eglot
-  (add-to-list 'eglot-server-programs '(prog-mode . ("wax" "lsp"))))
-```
+desired, `wat`) file type through their LSP client. Ready-to-use configurations
+for Neovim, Helix, and Emacs — paired with the `tree-sitter-wax` grammar for
+highlighting — live under [`editors/`](https://github.com/ocsigen/wax/tree/main/editors)
+in the repository (one directory per editor, each with a README).
 
 ## Exit status
 

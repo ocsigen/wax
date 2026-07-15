@@ -126,8 +126,9 @@ works in both desktop and web VS Code. Its source lives in
 
 Any other editor with a Language Server Protocol client (Neovim, Emacs, Helix,
 Zed, and others) gets the same features by launching `wax lsp`, the built-in
-language server. See the [CLI reference](docs/src/cli.md#language-server) for
-per-editor setup.
+language server. Ready-to-use Neovim, Helix, and Emacs configurations, paired
+with the `tree-sitter-wax` grammar for highlighting, are under
+[`editors/`](editors/).
 
 ## Installation
 

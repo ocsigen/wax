@@ -1,17 +1,22 @@
 # Wax in Neovim
 
-Uses the [`tree-sitter-wax`](../../tree-sitter-wax/) grammar. Neovim compiles the
-C parser itself (`src/parser.c` + `src/scanner.c`), so you only need a C
-compiler — no prebuilt artifact.
+Two pieces: the [`tree-sitter-wax`](../../tree-sitter-wax/) grammar for syntax
+highlighting, and the built-in `wax lsp` language server for everything else
+(diagnostics, hover, navigation, rename, completion, signature help,
+formatting). Neovim compiles the C parser itself (`src/parser.c` +
+`src/scanner.c`), so you only need a C compiler for the grammar; the language
+server is the `wax` binary on your `PATH`.
 
 The highlight/locals/injection queries ship *with the grammar* (they use
-nvim-treesitter's capture conventions), so either path below is just installing
-the parser plus copying those queries onto your runtimepath.
+nvim-treesitter's capture conventions), so either highlighting path below is
+just installing the parser plus copying those queries onto your runtimepath.
+
+## Highlighting
 
 Two options: **nvim-treesitter** (the plugin, most common) or Neovim's
 **built-in** tree-sitter (no plugin, Neovim ≥ 0.9).
 
-## Option A — nvim-treesitter
+### Option A — nvim-treesitter
 
 Register the parser:
 
@@ -43,7 +48,7 @@ the [nvim-treesitter-textobjects](https://github.com/nvim-treesitter/nvim-treesi
 plugin (function/parameter/call/conditional/loop/comment objects); both are
 optional and used only if you enable those modules.
 
-## Option B — built-in tree-sitter (no plugin)
+### Option B — built-in tree-sitter (no plugin)
 
 Build the parser into a shared library and drop it, with the queries, onto the
 runtimepath. From the grammar directory:
@@ -70,109 +75,49 @@ vim.api.nvim_create_autocmd("FileType", {
 (The filetype `wax` maps to the parser named `wax` by default; no
 `vim.treesitter.language.register` call is needed.)
 
-## Formatting
+## Language server
 
-`wax format` reformats a buffer through standard input (`wax format -f wax`,
-reading stdin and writing stdout), so it plugs into Neovim's `formatexpr`. Wire
-`gq` to it and, optionally, format on save:
+`wax lsp` provides diagnostics (as you type), hover, go to definition, go to
+type definition, find references, document highlight, rename, completion,
+signature help, and formatting. Neovim starts it per `.wax` buffer, so `wax`
+only needs to be on your `PATH`.
+
+Neovim ≥ 0.11:
+
+```lua
+vim.filetype.add({ extension = { wax = "wax" } }) -- if not already set above
+vim.lsp.config("wax", { cmd = { "wax", "lsp" }, filetypes = { "wax" } })
+vim.lsp.enable("wax")
+```
+
+On Neovim 0.10 or older, start it from a `FileType` autocmd instead:
 
 ```lua
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "wax",
-  callback = function(args)
-    vim.bo[args.buf].formatexpr = "v:lua.require'wax_format'()"
-  end,
+  callback = function() vim.lsp.start({ name = "wax", cmd = { "wax", "lsp" } }) end,
 })
 ```
 
-with a small module `lua/wax_format.lua` on your `runtimepath`:
+(Or register a custom server with [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig).)
+Diagnostics then show as signs / virtual text with the warning's `-W` name in
+the message, and the standard `vim.lsp.buf.*` mappings (`K`, `grr`, `grn`, …)
+drive hover, references, and rename.
 
-```lua
--- Format the current buffer (or the `gq` range) with `wax format`.
-return function()
-  -- Let Neovim handle the interactive `gq`/`gw` case (e.g. comments).
-  if vim.v.char ~= "" then return 1 end
-  local buf = vim.api.nvim_get_current_buf()
-  local input = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-  local result = vim.system(
-    { "wax", "format", "-f", "wax" }, { stdin = input, text = true }):wait()
-  if result.code ~= 0 then
-    vim.notify(vim.trim(result.stderr), vim.log.levels.ERROR, { title = "wax format" })
-    return 0
-  end
-  local formatted = vim.split(vim.trim(result.stdout), "\n")
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, formatted)
-  return 0
-end
-```
+## Formatting
 
-Then `gggqG` (or `gq` over a selection) formats. On a parse error `wax format`
-exits non-zero and the buffer is left untouched, with the diagnostic shown via
-`vim.notify`. To format on save, call the same module from `BufWritePre`:
+The language server formats: `vim.lsp.buf.format()`, or on save via an
+`LspAttach` autocmd. `wax`'s formatter reindents to four spaces and preserves
+comments; a buffer with a syntax error is left untouched.
 
-```lua
-vim.api.nvim_create_autocmd("BufWritePre", {
-  pattern = "*.wax",
-  callback = function() require("wax_format")() end,
-})
-```
-
-> Prefer a formatter plugin? Point [conform.nvim](https://github.com/stevearc/conform.nvim)
-> or null-ls at the same command (`wax format -f wax`, stdin) and it works the
-> same way.
-
-## Diagnostics (errors & warnings)
-
-`wax check --error-format=short` prints one `file:line:col: severity: message`
-line per diagnostic, which maps straight onto `vim.diagnostic`. A small module
-`lua/wax_diagnostics.lua`:
-
-```lua
-local ns = vim.api.nvim_create_namespace("wax")
-local severity = {
-  error = vim.diagnostic.severity.ERROR,
-  warning = vim.diagnostic.severity.WARN,
-}
-return function(buf)
-  buf = buf or vim.api.nvim_get_current_buf()
-  local file = vim.api.nvim_buf_get_name(buf)
-  if file == "" then return end
-  vim.system({ "wax", "check", "--error-format=short", file }, { text = true },
-    function(res)
-      local diags = {}
-      for line in (res.stderr or ""):gmatch("[^\n]+") do
-        local l, c, s, msg = line:match("^.-:(%d+):(%d+): (%a+): (.+)$")
-        if l then
-          table.insert(diags, {
-            lnum = tonumber(l) - 1, col = tonumber(c) - 1,
-            severity = severity[s] or vim.diagnostic.severity.ERROR,
-            message = msg, source = "wax",
-          })
-        end
-      end
-      vim.schedule(function() vim.diagnostic.set(ns, buf, diags) end)
-    end)
-end
-```
-
-Run it when a `.wax` buffer is read and after each save:
-
-```lua
-vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost" }, {
-  pattern = "*.wax",
-  callback = function(args) require("wax_diagnostics")(args.buf) end,
-})
-```
-
-Errors and warnings then show as signs/virtual text, and the warning's `-W`
-name rides along in the message (`… [unused-local]`).
-
-> Prefer a linter plugin? [nvim-lint](https://github.com/mfussenegger/nvim-lint)
-> can run the same command; parse its output with `require('lint.parser').from_pattern`
-> (or an `errorformat`) using `%f:%l:%c: %t%*[^:]: %m`.
+Prefer a standalone formatter, without the language server? `wax format -f wax`
+reads the buffer on stdin and writes the result to stdout, so point
+[conform.nvim](https://github.com/stevearc/conform.nvim) (or `formatexpr`) at
+it.
 
 ## Verify
 
-Open a `.wax` file, then `:InspectTree` for the parse tree. With
+Open a `.wax` file, then `:InspectTree` for the parse tree and `:checkhealth
+vim.lsp` (or `:LspInfo`) to confirm the `wax` server attached. With
 nvim-treesitter, `:checkhealth nvim-treesitter` confirms the parser is
 installed.
