@@ -112,6 +112,23 @@ export async function run(): Promise<void> {
     }
   }
 
+  // go-to-type-definition: from a value of type `&point`, jump to the `point`
+  // type declaration (distinct from the value's own binding).
+  {
+    const p = at(
+      "type point = { x: i32, y: i32 };\nfn g(q: &point) -> i32 { ‸q.x; }\n",
+    );
+    const td = wax.typeDefinition(p.src, p.line, p.character);
+    if (td.length !== 1 || td[0].startLine !== 0 || td[0].startChar !== 5) {
+      throw new Error("web: typeDefinition: " + JSON.stringify(td));
+    }
+    // A primitive-typed value has no type definition to jump to.
+    const q = at("fn g() -> i32 { let n = ‸1; n; }\n");
+    if (wax.typeDefinition(q.src, q.line, q.character).length !== 0) {
+      throw new Error("web: typeDefinition should be empty for a primitive");
+    }
+  }
+
   // completion: names in scope, scoped to the cursor — a `let` bound after it is
   // not offered — plus the always-in-scope module definitions and parameters.
   {

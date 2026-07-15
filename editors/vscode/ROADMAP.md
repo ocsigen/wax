@@ -123,6 +123,13 @@ does not carry. Three distinct prerequisites:
   recorded references for the use under the cursor and returns its definition
   span(s) (several only across conditional branches); a `DefinitionProvider` in
   `extension-common.ts`. Wax only.
+- [x] **Go to type definition** (`TypeDefinitionProvider`). A `typeDefinition`
+  export reads the innermost typed node covering the cursor (like hover), and for
+  each value it leaves on the stack whose type is a named reference type
+  (`Cell.get` resolving to a `Ref` of a `Type`/`Exact` heap-type index), resolves
+  that name against a map of the module's `type` declarations (built by walking
+  the `Type` fields, descending into conditional branches) to the declaration's
+  span. Nothing for a primitive / anonymous / unknown type. Wax only.
 - [x] **Find references + document highlight.** The inverse of the `reference`
   links: the cursor picks a symbol (from a use it sits on, or a definition), and
   a `references` export gathers every reference sharing a target definition plus

@@ -24,6 +24,8 @@ Syntax highlighting, formatting, diagnostics, and snippets for
 - **Go to definition** (`.wax`): jump from a use to its definition — a function,
   global, type, or tag; a `let`/parameter binding; or a block/loop label. Works
   through shadowing (a use resolves to the binding actually in scope).
+- **Go to type definition** (`.wax`): from a value, jump to the declaration of
+  its type — e.g. from a variable of type `&point` to `type point = { … }`.
 - **Find all references / highlight** (`.wax`): from a use or a definition, list
   every occurrence of the symbol (Shift+F12), and highlight them in the file when
   the cursor is on one.

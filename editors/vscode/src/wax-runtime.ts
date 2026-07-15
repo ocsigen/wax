@@ -114,6 +114,10 @@ export interface Wax {
   // Definition span(s) of the name/label use at the (zero-based) position, for
   // go-to-definition; several only across conditional branches. Wax only.
   definition(src: string, line: number, character: number): WaxRange[];
+  // Declaration span(s) of the *type* of the value at the position, for
+  // go-to-type-definition (e.g. from a `&point` value to `type point`). Empty
+  // for a primitive/anonymous/unknown type. Wax only.
+  typeDefinition(src: string, line: number, character: number): WaxRange[];
   // Every occurrence (definitions + uses) of the symbol at the position, for
   // find-references and document highlight. Wax only.
   references(src: string, line: number, character: number): WaxRange[];

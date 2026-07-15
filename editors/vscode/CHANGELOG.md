@@ -82,6 +82,10 @@
   branch no longer shows and the Problems match what a `-D` build sees. A partial
   set leaves the remaining `#[if]`s for the all-configurations check.
 
+- Go to type definition for `.wax` (`TypeDefinitionProvider`): from a value,
+  jump to the declaration of its type — e.g. from a variable of type `&point` to
+  `type point = { … }`. Distinct from go-to-definition, which jumps to the
+  value's own binding.
 - Expand / shrink selection for `.wax` (`SelectionRangeProvider`): Shift+Alt+→
   grows the selection along the syntax tree — identifier, expression, statement,
   block, function, whole file — and Shift+Alt+← shrinks it back. Built from the

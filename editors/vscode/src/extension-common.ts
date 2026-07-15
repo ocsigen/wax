@@ -50,6 +50,14 @@ interface LanguageSpec {
   inlays?(wax: Wax, src: string): WaxInlay[];
   // Definition span(s) at a position, for go-to-definition. Wax only.
   definition?(wax: Wax, src: string, line: number, character: number): WaxRange[];
+  // Type-declaration span(s) of the value at a position, for
+  // go-to-type-definition. Wax only.
+  typeDefinition?(
+    wax: Wax,
+    src: string,
+    line: number,
+    character: number,
+  ): WaxRange[];
   // Every occurrence of the symbol at a position, for find-references and
   // document highlight. Wax only.
   references?(wax: Wax, src: string, line: number, character: number): WaxRange[];
@@ -107,6 +115,8 @@ const LANGUAGES: LanguageSpec[] = [
     inlays: (wax, src) => wax.inlays(src),
     definition: (wax, src, line, character) =>
       wax.definition(src, line, character),
+    typeDefinition: (wax, src, line, character) =>
+      wax.typeDefinition(src, line, character),
     references: (wax, src, line, character) =>
       wax.references(src, line, character),
     renamePrepare: (wax, src, line, character) =>
@@ -143,6 +153,7 @@ export function activateWith(
     if (lang.hover) registerHover(context, opts, lang);
     if (lang.inlays) registerInlayHints(context, opts, lang);
     if (lang.definition) registerDefinition(context, opts, lang);
+    if (lang.typeDefinition) registerTypeDefinition(context, opts, lang);
     if (lang.references) registerReferences(context, opts, lang);
     if (lang.rename) registerRename(context, opts, lang);
     if (lang.completion) registerCompletion(context, opts, lang);
@@ -448,6 +459,50 @@ function registerDefinition(
 
   context.subscriptions.push(
     vscode.languages.registerDefinitionProvider(lang.id, provider),
+  );
+}
+
+function registerTypeDefinition(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const typeDefinition = lang.typeDefinition;
+  if (!typeDefinition) return;
+
+  const provider: vscode.TypeDefinitionProvider = {
+    async provideTypeDefinition(document, position, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return undefined;
+      }
+      if (token.isCancellationRequested) return undefined;
+      let ranges: WaxRange[];
+      try {
+        ranges = typeDefinition(
+          wax,
+          document.getText(),
+          position.line,
+          position.character,
+        );
+      } catch {
+        return undefined;
+      }
+      // A type is declared in the same document (a module-level `type` field).
+      return ranges.map(
+        (r) =>
+          new vscode.Location(
+            document.uri,
+            new vscode.Range(r.startLine, r.startChar, r.endLine, r.endChar),
+          ),
+      );
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerTypeDefinitionProvider(lang.id, provider),
   );
 }
 

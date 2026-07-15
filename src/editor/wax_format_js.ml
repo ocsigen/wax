@@ -543,6 +543,75 @@ let definition_string src line ch =
   in
   match best with None -> [] | Some (_, defs) -> defs
 
+(* Go-to-type-definition (Wax only): from a value under the cursor, the
+   declaration of its *type* — e.g. on a variable of type [&point], jump to
+   [type point = { … }]. Distinct from go-to-definition, which jumps to the
+   value's own binding. Reads the innermost typed node covering the cursor (like
+   hover), takes the named reference type(s) among the values it leaves on the
+   stack ([&t] / an exact [&t] — a heap type that is a [Type]/[Exact] index, not
+   a primitive or built-in abstract type), and resolves each name to the [type]
+   declaration of that name (there may be several under conditional compilation).
+   Nothing for a primitive, anonymous, or unknown type. *)
+let type_definition_string src line ch =
+  let a = analyze src in
+  match a.a_typed with
+  | None -> []
+  | Some typed -> (
+      let open Wax_lang.Ast in
+      let target = (line + 1, byte_column src line ch) in
+      let pos (p : Lexing.position) =
+        (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+      in
+      let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+      let contains (loc : Wax_utils.Ast.location) =
+        le (pos loc.loc_start) target && le target (pos loc.loc_end)
+      in
+      let span (loc : Wax_utils.Ast.location) =
+        loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+      in
+      (* The innermost node covering the cursor that leaves at least one value. *)
+      let best = ref None in
+      let observe ((tys, loc) : Wax_lang.Typing.inferred_module_annotation) =
+        (if contains loc && Array.length tys >= 1 then
+           match !best with
+           | Some (bloc, _) when span bloc <= span loc -> ()
+           | _ -> best := Some (loc, tys));
+        (tys, loc)
+      in
+      List.iter
+        (fun field ->
+          ignore (Wax_lang.Ast_utils.map_modulefield observe field.desc))
+        typed;
+      (* Each [type] declaration's name -> the span of that name (descending into
+         conditional branches, so a type defined per-configuration is found). *)
+      let type_defs = Hashtbl.create 16 in
+      Wax_lang.Ast_utils.iter_fields
+        (fun field ->
+          match (field.desc : _ modulefield) with
+          | Type rectype ->
+              Array.iter
+                (fun elt ->
+                  let name_ident, _ = elt.desc in
+                  Hashtbl.add type_defs name_ident.desc name_ident.info)
+                rectype
+          | _ -> ())
+        typed;
+      (* The name of a value's type when it is a named reference type. *)
+      let type_name cell =
+        match Wax_lang.Infer.Cell.get cell with
+        | Wax_lang.Infer.Valtype { typ = Ref { typ = ht; _ }; _ } -> (
+            match (ht : heaptype) with
+            | Type idx | Exact idx -> Some idx.desc
+            | _ -> None)
+        | _ -> None
+      in
+      match !best with
+      | None -> []
+      | Some (_, tys) ->
+          Array.to_list tys |> List.filter_map type_name
+          |> List.sort_uniq compare
+          |> List.concat_map (Hashtbl.find_all type_defs))
+
 (* Find-references / document-highlight (Wax only): every occurrence of the
    symbol under the cursor — its definition(s) and all uses that resolve to
    them — for "Find All References" and highlighting the symbol in the document.
@@ -848,6 +917,11 @@ let js_range src (loc : Wax_utils.Ast.location) =
 let definition_result src line ch =
   let s = Js.to_string src in
   let defs = try definition_string s line ch with _ -> [] in
+  Js.array (Array.of_list (List.map (js_range s) defs))
+
+let type_definition_result src line ch =
+  let s = Js.to_string src in
+  let defs = try type_definition_string s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) defs))
 
 let references_result src line ch =
@@ -2084,6 +2158,7 @@ let () =
       method hover src line ch = hover_result src line ch
       method inlays src = inlays_result src
       method definition src line ch = definition_result src line ch
+      method typeDefinition src line ch = type_definition_result src line ch
       method references src line ch = references_result src line ch
       method renamePrepare src line ch = rename_prepare_result src line ch
       method rename src line ch newname = rename_result src line ch newname
