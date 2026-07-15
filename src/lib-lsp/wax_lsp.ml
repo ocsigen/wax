@@ -406,25 +406,29 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
   | Lsp.Client_request.Shutdown -> ()
   | Lsp.Client_request.TextDocumentHover { textDocument; position; _ } ->
       let uri = textDocument.uri in
-      if is_wat uri then None
-      else
-        with_doc uri (fun src ->
-            match
-              Wax_editor.hover_string ~encoding:!encoding src position.line
-                position.character
-            with
-            | None -> None
-            | Some h ->
-                Some
-                  (Hover.create ~contents:(hover_markup h.h_type)
-                     ~range:(range_of_location src h.h_range)
-                     ()))
+      with_doc uri (fun src ->
+          let hover =
+            if is_wat uri then Wax_editor.hover_wat_string
+            else Wax_editor.hover_string
+          in
+          match
+            hover ~encoding:!encoding src position.line position.character
+          with
+          | None -> None
+          | Some h ->
+              Some
+                (Hover.create ~contents:(hover_markup h.h_type)
+                   ~range:(range_of_location src h.h_range)
+                   ()))
   | Lsp.Client_request.TextDocumentDefinition { textDocument; position; _ } ->
       let uri = textDocument.uri in
       with_doc uri (fun src ->
+          let definition =
+            if is_wat uri then Wax_editor.definition_wat_string
+            else Wax_editor.definition_string
+          in
           match
-            Wax_editor.definition_string ~encoding:!encoding src position.line
-              position.character
+            definition ~encoding:!encoding src position.line position.character
           with
           | [] -> None
           | locs ->
@@ -437,62 +441,85 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
   | Lsp.Client_request.TextDocumentTypeDefinition { textDocument; position; _ }
     ->
       let uri = textDocument.uri in
-      with_doc uri (fun src ->
-          match
-            Wax_editor.type_definition_string ~encoding:!encoding src
-              position.line position.character
-          with
-          | [] -> None
-          | locs ->
-              Some
-                (`Location
-                   (List.map
-                      (fun loc ->
-                        Location.create ~uri ~range:(range_of_location src loc))
-                      locs)))
+      (* No WAT type-definition yet; skip rather than run the Wax analysis on it. *)
+      if is_wat uri then None
+      else
+        with_doc uri (fun src ->
+            match
+              Wax_editor.type_definition_string ~encoding:!encoding src
+                position.line position.character
+            with
+            | [] -> None
+            | locs ->
+                Some
+                  (`Location
+                     (List.map
+                        (fun loc ->
+                          Location.create ~uri
+                            ~range:(range_of_location src loc))
+                        locs)))
   | Lsp.Client_request.TextDocumentReferences { textDocument; position; _ } ->
       let uri = textDocument.uri in
       with_doc uri (fun src ->
+          let references =
+            if is_wat uri then Wax_editor.references_wat_string
+            else Wax_editor.references_string
+          in
           Some
             (List.map
                (fun loc ->
                  Location.create ~uri ~range:(range_of_location src loc))
-               (Wax_editor.references_string ~encoding:!encoding src
-                  position.line position.character)))
+               (references ~encoding:!encoding src position.line
+                  position.character)))
   | Lsp.Client_request.TextDocumentHighlight { textDocument; position; _ } ->
-      with_doc textDocument.uri (fun src ->
+      let uri = textDocument.uri in
+      with_doc uri (fun src ->
+          let references =
+            if is_wat uri then Wax_editor.references_wat_string
+            else Wax_editor.references_string
+          in
           Some
             (List.map
                (fun loc ->
                  DocumentHighlight.create ~range:(range_of_location src loc) ())
-               (Wax_editor.references_string ~encoding:!encoding src
-                  position.line position.character)))
+               (references ~encoding:!encoding src position.line
+                  position.character)))
   | Lsp.Client_request.TextDocumentPrepareRename { textDocument; position; _ }
     ->
-      with_doc textDocument.uri (fun src ->
+      let uri = textDocument.uri in
+      with_doc uri (fun src ->
+          let rename_prepare =
+            if is_wat uri then Wax_editor.rename_prepare_wat_string
+            else Wax_editor.rename_prepare_string
+          in
           Option.map (range_of_location src)
-            (Wax_editor.rename_prepare_string ~encoding:!encoding src
-               position.line position.character))
+            (rename_prepare ~encoding:!encoding src position.line
+               position.character))
   | Lsp.Client_request.TextDocumentRename { textDocument; position; newName; _ }
     ->
       let uri = textDocument.uri in
       let edits =
         match get_doc uri with
         | None -> []
-        | Some src -> (
-            match
-              Wax_editor.rename_string ~encoding:!encoding src position.line
-                position.character newName
-            with
-            | Wax_editor.Rename_conflict message ->
-                Jsonrpc.Response.Error.raise
-                  (Jsonrpc.Response.Error.make
-                     ~code:Jsonrpc.Response.Error.Code.RequestFailed ~message ())
-            | Wax_editor.Rename_edits edits ->
-                List.map
-                  (fun (loc, newText) ->
-                    TextEdit.create ~range:(range_of_location src loc) ~newText)
-                  edits)
+        | Some src ->
+            let edit (loc, newText) =
+              TextEdit.create ~range:(range_of_location src loc) ~newText
+            in
+            if is_wat uri then
+              List.map edit
+                (Wax_editor.rename_wat_string ~encoding:!encoding src
+                   position.line position.character newName)
+            else (
+              match
+                Wax_editor.rename_string ~encoding:!encoding src position.line
+                  position.character newName
+              with
+              | Wax_editor.Rename_conflict message ->
+                  Jsonrpc.Response.Error.raise
+                    (Jsonrpc.Response.Error.make
+                       ~code:Jsonrpc.Response.Error.Code.RequestFailed ~message
+                       ())
+              | Wax_editor.Rename_edits edits -> List.map edit edits)
       in
       WorkspaceEdit.create ~changes:[ (uri, edits) ] ()
   | Lsp.Client_request.DocumentSymbol { textDocument; _ } ->
@@ -515,7 +542,10 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
             Some (`List (List.map completion_item items)))
   | Lsp.Client_request.SignatureHelp { textDocument; position; _ } -> (
       let empty = SignatureHelp.create ~signatures:[] () in
-      match get_doc textDocument.uri with
+      (* No WAT signature help yet. *)
+      match
+        if is_wat textDocument.uri then None else get_doc textDocument.uri
+      with
       | None -> empty
       | Some src -> (
           match
@@ -551,7 +581,12 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
                      ~label:(`String h.n_label) ~kind:InlayHintKind.Type ())
                  (Wax_editor.inlays_string src)))
   | Lsp.Client_request.TextDocumentFoldingRange { textDocument; _ } ->
-      with_doc textDocument.uri (fun src ->
+      let uri = textDocument.uri in
+      with_doc uri (fun src ->
+          let folding =
+            if is_wat uri then Wax_editor.folding_wat_string
+            else Wax_editor.folding_string
+          in
           Some
             (List.map
                (fun (startLine, endLine, kind) ->
@@ -562,20 +597,24 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
                    | _ -> Some FoldingRangeKind.Region
                  in
                  FoldingRange.create ~startLine ~endLine ?kind ())
-               (Wax_editor.folding_string src)))
+               (folding src)))
   | Lsp.Client_request.SelectionRange { textDocument; positions; _ } -> (
-      match get_doc textDocument.uri with
+      let uri = textDocument.uri in
+      match get_doc uri with
       | None ->
           List.map
             (fun (p : Position.t) ->
               SelectionRange.create ~range:(Range.create ~start:p ~end_:p) ())
             positions
       | Some src ->
+          let selection_range_chain =
+            if is_wat uri then Wax_editor.selection_range_wat_string
+            else Wax_editor.selection_range_string
+          in
           List.map
             (fun (p : Position.t) ->
               let chain =
-                Wax_editor.selection_range_string ~encoding:!encoding src p.line
-                  p.character
+                selection_range_chain ~encoding:!encoding src p.line p.character
               in
               match selection_range chain with
               | Some sr -> sr

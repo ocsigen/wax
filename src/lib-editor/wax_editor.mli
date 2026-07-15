@@ -92,6 +92,11 @@ val check_string_with_defines : string -> string list -> diag list
 val hover_string :
   ?encoding:position_encoding -> string -> int -> int -> hover option
 
+(* As [hover_string], but for a Wasm-text buffer: the type the innermost
+   instruction under the cursor leaves on the stack. *)
+val hover_wat_string :
+  ?encoding:position_encoding -> string -> int -> int -> hover option
+
 (* The inferred type on each un-annotated [let] binding. Wax only. *)
 val inlays_string : string -> inlay list
 
@@ -103,6 +108,39 @@ val definition_string :
   int ->
   int ->
   Wax_utils.Ast.location list
+
+(* As [definition_string], but for a Wasm-text buffer. *)
+val definition_wat_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  Wax_utils.Ast.location list
+
+(* As [references_string], but for a Wasm-text buffer. *)
+val references_wat_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  Wax_utils.Ast.location list
+
+(* As [rename_prepare_string], but for a Wasm-text buffer. *)
+val rename_prepare_wat_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  Wax_utils.Ast.location option
+
+(* As [rename_string], but for a Wasm-text buffer. *)
+val rename_wat_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  string ->
+  (Wax_utils.Ast.location * string) list
 
 (* From a value at the position, the declaration span(s) of its type. Wax only. *)
 val type_definition_string :
@@ -183,6 +221,14 @@ val selection_range_string :
   int ->
   (int * int * int * int) list
 
+(* As [selection_range_string], but for a Wasm-text buffer. *)
+val selection_range_wat_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  (int * int * int * int) list
+
 (* Every identifier occurrence classified for semantic highlighting. Wax only. *)
 val semantic_tokens_string :
   ?encoding:position_encoding -> string -> sem_token list
@@ -190,6 +236,9 @@ val semantic_tokens_string :
 (* Foldable ranges — block bodies and multi-line block comments — each [(start
    line, end line, kind)] (zero-based). Wax only. *)
 val folding_string : string -> (int * int * string) list
+
+(* As [folding_string], but for a Wasm-text buffer. *)
+val folding_wat_string : string -> (int * int * string) list
 
 (* The source ranges made unreachable by the [defines], each [(start line, start
    char, end line, end char)] (zero-based, UTF-16); empty with no define set.

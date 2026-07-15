@@ -19,3 +19,9 @@ val module_ :
     {!Wax_utils.Trivia.associate}'s [only] argument. *)
 
 val instr : Wax_utils.Printer.t -> Ast.location Ast.Text.instr -> unit
+
+val subtype_string :
+  (Ast.Text.name option * Ast.Text.subtype, Ast.location) Ast.annotated ->
+  string
+(** A type definition ([(type $id …)]) rendered to a plain uncoloured string,
+    for showing on hover over a type identifier. *)

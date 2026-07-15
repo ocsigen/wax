@@ -195,6 +195,73 @@ let print_source_type pp = function
           sp_type pp "bot";
           sp_punct pp ")")
 
+(* Render a source type to a plain (uncoloured) string. *)
+let render_source_type source =
+  let buf = Buffer.create 32 in
+  let fmt = Format.formatter_of_buffer buf in
+  Wax_utils.Printer.run fmt (fun p ->
+      let pp =
+        Wax_utils.Styled_printer.create ~printer:p
+          ~theme:Wax_utils.Colors.no_color ~trivia:(Hashtbl.create 0) ()
+      in
+      print_source_type pp source);
+  Format.pp_print_flush fmt ();
+  String.trim (Buffer.contents buf)
+
+(* What the editor type sink records at each instruction span. Kept unrendered:
+   the recording pass runs over the whole module, but the editor renders only
+   the few entries under the cursor, so rendering is deferred to
+   [render_recorded_type]. *)
+type recorded_type =
+  | Pushed of source_type (* a value the instruction leaves on the stack *)
+  | Polymorphic (* the unknown value of an unreachable / polymorphic stack *)
+  | No_result (* the instruction produces no value *)
+  | Signature of source_type array * source_type array
+    (* a function's (params, results), for the identifier of a call / ref.func *)
+  | Subtype of
+      (Ast.Text.name option * Ast.Text.subtype, Ast.location) Ast.annotated
+(* the source definition of the type a type identifier refers to *)
+
+let render_recorded_type = function
+  | Pushed source -> Some (render_source_type source)
+  | Polymorphic -> Some "any"
+  | No_result -> None
+  | Subtype e -> Some (Output.subtype_string e)
+  | Signature (params, results) ->
+      let group kw arr =
+        if Array.length arr = 0 then None
+        else
+          Some
+            (Printf.sprintf "(%s %s)" kw
+               (String.concat " "
+                  (Array.to_list (Array.map render_source_type arr))))
+      in
+      let parts =
+        List.filter_map Fun.id [ group "param" params; group "result" results ]
+      in
+      Some
+        (Printf.sprintf "(func%s)"
+           (String.concat "" (List.map (fun s -> " " ^ s) parts)))
+
+(* Editor type sink. Like [validate_refs], a module-level ref rather than a
+   threaded parameter: the push chokepoints below record into it without
+   carrying it through the ~130 call sites. When set (only in editor mode, via
+   [f]'s [?record_types]), every value pushed onto the stack is recorded as
+   [(span of the pushing instruction, type)] — the raw material for WAT hover.
+   [None] on ordinary validation, so the recording is free. *)
+let recorded_types : (Ast.location * recorded_type) list ref option ref =
+  ref None
+
+(* Record [rt] at instruction span [loc], if the sink is active and [loc] is a
+   real source span (not a synthesized / recovery placeholder). No rendering
+   here — an ordinary validation pays nothing beyond the [!recorded_types]
+   test. *)
+let record loc rt =
+  match (!recorded_types, loc) with
+  | Some r, Some l when l.Ast.loc_start.Lexing.pos_cnum >= 0 ->
+      r := (l, rt) :: !r
+  | _ -> ()
+
 (* Reconstruct a source type from an interned one. Used as the source type of a
    pushed value when no truer reference is available, so every concrete stack
    value carries a source type (as on the Wax side, where an inferred type
@@ -926,13 +993,25 @@ type type_context = {
      reference (rather than the deduplicated global index) keeps it injective,
      so [$a] is named with [$a] even when a structurally-equal [$b] shares its
      global index. *)
+  (* The fourth component is the source subtype definition — kept, keyed by the
+     (injective) source reference so hover on a type identifier shows the type
+     as written; [None] for a synthesized (implicit) function type, which has no
+     source. *)
   index_mapping :
     ( Uint32.t,
-      Types.ref_index * (string * int) list * Ast.Text.comptype )
+      Types.ref_index
+      * (string * int) list
+      * Ast.Text.comptype
+      * (Ast.Text.name option * Ast.Text.subtype, Ast.location) Ast.annotated
+        option )
     Hashtbl.t;
   label_mapping :
     ( string,
-      Types.ref_index * (string * int) list * Ast.Text.comptype )
+      Types.ref_index
+      * (string * int) list
+      * Ast.Text.comptype
+      * (Ast.Text.name option * Ast.Text.subtype, Ast.location) Ast.annotated
+        option )
     Hashtbl.t;
   (* For each type definition, keyed by its text-level index: its source index
      node (its name when it has one, else its numeric index, carrying the
@@ -957,7 +1036,7 @@ type type_context = {
    it (injective), or [None] for an unbound or sourceless reference. Does not
    report errors — callers that resolve the reference do. *)
 let reference_comptype tc (idx : Ast.Text.idx) =
-  let _, _, c =
+  let _, _, c, _ =
     match idx.desc with
     | Num x -> Hashtbl.find tc.index_mapping x
     | Id id -> Hashtbl.find tc.label_mapping id
@@ -995,28 +1074,37 @@ let cont_source_functype tc idx =
   | _ -> assert false
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
-  try
-    match idx.desc with
-    | Num x -> Some (Hashtbl.find ctx.index_mapping x)
-    | Id id -> Some (Hashtbl.find ctx.label_mapping id)
-  with Not_found ->
-    let lst =
+  let result =
+    try
       match idx.desc with
-      | Num _ -> []
-      | Id id ->
-          Wax_utils.Spell_check.f
-            (fun f -> Hashtbl.iter (fun id' _ -> f id') ctx.label_mapping)
-            id
-    in
-    Error.unbound_index d ~location:idx.info "type" idx lst;
-    None
+      | Num x -> Some (Hashtbl.find ctx.index_mapping x)
+      | Id id -> Some (Hashtbl.find ctx.label_mapping id)
+    with Not_found ->
+      let lst =
+        match idx.desc with
+        | Num _ -> []
+        | Id id ->
+            Wax_utils.Spell_check.f
+              (fun f -> Hashtbl.iter (fun id' _ -> f id') ctx.label_mapping)
+              id
+      in
+      Error.unbound_index d ~location:idx.info "type" idx lst;
+      None
+  in
+  (* Record the referenced type's source definition, so hover over the type
+     identifier shows its subtype. Guarded on the sink, so an ordinary
+     validation pays nothing. *)
+  (match (!recorded_types, result) with
+  | Some _, Some (_, _, _, Some e) -> record (Some idx.info) (Subtype e)
+  | _ -> ());
+  result
 
 (* Resolve a source type reference to how it should appear inside a rec group
    being registered: [Def id] for an already-defined type, [Rec pos] for a member
    of the group currently under construction. This is what the type-definition
    builders below produce. *)
 let resolve_type_ref d ctx idx =
-  let+@ r, _, _ = get_type_info d ctx idx in
+  let+@ r, _, _, _ = get_type_info d ctx idx in
   r
 
 (* The canonical index of an already-defined type. A [Rec] would mean referring
@@ -1220,7 +1308,7 @@ let subtype d ctx current
                  Wax_utils.Spell_check.f
                    (fun f ->
                      Hashtbl.iter
-                       (fun id' (r, _, _) ->
+                       (fun id' (r, _, _, _) ->
                          if defined_before current r then f id')
                        ctx.label_mapping)
                    id
@@ -1371,7 +1459,7 @@ let lookup_func_type ctx idx =
 
 let lookup_struct_type ctx idx =
   let ctx = ctx.modul in
-  let*@ ty, field_map, _ = get_type_info ctx.diagnostics ctx.types idx in
+  let*@ ty, field_map, _, _ = get_type_info ctx.diagnostics ctx.types idx in
   let ty = def_id ty in
   let def = Types.get_subtype ctx.subtyping_info ty in
   match def.typ with
@@ -1599,9 +1687,17 @@ let pop ctx loc ~expected_source ty st =
 let pop_known ctx loc ty =
   pop ctx loc ~expected_source:(source_of_valtype ty) ty
 
-let push_poly loc st = (Cons (Some loc, Bot, st), ())
-let push_bot_ref loc st = (Cons (loc, Bot_ref, st), ())
-let push ~source loc ty st = (Cons (loc, Val (ty, source), st), ())
+let push_poly loc st =
+  record (Some loc) Polymorphic;
+  (Cons (Some loc, Bot, st), ())
+
+let push_bot_ref loc st =
+  record loc (Pushed Bottom_ref);
+  (Cons (loc, Bot_ref, st), ())
+
+let push ~source loc ty st =
+  record loc (Pushed source);
+  (Cons (loc, Val (ty, source), st), ())
 
 (* Push a value whose type has no user-written source form, reconstructing its
    rendering from the type. *)
@@ -1790,12 +1886,21 @@ let pop_args ctx loc ~source args =
   in
   loop (Array.length args - 1)
 
-let push_results ~source results =
+(* [sink] (default [true]) records each pushed result at the instruction span
+   [loc] for the editor type sink, but pushes with location [None]: a
+   multi-result instruction must not attribute each of its result cells to that
+   single span — the per-cell location is the value provenance a "pushed here"
+   diagnostic reads. Set [~sink:false] where [push_results] is not pushing the
+   instruction's own results but simulating a branch target or a block's entry
+   parameters, which hover must not attribute to the instruction's span. *)
+let push_results ?(sink = true) ~loc ~source results =
   let rec loop i =
     if i >= Array.length results then return ()
-    else
+    else begin
+      if sink then record (Some loc) (Pushed source.(i));
       let* () = push ~source:source.(i) None results.(i) in
       loop (i + 1)
+    end
   in
   loop 0
 
@@ -2220,7 +2325,7 @@ let track_label ctx label =
     label;
   used
 
-let rec instruction ctx (i : _ Ast.Text.instr) =
+let rec instruction_core ctx (i : _ Ast.Text.instr) =
   if false then Format.eprintf "%a@." print_instr i;
   let loc = i.info in
   match i.desc with
@@ -2230,14 +2335,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
         ~br_source:result_source ~params ~results ~br_params:results b.desc;
-      push_results ~source:result_source results
+      push_results ~loc ~source:result_source results
   | Loop { label; typ; block = b } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
         ~br_source:param_source ~params ~results ~br_params:params b.desc;
-      push_results ~source:result_source results
+      push_results ~loc ~source:result_source results
   | If { label; typ; if_block; else_block } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_known ctx loc I32 in
@@ -2249,7 +2354,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       block ctx loc label ~used ~param_source ~result_source
         ~br_source:result_source ~params ~results ~br_params:results
         else_block.desc;
-      push_results ~source:result_source results
+      push_results ~loc ~source:result_source results
   | TryTable { label; typ; block = b; catches } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
@@ -2298,7 +2403,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                     ~expected:params ())
                 (branch_target ctx label))
         catches;
-      push_results ~source:result_source results
+      push_results ~loc ~source:result_source results
   | Try { label; typ; block = b; catches; catch_all } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
@@ -2318,7 +2423,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             ~br_source:result_source ~params ~results ~br_params:results
             b.Ast.desc)
         catch_all;
-      push_results ~source:result_source results
+      push_results ~loc ~source:result_source results
   | Unreachable -> unreachable
   | Nop -> return ()
   | Throw idx ->
@@ -2386,7 +2491,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let param_source, result_source = functype_sources sign in
       let* () = pop_args ctx loc ~source:param_source ts1 in
-      push_results ~source:result_source ts2
+      push_results ~loc ~source:result_source ts2
   | Resume (x, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
@@ -2399,7 +2504,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           (Array.append ftx.params
              [| Ref { nullable = true; typ = Type xty } |])
       in
-      push_results ~source:result_source ftx.results
+      push_results ~loc ~source:result_source ftx.results
   | ResumeThrow (x, y, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       let*! { params = ts0; _ }, sign = lookup_tag_signature ctx y in
@@ -2412,7 +2517,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           ~source:(cont_operand_source (fst (functype_sources sign)) x)
           (Array.append ts0 [| Ref { nullable = true; typ = Type xty } |])
       in
-      push_results ~source:result_source ftx.results
+      push_results ~loc ~source:result_source ftx.results
   | ResumeThrowRef (x, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
@@ -2431,7 +2536,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             Ref { nullable = true; typ = Type xty };
           |]
       in
-      push_results ~source:result_source ftx.results
+      push_results ~loc ~source:result_source ftx.results
   | Switch (x, y) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       let ts11 = ftx.params in
@@ -2482,7 +2587,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             ~source:(cont_operand_source ts11'_text x)
             (Array.append ts11' [| Ref { nullable = true; typ = Type xty } |])
         in
-        push_results ~source:ts21_text ts21
+        push_results ~loc ~source:ts21_text ts21
       end
   | Br idx ->
       let*! params, param_source = branch_target ctx idx in
@@ -2492,7 +2597,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc I32 in
       let*! params, param_source = branch_target ctx idx in
       let* () = pop_args ctx loc ~source:param_source params in
-      push_results ~source:param_source params
+      push_results ~sink:false ~loc ~source:param_source params
   (* Branch-hinting proposal: the wrapper is advisory and has the exact stack
      effect of the branch it wraps. The hint is only allowed on a conditional
      branch ([if]/[br_if]/[br_on_*], through a folded wrapper); reject it
@@ -2534,7 +2639,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let fallthrough push_top =
         let*! params, param_source = branch_target ctx idx in
         let* () = pop_args ctx loc ~source:param_source params in
-        let* () = push_results ~source:param_source params in
+        let* () = push_results ~sink:false ~loc ~source:param_source params in
         push_top
       in
       match ty with
@@ -2563,7 +2668,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable)
         else
           let* () = pop_args ctx loc ~source:param_source params in
-          let* () = push_results ~source:param_source params in
+          let* () = push_results ~sink:false ~loc ~source:param_source params in
           let* _ = pop_any ctx loc in
           return ()
       in
@@ -2599,7 +2704,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = push ~source:src_ty2 None (Ref ty2) in
       let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
-      let* () = push_results ~source:param_source params in
+      let* () = push_results ~sink:false ~loc ~source:param_source params in
       let* _ = pop_any ctx loc in
       push ~source:src_diff (Some loc) (Ref (diff_ref_type ty1 ty2))
   | Br_on_cast_fail (idx, ty1, ty2) ->
@@ -2624,7 +2729,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = push ~source:src_diff None (Ref (diff_ref_type ty1 ty2)) in
       let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
-      let* () = push_results ~source:param_source params in
+      let* () = push_results ~sink:false ~loc ~source:param_source params in
       let* _ = pop_any ctx loc in
       push ~source:src_ty2 (Some loc) (Ref ty2)
   | Br_on_cast_desc_eq (idx, ty1, ty2) ->
@@ -2655,7 +2760,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = push ~source:src_ty2 None (Ref ty2) in
       let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
-      let* () = push_results ~source:param_source params in
+      let* () = push_results ~sink:false ~loc ~source:param_source params in
       let* _ = pop_any ctx loc in
       push ~source:src_diff (Some loc) (Ref (diff_ref_type ty1 ty2))
   | Br_on_cast_desc_eq_fail (idx, ty1, ty2) ->
@@ -2684,7 +2789,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = push ~source:src_diff None (Ref (diff_ref_type ty1 ty2)) in
       let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
-      let* () = push_results ~source:param_source params in
+      let* () = push_results ~sink:false ~loc ~source:param_source params in
       let* _ = pop_any ctx loc in
       push ~source:src_ty2 (Some loc) (Ref ty2)
   | Return ->
@@ -2698,8 +2803,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable
       | Func { params; results } ->
           let param_source, result_source = functype_sources sign in
+          (* Give the callee identifier the function's signature on hover. *)
+          record (Some idx.info) (Signature (param_source, result_source));
           let* () = pop_args ctx loc ~source:param_source params in
-          push_results ~source:result_source results)
+          push_results ~loc ~source:result_source results)
   | CallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
       let param_source, result_source =
@@ -2711,7 +2818,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           (Ref { nullable = true; typ = Type type_idx })
       in
       let* () = pop_args ctx loc ~source:param_source params in
-      push_results ~source:result_source results
+      push_results ~loc ~source:result_source results
   | CallIndirect (idx, tu) -> (
       let*! typ, table_source = get_table ctx idx in
       let*! ty = typeuse ctx.modul.diagnostics ctx.modul.types tu in
@@ -2734,7 +2841,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             in
             let* () = pop_address ctx loc typ.limits in
             let* () = pop_args ctx loc ~source:param_source params in
-            push_results ~source:result_source results)
+            push_results ~loc ~source:result_source results)
   | ReturnCall idx -> (
       let*! ty, _, sign, _ = get_function ctx idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
@@ -2743,6 +2850,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable
       | Func { params; results } ->
           let param_source, result_source = functype_sources sign in
+          record (Some idx.info) (Signature (param_source, result_source));
           let* () = pop_args ctx loc ~source:param_source params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
             ~provided_source:result_source ~expected_source:ctx.return_source
@@ -2842,9 +2950,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push ~source (Some loc) ty
   | LocalSet i ->
       let*! ty, source = get_local ~initialize:true ctx i in
+      (* Give the identifier the local's type, so hover over [$x] shows it even
+         though [local.set] itself leaves nothing on the stack. *)
+      record (Some i.info) (Pushed source);
       pop ctx loc ~expected_source:source ty
   | LocalTee i ->
       let*! ty, source = get_local ~initialize:true ctx i in
+      record (Some i.info) (Pushed source);
       let* () = pop ctx loc ~expected_source:source ty in
       push ~source (Some loc) ty
   | GlobalGet idx ->
@@ -2852,6 +2964,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push ~source (Some loc) ty.typ
   | GlobalSet idx ->
       let*! ty, source = get_global ctx idx in
+      record (Some idx.info) (Pushed source);
       if not ty.mut then
         Error.immutable_global ctx.modul.diagnostics ~location:loc idx;
       pop ctx loc ~expected_source:source ty.typ
@@ -3110,6 +3223,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push ~source (Some loc) (Ref { nullable = true; typ })
   | RefFunc idx ->
       let*! i, type_idx, sign, exact = get_function ctx idx in
+      let param_source, result_source = functype_sources sign in
+      record (Some idx.info) (Signature (param_source, result_source));
       if
         not
           ((not !validate_refs)
@@ -3571,6 +3686,45 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
      configuration is validated, so none can remain at this point. *)
   | If_annotation _ -> assert false
 
+(* Wraps {!instruction_core} to feed the editor type sink (§ [recorded_types]).
+   Two adjustments, both no-ops when the sink is off:
+   - a folded instruction [(op … operands)] reads as one unit, so the type its
+     head produces is relocated from the operator token to the whole folded
+     span; nested operands keep their own (smaller) folded spans, so hovering an
+     operand still shows its own type;
+   - an instruction that leaves nothing on the stack ([drop], [local.set],
+     [nop], [br], a call to a void function, …) records a void marker at its
+     span, so hover shows nothing there rather than falling through to the
+     enclosing instruction's type. *)
+and instruction ctx i st =
+  match !recorded_types with
+  | None -> instruction_core ctx i st
+  | Some r -> (
+      match i.desc with
+      | Hinted _ -> instruction_core ctx i st
+      | Folded (head, _) ->
+          let st', () = instruction_core ctx i st in
+          (* The head is validated last, so its entries are at the front. Pop
+             them off the operator span and re-record them at the folded span. *)
+          let rec take acc =
+            match !r with
+            | (l0, t) :: tl when l0 = head.Ast.info ->
+                r := tl;
+                take (t :: acc)
+            | _ -> acc
+          in
+          List.iter (fun t -> r := (i.info, t) :: !r) (take []);
+          (st', ())
+      | _ ->
+          let before = !r in
+          let st', () = instruction_core ctx i st in
+          let produced =
+            (not (!r == before))
+            && match !r with (l0, _) :: _ -> l0 = i.info | [] -> false
+          in
+          if not produced then r := (i.info, No_result) :: !r;
+          (st', ()))
+
 and instructions ctx l =
   match l with
   | [] -> return ()
@@ -3581,7 +3735,7 @@ and instructions ctx l =
 and block ctx loc label ~used ~param_source ~result_source ~br_source ~params
     ~results ~br_params block =
   with_empty_stack ctx.modul loc
-    (let* () = push_results ~source:param_source params in
+    (let* () = push_results ~sink:false ~loc ~source:param_source params in
      let* () =
        instructions
          {
@@ -3684,11 +3838,11 @@ let add_type d ctx ty =
          not consulted meanwhile, but carrying it keeps the field total. *)
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int (ctx.last_index + i))
-        (Types.Rec i, [], sub.typ);
+        (Types.Rec i, [], sub.typ, Some e);
       Option.iter
         (fun label ->
           Hashtbl.replace ctx.label_mapping label.Ast.desc
-            (Types.Rec i, [], sub.typ))
+            (Types.Rec i, [], sub.typ, Some e))
         label)
     ty;
   match rectype d ctx ty with
@@ -3757,7 +3911,7 @@ let add_type d ctx ty =
           in
           Hashtbl.replace ctx.index_mapping
             (Uint32.of_int (ctx.last_index + i))
-            (Types.Def (Types.Id.add i' i), fields, typ.typ);
+            (Types.Def (Types.Id.add i' i), fields, typ.typ, Some e);
           let def_idx =
             let desc =
               match label with
@@ -3779,7 +3933,7 @@ let add_type d ctx ty =
           Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc
-                (Types.Def (Types.Id.add i' i), fields, typ.typ))
+                (Types.Def (Types.Id.add i' i), fields, typ.typ, Some e))
             label)
         ty;
       ctx.last_index <- ctx.last_index + Array.length ty
@@ -3915,7 +4069,7 @@ let collect_implicit_types d ctx fields =
     if Types.last_index ctx.types > before then (
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int ctx.last_index)
-        (Types.Def idx, [], Func sign);
+        (Types.Def idx, [], Func sign, None);
       ctx.last_index <- ctx.last_index + 1)
   in
   let collect_instr (i : _ Ast.Text.instr) =
@@ -4030,7 +4184,7 @@ let check_type_definitions ctx =
         (Hashtbl.find_opt ctx.types.type_defs i)
     in
     let location = def_idx.Ast.info in
-    let>@ gidx, _, _ =
+    let>@ gidx, _, _, _ =
       get_type_info ctx.diagnostics ctx.types
         (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
     in
@@ -4344,7 +4498,7 @@ let lint_body ctx instrs =
         | Ast.Text.Id id -> Some (Hashtbl.find m.types.label_mapping id)
       with Not_found -> None
     with
-    | Some (gidx, _, _) -> (
+    | Some (gidx, _, _, _) -> (
         match (Types.get_subtype m.subtyping_info (def_id gidx)).typ with
         | Struct fields -> Some (Array.length fields)
         | Func _ | Array _ | Cont _ -> None)
@@ -5313,8 +5467,10 @@ let check_import_order diagnostics fields =
        None fields)
 
 let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
-    diagnostics ((name, fields) as modul) =
+    ?record_types diagnostics ((name, fields) as modul) =
   Wax_utils.Debug.timed "validate" @@ fun () ->
+  recorded_types := record_types;
+  Fun.protect ~finally:(fun () -> recorded_types := None) @@ fun () ->
   check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     validate_configuration ~warn_unused ~features diagnostics modul

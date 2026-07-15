@@ -1362,3 +1362,21 @@ let instr printer i =
       indent_level = 2;
     }
     (instr i)
+
+(* A type definition rendered to a plain (uncoloured) one-line-ish string, for
+   the editor to show on hover over a type identifier. *)
+let subtype_string t =
+  let buf = Buffer.create 64 in
+  let fmt = Format.formatter_of_buffer buf in
+  Printer.run fmt (fun printer ->
+      format_sexp false 2 false
+        {
+          base =
+            Styled.create ~printer ~theme:(get_theme false)
+              ~trivia:(Hashtbl.create 16) ();
+          format = Compact;
+          indent_level = 2;
+        }
+        (subtype t));
+  Format.pp_print_flush fmt ();
+  String.trim (Buffer.contents buf)
