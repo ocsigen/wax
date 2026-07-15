@@ -32,13 +32,16 @@ module Sequence = struct
         (* When set (module-level sequences of a module containing conditional
            annotations), numeric references are refused: a field's index depends
            on which branch is taken, so it cannot be resolved to one name. *)
+    is_conditional : bool;
     diagnostics : Wax_utils.Diagnostic.context option;
         (* Where to report a [naming-conflict] / [reserved-word-rename] warning
            when a source name has to be renamed; [None] silences them (for
            internal namespaces without a source identifier to point at). *)
   }
 
-  let make ?(forbid_numeric = false) ?diagnostics namespace default =
+  let make ?(forbid_numeric = false) ?is_conditional ?diagnostics namespace
+      default =
+    let is_conditional = Option.value ~default:forbid_numeric is_conditional in
     {
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
@@ -48,6 +51,7 @@ module Sequence = struct
       namespace;
       default;
       forbid_numeric;
+      is_conditional;
       diagnostics;
     }
 
@@ -101,7 +105,7 @@ module Sequence = struct
        ([forbid_numeric]); locals reuse a single sequence across functions,
        where a repeated [$id] is a distinct variable, not the same entity. *)
     let reused =
-      if seq.forbid_numeric then
+      if seq.is_conditional then
         match id with
         | Some nm ->
             (* An explicit [$id] is authoritative: it is reused only when the
@@ -112,9 +116,14 @@ module Sequence = struct
                imported [$isatty], both exporting [unix_isatty]). *)
             Hashtbl.find_opt seq.label_mapping nm.Ast.desc
         | None ->
-            List.find_map
-              (fun nm -> Hashtbl.find_opt seq.export_mapping nm.Ast.desc)
-              exports
+            let found =
+              List.find_map
+                (fun nm -> Hashtbl.find_opt seq.export_mapping nm.Ast.desc)
+                exports
+            in
+            if Option.is_none found && not seq.forbid_numeric then
+              Hashtbl.find_opt seq.index_mapping Uint32.zero
+            else found
       else None
     in
     (* A source name already claimed by the caller's priority pass (see the
@@ -3507,10 +3516,26 @@ let rec count_memories fields =
       | Memory _ | Import { desc = Memory _; _ } -> n + 1
       | Module_if_annotation { then_fields; else_fields; _ } ->
           n
-          + count_memories then_fields.desc
-          + Option.fold ~none:0
-              ~some:(fun e -> count_memories e.Ast.desc)
-              else_fields
+          + max
+              (count_memories then_fields.desc)
+              (Option.fold ~none:0
+                 ~some:(fun e -> count_memories e.Ast.desc)
+                 else_fields)
+      | _ -> n)
+    0 fields
+
+let rec count_tables fields =
+  List.fold_left
+    (fun n (f : (_ Src.modulefield, _) Ast.annotated) ->
+      match f.desc with
+      | Table _ | Import { desc = Table _; _ } -> n + 1
+      | Module_if_annotation { then_fields; else_fields; _ } ->
+          n
+          + max
+              (count_tables then_fields.desc)
+              (Option.fold ~none:0
+                 ~some:(fun e -> count_tables e.Ast.desc)
+                 else_fields)
       | _ -> n)
     0 fields
 
@@ -3611,6 +3636,7 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
      are allowed; with several memories, indices may shift across branches like
      any other field, so the general constraint stands. *)
     let forbid_numeric_memory = forbid_numeric && count_memories fields > 1 in
+    let forbid_numeric_table = forbid_numeric && count_tables fields > 1 in
     let ctx =
       let common_namespace = Namespace.make () in
       {
@@ -3625,9 +3651,11 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
         functions =
           Sequence.make ~forbid_numeric ~diagnostics common_namespace "f";
         memories =
-          Sequence.make ~forbid_numeric:forbid_numeric_memory ~diagnostics
-            common_namespace "m";
-        tables = Sequence.make ~forbid_numeric ~diagnostics common_namespace "t";
+          Sequence.make ~forbid_numeric:forbid_numeric_memory
+            ~is_conditional:forbid_numeric ~diagnostics common_namespace "m";
+        tables =
+          Sequence.make ~forbid_numeric:forbid_numeric_table
+            ~is_conditional:forbid_numeric ~diagnostics common_namespace "t";
         tags =
           Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "t";
         datas = Sequence.make ~forbid_numeric ~diagnostics common_namespace "d";
