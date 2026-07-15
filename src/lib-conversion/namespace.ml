@@ -15,62 +15,67 @@ let build l = List.fold_left (fun m s -> StringMap.add s 1 m) StringMap.empty l
 (* Only the Wax keywords are reserved. Intrinsics need no reservation: the
    free-function ones are spelled as [v128::]/[i64::] paths and every other is a
    receiver-based method, so no bare entity name can ever shadow one. *)
-let reserved =
-  build
-    [
-      "as";
-      "become";
-      "br";
-      "br_if";
-      "br_on_cast";
-      "br_on_cast_fail";
-      "br_on_non_null";
-      "br_on_null";
-      "br_table";
-      "catch";
-      "const";
-      "cont";
-      "cont_bind";
-      "cont_new";
-      "data";
-      "dispatch";
-      "do";
-      "elem";
-      "else";
-      "fn";
-      "describes";
-      "descriptor";
-      "inf";
-      "if";
-      "import";
-      "is";
-      "let";
-      "loop";
-      "match";
-      "memory";
-      "mut";
-      "nan";
-      "nop";
-      "null";
-      "pagesize";
-      "open";
-      "rec";
-      "resume";
-      "resume_throw";
-      "resume_throw_ref";
-      "return";
-      "shared";
-      "suspend";
-      "switch";
-      "table";
-      "tag";
-      "throw";
-      "throw_ref";
-      "try";
-      "type";
-      "unreachable";
-      "while";
-    ]
+(* The Wax bare-word keywords. The single source shared by [from_wasm]'s
+   reserved-name set (below), the editor's keyword completion
+   ([Wax_format_js]), and the keyword-consistency test, which checks this list
+   against the lexer (the source of truth) and the other keyword lists. *)
+let reserved_words =
+  [
+    "as";
+    "become";
+    "br";
+    "br_if";
+    "br_on_cast";
+    "br_on_cast_fail";
+    "br_on_non_null";
+    "br_on_null";
+    "br_table";
+    "catch";
+    "const";
+    "cont";
+    "cont_bind";
+    "cont_new";
+    "data";
+    "dispatch";
+    "do";
+    "elem";
+    "else";
+    "fn";
+    "describes";
+    "descriptor";
+    "inf";
+    "if";
+    "import";
+    "is";
+    "let";
+    "loop";
+    "match";
+    "memory";
+    "mut";
+    "nan";
+    "nop";
+    "null";
+    "pagesize";
+    "open";
+    "rec";
+    "resume";
+    "resume_throw";
+    "resume_throw_ref";
+    "return";
+    "shared";
+    "suspend";
+    "switch";
+    "table";
+    "tag";
+    "throw";
+    "throw_ref";
+    "try";
+    "type";
+    "unreachable";
+    "while";
+  ]
+
+let reserved = build reserved_words
 
 let reserved_heap_types =
   StringMap.union

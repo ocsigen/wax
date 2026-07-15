@@ -2,6 +2,11 @@ type t
 (** A namespace manages a set of unique names, avoiding collisions with reserved
     keywords and previously allocated names. *)
 
+val reserved_words : string list
+(** The Wax bare-word keywords (the [`Regular] reserved set). Kept in sync with
+    the lexer by the keyword-consistency test; reused for editor keyword
+    completion so it does not drift. *)
+
 val make : ?kind:[ `Regular | `Label | `Type ] -> unit -> t
 (** Create a new namespace. [kind] determines the set of reserved words (default
     [`Regular]):

@@ -894,42 +894,10 @@ let symbols_string src =
    precise per-point local scoping are follow-ups. *)
 type completion = { k_name : string; k_kind : string }
 
-let wax_keywords =
-  [
-    "fn";
-    "let";
-    "const";
-    "type";
-    "global";
-    "memory";
-    "table";
-    "tag";
-    "data";
-    "elem";
-    "import";
-    "export";
-    "loop";
-    "while";
-    "if";
-    "else";
-    "match";
-    "dispatch";
-    "try";
-    "catch";
-    "return";
-    "br";
-    "br_if";
-    "br_table";
-    "throw";
-    "as";
-    "is";
-    "do";
-    "open";
-    "mut";
-    "null";
-    "true";
-    "false";
-  ]
+(* The keywords come from [Wax_conversion.Namespace.reserved_words], the single
+   list the keyword-consistency test keeps in step with the lexer, so this never
+   drifts. *)
+let wax_keywords = Wax_conversion.Namespace.reserved_words
 
 (* Flatten the outline symbols (which already carry a name and kind) to
    completion candidates; an import group contributes its members, not itself. *)

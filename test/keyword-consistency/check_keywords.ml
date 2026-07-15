@@ -3,8 +3,9 @@
 
    - [src/lib-wax/lexer.ml]        the keyword itself (source of truth)
    - [src/lib-wax/parser.mly]      [ident_or_keyword], so it still works as a label
-   - [src/lib-conversion/namespace.ml] [reserved], so [from_wasm] renames a
+   - [src/lib-conversion/namespace.ml] [reserved_words], so [from_wasm] renames a
                                     generated entity that would collide with it
+                                    (and the editor reuses it for completion)
    - [editors/vscode/syntaxes/wax.tmLanguage.json] a keyword-highlighting rule,
                                     so the editor grammar colours it
    - [tree-sitter-wax/grammar.js]  the [KEYWORDS] list, so a keyword still works
@@ -60,7 +61,7 @@ let () =
     |> all_group1 (Str.regexp {|{ "\([a-z_]+\)" }|})
   in
   let reserved =
-    region ~start:"let reserved =" ~stop:"]" (read_file namespace)
+    region ~start:"let reserved_words =" ~stop:"]" (read_file namespace)
     |> all_group1 (Str.regexp {|"\([a-z_]+\)"|})
   in
   (* The words listed in the grammar's keyword-highlighting rules, which have the
