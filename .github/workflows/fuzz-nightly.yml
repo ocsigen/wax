@@ -67,6 +67,21 @@ jobs:
         with:
           tool: wasm-tools@1.246.2
 
+      # Build the WebAssembly reference interpreter (pinned spec commit) so the
+      # REF-driven campaigns — diff-validate, exec-ref, exec-mutate — actually run
+      # instead of skipping. Sparse, blobless checkout of just interpreter/; it is
+      # stdlib-only, so dune builds it with no extra dependencies. Keep the pinned
+      # commit in sync with .github/workflows/ci.yml.
+      - name: Build the WebAssembly reference interpreter
+        run: |
+          git clone --filter=blob:none --sparse --no-checkout \
+            https://github.com/WebAssembly/spec.git "$HOME/wasm-spec"
+          git -C "$HOME/wasm-spec" sparse-checkout set interpreter
+          git -C "$HOME/wasm-spec" checkout d7b37e4170d8315f2f1283aed4e8076591a9a333
+          opam exec -- dune build --root "$HOME/wasm-spec/interpreter" wasm.exe
+          echo "REF=$HOME/wasm-spec/interpreter/_build/default/wasm.exe" \
+            >> "$GITHUB_ENV"
+
       # node (for the byte-mutation mode of mutate-wasm) is preinstalled on the
       # ubuntu runner. SEED is left unset so each night explores fresh inputs;
       # the chosen value is logged for replay.

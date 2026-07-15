@@ -5,9 +5,10 @@
 # Where fuzz/check.sh runs the deterministic guards on committed/generated seeds,
 # this builds the corpora and runs the budgeted stochastic + behavioural tier:
 # run.sh (oracles over the whole corpus), smith, mutate-wax/-wat/-wasm (both
-# byte and structure-aware), a seed-keyed slice of the Node execution oracle, and
-# diff-validate. Each campaign exits non-zero on a HIGH-severity finding; this
-# script's exit is non-zero iff some campaign did.
+# byte and structure-aware), a seed-keyed slice of the execution oracles (Node
+# plus, when REF is available, the reference-interpreter and mutation oracles),
+# and diff-validate. Each campaign exits non-zero on a HIGH-severity finding;
+# this script's exit is non-zero iff some campaign did.
 #
 # SEED defaults to a fresh value each run (announced, so a finding replays with
 # the same SEED); override it to reproduce a night. The budgets are split so the
@@ -17,8 +18,9 @@
 # campaigns, EXEC_WAST_COUNT drives the behavioural slice (`exec.sh` over a
 # deterministic SEED-keyed subset of core .wast files), and DIFF_VALIDATE_COUNT
 # drives diff-validate.sh. COUNT and SMITH are still accepted as legacy coarse
-# overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools (and
-# node for the byte-mutation mode of mutate-wasm and the execution oracle).
+# overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools; node
+# and the reference interpreter (REF) unlock the execution oracles (campaigns
+# lacking their engine skip rather than fail).
 # Failing campaigns leave their minimized inputs under fuzz/*-findings/.
 
 set -u
@@ -119,7 +121,15 @@ run mutate-wasm.sh "$mutate_wasm"
 run "MODE=struct" mutate-wasm.sh "$mutate_wasm_struct"
 if [ "$exec_wast" -gt 0 ]; then
   mapfile -t exec_wasts < <(pick_exec_wasts "$exec_wast")
-  [ ${#exec_wasts[@]} -gt 0 ] && run exec.sh "${exec_wasts[@]}"
+  if [ ${#exec_wasts[@]} -gt 0 ]; then
+    # exec.sh runs the slice under Node; the reference-interpreter oracles cover
+    # the proposals Node cannot (GC, SIMD, EH, multi-memory) and the mutation
+    # oracle lifts the fixed-suite ceiling. All three skip (exit 2) without their
+    # engine, so a machine with neither REF nor node loses only coverage.
+    run exec.sh "${exec_wasts[@]}"
+    run "MODE=wax" exec-ref.sh "${exec_wasts[@]}"
+    run exec-mutate.sh "${exec_wasts[@]}"
+  fi
 fi
 run diff-validate.sh "$diff_validate"
 
