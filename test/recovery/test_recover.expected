@@ -1,0 +1,40 @@
+=== two broken statements, resync at ; ===
+AST: recovered
+errors: 2
+  2:12-2:13: Expecting an expression.
+  3:12-3:13: Expecting an expression.
+
+=== broken body, resync at } then clean re-entry ===
+AST: recovered
+errors: 1
+  1:20-1:21: Expecting '(', or a simple pattern.
+
+=== well-formed input has no errors ===
+AST: recovered
+errors: 0
+
+=== error at end of input ===
+AST: recovered
+errors: 1
+  1:20-1:21: Expecting '(', or a simple pattern.
+
+=== resync on leading 'fn' when no delimiter survives ===
+AST: recovered
+errors: 1
+  1:6-1:7: Expecting a parameter list.
+
+=== error inside parens, resync at ) ===
+AST: recovered
+errors: 1
+  1:29-1:30: Expecting an expression.
+
+=== error inside index, resync at ] ===
+AST: recovered
+errors: 1
+  1:32-1:33: Expecting an index expression.
+
+=== lexer error is recorded, not fatal ===
+AST: none
+errors: 1
+  1:24-1:25: Unexpected character '$'.
+

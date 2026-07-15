@@ -9,6 +9,21 @@
 
 type binary_module = Wax_wasm.Ast.location Wax_wasm.Ast.Binary.module_
 
+val wax_parse_recover :
+  filename:string ->
+  string ->
+  Wax_lang.Ast.location Wax_lang.Ast.module_ option
+  * Wax_wasm.Parsing.syntax_error list
+  * Wax_utils.Trivia.context
+(** Parse Wax [contents] with panic-mode error recovery, returning the
+    best-effort AST ([None] if recovery could not reach an accepting state), the
+    list of {e all} syntax errors in source order, and the trivia context. For
+    in-process consumers such as a language server; see
+    {!Wax_wasm.Parsing.Make.parse_recover}. Wax resynchronizes on the statement,
+    block, paren and bracket closers and on the keywords that begin a new
+    top-level item or statement (see [wax_sync]). A lexer error (bad character)
+    is recorded as a diagnostic rather than raised. *)
+
 val wat_to_binary :
   ?color:Wax_utils.Colors.flag ->
   ?defines:Wax_wasm.Cond_specialize.bindings ->

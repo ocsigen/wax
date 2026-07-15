@@ -6,6 +6,8 @@ type syntax_error = {
   related : Wax_utils.Diagnostic.label list;
 }
 
+type sync_class = Boundary | Terminal | Skip
+
 (* Internal marker raised by [fail_detailed] to carry a structured error out of
    [loop_handle] to [parse_diagnostics]; never escapes this module. *)
 exception Detailed_error of syntax_error
@@ -241,6 +243,114 @@ struct
               related = [];
             }
 
+    (* Panic-mode error recovery, sync-token variant. This uses only the
+       vanilla [INCREMENTAL_ENGINE] API — no [error] productions in the grammar
+       and no inspection-API [feed] — so it needs neither a grammar change nor
+       [--inspection] on the generated parser. We drive [offer]/[resume] by hand
+       (rather than [loop_handle], which stops at the first error) so that at a
+       [HandlingError] checkpoint we still hold the offending token: to recover
+       we skip forward to the next boundary token, unwind the stack with [pop]
+       to a state that [acceptable] confirms can shift it, [offer] it, and carry
+       on. Every error is collected; the returned AST is whatever the parser
+       reduces to, with holes where erroneous spans were skipped. *)
+    let parse_recover ~filename ~sync text =
+      let module MI = P.MenhirInterpreter in
+      let lexbuf = initialize_lexing filename text in
+      let supplier =
+        lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
+      in
+      let buffer, supplier = E.wrap_supplier supplier in
+      let errors = ref [] in
+      let record checkpoint =
+        let (loc_start, loc_end), message, related =
+          build_syntax_error text buffer checkpoint
+        in
+        errors :=
+          { location = { Wax_utils.Ast.loc_start; loc_end }; message; related }
+          :: !errors
+      in
+      (* Return the token to resynchronize on: the next boundary (or terminal)
+         reached by discarding tokens from the supplier. [tok0] is the token
+         already in hand (the one that triggered the error, if any); if it is
+         itself a boundary we resynchronize on it directly rather than skipping
+         past it. Always terminates: every non-boundary pull advances toward the
+         end-of-input token, which is a [Terminal]. *)
+      let rec find_sync tok0 =
+        match tok0 with
+        | Some ((t, _, _) as tok) when sync t <> Skip -> tok
+        | _ -> (
+            let ((t, _, _) as tok) = supplier () in
+            match sync t with Skip -> find_sync None | _ -> tok)
+      in
+      (* Unwind the parser stack to the closest state that can shift [tok] and
+         shift it there, returning the resumed checkpoint; [None] if no stacked
+         state accepts it. *)
+      let rec unwind env ((tok, startp, _endp) as sync_tok) =
+        let checkpoint = MI.input_needed env in
+        if MI.acceptable checkpoint tok startp then
+          Some (MI.offer checkpoint sync_tok)
+        else
+          match MI.pop env with
+          | Some env' -> unwind env' sync_tok
+          | None -> None
+      in
+      (* Main loop: [last] is the most recently offered token, so at a
+         [HandlingError] it is the token that provoked the error. *)
+      let rec run checkpoint last =
+        match checkpoint with
+        | MI.InputNeeded _ ->
+            let tok = supplier () in
+            run (MI.offer checkpoint tok) (Some tok)
+        | MI.Shifting _ | MI.AboutToReduce _ -> run (MI.resume checkpoint) last
+        | MI.HandlingError env ->
+            record checkpoint;
+            recover env last
+        | MI.Accepted v -> Some v
+        | MI.Rejected -> None
+      and recover env last =
+        let ((tok, _, _) as sync_tok) = find_sync last in
+        match unwind env sync_tok with
+        | Some checkpoint -> run checkpoint None
+        | None -> (
+            (* No stacked state can shift this boundary. At end of input there
+               is nothing left to try; otherwise drop this boundary and scan on
+               for the next one, keeping the same error state to unwind from. *)
+            match sync tok with
+            | Terminal -> None
+            | _ -> recover env None)
+      in
+      (* A lexer error (bad character, malformed UTF-8) is raised out of a
+         [supplier] call rather than surfacing as a [HandlingError] checkpoint,
+         so — like [parse_diagnostics] — catch it here, record it, and stop.
+         Parser-level errors collected before it are kept; the token stream is
+         truncated at the bad input, so there is no best-effort AST (recovering
+         past a lexer error would need lexer-level resynchronization, which this
+         does not attempt). *)
+      let start = snd (Sedlexing.lexing_bytes_positions lexbuf) in
+      let ast =
+        try run (P.Incremental.parse start) None with
+        | Syntax_error ((loc_start, loc_end), message) ->
+            errors :=
+              {
+                location = { Wax_utils.Ast.loc_start; loc_end };
+                message;
+                related = [];
+              }
+              :: !errors;
+            None
+        | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
+            let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
+            errors :=
+              {
+                location = { Wax_utils.Ast.loc_start; loc_end };
+                message = "Input file contains malformed UTF-8 byte sequences\n";
+                related = [];
+              }
+              :: !errors;
+            None
+      in
+      (ast, List.rev !errors)
+
     (* Printing variant, as the CLI expects: report the structured error (same
        message and labels) and re-raise via [report_syntax_error]. *)
     let parse_from_string ?color ~filename text =
@@ -276,6 +386,18 @@ struct
     match I.parse_diagnostics ~filename text with
     | Ok ast -> Ok (ast, ctx)
     | Error e -> Error e
+
+  let parse_recover ~filename ~sync text =
+    Wax_utils.Debug.timed "parse" @@ fun () ->
+    let ctx = Wax_utils.Trivia.make () in
+    let module Context = struct
+      type t = Wax_utils.Trivia.context
+
+      let context = ctx
+    end in
+    let module I = Inner (Context) in
+    let ast, errors = I.parse_recover ~filename ~sync text in
+    (ast, errors, ctx)
 end
 
 (* The full parser: {!Make} plus the fast parser, used for its speed on the
