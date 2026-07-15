@@ -128,8 +128,9 @@ that sits after the `é`-bearing comment):
 
 A lint that flags removable or unreachable code (an unused local, import, field,
 or label, or dead code) carries LSP's `DiagnosticTag.Unnecessary` (the value
-`1`), so the editor fades the range as it does other dead code. A module with an
-unused local:
+`1`), so the editor fades the range as it does other dead code. Every lint also
+carries a `codeDescription` linking its `-W` code to the hosted lint
+documentation. A module with an unused local:
 
   $ python3 - <<'PY'
   > import subprocess, json
@@ -148,6 +149,8 @@ unused local:
   >     r=json.loads(o[s:s+n]); i=s+n
   >     if r.get("method")=="textDocument/publishDiagnostics":
   >         for d in r["params"]["diagnostics"]:
-  >             print("%s: severity=%s tags=%s" % (d.get("code"), d["severity"], d.get("tags")))
+  >             print("%s: severity=%s tags=%s doc=%s" % (d.get("code"),
+  >                   d["severity"], d.get("tags"),
+  >                   (d.get("codeDescription") or {}).get("href")))
   > PY
-  unused-local: severity=2 tags=[1]
+  unused-local: severity=2 tags=[1] doc=https://ocsigen.org/wax/cli.html#warnings

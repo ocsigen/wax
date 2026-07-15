@@ -76,7 +76,7 @@ server](#language-server)).
           already present in a binary — are preserved through WAT↔WAT and
           WASM↔WASM round-trips on their own, no flag needed.
 
-- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
+- <a id="warnings"></a>**`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
     - Set the reporting level of a warning produced during validation.
     - *NAME* is a single warning, a group, or `all`:
         - `unused-local` (group `unused`): a local that is declared but never

@@ -133,6 +133,11 @@ let completion_item_kind = function
 
 (* --- diagnostics (pushed on open/change) --- *)
 
+(* The hosted documentation of the [-W] lints, for a diagnostic's
+   [codeDescription] (the "learn more" link on its code). One page lists every
+   warning with its meaning and how to configure it. *)
+let warning_doc_url = "https://ocsigen.org/wax/cli.html#warnings"
+
 let diagnostic_of_diag uri src (d : Wax_editor.diag) =
   let severity =
     match d.severity with
@@ -156,11 +161,18 @@ let diagnostic_of_diag uri src (d : Wax_editor.diag) =
   let tags =
     if d.unnecessary then Some [ DiagnosticTag.Unnecessary ] else None
   in
+  (* When the diagnostic carries a lint name, link its code to the docs. *)
+  let codeDescription =
+    Option.map
+      (fun _ ->
+        CodeDescription.create ~href:(Lsp.Uri.of_string warning_doc_url))
+      d.warning
+  in
   Diagnostic.create
     ~range:(range_of_location src d.location)
     ~severity ~source:"wax"
     ?code:(Option.map (fun w -> `String w) d.warning)
-    ?tags ~message:(`String message) ~relatedInformation ()
+    ?codeDescription ?tags ~message:(`String message) ~relatedInformation ()
 
 let publish_diagnostics uri src =
   let diags =

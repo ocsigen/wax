@@ -948,8 +948,13 @@ function registerDiagnostics(
       const diagnostic = new vscode.Diagnostic(range, message, severity);
       diagnostic.source = "wax";
       // Surface a lint's -W name as the diagnostic code (shown as "wax(name)"
-      // in the Problems panel, and usable in rule-based filtering).
-      if (d.warning) diagnostic.code = d.warning;
+      // in the Problems panel, and usable in rule-based filtering), linking it
+      // to the hosted documentation of the lints.
+      if (d.warning)
+        diagnostic.code = {
+          value: d.warning,
+          target: vscode.Uri.parse("https://ocsigen.org/wax/cli.html#warnings"),
+        };
       // A lint that flags removable/unreachable code is tagged Unnecessary, so
       // VS Code renders the range faded (its greyed-out dead-code style).
       if (d.unnecessary) diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];
