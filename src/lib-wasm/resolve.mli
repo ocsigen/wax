@@ -24,9 +24,11 @@ type kind =
   | Field
 
 type binding = {
-  def : Ast.location option;
-      (** The span of the definition's [$id], or [None] for an anonymous
-          (numeric-only) definition. *)
+  defs : Ast.location list;
+      (** The span of each definition's [$id]. Usually one; several when the
+          same name is defined in more than one conditional-compilation branch
+          (each an alternative). Empty for an anonymous (numeric-only)
+          definition. *)
   uses : Ast.location list;
       (** Every use site's span — the [$id] or numeric-index token of each
           reference. *)
@@ -35,8 +37,10 @@ type binding = {
 }
 
 val f : Ast.location Ast.Text.module_ -> binding list
-(** [f modul] returns one binding per definition, across every module-level
+(** [f modul] returns one binding per named symbol, across every module-level
     index space (functions, globals, types, memories, tables, tags, elem and
     data segments), plus each function's locals and labels and each struct
     type's fields. Labels obey lexical scoping with shadowing; locals are
-    per-function. A binding with an empty [uses] list is simply unreferenced. *)
+    per-function. A name defined in several conditional-compilation branches
+    yields one binding carrying all its definition spans. A binding with an
+    empty [uses] list is simply unreferenced. *)

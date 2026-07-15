@@ -16,16 +16,16 @@ type kind =
   | Field
 
 type binding = {
-  def : location option;
+  defs : location list;
   uses : location list;
   kind : kind;
   hover : string option;
 }
 
-(* Internal mutable accumulator (uses grow as the walk finds references); mapped
-   to the immutable {!binding} at the end. *)
+(* Internal mutable accumulator (defs and uses grow as the walk proceeds);
+   mapped to the immutable {!binding} at the end. *)
 type acc = {
-  a_def : location option;
+  mutable a_defs : location list;
   mutable a_uses : location list;
   a_kind : kind;
   a_hover : string option;
@@ -42,8 +42,8 @@ type space = {
 
 let f ((_, fields) : location Text.module_) : binding list =
   let all = ref [] in
-  let add_binding kind def hover =
-    let b = { a_def = def; a_uses = []; a_kind = kind; a_hover = hover } in
+  let add_binding kind defs hover =
+    let b = { a_defs = defs; a_uses = []; a_kind = kind; a_hover = hover } in
     all := b :: !all;
     b
   in
@@ -59,17 +59,26 @@ let f ((_, fields) : location Text.module_) : binding list =
      [kind] overrides the space's kind (a function's parameters and its declared
      locals share one index space but are distinct kinds). *)
   let register ?kind sp (id : Text.name option) hover =
+    let kind = Option.value kind ~default:sp.s_kind in
+    let def = Option.map (fun (n : Text.name) -> n.info) id in
     let b =
-      add_binding
-        (Option.value kind ~default:sp.s_kind)
-        (Option.map (fun (n : Text.name) -> n.info) id)
-        hover
+      match id with
+      | Some (n : Text.name) -> (
+          match Hashtbl.find_opt sp.s_by_name n.desc with
+          | Some existing ->
+              (* The same name defined again — conditional-compilation branches,
+                 or a genuine duplicate. Merge into one binding so navigation
+                 offers every definition and references / rename cover them all. *)
+              Option.iter (fun d -> existing.a_defs <- d :: existing.a_defs) def;
+              existing
+          | None ->
+              let b = add_binding kind (Option.to_list def) hover in
+              Hashtbl.replace sp.s_by_name n.desc b;
+              b)
+      | None -> add_binding kind (Option.to_list def) hover
     in
     Hashtbl.replace sp.s_by_index sp.s_next b;
     sp.s_next <- sp.s_next + 1;
-    (match id with
-    | Some (n : Text.name) -> Hashtbl.replace sp.s_by_name n.desc b
-    | None -> ());
     b
   in
   (* Record a use of index [idx] in space [sp], if it resolves. *)
@@ -158,7 +167,9 @@ let f ((_, fields) : location Text.module_) : binding list =
     (* Push a fresh label frame for a block-like instruction. *)
     let frame (label : name option) =
       let b =
-        add_binding Label (Option.map (fun (n : name) -> n.info) label) None
+        add_binding Label
+          (Option.to_list (Option.map (fun (n : name) -> n.info) label))
+          None
       in
       (Option.map (fun (n : name) -> n.desc) label, b)
     in
@@ -492,7 +503,7 @@ let f ((_, fields) : location Text.module_) : binding list =
   List.rev_map
     (fun b ->
       {
-        def = b.a_def;
+        defs = List.rev b.a_defs;
         uses = List.rev b.a_uses;
         kind = b.a_kind;
         hover = b.a_hover;

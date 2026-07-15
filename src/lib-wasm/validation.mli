@@ -28,7 +28,7 @@ val type_def_location : recorded_type -> Ast.location option
 val f :
   ?warn_unused:bool ->
   ?features:Wax_utils.Feature.set ->
-  ?record_types:(Ast.location * recorded_type) list ref ->
+  ?record_types:(Ast.location * int * recorded_type) list ref ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.Text.module_ ->
   unit
@@ -36,13 +36,16 @@ val f :
     well-formedness checks. Raises exceptions on validation errors.
 
     When [record_types] is given, every value the validator pushes onto the
-    operand stack is appended to it as [(span of the pushing instruction, type)]
-    — the type information WAT hover reads. A folded instruction's result is
-    attributed to its whole [(op …)] span, and an instruction that produces no
-    value records a [No_result] entry (rendering to [None]). Order is
-    unspecified and one instruction may contribute several entries (a
-    multi-result instruction, one per result). Off (no recording, no cost)
-    otherwise.
+    operand stack is appended to it as
+    [(span of the pushing instruction, configuration index, type)] — the type
+    information WAT hover reads. The configuration index is [0] for a module
+    without conditional compilation, and distinct per explored configuration
+    otherwise, so a consumer can group one configuration's stack results into a
+    tuple yet keep a config-varying span's alternatives apart. A folded
+    instruction's result is attributed to its whole [(op …)] span, and an
+    instruction that produces no value records a [No_result] entry (rendering to
+    [None]). Order within a configuration is push order. Off (no recording, no
+    cost) otherwise.
 
     When [warn_unused] is set (default [true]), a local declared by a
     [(local …)] but never read is reported as a warning (unless its name starts
