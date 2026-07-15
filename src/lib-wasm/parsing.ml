@@ -349,14 +349,25 @@ struct
          the whole reason those keywords are boundaries. Always terminates: every
          step that does not stop pulls one token, advancing toward the
          end-of-input [Terminal]. *)
+      (* Returns [`Sync tok] (resynchronize on a single token) or, in a
+         parenthesized grammar with a [barrier], [`Barrier (lparen, kw)] when the
+         scan meets a [(] immediately followed by a field keyword: the start of a
+         new top-level construct, a [Leader]-equivalent honoured at {e any} depth
+         so a missing closer cannot let depth-counting swallow the sibling. *)
       let rec find_sync depth tok0 =
         let step ((t, _, _) as tok) =
           match sync t with
           | Skip -> find_sync depth None
-          | Open -> find_sync (depth + 1) None
-          | Close -> if depth > 0 then find_sync (depth - 1) None else tok
-          | Boundary -> if depth > 0 then find_sync depth None else tok
-          | Leader | Terminal -> tok
+          | Open -> (
+              match barrier with
+              | Some (_, is_leader) ->
+                  let ((t2, _, _) as tok2) = supplier () in
+                  if is_leader t2 then `Barrier (t, tok2)
+                  else find_sync (depth + 1) (Some tok2)
+              | None -> find_sync (depth + 1) None)
+          | Close -> if depth > 0 then find_sync (depth - 1) None else `Sync tok
+          | Boundary -> if depth > 0 then find_sync depth None else `Sync tok
+          | Leader | Terminal -> `Sync tok
         in
         match tok0 with Some tok -> step tok | None -> step (supplier ())
       in
@@ -498,38 +509,86 @@ struct
          and the new one starts. [None] falls through to [skip]. The two-token
          trial (offer [(], test the keyword) is why a bare "[(] is acceptable"
          check is not enough: [(] is acceptable at every nesting level. *)
+      (* Re-offer a barrier pair [( <keyword>] — the start of a new field in a
+         parenthesized grammar — from the closest level that accepts it, so the
+         enclosing (broken) field reduces into the AST and the new one starts. A
+         two-token trial is essential: [(] alone is acceptable at every nesting
+         level (it starts a folded instruction), so we must offer [(] then the
+         keyword and require the keyword to settle. Two ways to reach that level:
+         insert closers (a {e missing} closer — climb by closing the enclosing
+         field, keeping its body), or pop the stack (a field closed too early by
+         a mis-associated closer — re-open it). Insertion is preferred because it
+         preserves content; popping is the fallback. Both are fuel-bounded. *)
+      let place_pair env lparen kw pos =
+        let offer_pair checkpoint =
+          let trial = settle (MI.offer checkpoint (lparen, pos, pos)) in
+          match trial with
+          | MI.InputNeeded _ when MI.acceptable trial kw pos -> (
+              match settle (MI.offer trial (kw, pos, pos)) with
+              | (MI.InputNeeded _ | MI.Accepted _) as done_ -> Some done_
+              | _ -> None)
+          | _ -> None
+        in
+        let rec by_insert checkpoint fuel =
+          if fuel <= 0 then None
+          else
+            match offer_pair checkpoint with
+            | Some _ as r -> r
+            | None -> (
+                match
+                  List.find_opt
+                    (fun c -> MI.acceptable checkpoint c pos)
+                    closers
+                with
+                | Some c ->
+                    by_insert
+                      (settle (MI.offer checkpoint (c, pos, pos)))
+                      (fuel - 1)
+                | None -> None)
+        in
+        let rec by_pop env fuel =
+          if fuel <= 0 then None
+          else
+            match offer_pair (MI.input_needed env) with
+            | Some _ as r -> r
+            | None -> (
+                match MI.pop env with
+                | Some env' -> by_pop env' (fuel - 1)
+                | None -> None)
+        in
+        match by_insert (MI.input_needed env) 1000 with
+        | Some _ as r -> r
+        | None -> by_pop env 1000
+      in
+      (* Direct-error barrier route: the held token is a field keyword whose [(]
+         already shifted as a folded-instruction opener (the [(module (func …
+         (func …] missing-closer shape). Pop that one cell, then place the pair
+         from the state before it. The other route — the barrier met while
+         scanning — is handled in [skip] via [find_sync]'s [`Barrier]. *)
+      (* True when [pos] is immediately preceded (across blanks) by a [(] in the
+         source: the direct-error barrier route pops a supposed folded-instruction
+         opener, so it must only fire on a keyword that really was written as
+         [( keyword] — not a bare field keyword typed as an instruction
+         ([(func (nop) memory)]), where popping would fabricate a spurious
+         field. *)
+      let preceded_by_open (pos : Lexing.position) =
+        let rec back i =
+          if i < 0 then false
+          else
+            match text.[i] with
+            | ' ' | '\t' | '\n' | '\r' -> back (i - 1)
+            | '(' -> true
+            | _ -> false
+        in
+        back (pos.Lexing.pos_cnum - 1)
+      in
       let try_barrier env last =
         match (barrier, last) with
         | Some (lparen, is_leader), Some ((t, pos, _) : _ * Lexing.position * _)
-          when is_leader t -> (
+          when is_leader t && preceded_by_open pos -> (
             match MI.pop env with
-            | None -> None
-            | Some env' ->
-                let rec climb checkpoint fuel =
-                  if fuel <= 0 then None
-                  else
-                    let trial =
-                      settle (MI.offer checkpoint (lparen, pos, pos))
-                    in
-                    match trial with
-                    | MI.InputNeeded _ when MI.acceptable trial t pos -> (
-                        match settle (MI.offer trial (t, pos, pos)) with
-                        | (MI.InputNeeded _ | MI.Accepted _) as done_ ->
-                            Some done_
-                        | _ -> None)
-                    | _ -> (
-                        match
-                          List.find_opt
-                            (fun c -> MI.acceptable checkpoint c pos)
-                            closers
-                        with
-                        | Some c ->
-                            climb
-                              (settle (MI.offer checkpoint (c, pos, pos)))
-                              (fuel - 1)
-                        | None -> None)
-                in
-                climb (MI.input_needed env') 1000)
+            | Some env' -> place_pair env' lparen t pos
+            | None -> None)
         | _ -> None
       in
       (* Main loop: [last] is the most recently offered token, so at a
@@ -558,16 +617,26 @@ struct
                 | Some checkpoint -> run checkpoint None
                 | None -> skip env last))
       and skip env last =
-        let ((tok, _, _) as sync_tok) = find_sync 0 last in
-        match unwind env sync_tok with
-        | Some checkpoint -> run checkpoint None
-        | None -> (
-            (* No stacked state can shift this boundary. At end of input there is
-               nothing left to try; otherwise drop this boundary and scan on for
-               the next one, keeping the same error state to unwind from. *)
-            match sync tok with
-            | Terminal -> None
-            | _ -> skip env None)
+        match find_sync 0 last with
+        | `Barrier (lparen, (kw, pos, _)) -> (
+            (* A new field starts here: place the [( <keyword>] pair, closing or
+               re-opening the enclosing construct as needed. A false barrier (a
+               [(func] nested in a [(type] being skipped) makes [place_pair] fail;
+               drop it and scan on. *)
+            match place_pair env lparen kw pos with
+            | Some checkpoint -> run checkpoint None
+            | None -> skip env None)
+        | `Sync ((tok, _, _) as sync_tok) -> (
+            match unwind env sync_tok with
+            | Some checkpoint -> run checkpoint None
+            | None -> (
+                (* No stacked state can shift this boundary. At end of input there
+                   is nothing left to try; otherwise drop this boundary and scan
+                   on for the next one, keeping the same error state to unwind
+                   from. *)
+                match sync tok with
+                | Terminal -> None
+                | _ -> skip env None))
       in
       (* Lexer errors are handled by [recovering_supplier] above (recorded, then
          skipped). [Lexing_gave_up] means it could not make progress, so stop —

@@ -41,4 +41,14 @@ let () =
   report "missing ')' between two funcs"
     "(module (func (i32.const 1) (func (nop)))\n";
   report "missing ')' before a global"
-    "(module (func (nop) (global i32 (i32.const 0)))\n"
+    "(module (func (nop) (global i32 (i32.const 0)))\n";
+  (* The "0" placeholder generalizes past plain integers: a heap type may be a
+     type index, so (ref.null) is repaired to (ref.null 0). *)
+  report "missing heap type is a zero index"
+    "(module (func (ref.null)) (func (nop)))\n";
+  (* A field keyword typed as an instruction ("memory" with no "(") must not be
+     mistaken for a new field: the barrier fires only when the keyword really is
+     written "( keyword", so this degrades to two functions, not a spurious
+     memory field. *)
+  report "bare field keyword in a body is not a barrier"
+    "(module (func (nop) memory) (func (nop)))\n"

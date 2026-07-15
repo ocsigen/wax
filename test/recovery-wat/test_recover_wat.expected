@@ -20,3 +20,11 @@ errors: 1
 errors: 1
 (func (nop))
 (global i32 (i32.const 0))
+=== missing heap type is a zero index ===
+errors: 1
+(func (ref.null 0))
+(func (nop))
+=== bare field keyword in a body is not a barrier ===
+errors: 1
+(func (nop))
+(func (nop))
