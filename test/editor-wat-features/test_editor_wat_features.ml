@@ -509,4 +509,34 @@ let () =
     "(module (func $f (param $x i32) (local.get $x)))\n";
   inlays "numeric use of an anonymous func (no name)"
     "(module (func) (func (call 0)))\n";
+  print_newline ();
+
+  (* Inactive-range shading: the [(@if)] branch a [-D] configuration rules out,
+     as (line, col)-(line, col) spans for dimming. Field-level and
+     instruction-level conditionals both count; a residual condition (variable
+     unbound by the given defines) dims nothing, and no defines dims nothing. *)
+  let cond_src =
+    "(module\n\
+    \  (@if $debug\n\
+    \    (@then (func $a))\n\
+    \    (@else (func $b)))\n\
+    \  (func $c\n\
+    \    (@if $fast (@then (nop)) (@else (drop)))))\n"
+  in
+  let inactive label defines =
+    Printf.printf "  %s [%s] ->" label (String.concat " " defines);
+    (match Wat_editor.inactive_ranges_string cond_src defines with
+    | [] -> Printf.printf " (none)"
+    | rs ->
+        List.iter
+          (fun (sl, sc, el, ec) -> Printf.printf " (%d,%d)-(%d,%d)" sl sc el ec)
+          rs);
+    print_newline ()
+  in
+  Printf.printf "=== inactive ranges (@if branches ruled out) ===\n";
+  inactive "debug=false (then dead)" [ "debug=false" ];
+  inactive "debug=true (else dead)" [ "debug=true" ];
+  inactive "debug=false fast=true (both levels)" [ "debug=false"; "fast=true" ];
+  inactive "no defines" [];
+  inactive "residual (unrelated define)" [ "other=1" ];
   print_newline ()

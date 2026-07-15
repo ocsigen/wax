@@ -852,6 +852,75 @@ let folding_string src =
   List.iter (fun (s, e) -> add s e "comment") (wat_block_comment_folds src);
   Hashtbl.fold (fun s (e, k) acc -> (s, e, k) :: acc) tbl []
 
+(* As [inactive_ranges_string], but for WAT: the spans a conditional-compilation
+   configuration ([defines], mirroring [-D]) makes unreachable — the branch of an
+   [(@if …)] the [defines] rule out — so the editor can dim them. Applies to both
+   the field-level [(@then …)/(@else …)] of a [Module_if_annotation] and the
+   instruction-level one, evaluating each condition with the shared
+   [Cond_specialize]; a condition left residual by a partial [defines] set dims
+   nothing. Empty when no defines are set (nothing to specialize against). *)
+let inactive_ranges_string ?(encoding = UTF16) src defines =
+  let bindings =
+    Wax_wasm.Cond_specialize.of_list
+      (List.filter_map
+         (fun s ->
+           match Wax_wasm.Cond_specialize.parse_define s with
+           | Ok b -> Some b
+           | Error _ -> None)
+         defines)
+  in
+  if Wax_wasm.Cond_specialize.is_empty bindings then []
+  else
+    match (analyze src).a_ast with
+    | None -> []
+    | Some (_name, fields) ->
+        let open Wax_wasm.Ast in
+        let dctx = Wax_utils.Diagnostic.collector ~source:src () in
+        let dead = ref [] in
+        (* The branch not taken for a determined condition: [(@else …)] when true,
+           the [(@then …)] body when false; nothing when it stays residual. *)
+        let else_info b =
+          Option.map (fun (b : (_, location) annotated) -> b.info) b
+        in
+        let branch cond then_loc else_loc =
+          match Wax_wasm.Cond_specialize.eval dctx bindings cond with
+          | True -> Option.iter (fun l -> dead := l :: !dead) else_loc
+          | False -> dead := then_loc :: !dead
+          | Residual _ -> ()
+        in
+        wat_iter_fields
+          (fun field ->
+            (match field.desc with
+            | Text.Module_if_annotation { cond; then_fields; else_fields } ->
+                branch cond then_fields.info (else_info else_fields)
+            | _ -> ());
+            wat_field_iter_instr
+              (fun i ->
+                match i.desc with
+                | Text.If_annotation { cond; then_body; else_body } ->
+                    branch cond then_body.info (else_info else_body)
+                | _ -> ())
+              field)
+          fields;
+        let offsets =
+          List.concat_map
+            (fun (l : Wax_utils.Ast.location) ->
+              [ l.loc_start.pos_cnum; l.loc_end.pos_cnum ])
+            !dead
+          |> List.sort_uniq compare
+        in
+        let pos = positions ~encoding src offsets in
+        List.filter_map
+          (fun (l : Wax_utils.Ast.location) ->
+            match
+              ( Hashtbl.find_opt pos l.loc_start.pos_cnum,
+                Hashtbl.find_opt pos l.loc_end.pos_cnum )
+            with
+            | Some (sl, sc), Some (el, ec) when (sl, sc) <> (el, ec) ->
+                Some (sl, sc, el, ec)
+            | _ -> None)
+          !dead
+
 (* Semantic tokens for WAT: colour each index identifier by the kind of
    definition it resolves to, so functions, types, globals, locals and struct
    fields — all rendered the same by the grammar — are distinguished. Built from

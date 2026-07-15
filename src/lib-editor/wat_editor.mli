@@ -109,6 +109,16 @@ val selection_range_string :
    [(start line, end line, kind)] (zero-based). *)
 val folding_string : string -> (int * int * string) list
 
+(* The spans a conditional-compilation configuration ([defines], mirroring [-D])
+   makes unreachable — the [(@if …)] branch it rules out — as [(start line,
+   start char, end line, end char)] (zero-based), for dimming. Empty when no
+   defines are set. *)
+val inactive_ranges_string :
+  ?encoding:position_encoding ->
+  string ->
+  string list ->
+  (int * int * int * int) list
+
 (* Each index identifier classified by the kind of definition it resolves to,
    for semantic highlighting. *)
 val semantic_tokens_string :
