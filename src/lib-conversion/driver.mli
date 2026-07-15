@@ -69,8 +69,9 @@ val wax_to_binary :
 
 val output_binary :
   out_channel:out_channel ->
-  ?opt_source_map_file:string ->
-  binary_module ->
+  ?source_map:bool ->
+  Wax_wasm.Ast.location Wax_wasm.Ast.Binary.module_ ->
   unit
-(** Write a binary module to [out_channel], optionally emitting a source map to
-    [opt_source_map_file]. *)
+(** [output_binary ~out_channel ?source_map ast] outputs the Wasm binary AST
+    [ast] to [out_channel]. A source map is additionally generated if
+    [source_map] is true. *)

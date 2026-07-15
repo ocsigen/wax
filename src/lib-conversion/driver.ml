@@ -81,5 +81,5 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
   Wax_wasm.Text_to_binary.module_ wasm_ast
 
-let output_binary ~out_channel ?opt_source_map_file ast =
-  Wax_wasm.Wasm_output.module_ ~out_channel ?opt_source_map_file ast
+let output_binary ~out_channel ?(source_map = false) ast =
+  Wax_wasm.Wasm_output.module_ ~out_channel ~source_map ast
