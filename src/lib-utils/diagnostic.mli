@@ -86,11 +86,14 @@ val abort : unit -> 'a
     so they can be inspected and re-reported. Used for path-sensitive
     validation, where the same code is validated under several assumptions. *)
 
-val collector : ?source:string -> unit -> context
+val collector : ?parent:context -> ?source:string -> unit -> context
 (** A context that buffers reported errors without printing or exiting. It never
     renders diagnostics, so it needs none of {!run}'s rendering parameters
     ([color], [output]); pass [?source] only when a lint reads the original text
-    via {!source} while reporting against this context. *)
+    via {!source} while reporting against this context. When [parent] is given
+    (the collector checks part of a larger run — e.g. one configuration of a
+    path-sensitive check), it inherits the parent's error-recovery mode (see
+    {!set_recovery}) so cascade suppression carries into it. *)
 
 val set_recovery : context -> bool -> unit
 (** Put [context] into (or out of) error-recovery mode. In recovery mode a

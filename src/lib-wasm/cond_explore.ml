@@ -39,7 +39,12 @@ let check_all diagnostics ?truncation_location
       let record lit = a_full := Cond_solver.and_ !a_full lit in
       let enqueue b = Queue.push b queue in
       let cfg = specialize env asm ~enqueue ~record in
-      let cctx = Diagnostic.collector () in
+      (* Each configuration is checked in its own collector, derived from the
+         parent so it inherits its error-recovery mode: the [unbound_name]
+         cascade suppression (see lib-wax/typing.ml) then applies when
+         type-checking a module recovered past syntax errors, just as it does on
+         the conditional-free path. *)
+      let cctx = Diagnostic.collector ~parent:diagnostics () in
       check cctx cfg;
       (* Backstop: [specialize] prunes unreachable branches up front, so a
          configuration's full assumption is normally satisfiable. This guards

@@ -1726,13 +1726,23 @@ type empty_stack_context = Expression | Block | Function
 
 let with_empty_stack ctx ~kind:_ ~location f =
   let st, res = f Empty in
-  (* The source locations of the values still on the stack, topmost first.
-     Values left behind by error recovery carry a placeholder location and are
-     dropped. *)
+  let recovery = Wax_utils.Diagnostic.in_recovery ctx.diagnostics in
+  (* A leftover value is an error-recovery artifact if it carries a placeholder
+     location or, in recovery mode, has the [Error] type — its root cause was
+     already reported (or suppressed), so reporting it "left on the stack" would
+     only be a cascade. Such values are dropped from the report. In non-recovery
+     mode [recovery] is false, so this is exactly the previous behaviour (drop
+     placeholder-location values only). *)
+  let artifact loc cell =
+    loc.loc_start.Lexing.pos_cnum < 0
+    || (recovery && match Cell.get cell with Error -> true | _ -> false)
+  in
+  (* The source locations of the values still on the stack, topmost first, with
+     artifacts dropped. *)
   let rec locations = function
-    | Cons (loc, _, st) ->
+    | Cons (loc, cell, st) ->
         let rest = locations st in
-        if loc.loc_start.Lexing.pos_cnum >= 0 then loc :: rest else rest
+        if artifact loc cell then rest else loc :: rest
     | Empty | Unreachable -> []
   in
   (match st with
@@ -1750,10 +1760,13 @@ let with_empty_stack ctx ~kind:_ ~location f =
           in
           Error.leftover_values ctx.diagnostics ~location ~related
       | [] ->
-          (* No value carries a usable location (only error-recovery
-             placeholders): point at the construct and list what remains. *)
-          Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
-              Format.fprintf f "@[%a@]" output_stack st)));
+          (* Every leftover value was dropped. In recovery mode they were all
+             cascade artifacts (Error-typed or placeholder), so report nothing;
+             otherwise (placeholder-only, as before) point at the construct and
+             list what remains. *)
+          if not recovery then
+            Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
+                Format.fprintf f "@[%a@]" output_stack st)));
   res
 
 (*** Instruction-checking helpers ***)

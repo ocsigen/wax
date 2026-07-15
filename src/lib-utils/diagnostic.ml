@@ -476,9 +476,19 @@ let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
    ([color], [output]) are irrelevant since nothing is printed, but [source] is
    still worth threading: a lint that inspects the original text via {!source}
    (e.g. the [precedence] lint) runs against this context and needs it. *)
-let collector ?source () =
-  make ~source ~exit_on_error:false ~max:max_int ~output:null_formatter
-    ~collecting:true ()
+let collector ?parent ?source () =
+  let c =
+    make ~source ~exit_on_error:false ~max:max_int ~output:null_formatter
+      ~collecting:true ()
+  in
+  (* A collector created to check part of a larger run inherits the parent's
+     error-recovery mode, so the [unbound_name] cascade suppression carries into
+     it — e.g. the per-configuration sub-contexts of the path-sensitive checker
+     (see [Cond_explore.check_all]). Inheriting it here, rather than at each call
+     site, keeps the propagation correct as more recovery-sensitive state is
+     added. *)
+  Option.iter (fun p -> c.recovery <- p.recovery) parent;
+  c
 
 let in_recovery context = context.recovery
 let set_recovery context v = context.recovery <- v
