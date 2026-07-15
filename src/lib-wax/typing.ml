@@ -1726,32 +1726,34 @@ type empty_stack_context = Expression | Block | Function
 
 let with_empty_stack ctx ~kind:_ ~location f =
   let st, res = f Empty in
-  let recovery = Wax_utils.Diagnostic.in_recovery ctx.diagnostics in
-  (* A leftover value is an error-recovery artifact if it carries a placeholder
-     location or, in recovery mode, has the [Error] type — its root cause was
-     already reported (or suppressed), so reporting it "left on the stack" would
-     only be a cascade. Such values are dropped from the report. In non-recovery
-     mode [recovery] is false, so this is exactly the previous behaviour (drop
-     placeholder-location values only). *)
-  let artifact loc cell =
-    loc.loc_start.Lexing.pos_cnum < 0
-    || (recovery && match Cell.get cell with Error -> true | _ -> false)
-  in
-  (* The source locations of the values still on the stack, topmost first, with
-     artifacts dropped. *)
-  let rec locations = function
+  (* Decide what to report about values still on the stack. A value of type
+     [Error] is the poison of an already-reported error, so if any leftover
+     carries it the stack is unreliable and the whole diagnostic is a cascade —
+     suppress it. Otherwise the leftovers are genuine values and are reported: a
+     caret on each that has a source location, or — for values that carry only
+     an error-recovery placeholder location, which are still real values, just
+     not locatable — the construct itself. [scan] gathers the locatable values
+     (topmost first, after the final [List.rev]) and whether any [Error] value
+     is present. *)
+  let rec scan has_error locs = function
     | Cons (loc, cell, st) ->
-        let rest = locations st in
-        if artifact loc cell then rest else loc :: rest
-    | Empty | Unreachable -> []
+        let has_error =
+          has_error || match Cell.get cell with Error -> true | _ -> false
+        in
+        let locs =
+          if loc.loc_start.Lexing.pos_cnum >= 0 then loc :: locs else locs
+        in
+        scan has_error locs st
+    | Empty | Unreachable -> (has_error, List.rev locs)
   in
   (match st with
   | Empty | Unreachable -> ()
   | Cons _ -> (
-      match locations st with
-      | location :: rest ->
-          (* Point a caret right at each leftover value rather than at the
-             (potentially large) enclosing construct. *)
+      match scan false [] st with
+      | true, _ -> () (* poison on the stack: an already-reported cascade *)
+      | false, location :: rest ->
+          (* Point a caret right at each locatable leftover value rather than at
+             the (potentially large) enclosing construct. *)
           let related =
             List.map
               (fun location ->
@@ -1759,14 +1761,11 @@ let with_empty_stack ctx ~kind:_ ~location f =
               rest
           in
           Error.leftover_values ctx.diagnostics ~location ~related
-      | [] ->
-          (* Every leftover value was dropped. In recovery mode they were all
-             cascade artifacts (Error-typed or placeholder), so report nothing;
-             otherwise (placeholder-only, as before) point at the construct and
-             list what remains. *)
-          if not recovery then
-            Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
-                Format.fprintf f "@[%a@]" output_stack st)));
+      | false, [] ->
+          (* Real values remain but none carries a usable location: name the
+             construct and list what is on the stack. *)
+          Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
+              Format.fprintf f "@[%a@]" output_stack st)));
   res
 
 (*** Instruction-checking helpers ***)

@@ -15,10 +15,4 @@ instead. Found by fuzz/mutate-wax.sh.)
   2 │ fn f() { become {S| x: 0}(); }
     ·                  ^
   3 │ 
-  Error: This value remains on the stack.
-   ──➤  m.wax:2:10
-  1 │ type S = { x: i32 };
-  2 │ fn f() { become {S| x: 0}(); }
-    ·          ^^^^^^^^^^^^^^^^^^
-  3 │ 
   [128]
