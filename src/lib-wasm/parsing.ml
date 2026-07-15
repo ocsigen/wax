@@ -256,11 +256,47 @@ struct
     let parse_recover ~filename ~sync text =
       let module MI = P.MenhirInterpreter in
       let lexbuf = initialize_lexing filename text in
-      let supplier =
+      let errors = ref [] in
+      (* Raised when the lexer cannot make progress past a malformed byte; the
+         error is already recorded, so the top-level handler just stops. *)
+      let exception Lexing_gave_up in
+      let record_error location message =
+        errors := { location; message; related = [] } :: !errors
+      in
+      (* Lexer-level recovery. A bad character or malformed byte makes
+         [Lexer.token] raise rather than surface as a parser [HandlingError];
+         the lexer has already consumed the offending lexeme (e.g. the [Compl]
+         catch-all matches one code point, then raises), so we record the error
+         and retry, resuming past it — a stray character no longer truncates the
+         whole parse. The position guard keeps the [parse_recover] termination
+         invariant: if a raise made no progress (a byte the decoder cannot even
+         skip), we give up lexing rather than spin. *)
+      let base_supplier =
         lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
       in
-      let buffer, supplier = E.wrap_supplier supplier in
-      let errors = ref [] in
+      let cnum () =
+        (Sedlexing.lexing_bytes_position_curr lexbuf).Lexing.pos_cnum
+      in
+      let rec recovering_supplier () =
+        let before = cnum () in
+        (* Error just recorded; retry past the offending lexeme, or give up if
+           the raise made no progress. *)
+        let resume () =
+          if cnum () > before then recovering_supplier ()
+          else raise Lexing_gave_up
+        in
+        try base_supplier () with
+        | Syntax_error ((loc_start, loc_end), message) ->
+            record_error { Wax_utils.Ast.loc_start; loc_end } message;
+            resume ()
+        | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
+            let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
+            record_error
+              { Wax_utils.Ast.loc_start; loc_end }
+              "Input file contains malformed UTF-8 byte sequences\n";
+            resume ()
+      in
+      let buffer, supplier = E.wrap_supplier recovering_supplier in
       let record checkpoint =
         let (loc_start, loc_end), message, related =
           build_syntax_error text buffer checkpoint
@@ -319,34 +355,23 @@ struct
             | Terminal -> None
             | _ -> recover env None)
       in
-      (* A lexer error (bad character, malformed UTF-8) is raised out of a
-         [supplier] call rather than surfacing as a [HandlingError] checkpoint,
-         so — like [parse_diagnostics] — catch it here, record it, and stop.
-         Parser-level errors collected before it are kept; the token stream is
-         truncated at the bad input, so there is no best-effort AST (recovering
-         past a lexer error would need lexer-level resynchronization, which this
-         does not attempt). *)
+      (* Lexer errors are handled by [recovering_supplier] above (recorded, then
+         skipped). [Lexing_gave_up] means it could not make progress, so stop —
+         the error is already recorded. The [Syntax_error]/[Sedlexing] arms are a
+         backstop for a raise from elsewhere (e.g. a grammar semantic action),
+         recorded here since the supplier did not see it. *)
       let start = snd (Sedlexing.lexing_bytes_positions lexbuf) in
       let ast =
         try run (P.Incremental.parse start) None with
+        | Lexing_gave_up -> None
         | Syntax_error ((loc_start, loc_end), message) ->
-            errors :=
-              {
-                location = { Wax_utils.Ast.loc_start; loc_end };
-                message;
-                related = [];
-              }
-              :: !errors;
+            record_error { Wax_utils.Ast.loc_start; loc_end } message;
             None
         | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
             let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
-            errors :=
-              {
-                location = { Wax_utils.Ast.loc_start; loc_end };
-                message = "Input file contains malformed UTF-8 byte sequences\n";
-                related = [];
-              }
-              :: !errors;
+            record_error
+              { Wax_utils.Ast.loc_start; loc_end }
+              "Input file contains malformed UTF-8 byte sequences\n";
             None
       in
       (ast, List.rev !errors)

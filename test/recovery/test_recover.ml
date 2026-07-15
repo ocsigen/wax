@@ -43,7 +43,8 @@ let () =
     "fn f() -> i32 { let x = (1 + ) + 7; let y = 3; x; }\n";
   report "error inside index, resync at ]"
     "fn f(a: i32) -> i32 { let x = a[@] + 1; x; }\n";
-  (* A lexer error (bad character) is recorded as a diagnostic rather than
-     escaping as an exception; there is no best-effort AST past it. *)
-  report "lexer error is recorded, not fatal"
+  (* A lexer error (bad character) is recorded as a diagnostic, then skipped:
+     parsing resumes past it (here the ';' after the dropped '$' still errors),
+     so recovery is not truncated by a stray character. *)
+  report "lexer error is recorded and skipped"
     "fn f() -> i32 { let x = $; 1; }\n"

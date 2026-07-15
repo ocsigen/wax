@@ -33,8 +33,9 @@ AST: recovered
 errors: 1
   1:32-1:33: Expecting an index expression.
 
-=== lexer error is recorded, not fatal ===
-AST: none
-errors: 1
+=== lexer error is recorded and skipped ===
+AST: recovered
+errors: 2
   1:24-1:25: Unexpected character '$'.
+  1:25-1:26: Expecting an expression.
 

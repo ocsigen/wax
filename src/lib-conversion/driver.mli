@@ -21,8 +21,9 @@ val wax_parse_recover :
     in-process consumers such as a language server; see
     {!Wax_wasm.Parsing.Make.parse_recover}. Wax resynchronizes on the statement,
     block, paren and bracket closers and on the keywords that begin a new
-    top-level item or statement (see [wax_sync]). A lexer error (bad character)
-    is recorded as a diagnostic rather than raised. *)
+    top-level item or statement (see [wax_sync]). A lexer error (bad character,
+    malformed byte) is recorded as a diagnostic and skipped, so parsing resumes
+    past it rather than stopping. *)
 
 val wat_to_binary :
   ?color:Wax_utils.Colors.flag ->

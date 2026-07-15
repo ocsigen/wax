@@ -417,10 +417,20 @@ let field_symbols
       ]
   | Module_annotation _ | Conditional _ -> []
 
+(* The outline is built with panic-mode recovery too, so a buffer with a syntax
+   error still shows the items around it (the whole file used to collapse to an
+   empty outline at the first error). The syntax errors themselves are ignored
+   here — [check] reports them — and the intact top-level items of the
+   best-effort AST are outlined; only those dropped during recovery are missing.
+   No type-checking, so recovery mode does not matter. *)
 let symbols_string src =
-  match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error _ -> []
-  | Ok (ast, _ctx) -> List.concat_map field_symbols ast
+  let ast_opt, _syntax_errors, _ctx =
+    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+      src
+  in
+  match ast_opt with
+  | None -> []
+  | Some ast -> List.concat_map field_symbols ast
 
 (* The same outline for a Wasm-text module. Its fields differ from Wax's: the
    [$id] name is optional, and a definition carries its exports separately, so an

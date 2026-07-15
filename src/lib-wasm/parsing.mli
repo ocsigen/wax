@@ -98,11 +98,13 @@ end) : sig
       resynchronized: tokens are discarded up to the next boundary (as
       classified by [sync]), the stack is unwound to the closest state that can
       shift that boundary, the boundary is shifted, and parsing resumes; see
-      {!sync_class}. Returns the best-effort AST ([Some ast] if parsing reached
-      an accepting state, [None] if recovery could not), the errors in source
-      order, and the trivia context. Nothing is printed. Intended for in-process
-      consumers such as a language server that must report all errors and keep a
-      partial AST across them. *)
+      {!sync_class}. A lexer error (bad character, malformed byte) is likewise
+      recorded and skipped, so a stray character does not truncate the parse.
+      Returns the best-effort AST ([Some ast] if parsing reached an accepting
+      state, [None] if recovery could not), the errors in source order, and the
+      trivia context. Nothing is printed. Intended for in-process consumers such
+      as a language server that must report all errors and keep a partial AST
+      across them. *)
 end
 
 (** {!Make} plus a fast parser, whose only role is speed on the happy path:
