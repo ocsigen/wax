@@ -20,6 +20,8 @@ file-types = ["wax"]
 comment-tokens = ["//"]
 block-comment-tokens = { start = "/*", end = "*/" }
 indent = { tab-width = 4, unit = "    " }
+formatter = { command = "wax", args = ["format", "-f", "wax"] }
+auto-format = true
 grammar = "wax"
 
 [[grammar]]
@@ -27,6 +29,14 @@ name = "wax"
 # Remote checkout with the grammar in a subdirectory:
 source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" }
 ```
+
+## Formatting
+
+The `formatter` line above runs `wax format -f wax`, which reads the buffer on
+standard input and writes the formatted result to standard output — Helix's
+formatter protocol. Format the current buffer with `:format`, or on every save
+via `auto-format = true` (drop that line to format only on demand). `wax` must
+be on your `PATH`.
 
 ## Build and install the queries
 
