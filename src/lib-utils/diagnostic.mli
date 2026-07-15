@@ -14,7 +14,7 @@ type output_format =
 type label = { location : Ast.location; message : Message.t }
 
 val run :
-  ?color:Colors.flag ->
+  color:Colors.flag ->
   source:string option ->
   ?related:label list ->
   ?exit:bool ->
@@ -22,8 +22,12 @@ val run :
   ?policy:Warning.policy ->
   (context -> 'a) ->
   'a
-(** [run ?color ~source ?related ?exit ?output ?policy f] runs the diagnostic
-    context [f]. [source] is the source code for the diagnostics (if available).
+(** [run ~color ~source ?related ?exit ?output ?policy f] runs the diagnostic
+    context [f], a {e rendering} context that prints its diagnostics. [color] is
+    mandatory: a rendering context must decide up front whether to emit ANSI
+    colour, so a caller cannot silently fall back to the [Auto] default (which
+    sniffs stderr) — contrast {!collector}, which renders nothing and takes no
+    [color]. [source] is the source code for the diagnostics (if available).
     [policy] sets the level — hidden, displayed, or promoted to an error — of
     each {e named} warning reported with [report]'s [warning] argument; it
     defaults to the policy installed by {!set_policy}. *)

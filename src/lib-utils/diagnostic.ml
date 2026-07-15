@@ -428,22 +428,24 @@ let output_error ?(output = Format.err_formatter) ~theme ~source ~location
             output_error_with_source ~output ~theme ~source ~location ~severity
               ?hint ~related msg)
 
+(* Where and how a context renders. Held only by a rendering context; a
+   [collector] has none — it merely accumulates entries (see [collected]) for a
+   rendering context to re-report, so it needs no theme or output at all. *)
+type render = { theme : theme; output : Format.formatter; exit_on_error : bool }
+
 type context = {
   max : int;
   queue : t Queue.t;
   source : string option;
-  theme : theme;
   related : label list;
-  exit_on_error : bool;
-  output : Format.formatter;
   policy : Warning.policy;
       (* The level — hidden, displayed, or error — of each named warning. *)
-  collecting : bool;
-      (* A collecting context buffers warnings in its queue (like errors)
-         instead of printing them immediately, so they can be inspected with
-         [collected] and re-reported. The policy is not applied while
-         collecting; it is applied when the buffered entries are re-reported to
-         a non-collecting context. *)
+  render : render option;
+      (* [None] in a collecting context: it buffers every reported entry (errors
+         and warnings alike, with [policy] unapplied) for [collected] to read
+         back and re-report to a rendering context. [Some] otherwise: warnings
+         are resolved against [policy] and printed immediately, and errors are
+         queued and flushed (see [output_errors]) once [max] accumulate. *)
   mutable recovery : bool;
       (* Error-recovery mode: the input had syntax errors and a best-effort AST
          was recovered past them (see [Wax_wasm.Parsing.parse_recover]). Name
@@ -462,36 +464,25 @@ let global_policy = ref Warning.default_policy
 let set_policy policy = global_policy := policy
 let source context = context.source
 
-let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
-    ?(output = Format.err_formatter) ?(policy = !global_policy)
-    ?(collecting = false) () =
-  let theme = get_theme ?color () in
+let make ~source ?(related = []) ?(max = 1) ?(policy = !global_policy) ?render
+    () =
   {
     max;
     queue = Queue.create ();
     source;
-    theme;
     related;
-    exit_on_error;
-    output;
     policy;
-    collecting;
+    render;
     recovery = false;
   }
 
-(* A formatter that discards everything, used by collecting contexts. *)
-let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
-
 (* A context that accumulates errors in its queue without ever printing or
-   exiting, so they can be inspected with [collected]. Rendering parameters
-   ([color], [output]) are irrelevant since nothing is printed, but [source] is
-   still worth threading: a lint that inspects the original text via {!source}
-   (e.g. the [precedence] lint) runs against this context and needs it. *)
+   exiting, so they can be inspected with [collected]. It has no rendering
+   config ([render = None]) — nothing is printed — but [source] is still worth
+   threading: a lint that inspects the original text via {!source} (e.g. the
+   [precedence] lint) runs against this context and needs it. *)
 let collector ?parent ?source () =
-  let c =
-    make ~source ~exit_on_error:false ~max:max_int ~output:null_formatter
-      ~collecting:true ()
-  in
+  let c = make ~source ~max:max_int () in
   (* A collector created to check part of a larger run inherits the parent's
      error-recovery mode, so the [unbound_name] cascade suppression carries into
      it — e.g. the per-configuration sub-contexts of the path-sensitive checker
@@ -516,80 +507,72 @@ let entry_hint (e : entry) = e.hint
 let entry_related (e : entry) = e.related
 
 let output_errors ?exit_on_error context =
-  let exit_on_error =
-    match exit_on_error with Some b -> b | None -> context.exit_on_error
-  in
-  if not (Queue.is_empty context.queue) then (
-    Queue.iter
-      (fun ({
-              location;
-              severity;
-              hint;
-              message;
-              related;
-              warning;
-              universal = _;
-            } :
-             t) ->
-        output_error ~output:context.output ~theme:context.theme
-          ~source:context.source ~location ~severity ?warning ?hint ~related
-          message)
-      context.queue;
-    Queue.clear context.queue;
-    if exit_on_error then exit 128)
+  match context.render with
+  | None ->
+      () (* a collector renders nothing; use [collected] to read entries *)
+  | Some render ->
+      let exit_on_error =
+        match exit_on_error with Some b -> b | None -> render.exit_on_error
+      in
+      if not (Queue.is_empty context.queue) then (
+        Queue.iter
+          (fun ({
+                  location;
+                  severity;
+                  hint;
+                  message;
+                  related;
+                  warning;
+                  universal = _;
+                } :
+                 t) ->
+            output_error ~output:render.output ~theme:render.theme
+              ~source:context.source ~location ~severity ?warning ?hint ~related
+              message)
+          context.queue;
+        Queue.clear context.queue;
+        if exit_on_error then exit 128)
 
 let report context ~location ~severity ?warning ?(universal = false) ?hint
     ?(related = []) ~message () =
   let all_related = context.related @ related in
-  (* A collecting context buffers everything raw; the policy is applied later,
-     when the buffered entries are re-reported to a non-collecting context.
-     Otherwise, resolve a named warning's level now: hide it, leave it a
-     warning, or promote it to an error. *)
-  let severity =
-    if context.collecting then Some severity
-    else
-      match (severity, warning) with
-      | Warning, Some w -> (
-          match Warning.resolve context.policy w with
-          | Warning.Hidden -> None
-          | Warning.Displayed -> Some Warning
-          | Warning.Error -> Some Error)
-      | _ -> Some severity
+  let entry severity =
+    {
+      location;
+      severity;
+      warning;
+      message;
+      hint;
+      related = all_related;
+      universal;
+    }
   in
-  match severity with
-  | None -> ()
-  | Some severity -> (
+  match context.render with
+  | None ->
+      (* A collecting context buffers everything raw; the policy is applied
+         later, when the buffered entries are re-reported to a rendering
+         context. *)
+      Queue.push (entry severity) context.queue
+  | Some render -> (
+      (* Resolve a named warning's level now: hide it, leave it a warning, or
+         promote it to an error. *)
+      let severity =
+        match (severity, warning) with
+        | Warning, Some w -> (
+            match Warning.resolve context.policy w with
+            | Warning.Hidden -> None
+            | Warning.Displayed -> Some Warning
+            | Warning.Error -> Some Error)
+        | _ -> Some severity
+      in
       match severity with
-      | Warning when context.collecting ->
-          (* Buffer the warning so [collected] can surface it; never triggers
-             the early flush or the exit-on-error path. *)
-          Queue.push
-            {
-              location;
-              severity;
-              warning;
-              message;
-              hint;
-              related = all_related;
-              universal;
-            }
-            context.queue
-      | Warning ->
-          output_error ~output:context.output ~theme:context.theme
-            ~source:context.source ~location ~severity ?warning ?hint
+      | None -> ()
+      | Some Warning ->
+          output_error ~output:render.output ~theme:render.theme
+            ~source:context.source ~location ~severity:Warning ?warning ?hint
             ~related:all_related message
-      | Error ->
-          Queue.push
-            {
-              location;
-              severity;
-              warning;
-              message;
-              hint;
-              related = all_related;
-              universal;
-            }
-            context.queue;
+      | Some Error ->
+          Queue.push (entry Error) context.queue;
           if Queue.length context.queue = context.max then output_errors context
       )
 
@@ -597,8 +580,15 @@ exception Aborted
 
 let abort () = raise Aborted
 
-let run ?color ~source ?related ?(exit = true) ?output ?policy f =
-  let d = make ?color ~source ?related ~exit_on_error:exit ?output ?policy () in
+let run ~color ~source ?related ?(exit = true) ?output ?policy f =
+  let render =
+    {
+      theme = get_theme ~color ();
+      output = Option.value output ~default:Format.err_formatter;
+      exit_on_error = exit;
+    }
+  in
+  let d = make ~source ?related ?policy ~render () in
   match f d with
   | res ->
       output_errors d;
