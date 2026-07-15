@@ -31,8 +31,9 @@
      or a non-null [error] message when the rename is rejected. Wax only.
    - [symbols src] / [symbolsWat src] -> nested { name; kind; startLine; …;
      selStartLine; …; children }: the module's definitions, for the outline.
-   - [completion src line ch defines] -> array of { name; kind; detail }:
-     completion candidates at the position. Wax only.
+   - [completion src line ch defines] / [completionWat src line ch defines] ->
+     array of { name; kind; detail }: completion candidates at the position (for
+     WAT, the in-scope names of the index space the position expects).
    - [signatureHelp src line ch] -> { label; parameters; active } or null: the
      enclosing call's signature at the position. Wax only.
    - [selectionRange src line ch] -> array of { startLine; …; endChar }: the
@@ -269,13 +270,13 @@ let js_completion c =
     val detail = Js.string c.k_detail
   end
 
-let completion_result src line ch defines =
+let completion_result completion src line ch defines =
   let defines =
     try Js.to_array defines |> Array.to_list |> List.map Js.to_string
     with _ -> []
   in
   let items =
-    try completion_string (Js.to_string src) line ch defines with _ -> []
+    try completion (Js.to_string src) line ch defines with _ -> []
   in
   Js.array (Array.of_list (List.map js_completion items))
 
@@ -383,7 +384,7 @@ let () =
       method symbols src = symbols_result symbols_string src
 
       method completion src line ch defines =
-        completion_result src line ch defines
+        completion_result completion_string src line ch defines
 
       method signatureHelp src line ch =
         signature_result signature_help_string src line ch
@@ -428,4 +429,7 @@ let () =
 
       method typeDefinitionWat src line ch =
         type_definition_result Wat_editor.type_definition_string src line ch
+
+      method completionWat src line ch defines =
+        completion_result Wat_editor.completion_string src line ch defines
     end

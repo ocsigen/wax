@@ -128,8 +128,14 @@ side by re-resolving the rewritten buffer and rejecting a change to the renamed
 binding's occurrence count, and both sides return the shared
 `Editor_common.rename_outcome`); and type-definition (from a value of
 a named reference type to that type's definition, via a def-span recorded in the
-sink at each such value). Still Wax-only for `.wat` (guarded to return empty):
-completion and inlay-hint. `--stdio` is accepted and ignored. The
+sink at each such value); and completion (WAT operands are indices into flat
+spaces and the enclosing instruction fixes which space, so `Resolve.f`'s
+`?expected` sink records at every index use-site — including the zero-width `0`
+the recovering parse inserts for a missing operand — a thunk of the in-scope
+names of that space; completion finds the use-site at the cursor and offers those
+names with their leading `$`, letting the client filter by the typed prefix).
+Still Wax-only for `.wat` (guarded to return empty): inlay-hint. `--stdio` is
+accepted and ignored. The
 `wax` binary builds in both `exe` and `wasm` modes, and `lsp`/`jsonrpc` compile
 under wasm_of_ocaml, so the npm wasm CLI still builds with the subcommand linked
 in.

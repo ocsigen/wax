@@ -290,6 +290,7 @@ module and drive one request of each kind:
   >    {"jsonrpc":"2.0","id":8,"method":"textDocument/rename","params":{"textDocument":td,"position":{"line":1,"character":9},"newName":"main"}},
   >    {"jsonrpc":"2.0","id":6,"method":"textDocument/foldingRange","params":{"textDocument":td}},
   >    {"jsonrpc":"2.0","id":7,"method":"textDocument/documentSymbol","params":{"textDocument":td}},
+  >    {"jsonrpc":"2.0","id":10,"method":"textDocument/completion","params":{"textDocument":td,"position":{"line":4,"character":11}}},
   >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
   > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
   > o,i,by,pubs=p.stdout,0,{},[]
@@ -308,6 +309,7 @@ module and drive one request of each kind:
   > print("rename-clash:", by[8]["message"])
   > print("folding:", ", ".join("%d-%d"%(f["startLine"],f["endLine"]) for f in by[6]))
   > print("symbols:", ", ".join(s["name"] for s in by[7]))
+  > print("completion:", ", ".join(c["label"] for c in by[10]))
   > print("stderr:", p.stderr.decode().strip() or "(empty)")
   > PY
   diagnostics: 1
@@ -318,4 +320,5 @@ module and drive one request of each kind:
   rename-clash: Cannot rename to "$main": that name is already in use, and the rename would change which definition one or more names refer to.
   folding: 1-2, 3-4
   symbols: $add, $main
+  completion: $add, $main
   stderr: (empty)

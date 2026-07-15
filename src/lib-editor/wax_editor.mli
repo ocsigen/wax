@@ -8,10 +8,12 @@
    mapped back to that shape with {!Editor_common.position} (or
    {!Editor_common.utf16_position} for the UTF-16 case).
 
-   The Wax side type-checks and builds a typed tree, so features that read it
+   The Wax side type-checks and builds a typed tree that powers its features
    (hover, inlay hints, go-to-definition, references, rename, completion,
    signature help, semantic tokens, selection and folding ranges, inactive
-   ranges) are Wax only; the Wasm-text side ({!Wat_editor}) validates instead. *)
+   ranges); the Wasm-text side ({!Wat_editor}) reaches the same set through
+   validation and name resolution instead, with only inlay hints (and the
+   inactive-range shading) still Wax only. *)
 
 open Editor_common
 

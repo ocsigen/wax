@@ -366,6 +366,79 @@ let rename_string ?(encoding = UTF16) src line ch newname =
         else Rename_edits edits
   | _ -> Rename_edits []
 
+(* The completion kind word for an index space, matching the vocabulary the LSP
+   / JS consumers map to icons. *)
+let completion_kind (k : Wax_wasm.Resolve.kind) =
+  match k with
+  | Func -> "function"
+  | Global -> "variable"
+  | Type -> "type"
+  | Param -> "parameter"
+  | Local -> "variable"
+  | Field -> "field"
+  | Tag -> "event"
+  | Label | Memory | Table | Elem | Data -> "text"
+
+(* As [completion_string], but for WAT. WAT operands are all indices into flat
+   spaces, and the kind of index a position wants is fixed by the enclosing
+   instruction — so where the user is typing an index (or has just opened one,
+   which the recovering parse repairs by inserting a placeholder [0]), we know
+   whether functions, globals, locals, types, labels, … belong there. Resolve
+   notes each index use-site with the names in scope for the space it expects;
+   completion finds the use-site at the cursor and offers those names (with their
+   leading [$]), letting the client filter by the prefix already typed. Anywhere
+   else (a mnemonic, a keyword) there is no index use-site, so nothing is
+   offered. *)
+let completion_string ?(encoding = UTF16) src line ch (_defines : string list) =
+  match (analyze src).a_ast with
+  | None -> []
+  | Some ast -> (
+      let target = (line + 1, byte_column ~encoding src line ch) in
+      let pos (p : Lexing.position) =
+        (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+      in
+      let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+      let contains (loc : Wax_utils.Ast.location) =
+        le (pos loc.loc_start) target && le target (pos loc.loc_end)
+      in
+      let width (loc : Wax_utils.Ast.location) =
+        loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
+      in
+      let expected = ref [] in
+      ignore (Wax_wasm.Resolve.f ~expected ast);
+      (* The narrowest index use-site covering the cursor (a zero-width inserted
+         placeholder wins over any wider token that might abut it). *)
+      let best =
+        List.fold_left
+          (fun best (e : Wax_wasm.Resolve.expected) ->
+            if contains e.e_loc then
+              match best with
+              | Some (b : Wax_wasm.Resolve.expected)
+                when width b.e_loc <= width e.e_loc ->
+                  best
+              | _ -> Some e
+            else best)
+          None !expected
+      in
+      match best with
+      | None -> []
+      | Some e ->
+          let seen = Hashtbl.create 32 in
+          List.filter_map
+            (fun (name, kind, hover) ->
+              let k_name = "$" ^ name in
+              let key = (k_name, kind) in
+              if Hashtbl.mem seen key then None
+              else (
+                Hashtbl.add seen key ();
+                Some
+                  {
+                    k_name;
+                    k_kind = completion_kind kind;
+                    k_detail = Option.value hover ~default:"";
+                  }))
+            (e.e_candidates ()))
+
 (* As [check_string] but for WAT: the recovered parse's syntax errors together
    with the validation / lint diagnostics, both from the shared analysis. *)
 let check_string src =

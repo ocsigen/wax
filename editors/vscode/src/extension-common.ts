@@ -158,6 +158,8 @@ const LANGUAGES: LanguageSpec[] = [
     semanticTokens: (wax, src) => wax.semanticTokensWat(src),
     signatureHelp: (wax, src, line, character) =>
       wax.signatureHelpWat(src, line, character),
+    completion: (wax, src, line, character, defines) =>
+      wax.completionWat(src, line, character, defines),
   },
 ];
 
