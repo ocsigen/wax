@@ -21,7 +21,9 @@
 
    Parsing goes through [parse_diagnostics], which yields the AST or a structured
    error without printing or exiting (and without the fast parser), so a syntax
-   error becomes an editor squiggle rather than stderr noise. *)
+   error becomes an editor squiggle rather than stderr noise. The Wax [check]
+   uses [parse_recover] instead, so a buffer with several syntax errors squiggles
+   all of them at once rather than only the first. *)
 
 open Js_of_ocaml
 
@@ -126,8 +128,7 @@ let render_labels labels =
     (fun (l : Wax_utils.Diagnostic.label) -> (render l.message, l.location))
     labels
 
-(* The single syntax error the parser returns, as a diagnostic (with its related
-   labels but no hint). *)
+(* A syntax error, as a diagnostic (with its related labels but no hint). *)
 let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
   {
     severity = Wax_utils.Diagnostic.Error;
@@ -155,13 +156,23 @@ let collected_diags d =
       })
     (Wax_utils.Diagnostic.collected d)
 
-(* Diagnostics: a syntax error (one, from the parser) or, if parsing succeeds,
-   the checker's errors and warnings collected without printing. For Wax that
-   checker is the type-checker; for Wasm text it is the validator. *)
+(* Diagnostics for Wax. Parse with panic-mode recovery ([parse_recover]) so a
+   buffer with several syntax errors surfaces all of them as squiggles at once,
+   not just the first — the editor is exactly the multi-error consumer recovery
+   exists for. A buffer that still has syntax errors is not type-checked (the
+   partial AST recovered past them would yield spurious type errors); only a
+   cleanly-parsed module goes on to the type-checker, whose errors and warnings
+   are collected without printing. (WAT keeps the single-error path below:
+   recovery over its paren-counted grammar cascades — see the [Recover] note.) *)
 let check_string src =
-  match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error e -> [ syntax_error_diag e ]
-  | Ok (ast, _ctx) ->
+  let ast_opt, syntax_errors, _ctx =
+    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+      src
+  in
+  match (syntax_errors, ast_opt) with
+  | _ :: _, _ -> List.map syntax_error_diag syntax_errors
+  | [], None -> []
+  | [], Some ast ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       (try Wax_lang.Typing.check ~warn_unused:true d ast
        with Wax_utils.Diagnostic.Aborted -> ());
