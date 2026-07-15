@@ -1975,19 +1975,25 @@ let pop_args ctx loc ~source args =
   loop (Array.length args - 1)
 
 (* [sink] (default [true]) records each pushed result at the instruction span
-   [loc] for the editor type sink, but pushes with location [None]: a
-   multi-result instruction must not attribute each of its result cells to that
-   single span — the per-cell location is the value provenance a "pushed here"
-   diagnostic reads. Set [~sink:false] where [push_results] is not pushing the
-   instruction's own results but simulating a branch target or a block's entry
-   parameters, which hover must not attribute to the instruction's span. *)
+   [loc] for the editor type sink. A {e single} result cell also carries [loc] as
+   its provenance — that value was unambiguously pushed by this instruction, so a
+   "value pushed here" diagnostic (and hover) points at it; [push] does the sink
+   recording in that case. Several results cannot each be that one span, so their
+   cells push location [None] and the span is recorded here instead. Set
+   [~sink:false] where [push_results] simulates a branch target or a block's
+   entry parameters rather than pushing the instruction's own results: nothing is
+   attributed to the instruction's span, cells included. *)
 let push_results ?(sink = true) ~loc ~source results =
+  let single = Array.length results = 1 in
+  let cell_loc = if sink && single then Some loc else None in
   let rec loop i =
     if i >= Array.length results then return ()
     else begin
-      if sink then record (Some loc) (Pushed source.(i));
-      if sink then record_value_type_def (Some loc) source.(i);
-      let* () = push ~source:source.(i) None results.(i) in
+      if sink && not single then begin
+        record (Some loc) (Pushed source.(i));
+        record_value_type_def (Some loc) source.(i)
+      end;
+      let* () = push ~source:source.(i) cell_loc results.(i) in
       loop (i + 1)
     end
   in
