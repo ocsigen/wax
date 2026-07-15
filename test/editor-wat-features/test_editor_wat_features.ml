@@ -284,4 +284,43 @@ let () =
   Printf.printf "=== signature help ===\n";
   sig_help "in first arg" "(i32.const 1)" 2;
   sig_help "in second arg" "(i32.const 2)" 2;
+  print_newline ();
+
+  (* Go-to-type-definition: from a value of a named reference type, or from a
+     type identifier, to the type's definition. $t is defined on line 2. *)
+  let src8 =
+    "(module\n\
+    \  (type $t (struct (field i32)))\n\
+    \  (func (param $p (ref $t)) (result (ref $t))\n\
+    \    (local $x (ref $t))\n\
+    \    (local.set $x (local.get $p))\n\
+    \    (local.get $x)))\n"
+  in
+  let find8 sub off =
+    let i = Str.search_forward (Str.regexp_string sub) src8 0 in
+    let line = ref 0 and bol = ref 0 in
+    String.iteri
+      (fun j c ->
+        if j < i && c = '\n' then (
+          incr line;
+          bol := j + 1))
+      src8;
+    (!line, i - !bol + off)
+  in
+  let type_def label sub off =
+    let l, c = find8 sub off in
+    Printf.printf "  %s ->" label;
+    (match Wax_editor.type_definition_wat_string src8 l c with
+    | [] -> Printf.printf " (none)"
+    | ls ->
+        List.iter
+          (fun (loc : Wax_utils.Ast.location) ->
+            Printf.printf " (%d,%d)" loc.loc_start.pos_lnum
+              (loc.loc_start.pos_cnum - loc.loc_start.pos_bol))
+          ls);
+    print_newline ()
+  in
+  Printf.printf "=== type definition ($t defined at line 2) ===\n";
+  type_def "on local.get $x (value of ref $t)" "local.get $x" 6;
+  type_def "on local.get $p" "local.get $p" 6;
   print_newline ()

@@ -220,12 +220,15 @@ type recorded_type =
     (* a function's (params, results), for the identifier of a call / ref.func *)
   | Subtype of
       (Ast.Text.name option * Ast.Text.subtype, Ast.location) Ast.annotated
-(* the source definition of the type a type identifier refers to *)
+    (* the source definition of the type a type identifier refers to *)
+  | Value_type of Ast.location
+(* the definition span of a value's named reference type, for go-to-type-def;
+   carries no display type (a [Pushed] at the same span renders the value) *)
 
 let render_recorded_type = function
   | Pushed source -> Some (render_source_type source)
   | Polymorphic -> Some "any"
-  | No_result -> None
+  | No_result | Value_type _ -> None
   | Subtype e -> Some (Output.subtype_string e)
   | Signature (params, results) ->
       let group kw arr =
@@ -242,6 +245,17 @@ let render_recorded_type = function
       Some
         (Printf.sprintf "(func%s)"
            (String.concat "" (List.map (fun s -> " " ^ s) parts)))
+
+(* The definition span of the type a recorded entry refers to, for
+   go-to-type-definition: a value's named reference type, or the type a type
+   identifier names; [None] otherwise. *)
+let type_def_location = function
+  | Value_type l -> Some l
+  | Subtype e -> (
+      match fst e.Ast.desc with
+      | Some (n : Ast.Text.name) -> Some n.Ast.info
+      | None -> Some e.Ast.info)
+  | Pushed _ | Polymorphic | No_result | Signature _ -> None
 
 (* The rendered parameter and result types of a recorded function signature (a
    [call]/[ref.func] identifier), for signature help; [None] for any other kind. *)
@@ -1108,6 +1122,42 @@ let get_type_info d ctx (idx : Ast.Text.idx) =
   | _ -> ());
   result
 
+(* The type context in force during the current body validation, so [push] can
+   resolve a pushed value's named reference type to the type's definition for
+   go-to-type-definition. Set (editor mode only) by [validate_configuration];
+   like [recorded_types] it avoids threading through the push chokepoints. *)
+let sink_type_context : type_context option ref = ref None
+
+(* The source subtype entry a type reference resolves to (its definition),
+   without reporting or recording — a silent [get_type_info]. *)
+let lookup_subtype_entry tc (idx : Ast.Text.idx) =
+  match
+    match idx.desc with
+    | Num x -> Hashtbl.find_opt tc.index_mapping x
+    | Id id -> Hashtbl.find_opt tc.label_mapping id
+  with
+  | Some (_, _, _, e) -> e
+  | None -> None
+
+(* If [source] is a value of a named reference type, record its type's
+   definition span at [loc] for go-to-type-definition. *)
+let record_value_type_def loc source =
+  match (!recorded_types, loc, !sink_type_context) with
+  | Some r, Some l, Some tc when l.Ast.loc_start.Lexing.pos_cnum >= 0 -> (
+      match source with
+      | Plain (Ast.Text.Ref { typ = Type idx | Exact idx; _ }) -> (
+          match lookup_subtype_entry tc idx with
+          | Some e ->
+              let def =
+                match fst e.Ast.desc with
+                | Some (n : Ast.Text.name) -> n.Ast.info
+                | None -> e.Ast.info
+              in
+              r := (l, Value_type def) :: !r
+          | None -> ())
+      | _ -> ())
+  | _ -> ()
+
 (* Resolve a source type reference to how it should appear inside a rec group
    being registered: [Def id] for an already-defined type, [Rec pos] for a member
    of the group currently under construction. This is what the type-definition
@@ -1706,6 +1756,7 @@ let push_bot_ref loc st =
 
 let push ~source loc ty st =
   record loc (Pushed source);
+  record_value_type_def loc source;
   (Cons (loc, Val (ty, source), st), ())
 
 (* Push a value whose type has no user-written source form, reconstructing its
@@ -1907,6 +1958,7 @@ let push_results ?(sink = true) ~loc ~source results =
     if i >= Array.length results then return ()
     else begin
       if sink then record (Some loc) (Pushed source.(i));
+      if sink then record_value_type_def (Some loc) source.(i);
       let* () = push ~source:source.(i) None results.(i) in
       loop (i + 1)
     end
@@ -5190,6 +5242,9 @@ let validate_configuration ?(warn_unused = true)
       | _ -> ())
     fields;
   collect_implicit_types diagnostics type_context fields;
+  (* Make the type context available to [push] for go-to-type-definition
+     recording (editor mode only; reset in [f]). *)
+  if !recorded_types <> None then sink_type_context := Some type_context;
   (* Register the implicit [<string>] array type ([mut i8]) up front, so that
      validating an unnamed [@string] — which looks the type up via [string_type]
      ([add_rectype], idempotent) — gets an index within [subtyping_info] instead
@@ -5479,7 +5534,10 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
     ?record_types diagnostics ((name, fields) as modul) =
   Wax_utils.Debug.timed "validate" @@ fun () ->
   recorded_types := record_types;
-  Fun.protect ~finally:(fun () -> recorded_types := None) @@ fun () ->
+  Fun.protect ~finally:(fun () ->
+      recorded_types := None;
+      sink_type_context := None)
+  @@ fun () ->
   check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     validate_configuration ~warn_unused ~features diagnostics modul

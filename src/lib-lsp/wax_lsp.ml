@@ -441,23 +441,23 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
   | Lsp.Client_request.TextDocumentTypeDefinition { textDocument; position; _ }
     ->
       let uri = textDocument.uri in
-      (* No WAT type-definition yet; skip rather than run the Wax analysis on it. *)
-      if is_wat uri then None
-      else
-        with_doc uri (fun src ->
-            match
-              Wax_editor.type_definition_string ~encoding:!encoding src
-                position.line position.character
-            with
-            | [] -> None
-            | locs ->
-                Some
-                  (`Location
-                     (List.map
-                        (fun loc ->
-                          Location.create ~uri
-                            ~range:(range_of_location src loc))
-                        locs)))
+      with_doc uri (fun src ->
+          let type_definition =
+            if is_wat uri then Wax_editor.type_definition_wat_string
+            else Wax_editor.type_definition_string
+          in
+          match
+            type_definition ~encoding:!encoding src position.line
+              position.character
+          with
+          | [] -> None
+          | locs ->
+              Some
+                (`Location
+                   (List.map
+                      (fun loc ->
+                        Location.create ~uri ~range:(range_of_location src loc))
+                      locs)))
   | Lsp.Client_request.TextDocumentReferences { textDocument; position; _ } ->
       let uri = textDocument.uri in
       with_doc uri (fun src ->

@@ -117,6 +117,14 @@ val definition_wat_string :
   int ->
   Wax_utils.Ast.location list
 
+(* As [type_definition_string], but for a Wasm-text buffer. *)
+val type_definition_wat_string :
+  ?encoding:position_encoding ->
+  string ->
+  int ->
+  int ->
+  Wax_utils.Ast.location list
+
 (* As [references_string], but for a Wasm-text buffer. *)
 val references_wat_string :
   ?encoding:position_encoding ->

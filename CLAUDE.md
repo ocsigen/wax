@@ -118,9 +118,10 @@ a type reference's source subtype; the subtype is kept in the reference-keyed
 `index_mapping` so deduplicated types still show their own definition); and
 navigation/rename (go-to-definition, references, document-highlight,
 prepare-rename, rename — over `Wax_wasm.Resolve`, the WAT name-resolution pass,
-which also classifies the semantic tokens). Still Wax-only for `.wat` (guarded to
-return empty): completion, inlay-hint, and type-definition. `--stdio` is accepted
-and ignored. The
+which also classifies the semantic tokens); and type-definition (from a value of
+a named reference type to that type's definition, via a def-span recorded in the
+sink at each such value). Still Wax-only for `.wat` (guarded to return empty):
+completion and inlay-hint. `--stdio` is accepted and ignored. The
 `wax` binary builds in both `exe` and `wasm` modes, and `lsp`/`jsonrpc` compile
 under wasm_of_ocaml, so the npm wasm CLI still builds with the subcommand linked
 in.
