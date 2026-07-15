@@ -70,16 +70,18 @@ let resolve name src =
       List.iter
         (fun l -> Printf.printf "pun %S @ %s\n" (slice src l) (span l))
         (List.sort_uniq compare !puns);
-      (* Member-completion candidates at each struct field access: name, kind
-         (a struct field, or a value method) and its rendered signature. *)
-      List.iter
-        (fun (l, candidates) ->
+      (* Member-completion candidates at each access, derived on demand from the
+         recorded receiver: each candidate's name and rendered type / signature.
+         (The lines are sorted, not the receivers, which hold inference cells.) *)
+      !members
+      |> List.map (fun (l, receiver) ->
           let show (c : Typing.member_candidate) =
             Printf.sprintf "%s: %s" c.member_name c.member_detail
           in
-          Printf.printf "member @ %s -> %s\n" (span l)
-            (String.concat ", " (List.map show candidates)))
-        (List.sort_uniq compare !members);
+          Printf.sprintf "member @ %s -> %s" (span l)
+            (String.concat ", "
+               (List.map show (Typing.member_candidates receiver))))
+      |> List.sort_uniq compare |> List.iter print_endline;
       print_newline ()
 
 let () =

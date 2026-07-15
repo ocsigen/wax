@@ -66,15 +66,25 @@ type member_candidate = {
   member_detail : string;
 }
 
+(* What a member access [recv.<here>]'s completion candidates are derived from.
+   The typer records this lightweight descriptor (a kind and the receiver's
+   type), and {!member_candidates} turns it into the candidate list on demand —
+   so the list, which for a v128 or memory receiver is large, is built only for
+   the access under the cursor, not at every access in the file. *)
+type member_receiver =
+  | R_numeric of inferred_type
+      (** a value receiver: its integer / float / v128 methods *)
+  | R_struct of fieldtype Ast.annotated_array  (** the struct's fields *)
+  | R_array  (** [length] *)
+  | R_memory of [ `I32 | `I64 ]  (** by address type *)
+  | R_table of [ `I32 | `I64 ] * reftype  (** by address and element type *)
+
 (* Record, at a struct field access, the (possibly partial) field's span and the
-   receiver's members (a struct's fields, or the value methods below), for
-   member completion. [candidates] is a thunk: rendering it (field types,
-   method signatures) is wasted work on the ordinary compile path, where the
-   sink is [None]. *)
-let record_members (sink : (location * member_candidate list) list ref option)
-    field candidates =
+   receiver it is on, for member completion. [None] outside the editor. *)
+let record_members (sink : (location * member_receiver) list ref option) field
+    receiver =
   match sink with
-  | Some r when is_source field -> r := (field, candidates ()) :: !r
+  | Some r when is_source field -> r := (field, receiver) :: !r
   | _ -> ()
 
 (* What a value method's result type is relative to its receiver: [Same] as the
@@ -165,7 +175,8 @@ let render_fieldtype (f : Ast.fieldtype) =
 let render_reftype (rt : Ast.reftype) =
   String.trim (Format.asprintf "%a" Output.valtype (Ast.Ref rt))
 
-(* The member candidates for a struct's [fields], for member completion. *)
+(* The member candidates for a struct's [fields] (each name and declared type),
+   for member completion. *)
 let struct_candidates fields =
   Array.to_list fields
   |> List.map (fun f ->
@@ -1395,7 +1406,7 @@ type module_context = {
          both a field name and a variable use, so the editor must expand it
          ([x] -> [x: new]) rather than replace it on rename. [None] outside the
          editor. *)
-  member_completions : (location * member_candidate list) list ref option;
+  member_completions : (location * member_receiver) list ref option;
       (* At each struct field access [recv.field], the field-name span paired
          with the receiver's members (a struct's fields, or the value methods of
          a numeric / array receiver), for member completion. The editor offers
@@ -4017,6 +4028,17 @@ let numeric_receiver_candidates (t : inferred_type) :
   | Float -> Some (floats ~recv_name:"float" ~reinterp:"int")
   | _ -> None
 
+(* Whether a value receiver of type [t] has value methods, as an [R_numeric]
+   descriptor — the cheap classification the recorder uses to decide whether to
+   record, without building the (possibly large) candidate list. Its domain must
+   match [numeric_receiver_candidates] returning [Some]. *)
+let numeric_receiver_kind (t : inferred_type) : member_receiver option =
+  match t with
+  | Valtype { typ = I32 | I64 | F32 | F64 | V128; _ }
+  | Int | Number | LargeInt | Float ->
+      Some (R_numeric t)
+  | _ -> None
+
 let address_type_name : [ `I32 | `I64 ] -> string = function
   | `I32 -> "i32"
   | `I64 -> "i64"
@@ -4126,6 +4148,24 @@ let table_method_candidates ~addr_name ~elem_name =
       (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name addr_name addr_name);
     m "init" (Printf.sprintf "fn(elem, %s, i32, i32) -> ()" addr_name);
   ]
+
+(* The member-completion candidates a recorded {!member_receiver} stands for,
+   derived on demand (the editor forces only the one under the cursor). *)
+let member_candidates : member_receiver -> member_candidate list = function
+  | R_numeric t -> Option.value ~default:[] (numeric_receiver_candidates t)
+  | R_struct fields -> struct_candidates fields
+  | R_array ->
+      [
+        {
+          member_name = "length";
+          member_kind = Method;
+          member_detail = "fn() -> i32";
+        };
+      ]
+  | R_memory at -> memory_method_candidates ~addr_name:(address_type_name at)
+  | R_table (at, rt) ->
+      table_method_candidates ~addr_name:(address_type_name at)
+        ~elem_name:(render_reftype rt)
 
 (* Free-function members offered after [v128::] — [bitselect] and the per-shape
    const constructors — with signatures from the SIMD registry. *)
@@ -5831,37 +5871,31 @@ and type_aggregate_access ctx i =
       let* i' = instruction ctx i' in
       let*! ty =
         let ty = expression_type ctx i' in
-        (* The receiver's value methods, for member completion: the numeric ones
-           (a concrete or still-flexible literal type), or — when the receiver
-           is a memory / table name rather than a value — that object's methods.
-           A reference receiver's struct fields / array [length] are recorded in
-           the arms below. Built only in the editor (the sink is set), since a
-           numeric or memory [.field] is otherwise an error path. *)
+        (* The receiver this access is on, for member completion: a memory /
+           table name (that object's methods), else a numeric value (its
+           methods). A reference receiver's struct fields / array [length] are
+           recorded in the arms below. Only the receiver kind and type are
+           recorded; the editor derives the candidate list on demand. *)
         (if ctx.member_completions <> None then
-           let record cands =
-             record_members ctx.member_completions field.info (fun () -> cands)
-           in
            match i'.desc with
            | Get name when memory_receiver ctx name ->
                let _, at = Option.get (Tbl.find_opt ctx.memories name) in
-               record
-                 (memory_method_candidates ~addr_name:(address_type_name at))
+               record_members ctx.member_completions field.info (R_memory at)
            | Get name when table_receiver ctx name ->
                let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
-               record
-                 (table_method_candidates ~addr_name:(address_type_name at)
-                    ~elem_name:(render_reftype rt))
+               record_members ctx.member_completions field.info
+                 (R_table (at, rt))
            | _ -> (
-               match numeric_receiver_candidates (Cell.get ty) with
-               | Some cands -> record cands
+               match numeric_receiver_kind (Cell.get ty) with
+               | Some r -> record_members ctx.member_completions field.info r
                | None -> ()));
         match (Cell.get ty, field.desc) with
         | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
             match def.typ with
             | Struct fields -> (
-                record_members ctx.member_completions field.info (fun () ->
-                    struct_candidates fields);
+                record_members ctx.member_completions field.info
+                  (R_struct fields);
                 match
                   Array.find_map
                     (fun f ->
@@ -5877,14 +5911,7 @@ and type_aggregate_access ctx i =
             | Func _ | Array _ | Cont _ ->
                 (match def.typ with
                 | Array _ ->
-                    record_members ctx.member_completions field.info (fun () ->
-                        [
-                          {
-                            member_name = "length";
-                            member_kind = Method;
-                            member_detail = "fn() -> i32";
-                          };
-                        ])
+                    record_members ctx.member_completions field.info R_array
                 | _ -> ());
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics
@@ -5956,8 +5983,8 @@ and type_aggregate_access ctx i =
             match lookup_struct_type ctx ty with
             | None -> None
             | Some fields -> (
-                record_members ctx.member_completions field.info (fun () ->
-                    struct_candidates fields);
+                record_members ctx.member_completions field.info
+                  (R_struct fields);
                 match
                   Array.find_map
                     (fun f ->

@@ -103,6 +103,22 @@ val namespace_members : string -> member_candidate list
     (wide-arithmetic ops) and [atomic::] ([fence]), each with its signature.
     Empty for any other [ns]. *)
 
+type member_receiver =
+  | R_numeric of Infer.inferred_type
+  | R_struct of Ast.fieldtype Ast.annotated_array
+  | R_array
+  | R_memory of [ `I32 | `I64 ]
+  | R_table of [ `I32 | `I64 ] * Ast.reftype
+      (** What a member access [recv.<here>] is on, recorded by {!f_infer} (via
+          [member_completions]) so completion can derive its candidates with
+          {!member_candidates} only for the access under the cursor — the list,
+          large for a v128 / memory receiver, is not built at every access in
+          the file. *)
+
+val member_candidates : member_receiver -> member_candidate list
+(** The member-completion candidates a recorded {!member_receiver} stands for.
+*)
+
 val intrinsic_namespaces : string list
 (** The intrinsic namespace names ([v128]/[i64]/[atomic]) — the [ns] a [::] path
     can start with — for completion of the namespace itself. *)
@@ -131,7 +147,7 @@ val f_infer :
   ?warn_unused:bool ->
   ?resolve_links:reference list ref option ->
   ?pun_spans:Ast.location list ref option ->
-  ?member_completions:(Ast.location * member_candidate list) list ref option ->
+  ?member_completions:(Ast.location * member_receiver) list ref option ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -148,11 +164,10 @@ val f_infer :
     [Some ref], the span of each punned struct-literal field (the bare-name form
     [x] for [x: x]) is appended to it — such a span is both a field name and a
     variable use, so a rename must expand it rather than replace it. When
-    [member_completions] is a [Some ref], each struct field access [recv.field]
-    appends the field's span and the receiver's members ({!member_candidate}
-    list: a struct's fields, or a numeric / array receiver's value methods), for
-    member completion. All default to [None], so an ordinary run records
-    nothing. *)
+    [member_completions] is a [Some ref], each member access [recv.field]
+    appends the field's span and a {!member_receiver} describing what it is on,
+    from which {!member_candidates} derives the completion list on demand. All
+    default to [None], so an ordinary run records nothing. *)
 
 val check :
   ?warn_unused:bool ->

@@ -215,11 +215,10 @@ type analysis = {
       (* use -> definition(s) references, for go-to-definition. *)
   a_puns : Wax_utils.Ast.location list;
       (* punned struct-literal field spans, which rename must expand. *)
-  a_members :
-    (Wax_utils.Ast.location * Wax_lang.Typing.member_candidate list) list;
-      (* at each struct field access, the field span and the receiver's members
-         (fields, or a numeric / array receiver's value methods), for member
-         completion. *)
+  a_members : (Wax_utils.Ast.location * Wax_lang.Typing.member_receiver) list;
+      (* at each member access, the field span and what the receiver is (a
+         struct, a numeric / v128 value, a memory / table), for member
+         completion; the candidate list is derived on demand. *)
 }
 
 let analyze_uncached src =
@@ -1105,18 +1104,18 @@ let is_member_position src line ch =
   done;
   !i >= 0 && src.[!i] = '.'
 
-(* The field names of the struct access whose (possibly partial) field span
-   covers the cursor in [members], if any. *)
-let member_fields_at src line ch members =
+(* The receiver of the member access whose (possibly partial) field span covers
+   the cursor in [members], if any. *)
+let member_receiver_at src line ch members =
   let target = (line + 1, byte_column src line ch) in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
   let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
   List.find_map
-    (fun ((loc : Wax_utils.Ast.location), candidates) ->
+    (fun ((loc : Wax_utils.Ast.location), receiver) ->
       if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
-        Some candidates
+        Some receiver
       else None)
     members
 
@@ -1154,8 +1153,8 @@ let namespace_position src line ch =
 
 let completion_string src line ch =
   if is_member_position src line ch then
-    match member_fields_at src line ch (analyze src).a_members with
-    | Some candidates -> List.map member_completion candidates
+    match member_receiver_at src line ch (analyze src).a_members with
+    | Some r -> List.map member_completion (Wax_lang.Typing.member_candidates r)
     | None -> (
         (* A bare [.]: the parser drops the field-less access, so nothing is
            recorded. Splice a sentinel field in so [recv.<sentinel>] parses and
@@ -1168,10 +1167,11 @@ let completion_string src line ch =
           ^ String.sub src off (String.length src - off)
         in
         match
-          member_fields_at repaired line ch
+          member_receiver_at repaired line ch
             (analyze_uncached repaired).a_members
         with
-        | Some candidates -> List.map member_completion candidates
+        | Some r ->
+            List.map member_completion (Wax_lang.Typing.member_candidates r)
         | None -> [])
   else
     match namespace_position src line ch with

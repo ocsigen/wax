@@ -33,10 +33,10 @@ member @ 2:31-2:32 -> x: i32, y: mut i32, next: &point
 "f"      @ 3:34-3:35 -> 2:21-2:22  [f32]
 "w"      @ 3:17-3:18 -> 2:13-2:14  [i64]
 "x"      @ 3:6-3:7   -> 2:5-2:6  [i32]
-member @ 3:8-3:11 -> clz: fn() -> i32, ctz: fn() -> i32, popcnt: fn() -> i32, extend8_s: fn() -> i32, extend16_s: fn() -> i32, from_bits: fn() -> f32, rotl: fn(i32) -> i32, rotr: fn(i32) -> i32
 member @ 3:19-3:28 -> clz: fn() -> i64, ctz: fn() -> i64, popcnt: fn() -> i64, extend8_s: fn() -> i64, extend16_s: fn() -> i64, from_bits: fn() -> f64, rotl: fn(i64) -> i64, rotr: fn(i64) -> i64
 member @ 3:36-3:40 -> abs: fn() -> f32, ceil: fn() -> f32, floor: fn() -> f32, trunc: fn() -> f32, nearest: fn() -> f32, sqrt: fn() -> f32, to_bits: fn() -> i32, min: fn(f32) -> f32, max: fn(f32) -> f32, copysign: fn(f32) -> f32
 member @ 3:48-3:54 -> length: fn() -> i32
+member @ 3:8-3:11 -> clz: fn() -> i32, ctz: fn() -> i32, popcnt: fn() -> i32, extend8_s: fn() -> i32, extend16_s: fn() -> i32, from_bits: fn() -> f32, rotl: fn(i32) -> i32, rotr: fn(i32) -> i32
 
 === table receiver ===
 "tab"    @ 2:13-2:16 -> 1:6-1:9
