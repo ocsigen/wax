@@ -154,3 +154,35 @@ documentation. A module with an unused local:
   >                   (d.get("codeDescription") or {}).get("href")))
   > PY
   unused-local: severity=2 tags=[1] doc=https://ocsigen.org/wax/cli.html#warnings
+
+Diagnostics specialize to the conditional-compilation defines (the editor's
+`wax.define`, mirroring `-D`), read from `initializationOptions` at startup and
+from `workspace/didChangeConfiguration` live. A module whose `#[else]` branch has
+a type error: with no defines it is reported (reachable when the condition is
+false); setting `debug=true` selects the `#[if]` branch and drops it, leaving
+only the taken branch's unused-global warning.
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///c.wax"
+  > src="#[if(debug)]\n{\n  const x: i32 = 1;\n}\n#[else]\n{\n  const x: i32 = 1.5;\n}\n"
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wax","version":1,"text":src}}},
+  >    {"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{"settings":{"wax":{"define":["debug=true"]}}}},
+  >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i,pubs=p.stdout,0,[]
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if r.get("method")=="textDocument/publishDiagnostics":
+  >         pubs.append([("error" if d["severity"]==1 else "warning", d.get("code"))
+  >                      for d in r["params"]["diagnostics"]])
+  > print("on open (no defines): ", pubs[0])
+  > print("after debug=true:     ", pubs[1])
+  > PY
+  on open (no defines):  [('error', None)]
+  after debug=true:      [('warning', 'unused-field')]

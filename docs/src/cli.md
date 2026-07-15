@@ -389,15 +389,26 @@ editor (Neovim, Emacs with Eglot or lsp-mode, Helix, Kakoune, Zed, and others).
 wax lsp
 ```
 
-It reads no files of its own and takes no configuration; the editor tells it
-which documents are open. Supported requests: diagnostics (pushed on
-open/change), hover, go-to-definition, go-to-type-definition, find-references,
-document highlight, rename (with prepare), document symbols (outline),
-completion, signature help, inlay hints, folding ranges, selection ranges,
-semantic tokens, and document formatting. The hover, navigation and completion
-features that need the typed tree are Wax-only, while formatting, diagnostics
-and the outline work for `.wat` too (dispatched by the document's URI
-extension).
+It reads no files of its own; the editor tells it which documents are open.
+Supported requests: diagnostics (pushed on open/change), hover,
+go-to-definition, go-to-type-definition, find-references, document highlight,
+rename (with prepare), document symbols (outline), completion, signature help,
+inlay hints, folding ranges, selection ranges, semantic tokens, and document
+formatting. The hover, navigation and completion features that need the typed
+tree are Wax-only, while formatting, diagnostics and the outline work for `.wat`
+too (dispatched by the document's URI extension).
+
+A lint diagnostic carries the extra metadata editors use: the `-W` name as its
+code (linked to this reference), and `DiagnosticTag.Unnecessary` on the
+removable/unreachable lints (unused bindings, dead code) so the editor fades
+them.
+
+The one setting is `wax.define`, a list of conditional-compilation defines
+(mirroring the [`-D`](#options) flag, e.g. `["debug=true", "arch=wasm64"]`).
+Diagnostics and completion specialize to it, so a definition or an error in a
+branch the defines rule out is dropped. The server reads it from the client's
+`initializationOptions` at startup and from `workspace/didChangeConfiguration`
+live (under a `wax` section), re-checking the open documents when it changes.
 
 Documents are synchronized in full (each change carries the whole buffer). The
 position encoding is negotiated: the server uses UTF-8 when the client offers it

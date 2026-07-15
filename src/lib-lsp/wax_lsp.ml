@@ -78,6 +78,33 @@ let lsp_encoding = function
   | Wax_editor.UTF8 -> PositionEncodingKind.UTF8
   | Wax_editor.UTF16 -> PositionEncodingKind.UTF16
 
+(* The conditional-compilation defines (the editor's `wax.define`, mirroring the
+   `-D` CLI flag), read from configuration at startup and on change. Diagnostics
+   and completion specialize to them; empty leaves the ordinary all-paths check. *)
+let defines = ref ([] : string list)
+
+(* Extract the `define` string list from a settings object, accepting either
+   [{ "define": [...] }] (initialization options) or [{ "wax": { "define": … } }]
+   (a namespaced configuration section). Absent or malformed yields the empty
+   list, which clears any previous defines. *)
+let defines_of_settings (json : Jsonrpc.Json.t) =
+  let assoc = function `Assoc l -> l | _ -> [] in
+  let strings = function
+    | `List items ->
+        List.filter_map (function `String s -> Some s | _ -> None) items
+    | _ -> []
+  in
+  let top = assoc json in
+  match List.assoc_opt "define" top with
+  | Some v -> strings v
+  | None -> (
+      match List.assoc_opt "wax" top with
+      | Some w -> (
+          match List.assoc_opt "define" (assoc w) with
+          | Some v -> strings v
+          | None -> [])
+      | None -> [])
+
 (* --- coordinate mapping between LSP and Wax_editor --- *)
 
 let position line character = Position.create ~line ~character
@@ -177,7 +204,7 @@ let diagnostic_of_diag uri src (d : Wax_editor.diag) =
 let publish_diagnostics uri src =
   let diags =
     if is_wat uri then Wax_editor.check_wat_string src
-    else Wax_editor.check_string src
+    else Wax_editor.check_string_with_defines src !defines
   in
   let diagnostics = List.map (diagnostic_of_diag uri src) diags in
   send_notification
@@ -288,6 +315,11 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
         when List.mem PositionEncodingKind.UTF8 encs ->
           encoding := Wax_editor.UTF8
       | _ -> ());
+      (* Conditional-compilation defines, if the client passed any as
+         initialization options. Live updates come via didChangeConfiguration. *)
+      Option.iter
+        (fun j -> defines := defines_of_settings j)
+        params.initializationOptions;
       InitializeResult.create ~capabilities:(server_capabilities ())
         ~serverInfo:(InitializeResult.create_serverInfo ~name:"wax-lsp" ())
         ()
@@ -390,7 +422,7 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
         with_doc uri (fun src ->
             let items =
               Wax_editor.completion_string ~encoding:!encoding src position.line
-                position.character []
+                position.character !defines
             in
             Some (`List (List.map completion_item items)))
   | Lsp.Client_request.SignatureHelp { textDocument; position; _ } -> (
@@ -515,6 +547,12 @@ let on_notification (n : Lsp.Client_notification.t) =
         (Lsp.Server_notification.PublishDiagnostics
            (PublishDiagnosticsParams.create ~uri:textDocument.uri
               ~diagnostics:[] ()))
+  | Lsp.Client_notification.ChangeConfiguration { settings } ->
+      (* Re-read the defines and re-check every open document against them. *)
+      defines := defines_of_settings settings;
+      Hashtbl.iter
+        (fun key src -> publish_diagnostics (Lsp.Uri.of_string key) src)
+        documents
   | Lsp.Client_notification.Exit -> exit 0
   | _ -> ()
 
