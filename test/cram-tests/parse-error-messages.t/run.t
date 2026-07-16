@@ -32,7 +32,7 @@ A trailing-comma list names its element ("an on clause"), rather than leaking
 the raw `separated_nonempty_list_trailing(comma,on_clause)`:
 
   $ wax check onclause.wax
-  Error: Expecting ']', or an on clause.
+  Error: Expecting ']'.
    ──➤  onclause.wax:2:18
   1 │ fn f() {
   2 │   c.resume() on [_ => switch 5]
