@@ -8,9 +8,15 @@ let () =
       if Filename.check_suffix file ".wat" then (
         let base = Filename.chop_suffix file ".wat" in
 
+        (* Every rule below runs the [wax] binary (directly, or by diffing its
+           output), so it belongs to the [wax] package: under opam these run for
+           [wax] --with-test (where the binary is built) and are skipped for
+           [wax-lib] --with-test (where it is not). *)
+
         (* 1. Format: wat -> wat (formatted) *)
         printf "(subdir wasm-formatted\n";
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (target %s.gen)\n" file;
         printf "  (deps ../wasm-source/%s)\n" file;
         printf "  (action\n";
@@ -20,6 +26,7 @@ let () =
            ../wasm-source/%s)))\n"
           file;
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (alias runtest)\n";
         (*        printf "  (mode (promote (until-clean)))\n";*)
         printf "  (action\n";
@@ -29,6 +36,7 @@ let () =
         (* 2. Convert: wat -> wax *)
         printf "(subdir wax\n";
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (target %s.wax.gen)\n" base;
         printf "  (deps ../wasm-source/%s)\n" file;
         printf " (action\n";
@@ -38,6 +46,7 @@ let () =
            ../wasm-source/%s)))\n"
           file;
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (alias runtest)\n";
         (*        printf "  (mode (promote (until-clean)))\n";*)
         printf "  (action\n";
@@ -47,6 +56,7 @@ let () =
         (* 3. Round-trip: wax -> wat *)
         printf "(subdir wasm-round-trip\n";
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (target %s.gen)\n" file;
         printf "  (deps ../wax/%s.wax.gen)\n" base;
         printf " (action\n";
@@ -56,6 +66,7 @@ let () =
            ../wax/%s.wax.gen)))\n"
           base;
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (alias runtest)\n";
         (*        printf "  (mode (promote (until-clean)))\n";*)
         printf "  (action\n";
@@ -65,6 +76,7 @@ let () =
         (* 4. Idempotence: reformatting the generated wat must reproduce it *)
         printf "(subdir wat-idempotent\n";
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (target %s.gen)\n" file;
         printf "  (deps ../wasm-formatted/%s.gen)\n" file;
         printf " (action\n";
@@ -74,6 +86,7 @@ let () =
            ../wasm-formatted/%s.gen)))\n"
           file;
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (alias runtest)\n";
         printf "  (action\n";
         printf "   (diff ../wasm-formatted/%s.gen %s.gen))))\n" file file;
@@ -82,6 +95,7 @@ let () =
         (* 5. Idempotence: reformatting the generated wax must reproduce it *)
         printf "(subdir wax-idempotent\n";
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (target %s.wax.gen)\n" base;
         printf "  (deps ../wax/%s.wax.gen)\n" base;
         printf " (action\n";
@@ -91,6 +105,7 @@ let () =
            ../wax/%s.wax.gen)))\n"
           base;
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (alias runtest)\n";
         printf "  (action\n";
         printf "   (diff ../wax/%s.wax.gen %s.wax.gen))))\n" base base;
@@ -104,6 +119,7 @@ let () =
            between two generated files. *)
         printf "(subdir wax-round-trip\n";
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (target %s.wax.gen)\n" base;
         printf "  (deps ../wasm-round-trip/%s)\n" file;
         printf " (action\n";
@@ -113,6 +129,7 @@ let () =
            ../wasm-round-trip/%s)))\n"
           file;
         printf " (rule\n";
+        printf "  (package wax)\n";
         printf "  (alias runtest)\n";
         printf "  (action\n";
         printf "   (diff ../wax/%s.wax.gen %s.wax.gen))))\n" base base;
