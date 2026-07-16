@@ -1,0 +1,91 @@
+name: Publish grammar
+
+# Publish the tree-sitter-wax grammar to npm.
+#
+#   * push a `grammar-v*` tag  -> test, then publish that version to npm
+#   * manual dispatch          -> test only (exercise the workflow, no publish)
+#
+# The grammar is versioned independently of the `wax` CLI (which uses plain
+# `v*` tags), so it gets its own `grammar-v*` tag namespace — e.g. tag
+# `grammar-v0.1.0` publishes tree-sitter-wax 0.1.0. The everyday test-on-push /
+# test-on-PR checks stay in tree-sitter.yml; this workflow only adds publishing.
+#
+# Before the first publish:
+#   * add an `NPM_TOKEN` repository secret (an npm automation token);
+#   * confirm the package name `tree-sitter-wax` is available / yours on npm.
+# Provenance also requires the repository to be public, and a `repository` field
+# in tree-sitter-wax/package.json (already present).
+
+on:
+  push:
+    tags:
+      - "grammar-v*"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: tree-sitter-wax
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the committed parser is up to date
+        run: |
+          npx tree-sitter generate
+          git diff --exit-code -- src/ \
+            || (echo "src/ is stale — run 'tree-sitter generate' and commit."; exit 1)
+
+      - name: Unit tests
+        run: npx tree-sitter test
+
+      - name: Corpus smoke test (zero ERROR/MISSING)
+        run: ./scripts/smoke-parse.sh
+
+  publish:
+    name: Publish to npm
+    needs: test
+    # Only on a grammar-v* tag push; manual runs stop after the test job.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/grammar-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for npm provenance
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Guard against a tag that does not match the committed version, so a
+      # forgotten `tree-sitter version` bump fails loudly instead of publishing
+      # the wrong number.
+      - name: Check the tag matches package.json
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#grammar-v}"
+          pkg_version="$(node -p "require('./package.json').version")"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "tag $GITHUB_REF_NAME ($tag_version) != package.json version ($pkg_version)" >&2
+            exit 1
+          fi
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

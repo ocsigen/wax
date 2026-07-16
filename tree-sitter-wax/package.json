@@ -4,6 +4,11 @@
   "description": "Tree-sitter grammar for the Wax language (a Rust-like syntax for WebAssembly)",
   "license": "MIT",
   "author": "Jérôme Vouillon",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocsigen/wax.git",
+    "directory": "tree-sitter-wax"
+  },
   "main": "bindings/node",
   "keywords": [
     "tree-sitter",
