@@ -354,12 +354,20 @@ struct
         done;
         !ok
       in
-      let record_missing message (pos : Lexing.position) =
+      let record_missing message (pos : Lexing.position)
+          (end_pos : Lexing.position) =
         let already_flagged =
           match !errors with
           | { location; _ } :: _ ->
-              only_blank_between location.Wax_utils.Ast.loc_end.Lexing.pos_cnum
-                pos.pos_cnum
+              let err_start =
+                location.Wax_utils.Ast.loc_start.Lexing.pos_cnum
+              in
+              let err_end = location.Wax_utils.Ast.loc_end.Lexing.pos_cnum in
+              if
+                pos.Lexing.pos_cnum <= err_start
+                && err_end <= end_pos.Lexing.pos_cnum
+              then true
+              else only_blank_between err_end pos.Lexing.pos_cnum
           | [] -> false
         in
         if not already_flagged then
@@ -466,17 +474,24 @@ struct
           when insert <> [] && !last_insert <> startp.Lexing.pos_cnum ->
             last_insert := startp.Lexing.pos_cnum;
             let cp = MI.input_needed env in
+            let insert_pos =
+              match MI.top env with
+              | Some (MI.Element (_, _, _, pos2)) -> pos2
+              | None -> startp
+            in
             (* Try each candidate token in order; keep the first that both is
                acceptable and, once the held token is offered on top, leaves the
                parser wanting more input or accepting (the validation check). *)
-            let attempt (tok, message) =
+            let attempt (tok, message, move_pos) =
               if not (MI.acceptable cp tok startp) then None
               else
                 match settle (MI.offer cp (tok, startp, startp)) with
                 | MI.InputNeeded _ as after_insert -> (
                     match settle (MI.offer after_insert held) with
                     | (MI.InputNeeded _ | MI.Accepted _) as after_held ->
-                        record_missing message startp;
+                        if move_pos then
+                          record_missing message insert_pos startp
+                        else record_missing message startp startp;
                         Some after_held
                     | _ -> None)
                 | _ -> None
@@ -542,10 +557,10 @@ struct
                     else
                       match
                         List.find_opt
-                          (fun (tok, _) -> MI.acceptable checkpoint tok pos)
+                          (fun (tok, _, _) -> MI.acceptable checkpoint tok pos)
                           insert
                       with
-                      | Some (tok, _) ->
+                      | Some (tok, _, _) ->
                           loop
                             (settle (MI.offer checkpoint (tok, pos, pos)))
                             true (fuel - 1)

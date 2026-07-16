@@ -47,7 +47,9 @@ let sync : Tokens.token -> Wax_wasm.Parsing.sync_class = function
    than skipping to the next boundary. *)
 let insert =
   [
-    (Tokens.SEMI, Wax_utils.Message.(text "Missing" ++ (code ";" ^^ text ".")));
+    ( Tokens.SEMI,
+      Wax_utils.Message.(text "Missing" ++ (code ";" ^^ text ".")),
+      true );
   ]
 
 (* The closing brackets recovery may insert to auto-close a construct left open

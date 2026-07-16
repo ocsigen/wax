@@ -108,7 +108,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:(Tokens.token * Wax_utils.Message.t) list ->
+    ?insert:(Tokens.token * Wax_utils.Message.t * bool) list ->
     ?closers:Tokens.token list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->
@@ -231,7 +231,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:(Tokens.token * Wax_utils.Message.t) list ->
+    ?insert:(Tokens.token * Wax_utils.Message.t * bool) list ->
     ?closers:Tokens.token list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->

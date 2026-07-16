@@ -41,13 +41,12 @@ shift a `;` (it can, right after a complete statement), so it reports a precise
 
   $ wax check --all-errors missing-semi.wax
   Error: Missing ';'.
-   ──➤  missing-semi.wax:3:5
+   ──➤  missing-semi.wax:2:14
   1 │ fn f() -> i32 {
   2 │     let x = 1
+    ·              ^
   3 │     let y = 2;
-    ·     ^
   4 │     x + y;
-  5 │ }
   [128]
 
 A file with no syntax errors passes silently, exactly as without the flag:

@@ -7,7 +7,7 @@ val sync : Tokens.token -> Wax_wasm.Parsing.sync_class
     end-of-input is the [Terminal], and everything else is [Skip]ped while
     scanning for the next boundary. Shared by the CLI and the editor. *)
 
-val insert : (Tokens.token * Wax_utils.Message.t) list
+val insert : (Tokens.token * Wax_utils.Message.t * bool) list
 (** Candidate tokens {!Wax_wasm.Parsing.Make.parse_recover} may insert in front
     of an offending token, each paired with the diagnostic to report. For Wax
     the sole candidate is the statement separator [";"]: a dropped [;] is

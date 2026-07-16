@@ -40,8 +40,9 @@ let closers = [ Tokens.RPAREN ]
 let insert =
   [
     ( Tokens.ID (Wax_utils.Ast.no_loc "_"),
-      Wax_utils.Message.text "Missing index." );
-    (Tokens.NAT "0", Wax_utils.Message.text "Missing number.");
+      Wax_utils.Message.text "Missing index.",
+      false );
+    (Tokens.NAT "0", Wax_utils.Message.text "Missing number.", false);
   ]
 
 (* A missing closer — [(module (func … (func …] with a [)] left out — surfaces
