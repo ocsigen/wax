@@ -2371,6 +2371,19 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* ops = Stack.grab (List.length operands) in
       let* addr = Stack.pop_width_preserved in
       let nat = 1 lsl Atomics.natural_align_log2 op in
+      (* A narrow store/RMW ([store8/16/32], [rmw*8/16/32]) picks its i32/i64
+         type from the value operand's type on re-parse ([To_wasm.atomic_op]).
+         When that operand is anchor-free (a hole on the polymorphic dead-code
+         stack), it re-defaults to i32, silently narrowing an i64 op — and if the
+         RMW result then feeds a memory64 address, the recompile fails. Pin the
+         value operand(s) to [i64] so the width survives; the full-width ([W64])
+         forms are already i64 regardless, and [simplify] drops a redundant pin. *)
+      let ops =
+        match op with
+        | AtomicStore (`I64, Some _) | AtomicRmw (_, `I64, Some _) ->
+            List.map (Stack.pin_width (Some `I64)) ops
+        | _ -> ops
+      in
       let call =
         mem_call m
           (Atomics.method_name (Atomics.family op))
