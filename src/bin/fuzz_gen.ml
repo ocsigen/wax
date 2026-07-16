@@ -334,10 +334,10 @@ and if_ t d : Ast.location Ast.instr =
          else_block = Some (nl [ gen t (d - 1) ]);
        })
 
-(* A `try`/`catch` expression of type [t]. The body and each handler produce
+(* A legacy `try_legacy`/`catch` expression of type [t] (the deprecated
+   try/catch instructions). The body and each handler independently produce
    [t]; the `stop` tag carries no payload, so a handler needs nothing off the
-   stack. Exercises the exception-typing arms the decompiler never reaches (it
-   lowers to try_table). *)
+   stack. *)
 and try_ t d : Ast.location Ast.instr =
   let typ = Ast.{ params = [||]; results = [| valtype t |] } in
   nl
@@ -349,6 +349,28 @@ and try_ t d : Ast.location Ast.instr =
          catches = [ (id "stop", nl [ gen t (d - 1) ]) ];
          catch_all = Some (nl [ gen t (d - 1) ]);
        })
+
+(* A structured `try`/`catch` of type [t] (try_table plus a block ladder,
+   with fall-through arms). Shapes: a catch-all producing [t]; an [oops]
+   payload arm consuming its i32 payload then falling through into the
+   catch-all; a [&] arm dropping the delivered &exn likewise; and — for i32 —
+   the payload itself passed through as the try's value (a hole completing
+   the last arm). *)
+and try_catch t d : Ast.location Ast.instr =
+  let typ = Ast.{ params = [||]; results = [| valtype t |] } in
+  let arm ?tag ?(ref_ = false) body =
+    Ast.{ arm_tag = tag; arm_ref = ref_; arm_types = [||]; arm_body = nl body }
+  in
+  let drop = nl (Ast.Let ([ (None, None) ], Some (nl Ast.Hole))) in
+  let catch_all = arm [ gen t (d - 1) ] in
+  let arms =
+    match rnd (if t = I32 then 4 else 3) with
+    | 0 -> [ catch_all ]
+    | 1 -> [ arm ~tag:(id "oops") [ drop ]; catch_all ]
+    | 2 -> [ arm ~tag:(id "stop") ~ref_:true [ drop ]; catch_all ]
+    | _ -> [ arm ~tag:(id "oops") [ nl Ast.Hole ] ]
+  in
+  nl (Ast.TryCatch { label = None; typ; block = nl [ gen t (d - 1) ]; arms })
 
 (* An expression of type [t] at depth [d]. *)
 and gen t d : Ast.location Ast.instr =
@@ -424,6 +446,36 @@ and gen_num t d : Ast.location Ast.instr =
   let load () =
     meth mem (if t = I64 then "load64" else "load32") [ gen I32 (d - 1) ]
   in
+  (* An atomic memory access: the width is in the method name, the i32/i64
+     family resolved from the value operand's type (RMW) or the resolving
+     [as iN_u] cast (narrow load). *)
+  let atomic () =
+    let cast_u e typ =
+      nl
+        (Ast.Cast
+           (e, Ast.Signedtype { typ; signage = Ast.Unsigned; strict = false }))
+    in
+    if t = I64 then
+      if rnd 2 = 0 then
+        meth mem "atomic_rmw_xchg16" [ gen I32 (d - 1); gen I64 (d - 1) ]
+      else cast_u (meth mem "atomic_load32" [ gen I32 (d - 1) ]) `I64
+    else if rnd 2 = 0 then
+      meth mem "atomic_rmw_add32" [ gen I32 (d - 1); gen I32 (d - 1) ]
+    else cast_u (meth mem "atomic_load8" [ gen I32 (d - 1) ]) `I32
+  in
+  (* Resume a freshly wrapped worker, [k::new(worker).resume(x)]: the [task]
+     type is [fn(i32) -> i32], and the resume's type immediate is inferred
+     from the receiver's static type. *)
+  let resume () =
+    nl
+      (Ast.Resume
+         ( id "k",
+           [],
+           [
+             gen I32 (d - 1);
+             nl (Ast.ContNew (id "k", nl (Ast.Get (id "worker"))));
+           ] ))
+  in
   (* Read an i31ref back to i32 ([r as i32_s]). *)
   let i31get () =
     let sgn = if rnd 2 = 0 then Ast.Signed else Ast.Unsigned in
@@ -447,16 +499,19 @@ and gen_num t d : Ast.location Ast.instr =
     | n when n < 49 -> neg ()
     | n when n < 61 -> cast t d
     | n when n < 66 -> if_ t d
-    | n when n < 70 -> try_ t d
+    | n when n < 68 -> try_ t d
+    | n when n < 71 -> try_catch t d
     | n when n < 74 -> ternary ()
     | n when n < 78 && t = I32 -> field_get ()
     | n when n < 80 && t = I32 -> nl (Ast.ArrayGet (leaf Ints, gen I32 (d - 1)))
     | n when n < 82 && t = I32 -> meth (leaf Ints) "length" []
-    | n when n < 85 && t = I32 -> i31get ()
-    | n when n < 88 && t = I32 -> reftest ()
-    | n when n < 90 && t = I32 -> callref ()
+    | n when n < 84 && t = I32 -> i31get ()
+    | n when n < 87 && t = I32 -> reftest ()
+    | n when n < 89 && t = I32 -> callref ()
+    | n when n < 91 && t = I32 -> resume ()
     | n when n < 93 -> extract ()
-    | n when n < 97 -> load ()
+    | n when n < 95 -> load ()
+    | n when n < 98 -> atomic ()
     | n when n < 99 ->
         (* Read an imported mutable global of the matching width. *)
         nl (Ast.Get (id (if t = I32 then "gi32" else "gi64")))
@@ -469,7 +524,8 @@ and gen_num t d : Ast.location Ast.instr =
     | n when n < 54 -> neg ()
     | n when n < 70 -> cast t d
     | n when n < 79 -> if_ t d
-    | n when n < 85 -> try_ t d
+    | n when n < 82 -> try_ t d
+    | n when n < 85 -> try_catch t d
     | n when n < 91 -> ternary ()
     | n when n < 95 -> extract ()
     | _ -> call t
@@ -548,7 +604,7 @@ and gen_ref t d : Ast.location Ast.instr =
       | _ -> leaf t)
   | Cont -> (
       match rnd 100 with
-      (* wrap the fixed `worker` task into a continuation: [cont_new k (worker)] *)
+      (* wrap the fixed `worker` task into a continuation: [k::new(worker)] *)
       | n when n < 46 -> nl (Ast.ContNew (id "k", nl (Ast.Get (id "worker"))))
       | n when n < 64 -> if_ t d
       | n when n < 82 -> call t
@@ -1002,6 +1058,15 @@ let type_decls : Ast.location Ast.modulefield list =
         name = id "stop";
         typ = None;
         sign = Some Ast.{ params = [||]; results = [||] };
+        attributes = [];
+      };
+    (* An i32-payload, no-result tag, catchable by the structured try's
+       payload arms (a tag with results cannot be caught by try_table). *)
+    Ast.Tag
+      {
+        name = id "oops";
+        typ = None;
+        sign = Some Ast.{ params = [| nl (None, I32) |]; results = [||] };
         attributes = [];
       };
     Ast.Tag
