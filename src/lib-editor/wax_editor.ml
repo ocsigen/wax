@@ -1608,11 +1608,28 @@ let folding_string src =
       let open Wax_lang.Ast in
       Wax_lang.Ast_utils.iter_fields
         (fun field ->
+          let add_named (name : Wax_lang.Ast.ident) =
+            if
+              name.info.loc_start.pos_cnum >= 0
+              && field.info.loc_start.pos_cnum >= 0
+            then
+              add
+                (name.info.loc_start.pos_lnum - 1)
+                (field.info.loc_end.pos_lnum - 1)
+                "region"
+          in
           match (field.desc : _ modulefield) with
           | Import_group _ -> add_loc "imports" field.info
           | Conditional { then_fields; else_fields; _ } ->
               add_loc "region" then_fields.info;
               Option.iter (fun b -> add_loc "region" b.info) else_fields
+          | Func { name; _ } -> add_named name
+          | Global { name; _ } -> add_named name
+          | Tag { name; _ } -> add_named name
+          | Memory { name; _ } -> add_named name
+          | Table { name; _ } -> add_named name
+          | Elem { name; _ } -> add_named name
+          | Data { name = Some name; _ } -> add_named name
           | _ -> add_loc "region" field.info)
         ast;
       Wax_lang.Ast_utils.iter_module_instr
@@ -1624,18 +1641,27 @@ let folding_string src =
           | TryTable { block; _ } ->
               add_loc "region" block.info
           | If { if_block; else_block; _ } ->
+              add_loc "region" i.info;
               add_loc "region" if_block.info;
               Option.iter (fun b -> add_loc "region" b.info) else_block
           | Try { block; catches; catch_all; _ } ->
+              add_loc "region" i.info;
               add_loc "region" block.info;
               List.iter (fun (_, b) -> add_loc "region" b.info) catches;
               Option.iter (fun b -> add_loc "region" b.info) catch_all
+          | TryCatch { block; arms; _ } ->
+              add_loc "region" i.info;
+              add_loc "region" block.info;
+              List.iter (fun a -> add_loc "region" a.arm_body.info) arms
           | Match { arms; default; _ } ->
+              add_loc "region" i.info;
               List.iter (fun (_, b) -> add_loc "region" b.info) arms;
               add_loc "region" default.info
           | Dispatch { arms; _ } ->
+              add_loc "region" i.info;
               List.iter (fun (_, b) -> add_loc "region" b.info) arms
           | If_annotation { then_body; else_body; _ } ->
+              add_loc "region" i.info;
               add_loc "region" then_body.info;
               Option.iter (fun b -> add_loc "region" b.info) else_body
           | _ -> ())
