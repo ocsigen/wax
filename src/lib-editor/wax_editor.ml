@@ -1236,6 +1236,14 @@ let completion_string ?(encoding = UTF16) src line ch defines =
           List.map
             (fun k -> { k_name = k; k_kind = "keyword"; k_detail = "" })
             wax_keywords
+          @ List.map
+              (fun k ->
+                {
+                  k_name = k ^ ":";
+                  k_kind = "keyword";
+                  k_detail = "labelled argument";
+                })
+              [ "align"; "offset"; "lane"; "tag" ]
         in
         (* The intrinsic namespace names, so [v128::] / [i64::] / [atomic::] is
            discoverable; selecting one leaves the cursor before the [::]. *)
