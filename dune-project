@@ -19,7 +19,9 @@
   (description "The parsing, type-checking and format-conversion libraries behind the Wax toolchain (bidirectional Wax <-> Wasm Text <-> Wasm Binary).")
   (depends
     (ocaml (>= 4.14))
-    (sedlex (>= 2.0))
+    ; 3.3 adds the byte-offset position API (lexing_bytes_position_start/curr)
+    ; the lexers use; still compatible with OCaml 4.14.
+    (sedlex (>= 3.3))
     (menhir (and :build (>= 20220210)))
     (menhirLib (>= 20220210))
     (re (>= 1.10.0))
@@ -40,9 +42,10 @@
     ; Cmd.eval, plus `cmdliner install tool-support` at build time.
     (cmdliner (>= 2.0.0))
     ; The `wax lsp` language server (src/lib-lsp): protocol types and framing.
-    ; 1.17 has the 3.17 `positionEncoding` capability the server advertises.
-    (lsp (>= 1.17.0))
-    (jsonrpc (>= 1.17.0))
+    ; 1.17 has the 3.17 `positionEncoding` capability the server advertises;
+    ; 1.26 is the floor that has `Lsp.Uri.of_string` (used for diagnostics URIs).
+    (lsp (>= 1.26.0))
+    (jsonrpc (>= 1.26.0))
     ; Embeds the version reported by `wax --version` (git tag at build time).
     (dune-build-info (>= 3.0.0))
   )

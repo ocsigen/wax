@@ -52,6 +52,16 @@ type process_pool = {
 let create_pool max_concurrent = { max_concurrent; running = [] }
 let read_file filename = In_channel.with_open_bin filename In_channel.input_all
 
+(* [In_channel.input_lines] only exists since OCaml 5.1; read lines by hand so
+   the test runner still builds on the 4.14 the packages support. *)
+let input_lines ic =
+  let rec loop acc =
+    match input_line ic with
+    | line -> loop (line :: acc)
+    | exception End_of_file -> List.rev acc
+  in
+  loop []
+
 let handle_finished_pid pool pid status =
   match List.find_opt (fun proc -> proc.pid = pid) pool.running with
   | Some proc ->
@@ -135,7 +145,7 @@ let read_blacklist root =
   if not (Sys.file_exists file) then fun _ -> false
   else
     let entries =
-      In_channel.with_open_text file In_channel.input_lines
+      In_channel.with_open_text file input_lines
       |> List.filter_map (fun line ->
           let line =
             match String.index_opt line '#' with
