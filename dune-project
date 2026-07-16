@@ -4,6 +4,7 @@
 ; (src/bin/dune); directory targets need this extension.
 (using directory-targets 0.1)
 (name wax)
+(version 0.1.0)
 (generate_opam_files true)
 
 (authors "Jérôme Vouillon")

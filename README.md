@@ -137,18 +137,29 @@ details.
 
 ## Installation
 
+### npm
+
+The easiest way to get `wax` is from npm; it ships a single cross-platform
+WebAssembly build that runs on any Node 22+ (Linux, macOS, Windows):
+
+```sh
+npm install -g @wax-wasm/wax
+```
+
 ### Prebuilt binaries
 
 Native `wax` executables for Linux, macOS (Apple silicon and Intel), and
-Windows (with `SHA256SUMS`) are attached to the
-[`edge` prerelease](https://github.com/ocsigen/wax/releases/tag/edge), which is
-rebuilt on every push to `main`. Download the one for your platform, make it
-executable, and put it on your `PATH`:
+Windows (with `SHA256SUMS`) are attached to each
+[release](https://github.com/ocsigen/wax/releases/latest). Download the one for
+your platform, make it executable, and put it on your `PATH`:
 
 ```sh
-curl -LO https://github.com/ocsigen/wax/releases/download/edge/wax-linux-x86_64
+curl -LO https://github.com/ocsigen/wax/releases/latest/download/wax-linux-x86_64
 chmod +x wax-linux-x86_64 && mv wax-linux-x86_64 /usr/local/bin/wax
 ```
+
+The [`edge` prerelease](https://github.com/ocsigen/wax/releases/tag/edge)
+carries the same binaries built from the latest `main`, rebuilt on every push.
 
 ### From source
 
