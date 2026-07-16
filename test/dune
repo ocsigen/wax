@@ -1,4 +1,6 @@
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (deps
   (glob_files_rec wasm-test-suite/*.wast)
   (glob_files wasm-test-suite/blacklist)
@@ -9,6 +11,8 @@
    (run ../src/bin/run_wasm_testsuite.exe --no-color))))
 
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (alias runtest)
  (action
   (diff wasm_test_suite.expected wasm_test_suite.output)))
@@ -19,6 +23,8 @@
 ; as feature-disabled, which checks the gate).
 
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (deps
   (glob_files_rec wasm-test-suite/*.wast)
   (glob_files wasm-test-suite/blacklist)
@@ -33,6 +39,8 @@
     custom-descriptors))))
 
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (alias runtest)
  (action
   (diff
@@ -44,6 +52,8 @@
 ; file). Its own golden, kept separate from the spec suite above.
 
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (deps
   (glob_files_rec wasm-tools-suite/*.wast)
   (glob_files wasm-tools-suite/blacklist))
@@ -53,6 +63,8 @@
    (run ../src/bin/run_wasm_testsuite.exe --no-color wasm-tools-suite))))
 
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (alias runtest)
  (action
   (diff wasm_tools_suite.expected wasm_tools_suite.output)))
@@ -61,6 +73,8 @@
 ; custom-descriptors tests (skipped as feature-disabled in the default run).
 
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (deps
   (glob_files_rec wasm-tools-suite/*.wast)
   (glob_files wasm-tools-suite/blacklist))
@@ -75,6 +89,8 @@
     wasm-tools-suite))))
 
 (rule
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
  (alias runtest)
  (action
   (diff

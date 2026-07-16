@@ -49,6 +49,16 @@
 ; AST mutator behind fuzz/mutate-wax.sh and fuzz_gen the AST generator behind
 ; fuzz/type-fuzz.sh.
 
+; run_wasm_testsuite uses Domain (OCaml 5.0+); the spec-suite tests it drives
+; require 5.0+ anyway (see the matching gate on the test/dune rules). Gating it
+; keeps a plain `dune build` working on the 4.14 the libraries still support.
+
+(executable
+ (name run_wasm_testsuite)
+ (enabled_if
+  (>= %{ocaml_version} 5.0))
+ (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
+
 (executables
- (names run_wasm_testsuite fuzz_mutate fuzz_gen fuzz_recover)
+ (names fuzz_mutate fuzz_gen fuzz_recover)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
