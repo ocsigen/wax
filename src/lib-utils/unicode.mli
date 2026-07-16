@@ -48,3 +48,11 @@ val escape_string : ?hex_prefix:string -> string -> int * string
     Byte escapes are written [\HH] by default; [hex_prefix] is inserted after
     the backslash, so [~hex_prefix:"x"] produces Rust-style [\xHH] escapes for
     Wax. *)
+
+val has_hex_escape : string -> bool
+(** [has_hex_escape s] is true if [s] contains a control character that requires
+    a hex escape in WAT (e.g. below U+0020 other than tab/cr/nl, or U+007F). *)
+
+val char_width : int -> Uchar.t -> int
+(** [char_width pos u] returns the display width of the Unicode character [u],
+    accounting for tabs assuming starting position [pos]. *)

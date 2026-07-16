@@ -481,6 +481,52 @@ let make_names_unique (names : B.names) =
     fields = unique_names_indirect names.fields;
   }
 
+let split_string s =
+  if s = "" then [ "" ]
+  else
+    let is_utf8 =
+      String.is_valid_utf_8 s && not (Wax_utils.Unicode.has_hex_escape s)
+    in
+    if is_utf8 then (
+      let chunks = ref [] in
+      let b = Buffer.create 60 in
+      let width = ref 0 in
+      let rec loop i =
+        if i >= String.length s then (
+          if Buffer.length b > 0 then chunks := Buffer.contents b :: !chunks)
+        else
+          let dec = String.get_utf_8_uchar s i in
+          let u = Uchar.utf_decode_uchar dec in
+          let l = Uchar.utf_decode_length dec in
+          let c = Uchar.to_int u in
+          let esc_len =
+            if c >= 32 && c <> 127 && c <> 34 && c <> 92 then
+              Wax_utils.Unicode.char_width !width u
+            else if c = 9 || c = 10 || c = 13 || c = 34 || c = 92 then 2
+            else 3
+          in
+          if !width > 0 && !width + esc_len > 60 then (
+            chunks := Buffer.contents b :: !chunks;
+            Buffer.clear b;
+            width := 0);
+          Buffer.add_substring b s i l;
+          width := !width + esc_len;
+          loop (i + l)
+      in
+      loop 0;
+      List.rev !chunks)
+    else
+      let chunks = ref [] in
+      let rec loop i =
+        if i >= String.length s then ()
+        else
+          let len = min 20 (String.length s - i) in
+          chunks := String.sub s i len :: !chunks;
+          loop (i + len)
+      in
+      loop 0;
+      List.rev !chunks
+
 let module_ ?features (m : _ B.module_) : _ T.module_ =
   Wax_utils.Debug.timed "to-text" @@ fun () ->
   let m = { m with names = make_names_unique m.names } in
@@ -725,7 +771,8 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
           {
             id = id m.names.data i;
             (* A binary segment is a flat byte string with no run structure. *)
-            init = [ Ast.no_loc (T.Str d.init) ];
+            init =
+              List.map (fun s -> Ast.no_loc (T.Str s)) (split_string d.init);
             mode = datamode m.names B.IntMap.empty d.mode;
           })
       m.data
