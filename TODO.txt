@@ -1,29 +1,8 @@
-- environment variables to select warnings?
 
 - support for string imports
-
-- what is the right way to reorder imports?
-
-- struct field pinning
-
-- maybe remove fast parser (large+ slow compile time)
-
-- Fix end of then location in conditionals
-
-- More robust support for conditional compilation
-- Use plain attributes for conditional compilation, rather than the current hack
-  where #[if( and #[else] are token
-
-Use a wrapper library to print errors
-==> deal with line breaking / proper string width for escaped strings
-
 - names in result type (symmetry with params) ?
-
-====
 
 Maybe
 =====
 
-allow comma/semicolon at end of block
-
-include a file (e.g. common types, imports)
+- allow comma/semicolon at end of block
