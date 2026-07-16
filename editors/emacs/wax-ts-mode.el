@@ -11,14 +11,10 @@
 ;; built on Emacs's built-in tree-sitter support (`treesit', Emacs 29+) and the
 ;; `tree-sitter-wax' grammar.
 ;;
-;; Unlike Neovim and Helix, Emacs does not consume the grammar's `.scm' query
-;; files; font-lock is defined here in Elisp instead.
-;;
+
 ;; Setup:
-;;   (add-to-list 'treesit-language-source-alist
-;;                '(wax "https://github.com/ocsigen/wax" "main" "tree-sitter-wax/src"))
-;;   M-x treesit-install-language-grammar RET wax RET
-;; then open a .wax file.
+;;   M-x wax-ts-install-grammar RET
+;; then open a .wax file (or simply open a .wax file and follow the prompt).
 
 ;;; Code:
 
@@ -181,26 +177,57 @@ On a formatter error the buffer is left unchanged and the error is shown."
       (kill-buffer out)
       (delete-file errfile))))
 
+(defvar wax-ts-mode-syntax-table
+  (let ((table (make-syntax-table)))
+    ;; C-style comments (// and /* */)
+    (modify-syntax-entry ?/ ". 124b" table)
+    (modify-syntax-entry ?* ". 23" table)
+    (modify-syntax-entry ?\n "> b" table)
+    ;; Symbol constituents (so variables with underscores are treated as one word)
+    (modify-syntax-entry ?_ "_" table)
+    table)
+  "Syntax table for `wax-ts-mode'.")
+
+;;;###autoload
+(defun wax-ts-install-grammar ()
+  "Install or update the Tree-sitter grammar for Wax."
+  (interactive)
+  (let ((treesit-language-source-alist
+         (cons '(wax "https://github.com/ocsigen/wax" "main" "tree-sitter-wax/src")
+               treesit-language-source-alist)))
+    (treesit-install-language-grammar 'wax)))
+
 ;;;###autoload
 (define-derived-mode wax-ts-mode prog-mode "Wax"
   "Major mode for editing Wax, powered by tree-sitter."
   :group 'wax
-  (when (treesit-ready-p 'wax)
-    (treesit-parser-create 'wax)
-    (setq-local treesit-font-lock-settings wax-ts-mode--font-lock-rules)
-    (setq-local treesit-font-lock-feature-list wax-ts-mode--font-lock-feature-list)
-    (setq-local treesit-simple-indent-rules wax-ts-mode--indent-rules)
-    (setq-local comment-start "// ")
-    (setq-local comment-end "")
-    (setq-local treesit-defun-type-regexp "function_definition")
-    (setq-local treesit-simple-imenu-settings
-                '(("Function" "\\`function_definition\\'" nil nil)
-                  ("Type" "\\`type_definition\\'" nil nil)))
-    (treesit-major-mode-setup)))
+
+  (unless (treesit-ready-p 'wax t)
+    (when (y-or-n-p "Wax tree-sitter grammar is not installed. Install it now? ")
+      (wax-ts-install-grammar)))
+
+  (if (treesit-ready-p 'wax)
+      (progn
+        (treesit-parser-create 'wax)
+        (setq-local treesit-font-lock-settings wax-ts-mode--font-lock-rules)
+        (setq-local treesit-font-lock-feature-list wax-ts-mode--font-lock-feature-list)
+        (setq-local treesit-simple-indent-rules wax-ts-mode--indent-rules)
+        (setq-local comment-start "// ")
+        (setq-local comment-end "")
+        (setq-local treesit-defun-type-regexp "function_definition")
+        (setq-local treesit-simple-imenu-settings
+                    '(("Function" "\\`function_definition\\'" nil nil)
+                      ("Type" "\\`type_definition\\'" nil nil)))
+        (treesit-major-mode-setup))
+    (message "Wax tree-sitter grammar is required for wax-ts-mode to fully function.")))
 
 ;;;###autoload
 (when (fboundp 'treesit-ready-p)
   (add-to-list 'auto-mode-alist '("\\.wax\\'" . wax-ts-mode)))
+
+;; Automatically register the language server with Eglot if Eglot is loaded
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs '(wax-ts-mode . ("wax" "lsp"))))
 
 (provide 'wax-ts-mode)
 ;;; wax-ts-mode.el ends here

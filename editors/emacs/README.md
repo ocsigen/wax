@@ -4,29 +4,36 @@
 (`treesit`, Emacs ≥ 29) and the [`tree-sitter-wax`](../../tree-sitter-wax/)
 grammar.
 
-Emacs does **not** read the grammar's `.scm` query files — font-lock is defined
-in Elisp inside `wax-ts-mode.el`, so this integration is a self-contained
-package.
 
 ## Install
 
-Put `wax-ts-mode.el` on your `load-path`, then register and build the grammar.
-Emacs compiles the C parser itself (you need a C compiler):
+Since `wax-ts-mode` requires Emacs 29+, you can install it directly from this repository using the built-in `use-package` and `package-vc`:
+
+```elisp
+(use-package wax-ts-mode
+  :vc (:url "https://github.com/ocsigen/wax"
+       :branch "main"
+       :lisp-dir "editors/emacs")
+  :custom
+  (wax-ts-mode-indent-offset 4)
+  :hook
+  (wax-ts-mode . eglot-ensure))
+```
+
+Alternatively, you can manually put `wax-ts-mode.el` on your `load-path`:
 
 ```elisp
 (add-to-list 'load-path "/path/to/wax/editors/emacs")
 (require 'wax-ts-mode)
-
-(add-to-list 'treesit-language-source-alist
-             '(wax "https://github.com/ocsigen/wax" "main" "tree-sitter-wax/src"))
-;; M-x treesit-install-language-grammar RET wax RET   (once)
 ```
 
-`treesit-install-language-grammar` clones the repo and builds
-`libtree-sitter-wax` into `~/.emacs.d/tree-sitter/`. Opening a `.wax` file then
-selects `wax-ts-mode` (it adds itself to `auto-mode-alist`).
+Emacs requires a C compiler to build the tree-sitter parser. When you open a `.wax` file for the first time, `wax-ts-mode` will automatically prompt you to download and compile the grammar into `~/.emacs.d/tree-sitter/`.
 
-Check the grammar is available with `M-: (treesit-ready-p 'wax)` → `t`.
+Alternatively, you can manually install or update the grammar at any time by running:
+
+`M-x wax-ts-install-grammar RET`
+
+Opening a `.wax` file automatically selects `wax-ts-mode` (it adds itself to `auto-mode-alist`). Check the grammar is available with `M-: (treesit-ready-p 'wax)` → `t`.
 
 ## Language server
 
@@ -36,9 +43,6 @@ definition, go to type definition, find references, rename, completion, and
 signature help:
 
 ```elisp
-(with-eval-after-load 'eglot
-  (add-to-list 'eglot-server-programs '(wax-ts-mode . ("wax" "lsp"))))
-
 (add-hook 'wax-ts-mode-hook #'eglot-ensure)
 ```
 
@@ -49,17 +53,14 @@ server adds the language intelligence on top.
 
 ## Formatting
 
-`M-x wax-format-buffer` reformats the buffer by piping it through
-`wax format -f wax` (stdin → stdout). On a parse error the buffer is left
-unchanged and the diagnostic is shown in the echo area. `wax` must be on
-`exec-path`; override the command with `wax-format-command` if needed.
-
-Format on save:
+Because `wax lsp` natively supports document formatting, Eglot can format your code out of the box. To enable format on save universally:
 
 ```elisp
 (add-hook 'wax-ts-mode-hook
-          (lambda () (add-hook 'before-save-hook #'wax-format-buffer nil t)))
+          (lambda () (add-hook 'before-save-hook #'eglot-format-buffer nil t)))
 ```
+
+(If you prefer not to use Eglot, `M-x wax-format-buffer` reformats the buffer by piping it through `wax format -f wax`. Override the command with `wax-format-command` if needed.)
 
 ## What you get
 

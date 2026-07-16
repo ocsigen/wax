@@ -64,7 +64,7 @@ Ready-to-use configurations, each with a README, live under
   `languages.toml` is included).
 - **[Emacs](https://github.com/ocsigen/wax/tree/main/editors/emacs)**:
   `wax-ts-mode` provides tree-sitter highlighting, indentation, and `imenu`,
-  with Eglot driving `wax lsp` for the rest.
+  with Eglot driving `wax lsp` for the rest. Requires Emacs 29+ and can be installed directly from GitHub using `use-package` with `package-vc`.
 
 The server's flags and behaviour (document sync, position-encoding negotiation)
 are documented under [`wax lsp`](cli.md#language-server) in the CLI reference.
