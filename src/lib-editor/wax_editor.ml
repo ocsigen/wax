@@ -522,6 +522,9 @@ let references_string ?(encoding = UTF16) src line ch =
         (if contains r.use then r.definitions else [])
         @ List.filter contains r.definitions)
       refs
+    |> List.sort_uniq (fun (a : Wax_utils.Ast.location) b ->
+        let c = compare a.loc_start.pos_cnum b.loc_start.pos_cnum in
+        if c = 0 then compare a.loc_end.pos_cnum b.loc_end.pos_cnum else c)
   in
   if targets = [] then []
   else
@@ -625,13 +628,19 @@ let rename_crosses_binding src' renamed_spans =
 
 let rename_string ?(encoding = UTF16) src line ch newname =
   let a = analyze src in
+  let puns = Hashtbl.create 16 in
+  List.iter
+    (fun (loc : Wax_utils.Ast.location) ->
+      Hashtbl.replace puns (loc.loc_start.pos_cnum, loc.loc_end.pos_cnum) ())
+    a.a_puns;
+  let is_pun (loc : Wax_utils.Ast.location) =
+    Hashtbl.mem puns (loc.loc_start.pos_cnum, loc.loc_end.pos_cnum)
+  in
   let edits =
     List.map
       (fun (loc : Wax_utils.Ast.location) ->
         let replacement =
-          if List.exists (same_span loc) a.a_puns then
-            slice src loc ^ ": " ^ newname
-          else newname
+          if is_pun loc then slice src loc ^ ": " ^ newname else newname
         in
         (loc, replacement))
       (references_string ~encoding src line ch)
