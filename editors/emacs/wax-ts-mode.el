@@ -21,6 +21,8 @@
 
 (require 'treesit)
 
+(defvar eglot-server-programs)
+
 (defgroup wax nil
   "Major mode for the Wax language."
   :group 'languages)
@@ -215,6 +217,7 @@ On a formatter error the buffer is left unchanged and the error is shown."
         (setq-local treesit-simple-indent-rules wax-ts-mode--indent-rules)
         (setq-local comment-start "// ")
         (setq-local comment-end "")
+        (setq-local comment-start-skip "\\(?://+\\|/\\*+\\)\\s *")
         (setq-local treesit-defun-type-regexp "function_definition")
         (setq-local treesit-simple-imenu-settings
                     '(("Function" "\\`function_definition\\'" nil nil)
