@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-68a55f00.js";
+            window.path_to_searchindex_js = "searchindex-51804260.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -275,6 +275,20 @@ already present in a binary — are preserved through WAT↔WAT and
 WASM↔WASM round-trips on their own, no flag needed.</li>
 </ul>
 </li>
+<li>A module can also declare the features it uses itself, with a
+<code>#![feature = "NAME"]</code> inner attribute (WAT: a module-level
+<code>(@feature "NAME")</code> annotation); see
+<a href="./language.html#features">Features</a>. The declared and enabled sets are
+unioned. The one exception is a conflict: an explicit <code>-X NAME=off</code>
+against a module that declares <em>NAME</em> is an error, reported at the
+attribute, since the file states a fact and the flag states a policy and
+neither silently wins.</li>
+<li>A binary persists the declarations as <code>+NAME</code> entries of the
+conventional <code>target_features</code> custom section, one entry per declared
+feature; other producers’ entries there are preserved verbatim and not
+interpreted. Decompiling a binary restores the attributes from the
+union of those entries and the gated encodings the module actually
+uses.</li>
 </ul>
 </li>
 <li>
@@ -444,6 +458,13 @@ global.</li>
 output is a usage error.</li>
 <li>Fails (exit <code>128</code>) if a conditional-compilation directive <code>(@if …)</code>
 remains unresolved; resolve them first with <code>-D</code>/<code>--define</code>.</li>
+<li>A <code>(@feature "…")</code> declaration is stripped: no annotation remains in the
+output. Feature resolution has already run by then, so the declaration
+still gates during processing; re-ingesting the desugared text needs
+<code>-X</code> again, exactly as desugared strings do not come back as literals.
+A module <em>using</em> gated constructs is not an error — those are real
+(proposal) WebAssembly, and removing annotations is orthogonal to
+whether the consumer supports the proposal.</li>
 </ul>
 </li>
 <li>

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-68a55f00.js";
+            window.path_to_searchindex_js = "searchindex-51804260.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -229,15 +229,28 @@ be on your <code>PATH</code>; pair it with the tree-sitter grammar for highlight
 Ready-to-use configurations, each with a README, live under
 <a href="https://github.com/ocsigen/wax/tree/main/editors"><code>editors/</code></a>:</p>
 <ul>
-<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/nvim">Neovim</a></strong>: register
+<li>
+<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/nvim/README.md">Neovim</a></strong>: register
 the <code>tree-sitter-wax</code> parser (nvim-treesitter or the built-in loader) and
-point <code>vim.lsp</code> at <code>wax lsp</code>.</li>
-<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/helix">Helix</a></strong>: add the
+point <code>vim.lsp</code> at <code>wax lsp</code>.</p>
+</li>
+<li>
+<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/helix/README.md">Helix</a></strong>: add the
 grammar and a <code>[language-server.wax]</code> entry running <code>wax lsp</code> (a ready-to-paste
-<code>languages.toml</code> is included).</li>
-<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/emacs">Emacs</a></strong>:
+<code>languages.toml</code> is included).</p>
+</li>
+<li>
+<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/emacs/README.md">Emacs</a></strong>:
 <code>wax-ts-mode</code> provides tree-sitter highlighting, indentation, and <code>imenu</code>,
-with Eglot driving <code>wax lsp</code> for the rest.</li>
+with Eglot driving <code>wax lsp</code> for the rest. Requires Emacs 29+ and can be installed directly from GitHub using <code>use-package</code> with <code>package-vc</code>:</p>
+<pre><code class="language-elisp">(use-package wax-ts-mode
+  :vc (:url "https://github.com/ocsigen/wax"
+       :branch "main"
+       :rev :newest
+       :lisp-dir "editors/emacs")
+  :hook (wax-ts-mode . eglot-ensure))
+</code></pre>
+</li>
 </ul>
 <p>The server’s flags and behaviour (document sync, position-encoding negotiation)
 are documented under <a href="cli.html#language-server"><code>wax lsp</code></a> in the CLI reference.</p>

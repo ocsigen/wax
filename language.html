@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-68a55f00.js";
+            window.path_to_searchindex_js = "searchindex-51804260.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -195,6 +195,39 @@ enclosing module. A module may carry at most one name.</p>
 <p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section,
 the <code>$name</code> in a WAT <code>(module $name …)</code>; see
 <a href="./correspondence/module_fields.html#module-name">Module Fields</a>.)</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<p>A module can declare the optional proposals it uses (the <code>-X</code>/<code>--feature</code> set,
+such as <code>custom-descriptors</code> or <code>compact-import-section</code>) with a
+<code>#![feature = "..."]</code> inner attribute at the top of the file, one feature per
+attribute:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span>
+
+<span class="hljs-keyword">rec</span> {
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { };
+}</span></pre>
+
+<p>The file is then self-describing: it compiles, validates, and round-trips
+without every consumer passing <code>-X</code>, and the editor needs no configuration.
+The value is a feature name exactly as <code>-X</code> spells it; an unknown name is an
+error listing the known features. Repeating an attribute is allowed
+(declaring a feature is idempotent).</p>
+<p>The attribute states a fact (“this module uses X”), while an explicit
+<code>-X x=off</code> states a policy; neither silently overrides the other:</p>
+<ul>
+<li>The file declares X and the command line is silent: X is enabled.</li>
+<li>The file is silent and the command line passes <code>-X x</code>: X is enabled.</li>
+<li>Both declare and enable X: X is enabled.</li>
+<li>The file declares X but the command line passes <code>-X x=off</code>: this is an
+error, reported once at the attribute.</li>
+</ul>
+<p>(This maps to a module-level <code>(@feature "...")</code> annotation in WAT, and to a
+<code>+name</code> entry of the conventional <code>target_features</code> custom section in the
+binary; see
+<a href="./correspondence/module_fields.html#feature-declarations">Module Fields</a>.
+Decompiling a binary restores the attribute from that section and from the
+gated encodings the module actually uses, so even a binary from a producer
+that wrote no section decompiles to a self-describing module.)</p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
 <p>Wax supports C-style comments:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-comment">// Single-line comment</span>

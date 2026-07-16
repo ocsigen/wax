@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-68a55f00.js";
+            window.path_to_searchindex_js = "searchindex-51804260.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -359,6 +359,39 @@ enclosing module. A module may carry at most one name.</p>
 <p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section,
 the <code>$name</code> in a WAT <code>(module $name …)</code>; see
 <a href="#module-name-1">Module Fields</a>.)</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<p>A module can declare the optional proposals it uses (the <code>-X</code>/<code>--feature</code> set,
+such as <code>custom-descriptors</code> or <code>compact-import-section</code>) with a
+<code>#![feature = "..."]</code> inner attribute at the top of the file, one feature per
+attribute:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span>
+
+<span class="hljs-keyword">rec</span> {
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { };
+}</span></pre>
+
+<p>The file is then self-describing: it compiles, validates, and round-trips
+without every consumer passing <code>-X</code>, and the editor needs no configuration.
+The value is a feature name exactly as <code>-X</code> spells it; an unknown name is an
+error listing the known features. Repeating an attribute is allowed
+(declaring a feature is idempotent).</p>
+<p>The attribute states a fact (“this module uses X”), while an explicit
+<code>-X x=off</code> states a policy; neither silently overrides the other:</p>
+<ul>
+<li>The file declares X and the command line is silent: X is enabled.</li>
+<li>The file is silent and the command line passes <code>-X x</code>: X is enabled.</li>
+<li>Both declare and enable X: X is enabled.</li>
+<li>The file declares X but the command line passes <code>-X x=off</code>: this is an
+error, reported once at the attribute.</li>
+</ul>
+<p>(This maps to a module-level <code>(@feature "...")</code> annotation in WAT, and to a
+<code>+name</code> entry of the conventional <code>target_features</code> custom section in the
+binary; see
+<a href="#feature-declarations">Module Fields</a>.
+Decompiling a binary restores the attribute from that section and from the
+gated encodings the module actually uses, so even a binary from a producer
+that wrote no section decompiles to a self-describing module.)</p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
 <p>Wax supports C-style comments:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-comment">// Single-line comment</span>
@@ -1855,8 +1888,26 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
     <span class="hljs-keyword">i32.mul</span>))</span></pre>
 
-<h2 id="arithmetic-functions"><a class="header" href="#arithmetic-functions">Arithmetic Functions</a></h2>
+<h2 id="feature-declaration"><a class="header" href="#feature-declaration">Feature Declaration</a></h2>
+<p>A <code>#![feature = "..."]</code> inner attribute declares an optional proposal the
+module uses, so it compiles and validates with no <code>-X</code> flag.</p>
 <h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span>
+
+<span class="hljs-keyword">rec</span> {
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { };
+}</span></pre>
+
+<h3 id="equivalent-wat-1"><a class="header" href="#equivalent-wat-1">Equivalent WAT</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span>
+  (<span class="hljs-meta">@feature</span> <span class="hljs-string">"custom-descriptors"</span>)
+  (<span class="hljs-keyword">rec</span>
+    (<span class="hljs-keyword">type</span> <span class="hljs-variable">$obj</span> (<span class="hljs-keyword">descriptor</span> <span class="hljs-variable">$obj_desc</span>) (<span class="hljs-keyword">struct</span> (<span class="hljs-keyword">field</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>)))
+    (<span class="hljs-keyword">type</span> <span class="hljs-variable">$obj_desc</span> (<span class="hljs-keyword">describes</span> <span class="hljs-variable">$obj</span>) (<span class="hljs-keyword">struct</span>))))</span></pre>
+
+<h2 id="arithmetic-functions"><a class="header" href="#arithmetic-functions">Arithmetic Functions</a></h2>
+<h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">add</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     x + y;
@@ -1867,7 +1918,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     x * y;
 }</span></pre>
 
-<h3 id="equivalent-wat-1"><a class="header" href="#equivalent-wat-1">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$add</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"add"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$y</span>
@@ -1879,7 +1930,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
   <span class="hljs-keyword">i32.mul</span>)</span></pre>
 
 <h2 id="factorial-with-recursion"><a class="header" href="#factorial-with-recursion">Factorial with Recursion</a></h2>
-<h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
+<h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"factorial"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">factorial</span>(n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">if</span> n &lt;=s <span class="hljs-number">1</span> =&gt; <span class="hljs-type">i32</span> {
@@ -1889,7 +1940,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     }
 }</span></pre>
 
-<h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$factorial</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"factorial"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$n</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>
   <span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>
@@ -1906,7 +1957,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
   <span class="hljs-keyword">end</span>)</span></pre>
 
 <h2 id="factorial-with-tail-call"><a class="header" href="#factorial-with-tail-call">Factorial with Tail Call</a></h2>
-<h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
+<h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"factorial"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">factorial</span>(n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">become</span> <span class="hljs-title">factorial_helper</span>(n, <span class="hljs-number">1</span>);
@@ -1921,7 +1972,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
 }</span></pre>
 
 <h2 id="loop-with-early-exit"><a class="header" href="#loop-with-early-exit">Loop with Early Exit</a></h2>
-<h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
+<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">ints</span> = [<span class="hljs-type">i32</span>];
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"find_first_zero"</span><span class="hljs-meta">]</span>
@@ -1941,7 +1992,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     <span class="hljs-keyword">unreachable</span>;
 }</span></pre>
 
-<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$find_first_zero</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"find_first_zero"</span>)
       (<span class="hljs-keyword">param</span> <span class="hljs-variable">$arr</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$array_i32</span>)) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">local</span> <span class="hljs-variable">$len</span> <span class="hljs-type">i32</span>)
@@ -1974,7 +2025,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     <span class="hljs-keyword">br</span> <span class="hljs-variable">$search</span>))</span></pre>
 
 <h2 id="while-loops-1"><a class="header" href="#while-loops-1">While Loops</a></h2>
-<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
+<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"triangle"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">triangle</span>(n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">let</span> i: <span class="hljs-type">i32</span> = <span class="hljs-number">0</span>;
@@ -1997,7 +2048,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     steps;
 }</span></pre>
 
-<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$triangle</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"triangle"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$n</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">local</span> <span class="hljs-variable">$i</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">local</span> <span class="hljs-variable">$total</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$i</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>))
@@ -2022,7 +2073,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
 )</span></pre>
 
 <h2 id="dispatch-jump-table"><a class="header" href="#dispatch-jump-table">Dispatch (Jump Table)</a></h2>
-<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
+<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"rgb_channel"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">rgb_channel</span>(color: <span class="hljs-type">i32</span>, value: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">dispatch</span> color [<span class="hljs-symbol">'red</span>, <span class="hljs-symbol">'green</span>, <span class="hljs-symbol">'blue</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'bad</span>] {
@@ -2033,7 +2084,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     }
 }</span></pre>
 
-<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$rgb_channel</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"rgb_channel"</span>)
   (<span class="hljs-keyword">param</span> <span class="hljs-variable">$color</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$value</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">block</span> <span class="hljs-variable">$red</span>
@@ -2048,7 +2099,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     (<span class="hljs-keyword">i32.shl</span> (<span class="hljs-keyword">i32.and</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$value</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">255</span>)) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">16</span>))))</span></pre>
 
 <h2 id="type-match"><a class="header" href="#type-match">Type Match</a></h2>
-<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
+<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">cell</span> = { value: <span class="hljs-type">i32</span> };
 <span class="hljs-keyword">type</span> <span class="hljs-type">cons</span> = { head: &amp;<span class="hljs-type">eq</span>, tail: &amp;?<span class="hljs-type">eq</span> };
 
@@ -2061,7 +2112,7 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
     }
 }</span></pre>
 
-<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <p>The scrutinee is evaluated once and threaded through a <code>br_on_cast</code> chain in the
 innermost block; each test branches out to its arm’s block (named by a readable
 <code>$arm</code>/<code>$default</code> label, picked fresh so it cannot capture a user branch)
@@ -2086,7 +2137,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
   (<span class="hljs-keyword">return</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>)))</span></pre>
 
 <h2 id="structs-and-methods"><a class="header" href="#structs-and-methods">Structs and Methods</a></h2>
-<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
+<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_point"</span><span class="hljs-meta">]</span>
@@ -2102,7 +2153,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }</span></pre>
 
 <h2 id="mutable-structs"><a class="header" href="#mutable-structs">Mutable Structs</a></h2>
-<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
+<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">counter</span> = { value: <span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"new_counter"</span><span class="hljs-meta">]</span>
@@ -2121,7 +2172,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }</span></pre>
 
 <h2 id="inferring-struct-and-array-types"><a class="header" href="#inferring-struct-and-array-types">Inferring Struct and Array Types</a></h2>
-<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
+<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
 <span class="hljs-keyword">type</span> <span class="hljs-type">ints</span> = [<span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span>];
 
@@ -2156,7 +2207,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }</span></pre>
 
 <h2 id="inferring-block-result-types"><a class="header" href="#inferring-block-result-types">Inferring Block Result Types</a></h2>
-<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
+<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
 <p>A block’s result type, <code>=&gt; T</code> on an <code>if</code>, or the type after <code>do</code> (and likewise
 <code>loop</code>, <code>try</code>, and <code>try_table</code>), may be omitted where it is fixed by the values
 the block produces or by the surrounding context:</p>
@@ -2180,7 +2231,7 @@ the block produces or by the surrounding context:</p>
 }</span></pre>
 
 <h2 id="arrays-1"><a class="header" href="#arrays-1">Arrays</a></h2>
-<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
+<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">bytes</span> = [<span class="hljs-keyword">mut</span> <span class="hljs-type">i8</span>];
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
@@ -2214,7 +2265,7 @@ the block produces or by the surrounding context:</p>
 }</span></pre>
 
 <h2 id="exception-handling"><a class="header" href="#exception-handling">Exception Handling</a></h2>
-<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
+<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">tag</span> <span class="hljs-title">divide_by_zero</span>();
 <span class="hljs-keyword">tag</span> <span class="hljs-title">overflow</span>();
 
@@ -2236,7 +2287,7 @@ the block produces or by the surrounding context:</p>
 }</span></pre>
 
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
-<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
+<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">list</span> = { value: <span class="hljs-type">i32</span>, next: &amp;?<span class="hljs-type">list</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_node"</span><span class="hljs-meta">]</span>
@@ -2254,7 +2305,7 @@ the block produces or by the surrounding context:</p>
 }</span></pre>
 
 <h2 id="imports-and-exports-1"><a class="header" href="#imports-and-exports-1">Imports and Exports</a></h2>
-<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-comment">// Import a function and a global from the host environment</span>
 <span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> {
     <span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(value: <span class="hljs-type">i32</span>);
@@ -2271,7 +2322,7 @@ the block produces or by the surrounding context:</p>
 
 <h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
 <p>A more complex example showing bitwise operations:</p>
-<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
+<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"hash_mix_int"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">hash_mix_int</span>(h: <span class="hljs-type">i32</span>, d: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     ((d * <span class="hljs-number">0xcc9e2d51</span>).<span class="hljs-title">rotl</span>(<span class="hljs-number">15</span>) * <span class="hljs-number">0x1b873593</span> ^ h).<span class="hljs-title">rotl</span>(<span class="hljs-number">13</span>) * <span class="hljs-number">5</span> + <span class="hljs-number">0xe6546b64</span>;
@@ -2291,7 +2342,7 @@ the block produces or by the surrounding context:</p>
 <code>i16</code> array (<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code>
 prefix). An <code>i8</code> array holds the raw UTF-8 bytes; an <code>i16</code> array holds the
 UTF-16 code units. See <a href="#strings">Strings</a>.</p>
-<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
+<h3 id="wax-18"><a class="header" href="#wax-18">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">chars</span> = [<span class="hljs-type">i8</span>];
 <span class="hljs-keyword">type</span> <span class="hljs-type">wide</span> = [<span class="hljs-type">i16</span>];
 
@@ -2310,7 +2361,7 @@ UTF-16 code units. See <a href="#strings">Strings</a>.</p>
     <span class="hljs-type">wide</span> # <span class="hljs-string">"café"</span>;              <span class="hljs-comment">// the UTF-16 units 'c', 'a', 'f', 'é'</span>
 }</span></pre>
 
-<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
 <p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
 they round-trip back to Wax unchanged:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$newline</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"newline"</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>) (<span class="hljs-meta">@char</span> <span class="hljs-string">"\n"</span>))
@@ -2329,7 +2380,7 @@ four UTF-16 units <code>99, 97, 102, 233</code>. The character comes back as the
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
 they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
-<h3 id="wax-18"><a class="header" href="#wax-18">Wax</a></h3>
+<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"blend"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">blend</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     x * <span class="hljs-number">2</span>;
@@ -2337,7 +2388,7 @@ they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
     _ + _;
 }</span></pre>
 
-<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-9"><a class="header" href="#equivalent-wat-9">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$blend</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"blend"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
   <span class="hljs-keyword">i32.const</span> <span class="hljs-number">2</span>
@@ -2351,7 +2402,7 @@ they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
 stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
-<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
+<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">divmod</span>(a: <span class="hljs-type">i32</span>, b: <span class="hljs-type">i32</span>) -&gt; (<span class="hljs-type">i32</span>, <span class="hljs-type">i32</span>) {
     a /s b;
     a %s b;
@@ -2363,7 +2414,7 @@ stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
     q + r;
 }</span></pre>
 
-<h3 id="equivalent-wat-9"><a class="header" href="#equivalent-wat-9">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-10"><a class="header" href="#equivalent-wat-10">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$divmod</span> (<span class="hljs-keyword">param</span> <span class="hljs-variable">$a</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$b</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$a</span>
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$b</span>
@@ -2387,7 +2438,7 @@ stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
 <p>128-bit integer arithmetic uses the <code>i64::</code> intrinsics, which take and return
 their operands as <code>(low, high)</code> pairs of <code>i64</code> values. Each returns two
 results, so a multi-value <code>let</code> binds them.</p>
-<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
+<h3 id="wax-21"><a class="header" href="#wax-21">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add_u128"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">add_u128</span>(a_lo: <span class="hljs-type">i64</span>, a_hi: <span class="hljs-type">i64</span>, b_lo: <span class="hljs-type">i64</span>, b_hi: <span class="hljs-type">i64</span>) -&gt; (<span class="hljs-type">i64</span>, <span class="hljs-type">i64</span>) {
     <span class="hljs-keyword">let</span> (lo, hi) = <span class="hljs-type">i64</span>::<span class="hljs-title">add128</span>(a_lo, a_hi, b_lo, b_hi);
@@ -2408,7 +2459,7 @@ descriptor operand (the type the operand <em>describes</em>), so all of them sha
 <code>descriptor(d)</code> clause. <code>struct.new_desc</code> allocates carrying a descriptor,
 <code>.descriptor</code> reads it back, and <code>as [?]descriptor(d)</code> / <code>br_on_cast [?]descriptor(d)</code>
 cast on descriptor equality (a leading <code>?</code> makes the result nullable).</p>
-<h3 id="wax-21"><a class="header" href="#wax-21">Wax</a></h3>
+<h3 id="wax-22"><a class="header" href="#wax-22">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">rec</span> {
     <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
     <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { kind: <span class="hljs-type">i32</span> };
@@ -2434,7 +2485,7 @@ cast on descriptor equality (a leading <code>?</code> makes the result nullable)
 a conditional branch likely or unlikely taken. Prefix the branch with
 <code>#[likely]</code> / <code>#[unlikely]</code>; the hint is preserved through every conversion (no
 feature flag required).</p>
-<h3 id="wax-22"><a class="header" href="#wax-22">Wax</a></h3>
+<h3 id="wax-23"><a class="header" href="#wax-23">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"clamp_low"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">clamp_low</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-meta">#[likely]</span> <span class="hljs-keyword">if</span> x &gt;=s <span class="hljs-number">0</span> =&gt; <span class="hljs-type">i32</span> {
@@ -2455,7 +2506,7 @@ feature flag required).</p>
 <p>A <code>memory</code> declaration reserves linear memory. <code>load</code>/<code>store</code> methods on it read
 and write, with the access width in the method name; a narrow (<code>load8</code>/<code>load16</code>)
 load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
-<h3 id="wax-23"><a class="header" href="#wax-23">Wax</a></h3>
+<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
@@ -2472,7 +2523,7 @@ load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
 <h2 id="data-segments-with-numeric-values"><a class="header" href="#data-segments-with-numeric-values">Data Segments with Numeric Values</a></h2>
 <p>A data segment’s contents can mix string literals with typed numeric runs —
 <code>[type: values]</code>, packed little-endian — instead of hand-escaping every byte.</p>
-<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
+<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
 
 <span class="hljs-comment">// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.</span>
@@ -2484,7 +2535,7 @@ load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
 <h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
 <p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
 name (<code>mul_i32x4</code>, <code>add_i32x4</code>, <code>extract_lane_i32x4</code>).</p>
-<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
+<h3 id="wax-26"><a class="header" href="#wax-26">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"madd_i32x4"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">madd_i32x4</span>(a: <span class="hljs-type">v128</span>, b: <span class="hljs-type">v128</span>, c: <span class="hljs-type">v128</span>) -&gt; <span class="hljs-type">v128</span> {
     a.<span class="hljs-title">mul_i32x4</span>(b).<span class="hljs-title">add_i32x4</span>(c);          <span class="hljs-comment">// a * b + c, four i32 lanes at once</span>
@@ -2502,7 +2553,7 @@ with a value; a driver <code>resume</code>s it, routing the suspended tag to a h
 label that receives the payload and the paused continuation. Note that the
 continuation’s type changes after a suspend, since resuming it now needs the
 reply value.</p>
-<h3 id="wax-26"><a class="header" href="#wax-26">Wax</a></h3>
+<h3 id="wax-27"><a class="header" href="#wax-27">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">task</span> = <span class="hljs-keyword">fn</span>() -&gt; <span class="hljs-type">i32</span>;
 <span class="hljs-keyword">type</span> <span class="hljs-type">k</span> = <span class="hljs-keyword">cont</span> task;
 <span class="hljs-keyword">type</span> <span class="hljs-type">resumed</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;   <span class="hljs-comment">// the continuation's type after a suspend</span>
@@ -3301,6 +3352,28 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 
 <p>A module may carry at most one name. See also
 <a href="#module-name">Module Name</a> in the language guide.</p>
+<h2 id="feature-declarations"><a class="header" href="#feature-declarations">Feature Declarations</a></h2>
+<p>A <code>#![feature = "..."]</code> inner attribute declares an optional proposal the
+module uses (see <a href="#features">Features</a> in the language guide).
+It maps to a module-level <code>(@feature "...")</code> annotation in WAT:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span></span></pre>
+
+<p>corresponds to the WAT</p>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-meta">@feature</span> <span class="hljs-string">"custom-descriptors"</span>)</span></pre>
+
+<p>Both are read on input and emitted on output, so the declaration survives a
+Wax/WAT round-trip. In the binary format, each declared feature becomes a
+<code>+name</code> entry of the conventional <code>target_features</code> custom section
+(<a href="https://github.com/WebAssembly/tool-conventions/blob/main/Linking.md#target-features-section">tool-conventions</a>):</p>
+<pre><code class="language-text">(@custom "target_features" "\01+\12custom-descriptors")
+</code></pre>
+<p>Other producers’ entries in that section (standard names like <code>+simd128</code>, or
+<code>-</code> entries) are preserved verbatim through a binary round-trip but do not
+become attributes. Decompiling a binary restores the declarations from the
+union of the section’s recognised <code>+</code> entries and the gated encodings the
+module actually uses (a descriptor type, an exact reference, a compact import
+section, …), so even a binary whose producer wrote no section decompiles to
+a module that recompiles standalone.</p>
 <h2 id="types-2"><a class="header" href="#types-2">Types</a></h2>
 <p>Types are defined using <code>type</code> for single definitions or <code>rec { ... }</code> for mutually recursive types.</p>
 <h3 id="simple-types"><a class="header" href="#simple-types">Simple Types</a></h3>
@@ -3659,6 +3732,20 @@ already present in a binary — are preserved through WAT↔WAT and
 WASM↔WASM round-trips on their own, no flag needed.</li>
 </ul>
 </li>
+<li>A module can also declare the features it uses itself, with a
+<code>#![feature = "NAME"]</code> inner attribute (WAT: a module-level
+<code>(@feature "NAME")</code> annotation); see
+<a href="#features">Features</a>. The declared and enabled sets are
+unioned. The one exception is a conflict: an explicit <code>-X NAME=off</code>
+against a module that declares <em>NAME</em> is an error, reported at the
+attribute, since the file states a fact and the flag states a policy and
+neither silently wins.</li>
+<li>A binary persists the declarations as <code>+NAME</code> entries of the
+conventional <code>target_features</code> custom section, one entry per declared
+feature; other producers’ entries there are preserved verbatim and not
+interpreted. Decompiling a binary restores the attributes from the
+union of those entries and the gated encodings the module actually
+uses.</li>
 </ul>
 </li>
 <li>
@@ -3828,6 +3915,13 @@ global.</li>
 output is a usage error.</li>
 <li>Fails (exit <code>128</code>) if a conditional-compilation directive <code>(@if …)</code>
 remains unresolved; resolve them first with <code>-D</code>/<code>--define</code>.</li>
+<li>A <code>(@feature "…")</code> declaration is stripped: no annotation remains in the
+output. Feature resolution has already run by then, so the declaration
+still gates during processing; re-ingesting the desugared text needs
+<code>-X</code> again, exactly as desugared strings do not come back as literals.
+A module <em>using</em> gated constructs is not an error — those are real
+(proposal) WebAssembly, and removing annotations is orthogonal to
+whether the consumer supports the proposal.</li>
 </ul>
 </li>
 <li>
@@ -4056,7 +4150,7 @@ grammar for syntax highlighting, and the built-in <strong><code>wax lsp</code></
 (see <a href="#language-server">CLI Reference</a>) for everything else. The extension
 and the server run the same analysis as the <code>wax</code> toolchain, so the language
 features are the same across editors.</p>
-<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h2 id="features-1"><a class="header" href="#features-1">Features</a></h2>
 <p>Available in VS Code, and in any editor with a Language Server Protocol client
 through <code>wax lsp</code>:</p>
 <ul>
@@ -4099,15 +4193,28 @@ be on your <code>PATH</code>; pair it with the tree-sitter grammar for highlight
 Ready-to-use configurations, each with a README, live under
 <a href="https://github.com/ocsigen/wax/tree/main/editors"><code>editors/</code></a>:</p>
 <ul>
-<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/nvim">Neovim</a></strong>: register
+<li>
+<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/nvim/README.md">Neovim</a></strong>: register
 the <code>tree-sitter-wax</code> parser (nvim-treesitter or the built-in loader) and
-point <code>vim.lsp</code> at <code>wax lsp</code>.</li>
-<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/helix">Helix</a></strong>: add the
+point <code>vim.lsp</code> at <code>wax lsp</code>.</p>
+</li>
+<li>
+<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/helix/README.md">Helix</a></strong>: add the
 grammar and a <code>[language-server.wax]</code> entry running <code>wax lsp</code> (a ready-to-paste
-<code>languages.toml</code> is included).</li>
-<li><strong><a href="https://github.com/ocsigen/wax/tree/main/editors/emacs">Emacs</a></strong>:
+<code>languages.toml</code> is included).</p>
+</li>
+<li>
+<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/emacs/README.md">Emacs</a></strong>:
 <code>wax-ts-mode</code> provides tree-sitter highlighting, indentation, and <code>imenu</code>,
-with Eglot driving <code>wax lsp</code> for the rest.</li>
+with Eglot driving <code>wax lsp</code> for the rest. Requires Emacs 29+ and can be installed directly from GitHub using <code>use-package</code> with <code>package-vc</code>:</p>
+<pre><code class="language-elisp">(use-package wax-ts-mode
+  :vc (:url "https://github.com/ocsigen/wax"
+       :branch "main"
+       :rev :newest
+       :lisp-dir "editors/emacs")
+  :hook (wax-ts-mode . eglot-ensure))
+</code></pre>
+</li>
 </ul>
 <p>The server’s flags and behaviour (document sync, position-encoding negotiation)
 are documented under <a href="#language-server"><code>wax lsp</code></a> in the CLI reference.</p>

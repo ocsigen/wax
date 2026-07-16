@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-68a55f00.js";
+            window.path_to_searchindex_js = "../searchindex-51804260.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7b4055a9.js"></script>
@@ -191,6 +191,28 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 
 <p>A module may carry at most one name. See also
 <a href="../language.html#module-name">Module Name</a> in the language guide.</p>
+<h2 id="feature-declarations"><a class="header" href="#feature-declarations">Feature Declarations</a></h2>
+<p>A <code>#![feature = "..."]</code> inner attribute declares an optional proposal the
+module uses (see <a href="../language.html#features">Features</a> in the language guide).
+It maps to a module-level <code>(@feature "...")</code> annotation in WAT:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span></span></pre>
+
+<p>corresponds to the WAT</p>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-meta">@feature</span> <span class="hljs-string">"custom-descriptors"</span>)</span></pre>
+
+<p>Both are read on input and emitted on output, so the declaration survives a
+Wax/WAT round-trip. In the binary format, each declared feature becomes a
+<code>+name</code> entry of the conventional <code>target_features</code> custom section
+(<a href="https://github.com/WebAssembly/tool-conventions/blob/main/Linking.md#target-features-section">tool-conventions</a>):</p>
+<pre><code class="language-text">(@custom "target_features" "\01+\12custom-descriptors")
+</code></pre>
+<p>Other producers’ entries in that section (standard names like <code>+simd128</code>, or
+<code>-</code> entries) are preserved verbatim through a binary round-trip but do not
+become attributes. Decompiling a binary restores the declarations from the
+union of the section’s recognised <code>+</code> entries and the gated encodings the
+module actually uses (a descriptor type, an exact reference, a compact import
+section, …), so even a binary whose producer wrote no section decompiles to
+a module that recompiles standalone.</p>
 <h2 id="types"><a class="header" href="#types">Types</a></h2>
 <p>Types are defined using <code>type</code> for single definitions or <code>rec { ... }</code> for mutually recursive types.</p>
 <h3 id="simple-types"><a class="header" href="#simple-types">Simple Types</a></h3>
