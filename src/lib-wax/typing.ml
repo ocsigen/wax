@@ -7801,38 +7801,52 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
          [ i1'; a2'; i2'; n' ] ))
     [||]
 
-and type_array_init_call ctx i func a meth seg sinfo rest =
+and type_array_init_call ctx i func a meth arg1 rest =
   let* a' = instruction ctx a in
-  let* rest' = instructions ctx rest in
-  let i32 = i32_cell in
-  (match rest' with
-  | [ d'; s'; n' ] ->
-      check_type ctx d' i32;
-      check_type ctx s' i32;
-      check_type ctx n' i32
-  | _ -> ());
-  (match Cell.get (expression_type ctx a') with
-  | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> (
-      let>@ field = lookup_array_type ~location:a.info ctx ty in
-      if not field.mut then
-        Error.immutable ctx.diagnostics ~location:a.info "array";
-      match field.typ with
-      | Value (Ref dst) ->
-          let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
-          check_elem_subtype ctx ~location:a.info ~src ~dst
-      | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option))
-  | Error -> (* receiver already failed to type; recover silently *) ()
-  | Unknown | UnknownRef ->
-      (* The receiver's type is unknown (unreachable / branch code) or only a
-         reference (its array type cannot be resolved), so the operation cannot
-         be compiled. *)
-      Error.unknown_operand_type ctx.diagnostics ~location:a.info
-  | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
-  let seg' = { desc = Get seg; info = ([||], sinfo) } in
-  return_statement i
-    (Call
-       ({ desc = StructGet (a', meth); info = ([||], func.info) }, seg' :: rest'))
-    [||]
+  match arg1.desc with
+  | Get seg ->
+      let sinfo = arg1.info in
+      let* rest' = instructions ctx rest in
+      let i32 = i32_cell in
+      (match rest' with
+      | [ d'; s'; n' ] ->
+          check_type ctx d' i32;
+          check_type ctx s' i32;
+          check_type ctx n' i32
+      | _ -> ());
+      (match Cell.get (expression_type ctx a') with
+      | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> (
+          let>@ field = lookup_array_type ~location:a.info ctx ty in
+          if not field.mut then
+            Error.immutable ctx.diagnostics ~location:a.info "array";
+          match field.typ with
+          | Value (Ref dst) ->
+              let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
+              check_elem_subtype ctx ~location:a.info ~src ~dst
+          | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option))
+      | Error -> (* receiver already failed to type; recover silently *) ()
+      | Unknown | UnknownRef ->
+          (* The receiver's type is unknown (unreachable / branch code) or only
+             a reference (its array type cannot be resolved), so the operation
+             cannot be compiled. *)
+          Error.unknown_operand_type ctx.diagnostics ~location:a.info
+      | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
+      let seg' = { desc = Get seg; info = ([||], sinfo) } in
+      return_statement i
+        (Call
+           ( { desc = StructGet (a', meth); info = ([||], func.info) },
+             seg' :: rest' ))
+        [||]
+  | _ ->
+      (* [array.init_data]/[array.init_elem] name a data or element segment as
+         their first argument; the lowering requires that name, so anything else
+         (a [null], a computed value) cannot be compiled. Type the arguments for
+         recovery, then reject. *)
+      let* args' = instructions ctx (arg1 :: rest) in
+      Error.invalid_management_call ctx.diagnostics ~location:i.info meth.desc;
+      return_statement i
+        (Call ({ desc = StructGet (a', meth); info = ([||], func.info) }, args'))
+        [||]
 
 (* An array bulk method ([fill]/[copy]/[init]) on an array receiver but with the
    wrong argument count — in practice the empty [a.fill()] an auto-closed call
@@ -9080,8 +9094,8 @@ and call_instruction ctx i =
      element type selects data vs elem (as for array.new). *)
   | Call
       ( ({ desc = StructGet (a, ({ desc = "init"; _ } as meth)); _ } as func),
-        { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ) ->
-      type_array_init_call ctx i func a meth seg sinfo rest
+        arg1 :: ([ _; _; _ ] as rest) ) ->
+      type_array_init_call ctx i func a meth arg1 rest
   (* An array bulk method with the wrong argument count (the exact forms are
      above) — the empty [a.fill()] a call being typed leaves. Gated on an array
      receiver so a struct field of the same name stays an indirect call. *)

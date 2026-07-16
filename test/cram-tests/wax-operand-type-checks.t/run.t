@@ -63,6 +63,18 @@ array.init_elem requires the element segment's type to fit the array:
   4 │ 
   [128]
 
+array.init names a data/element segment as its first argument; anything else
+(here a `null`) is rejected rather than crashing the compiler:
+
+  $ wax check array-init-nonsegment.wax
+  Error: Invalid arguments in call to 'init'.
+   ──➤  array-init-nonsegment.wax:2:15
+  1 │ type a = [mut i8];
+  2 │ fn f(x: &a) { x.init(null, 0 as i32, 0 as i32, 0 as i32); }
+    ·               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 │ 
+  [128]
+
 array.new_elem likewise requires the element segment's type to fit the array:
 
   $ wax check array-new-elem-bad.wax
