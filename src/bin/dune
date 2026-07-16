@@ -57,7 +57,7 @@
  (name run_wasm_testsuite)
  (enabled_if
   (>= %{ocaml_version} 5.0))
- (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
+ (libraries wax_wasm wax_lang wax_conversion menhirLib re unix))
 
 (executables
  (names fuzz_mutate fuzz_gen fuzz_recover)
