@@ -727,10 +727,11 @@ let label_seq pp cases default =
       punctuation pp ",";
       space pp ())
     cases;
-  keyword pp "else";
-  space pp ();
-  identifier pp "'";
-  identifier pp default.desc
+  box pp (fun () ->
+      keyword pp "else";
+      space pp ();
+      identifier pp "'";
+      identifier pp default.desc)
 
 (* Print [<before>[ <labels> else <default> ]<after>], shared by [br_table] and
    [dispatch]. On one line when it fits; otherwise [<before>[] stays on the line,

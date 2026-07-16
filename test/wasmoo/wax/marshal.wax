@@ -460,8 +460,8 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             'DOUBLE_ARRAY8, 'DOUBLE_ARRAY32, 'CODEPOINTER,
                                             'CODEPOINTER, 'CUSTOM, 'default, 'default, 'default,
                                             'default, 'default, 'CUSTOM, 'CUSTOM, 'default,
-                                            'default, 'default, 'default, 'default, 'NULL, else
-                                            'default
+                                            'default, 'default, 'default, 'default, 'NULL,
+                                            else 'default
                                         ] {
                                             'default: {
                                                 // default
