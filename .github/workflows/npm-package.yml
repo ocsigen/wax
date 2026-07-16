@@ -8,9 +8,14 @@ name: npm package
 #
 # Pushing a version tag (e.g. `v0.1.0`) builds, tests across the matrix, then
 # publishes to npm. Pushes to main, pull requests and manual runs build and test
-# only. Before the first real tag: add an `NPM_TOKEN` repository secret and
-# confirm the package `name` in npm/package.json is available/scoped. Provenance
-# is enabled, which requires a public repository.
+# only.
+#
+# Authentication is npm trusted publishing (OIDC): no NPM_TOKEN secret — the
+# publish job's `id-token: write` permission lets `npm publish` exchange a
+# short-lived GitHub token for npm credentials, with provenance attached
+# automatically. Configure a trusted publisher for `@wax-wasm/wax` on npmjs.com,
+# pointing at this repo and workflow file (npm-package.yml). Requires a public
+# repository and npm >= 11.5.1 (installed in the publish job).
 
 on:
   push:
@@ -118,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # for npm provenance
+      id-token: write # for trusted publishing (OIDC) + provenance
     steps:
       - name: Download package tarball
         uses: actions/download-artifact@v8
@@ -131,7 +136,12 @@ jobs:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
+      # Node 22 ships an npm older than the 11.5.1 that supports trusted
+      # publishing; upgrade before publishing.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      # Trusted publishing authenticates via OIDC (no token) and attaches
+      # provenance automatically.
       - name: Publish
-        run: npm publish ./*.tgz --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish ./*.tgz --access public
