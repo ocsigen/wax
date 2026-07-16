@@ -130,6 +130,11 @@
   bare $ (one error, not two) -> [Unknown token '$'.]
   bare $ then space (one error) -> [Unknown token '$'.]
 
+=== feature annotation ===
+  descriptors with (@feature) -> (none)
+  descriptors without (@feature) -> [This uses the custom-descriptors feature, which is not enabled; pass --feature custom-descriptors.] [This uses the custom-descriptors feature, which is not enabled; pass --feature custom-descriptors.]
+  unknown feature name -> [Unknown feature 'bogus'. Known features: custom-descriptors, compact-import-section.]
+
 === inlay hints (numeric index -> name) ===
   local / global / label by number -> (5,17) $g (5,30) $x (4,22) $done
   numeric call to a named func -> (1,36) $helper

@@ -75,6 +75,20 @@ server](#language-server)).
           Groups written explicitly — in WAT via `(import "m" (item …) …)`, or
           already present in a binary — are preserved through WAT↔WAT and
           WASM↔WASM round-trips on their own, no flag needed.
+    - A module can also declare the features it uses itself, with a
+      `#![feature = "NAME"]` inner attribute (WAT: a module-level
+      `(@feature "NAME")` annotation); see
+      [Features](./language.md#features). The declared and enabled sets are
+      unioned. The one exception is a conflict: an explicit `-X NAME=off`
+      against a module that declares *NAME* is an error, reported at the
+      attribute, since the file states a fact and the flag states a policy and
+      neither silently wins.
+    - A binary persists the declarations as `+NAME` entries of the
+      conventional `target_features` custom section, one entry per declared
+      feature; other producers' entries there are preserved verbatim and not
+      interpreted. Decompiling a binary restores the attributes from the
+      union of those entries and the gated encodings the module actually
+      uses.
 
 - <a id="warnings"></a>**`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
     - Set the reporting level of a warning produced during validation.
@@ -222,6 +236,13 @@ server](#language-server)).
       output is a usage error.
     - Fails (exit `128`) if a conditional-compilation directive `(@if …)`
       remains unresolved; resolve them first with `-D`/`--define`.
+    - A `(@feature "…")` declaration is stripped: no annotation remains in the
+      output. Feature resolution has already run by then, so the declaration
+      still gates during processing; re-ingesting the desugared text needs
+      `-X` again, exactly as desugared strings do not come back as literals.
+      A module *using* gated constructs is not an error — those are real
+      (proposal) WebAssembly, and removing annotations is orthogonal to
+      whether the consumer supports the proposal.
 
 - **`--source-map`**
     - Generate a source map file alongside the output file and insert a `sourceMappingURL` custom section. Only valid with wasm output (`-f wasm`) to a file;

@@ -45,7 +45,8 @@ let map_instrs ?(enter = fun ~location:_ _cond _positive f -> f ()) func
                   else_fields;
             }
       | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _
-      | Tag _ | Export _ | Start _ | Data _ | String_global _ ->
+      | Tag _ | Export _ | Start _ | Data _ | String_global _
+      | Feature_annotation _ ->
           f.desc
     in
     { f with desc }
@@ -185,7 +186,7 @@ let types cctx m =
         fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
     | Import _ | Import_group1 _ | Import_group2 _ | Func _ | Memory _ | Table _
     | Tag _ | Global _ | Export _ | Start _ | Elem _ | Data _ | String_global _
-      ->
+    | Feature_annotation _ ->
         tbl
   in
   List.fold_left add (Tbl.empty cctx) m
@@ -201,7 +202,7 @@ let functions cctx f =
         List.fold_left add tbl (Ast_utils.expand_import_group f)
     | Import { desc = Memory _ | Table _ | Global _ | Tag _; _ }
     | Types _ | Memory _ | Table _ | Tag _ | Global _ | Export _ | Start _
-    | Elem _ | Data _ | String_global _ ->
+    | Elem _ | Data _ | String_global _ | Feature_annotation _ ->
         tbl
   in
   List.fold_left add (Tbl.empty cctx) f
@@ -220,7 +221,7 @@ let globals cctx f =
         List.fold_left add tbl (Ast_utils.expand_import_group f)
     | Import { desc = Func _ | Memory _ | Table _ | Tag _; _ }
     | Types _ | Func _ | Memory _ | Table _ | Tag _ | Export _ | Start _
-    | Elem _ | Data _ ->
+    | Elem _ | Data _ | Feature_annotation _ ->
         tbl
   in
   List.fold_left add (Tbl.empty cctx) f
@@ -236,7 +237,7 @@ let tags cctx f =
         List.fold_left add tbl (Ast_utils.expand_import_group f)
     | Import { desc = Func _ | Memory _ | Table _ | Global _; _ }
     | Types _ | Func _ | Memory _ | Table _ | Global _ | Export _ | Start _
-    | Elem _ | Data _ | String_global _ ->
+    | Elem _ | Data _ | String_global _ | Feature_annotation _ ->
         tbl
   in
   List.fold_left add (Tbl.empty cctx) f

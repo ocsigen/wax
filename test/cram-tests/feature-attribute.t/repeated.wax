@@ -1,0 +1,6 @@
+#![feature = "custom-descriptors"]
+#![feature = "custom-descriptors"]
+rec {
+  type obj = descriptor obj_desc { x: i32 };
+  type obj_desc = describes obj { };
+}

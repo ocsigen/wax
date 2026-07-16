@@ -1327,10 +1327,9 @@ let coalesce_singles entries =
    is a valid kind, so a plain import (kind byte next) stays unambiguous. Groups
    present in the AST are emitted verbatim (preserving a compact input); the
    feature only drives coalescing of ungrouped [Single] imports above. *)
-let output_import_section out_channel imports =
+let output_import_section ~features out_channel imports =
   let compact =
-    Wax_utils.Feature.is_enabled
-      (Wax_utils.Feature.default ())
+    Wax_utils.Feature.is_enabled features
       Wax_utils.Feature.Compact_import_section
   in
   let write_named_desc b name desc =
@@ -1383,7 +1382,7 @@ let output_branch_hint_section out_channel
 (*** The module writer ***)
 
 let module_ ~out_channel ?output_file ?(source_map = false)
-    (m : Ast.location module_) =
+    ?(features = Wax_utils.Feature.default ()) (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
@@ -1420,7 +1419,8 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   if m.types <> [] then section 1 (Encoder.vec Encoder.rectype) m.types;
 
   (* 2. Import Section *)
-  if m.imports <> [] then bump (output_import_section out_channel m.imports);
+  if m.imports <> [] then
+    bump (output_import_section ~features out_channel m.imports);
 
   (* 3. Function Section *)
   if m.functions <> [] then section 3 (Encoder.vec Encoder.sint) m.functions;
@@ -1632,6 +1632,28 @@ let module_ ~out_channel ?output_file ?(source_map = false)
                  (Encoder.expr ~source_map_t b) offset;
                  Encoder.name b d.init)))
       m.data;
+
+  (* [target_features] custom section (tool-conventions): a vector of (prefix
+     byte, name) entries, at most one section. Entries — including other
+     producers' — are emitted verbatim from the AST. *)
+  if m.target_features <> [] then (
+    let b = Buffer.create 128 in
+    Encoder.name b "target_features";
+    Encoder.vec
+      (fun b (prefix, name) ->
+        Encoder.byte b (Char.code prefix);
+        Encoder.name b name)
+      b m.target_features;
+    Out_channel.output_byte out_channel 0;
+    let len = Buffer.length b in
+    let rec output_uint i =
+      if i < 128 then Out_channel.output_byte out_channel i
+      else (
+        Out_channel.output_byte out_channel (128 + (i land 127));
+        output_uint (i lsr 7))
+    in
+    output_uint len;
+    Buffer.output_buffer out_channel b);
 
   (* Custom Name Section *)
   let output_name_subsection id name_list b =

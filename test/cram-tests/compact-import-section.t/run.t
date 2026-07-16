@@ -19,6 +19,7 @@ the three consecutive `env` imports print as one grouped `(import "env" (item â€
 â€¦)`, while `other` and the later, non-adjacent `env "d"` stay separate.
 
   $ wax compact.wasm -f wat
+  (@feature "compact-import-section")
   (type (func))
   (type (func (param i32)))
   (import "env"

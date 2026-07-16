@@ -11,6 +11,7 @@ survives a binary round-trip (no feature flag needed to preserve it):
 
   $ wax -i wat -f wasm groups.wat -o groups.wasm
   $ wax -i wasm -f wat groups.wasm
+  (@feature "compact-import-section")
   (type (func (result i32)))
   (type (func (param i32)))
   (import "env" (item "a" (func (result i32))) (item "b" (global i32)))

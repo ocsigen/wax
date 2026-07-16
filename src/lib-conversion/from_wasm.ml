@@ -3196,6 +3196,11 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    attributes = [];
                  }))
     | Start _ | Export _ -> None
+    (* A [(@feature "name")] annotation becomes a [#![feature = "name"]] inner
+       attribute. *)
+    | Feature_annotation name ->
+        Some
+          (Module_annotation [ ("feature", Some (string_of_name name), None) ])
     | String_global { typ; init; _ } ->
         let name = Sequence.get_current ctx.globals in
         Some
@@ -3367,7 +3372,7 @@ let elaborate_implicit_types ctx fields =
       (* Groups are flattened below, so only their [Import] members reach here. *)
       | Import_group1 _ | Import_group2 _ | Types _ | Import _ | Memory _
       | Table _ | Export _ | Start _ | Data _ | String_global _
-      | Module_if_annotation _ ->
+      | Feature_annotation _ | Module_if_annotation _ ->
           ())
     (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
@@ -3449,7 +3454,9 @@ let register_names ctx export_tbl fields =
         | Global { id; exports; _ } ->
             Sequence.register ctx.globals export_tbl (Some Global) id exports
         (* Groups are flattened below, so only their [Import] members reach here. *)
-        | Func _ | Export _ | Start _ | Import_group1 _ | Import_group2 _ -> ()
+        | Func _ | Export _ | Start _ | Import_group1 _ | Import_group2 _
+        | Feature_annotation _ ->
+            ()
         | Elem { id; _ } -> Sequence.register ctx.elems export_tbl None id []
         | Data { id; _ } -> Sequence.register ctx.datas export_tbl None id []
         | Memory { id; exports; _ } ->
@@ -3496,7 +3503,7 @@ let register_names ctx export_tbl fields =
               else_fields
         | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
         | Table _ | Tag _ | String_global _ | Import_group1 _ | Import_group2 _
-          ->
+        | Feature_annotation _ ->
             ())
       (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
   in
@@ -3677,7 +3684,8 @@ let rec group_imports fields =
   in
   merge (List.map recurse fields)
 
-let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
+let module_ ?(strict_constants = false) ?features diagnostics
+    (module_name, fields) =
   Wax_utils.Debug.timed "convert" @@ fun () ->
   try
     let forbid_numeric = module_has_conditional fields in
@@ -3803,7 +3811,41 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
           ]
       | None -> []
     in
-    name_annotation @ group_imports recovered
+    (* Stamp a [#![feature = "…"]] inner attribute for each gated feature the
+       module was seen to exercise ([Feature.used], recorded by the binary
+       decoder and by validation), so the output recompiles standalone. A
+       feature the module already declares with a [(@feature "…")] annotation
+       was converted above; do not stamp it twice. *)
+    let feature_annotations =
+      match features with
+      | None -> []
+      | Some features ->
+          let declared =
+            List.filter_map
+              (fun (f : (_ Src.modulefield, _) Ast.annotated) ->
+                match f.desc with
+                | Feature_annotation nm -> Wax_utils.Feature.of_name nm.desc
+                | _ -> None)
+              fields
+          in
+          List.filter_map
+            (fun feature ->
+              if List.mem feature declared then None
+              else
+                Some
+                  (Ast.no_loc
+                     (Ast.Module_annotation
+                        [
+                          ( "feature",
+                            Some
+                              (Ast.no_loc
+                                 (Ast.String
+                                    (None, Wax_utils.Feature.name feature))),
+                            None );
+                        ])))
+            (Wax_utils.Feature.used features)
+    in
+    name_annotation @ feature_annotations @ group_imports recovered
   with
   | Numeric_ref_in_conditional location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error

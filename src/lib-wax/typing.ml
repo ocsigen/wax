@@ -632,6 +632,23 @@ module Error = struct
        ++ text (Wax_utils.Feature.name feature)
       ^^ text ".")
 
+  let unknown_feature context ~location name =
+    report context ~location
+      ((text "Unknown feature" ++ kw name)
+      ^^ text ". Known features:"
+         ++ text
+              (String.concat ", "
+                 (List.map Wax_utils.Feature.name Wax_utils.Feature.all))
+      ^^ text ".")
+
+  let feature_conflict context ~location feature =
+    report context ~location
+      (text "This module requires the"
+       ++ text (Wax_utils.Feature.name feature)
+       ++ text "feature, which is disabled on the command line; drop --feature"
+       ++ text (Wax_utils.Feature.name feature ^ "=off")
+      ^^ text ".")
+
   (* A secondary caret at [location] labelled with an inferred value type. Used
      to point at each branch of an [if]/select whose branches are in
      incompatible type hierarchies: there is no common supertype — and, unlike a
@@ -10758,6 +10775,15 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
                 "a string");
           if not module_ok then
             Error.annotation_not_allowed diagnostics ~location "module"
+      | "feature" ->
+          (match value with
+          | Some { desc = String _; _ } -> ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location "feature"
+                "a string");
+          (* Allowed exactly where [module] is: as an inner attribute. *)
+          if not module_ok then
+            Error.annotation_not_allowed diagnostics ~location "feature"
       | "import" ->
           (match value with
           | Some { desc = String _; _ } -> ()
@@ -11593,6 +11619,38 @@ let check_let_bindings diagnostics fields =
       | _ -> ())
     fields
 
+(* Apply the module's [#![feature = "…"]] declarations to [features]: each
+   declared feature is enabled, in union with the command-line configuration —
+   unless the command line explicitly disabled it, which is a conflict reported
+   once, at the attribute. Runs at the entry points, before anything consults
+   [is_enabled]. Only top-level attributes count: the attribute states a fact
+   about the whole module, so it takes no guard and lives at the top of the
+   file. An ill-shaped value (no string) is reported by [check_attribute_list]
+   and ignored here. *)
+let apply_declared_features diagnostics features fields =
+  List.iter
+    (fun (field : (_ modulefield, _) annotated) ->
+      match field.desc with
+      | Module_annotation attrs ->
+          List.iter
+            (fun (key, value, _) ->
+              match (key, value) with
+              | "feature", Some { desc = String (_, name); info = location }
+                -> (
+                  match Wax_utils.Feature.of_name name with
+                  | None -> Error.unknown_feature diagnostics ~location name
+                  | Some feature ->
+                      if Wax_utils.Feature.explicitly_disabled features feature
+                      then Error.feature_conflict diagnostics ~location feature;
+                      (* Enable it even on a conflict: the error has been
+                         reported once, at the attribute; without this every
+                         gated construct below would error too. *)
+                      Wax_utils.Feature.declare features feature)
+              | _ -> ())
+            attrs
+      | _ -> ())
+    fields
+
 (* Check every reachable configuration of a conditional module: each is
    specialized to be conditional-free and typed independently, so a diagnostic
    is reported once with the assumption under which it is reachable. Only the
@@ -11614,6 +11672,7 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(resolve_links = None)
     ?(pun_spans = None) ?(member_completions = None)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
+  apply_declared_features diagnostics features fields;
   check_let_bindings diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     type_configuration ~warn_unused ~resolve_links ~pun_spans
@@ -11643,6 +11702,7 @@ let f ?(simplify = false) ?(warn_unused = false)
 let check ?(warn_unused = false) ?(features = Wax_utils.Feature.default ())
     diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
+  apply_declared_features diagnostics features fields;
   check_let_bindings diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     ignore

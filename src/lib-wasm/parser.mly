@@ -172,6 +172,7 @@
 %token <string> MEM_OFFSET
 (* Binaryen extensions *)
 %token STRING_ANNOT CHAR_ANNOT
+%token FEATURE_ANNOT
 %token BRANCH_HINT_ANNOT
 %token IF_ANNOT THEN_ANNOT ELSE_ANNOT
 %token AND OR NOT
@@ -1266,6 +1267,12 @@ globalstring:
 | STRING_ANNOT id = ID typ = option(index) init = string_list ")"
   { with_loc $sloc (String_global {id; typ; init}) }
 
+(* A module-level [(@feature "name")] annotation: the module declares it uses
+   the named optional proposal (the Wax [#![feature = "…"]] inner attribute). *)
+feature_annotation:
+| FEATURE_ANNOT s = STRING ")"
+  { with_loc $sloc (Feature_annotation s) }
+
 module_field:
 | f = rectype
 | f = import
@@ -1279,6 +1286,7 @@ module_field:
 | f = elem
 | f = data
 | f = globalstring
+| f = feature_annotation
 | f = cond_module_field
   { f }
 

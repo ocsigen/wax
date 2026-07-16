@@ -21,6 +21,39 @@ corresponds to the WAT
 A module may carry at most one name. See also
 [Module Name](../language.md#module-name) in the language guide.
 
+## Feature Declarations
+
+A `#![feature = "..."]` inner attribute declares an optional proposal the
+module uses (see [Features](../language.md#features) in the language guide).
+It maps to a module-level `(@feature "...")` annotation in WAT:
+
+```wax,check
+#![feature = "custom-descriptors"]
+```
+
+corresponds to the WAT
+
+```wat
+(@feature "custom-descriptors")
+```
+
+Both are read on input and emitted on output, so the declaration survives a
+Wax/WAT round-trip. In the binary format, each declared feature becomes a
+`+name` entry of the conventional `target_features` custom section
+([tool-conventions](https://github.com/WebAssembly/tool-conventions/blob/main/Linking.md#target-features-section)):
+
+```text
+(@custom "target_features" "\01+\12custom-descriptors")
+```
+
+Other producers' entries in that section (standard names like `+simd128`, or
+`-` entries) are preserved verbatim through a binary round-trip but do not
+become attributes. Decompiling a binary restores the declarations from the
+union of the section's recognised `+` entries and the gated encodings the
+module actually uses (a descriptor type, an exact reference, a compact import
+section, ...), so even a binary whose producer wrote no section decompiles to
+a module that recompiles standalone.
+
 ## Types
 
 Types are defined using `type` for single definitions or `rec { ... }` for mutually recursive types.

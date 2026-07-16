@@ -422,7 +422,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
         | Text.Module_if_annotation { then_fields; else_fields; _ } ->
             declare then_fields.desc;
             Option.iter (fun b -> declare b.desc) else_fields
-        | Text.Export _ | Text.Start _ -> ())
+        | Text.Export _ | Text.Start _ | Text.Feature_annotation _ -> ())
       fields
   in
 
@@ -518,6 +518,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
             in
             use sp index
         | Text.Start idx -> use funcs idx
+        | Text.Feature_annotation _ -> ()
         | Text.Module_if_annotation { then_fields; else_fields; _ } ->
             resolve then_fields.desc;
             Option.iter (fun b -> resolve b.desc) else_fields)

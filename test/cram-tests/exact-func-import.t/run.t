@@ -18,6 +18,7 @@ import form (binary import kind [0x20]).
 A WAT module using an exact function import decompiles back to the [!] form.
 
   $ wax -X custom-descriptors roundtrip.wat -f wax
+  #![feature = "custom-descriptors"]
   type ft = fn(i32) -> i64;
   import "env"
   #[import = "g"]
@@ -28,6 +29,7 @@ It survives a binary round-trip.
 
   $ wax -X custom-descriptors exact.wax -f wasm -o exact.wasm
   $ wax -X custom-descriptors exact.wasm -f wat
+  (@feature "custom-descriptors")
   (type $ft (func (param i32) (result i64)))
   (import "env" "g" (func $g (exact (param i32) (result i64))))
   (import "env" "h" (func $h (exact (param i32) (result i64))))

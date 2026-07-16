@@ -17,6 +17,7 @@ The ids survive a binary round-trip (via the name section):
 
   $ wax -i wat -f wasm g2.wat -o g2.wasm
   $ wax -i wasm -f wat g2.wasm
+  (@feature "compact-import-section")
   (type (func (result i32)))
   (import "env" (item $a "a") (item $b "b") (global i32))
   (func (result i32)

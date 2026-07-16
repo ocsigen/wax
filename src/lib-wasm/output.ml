@@ -1309,6 +1309,19 @@ let rec modulefield f =
                    s = "\"" ^ s ^ "\"";
                  })
              init)
+  | Feature_annotation name ->
+      let i, s = escape_string name.Ast.desc in
+      list ~loc
+        [
+          atom ~style:Annotation "@feature";
+          Atom
+            {
+              loc = None;
+              style = Annotation;
+              len = Some (i + 2);
+              s = "\"" ^ s ^ "\"";
+            };
+        ]
   | Module_if_annotation { cond; then_fields; else_fields } ->
       let clause head fields =
         list ~loc:fields.Ast.info

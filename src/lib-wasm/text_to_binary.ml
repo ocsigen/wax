@@ -619,7 +619,8 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             ( { ctx with globals = fst (add_name ctx.globals (Some id)) },
               acc_func_types )
         | T.Module_if_annotation _ -> raise (Conditional_in_binary f.Ast.info)
-        | T.Start _ | T.Export _ -> (ctx, acc_func_types))
+        | T.Start _ | T.Export _ | T.Feature_annotation _ ->
+            (ctx, acc_func_types))
       (ctx, func_types_by_idx) fields
   in
 
@@ -1186,6 +1187,19 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
           |]))
   in
 
+  (* Each [(@feature "name")] declaration becomes a [+name] entry of the
+     [target_features] custom section, so the declaration survives the binary
+     format. Deduplicated: repeating a declaration is idempotent. *)
+  let target_features =
+    List.fold_left
+      (fun entries (f : (_ T.modulefield, _) Ast.annotated) ->
+        match f.desc with
+        | T.Feature_annotation n ->
+            let entry = ('+', n.Ast.desc) in
+            if List.mem entry entries then entries else entries @ [ entry ]
+        | _ -> entries)
+      [] fields
+  in
   {
     B.types;
     imports;
@@ -1199,6 +1213,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
     elem;
     code;
     data;
+    target_features;
     names =
       {
         B.module_ = Option.map (fun n -> n.Ast.desc) module_name;

@@ -903,6 +903,23 @@ module Error = struct
        ++ text (Wax_utils.Feature.name feature)
       ^^ text ".")
 
+  let unknown_feature context ~location name =
+    report context ~location ~severity:Error
+      ((text "Unknown feature" ++ Message.code name)
+      ^^ text ". Known features:"
+         ++ text
+              (String.concat ", "
+                 (List.map Wax_utils.Feature.name Wax_utils.Feature.all))
+      ^^ text ".")
+
+  let feature_conflict context ~location feature =
+    report context ~location ~severity:Error
+      (text "This module requires the"
+       ++ text (Wax_utils.Feature.name feature)
+       ++ text "feature, which is disabled on the command line; drop --feature"
+       ++ text (Wax_utils.Feature.name feature ^ "=off")
+      ^^ text ".")
+
   let descriptor_allocation_required context ~location =
     report context ~location ~severity:Error
       (text
@@ -5245,7 +5262,7 @@ let check_syntax ctx lst =
       | Elem { id; _ } -> check_unbound elems "elem" id
       | Data { id; _ } -> check_unbound datas "data" id
       | String_global { id; _ } -> check_unbound globals "global" (Some id)
-      | Module_if_annotation _ -> ())
+      | Feature_annotation _ | Module_if_annotation _ -> ())
     lst;
   match
     List.filter
@@ -5371,7 +5388,7 @@ let field_has_conditional (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
       | Active (_, offset) -> expr_has_conditional offset
       | Passive -> false)
   | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
-  | Export _ | Start _ | String_global _ ->
+  | Export _ | Start _ | String_global _ | Feature_annotation _ ->
       false
 
 (* Specialize a module for one configuration: resolve every conditional using
@@ -5452,7 +5469,7 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
         in
         ([ { f with desc = Data { id; init; mode } } ], asm)
     | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
-    | Export _ | Start _ | String_global _ ->
+    | Export _ | Start _ | String_global _ | Feature_annotation _ ->
         ([ f ], asm)
   and sinstrs asm l =
     match l with
@@ -5561,9 +5578,34 @@ let check_import_order diagnostics fields =
          | None, (Import _ | Import_group1 _ | Import_group2 _)
          | ( _,
              ( Types _ | Export _ | Start _ | Elem _ | Data _
-             | Module_if_annotation _ ) ) ->
+             | Feature_annotation _ | Module_if_annotation _ ) ) ->
              can_import)
        None fields)
+
+(* Apply the module's [(@feature "…")] declarations to [features]: each
+   declared feature is enabled, in union with the command-line configuration —
+   unless the command line explicitly disabled it, which is a conflict reported
+   once, at the annotation. Runs at the entry point, before anything consults
+   [is_enabled]. Only top-level annotations count: the annotation states a fact
+   about the whole module, so it is not conditional. Mirrors the Wax typer's
+   [apply_declared_features]. *)
+let apply_declared_features diagnostics features fields =
+  List.iter
+    (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      match field.desc with
+      | Ast.Text.Feature_annotation name -> (
+          let location = name.Ast.info in
+          match Wax_utils.Feature.of_name name.Ast.desc with
+          | None -> Error.unknown_feature diagnostics ~location name.Ast.desc
+          | Some feature ->
+              if Wax_utils.Feature.explicitly_disabled features feature then
+                Error.feature_conflict diagnostics ~location feature;
+              (* Enable it even on a conflict: the error has been reported
+                 once, at the annotation; without this every gated construct
+                 below would error too. *)
+              Wax_utils.Feature.declare features feature)
+      | _ -> ())
+    fields
 
 let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
     ?record_types diagnostics ((name, fields) as modul) =
@@ -5574,6 +5616,7 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
       recorded_types := None;
       sink_type_context := None)
   @@ fun () ->
+  apply_declared_features diagnostics features fields;
   check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     validate_configuration ~warn_unused ~features diagnostics modul

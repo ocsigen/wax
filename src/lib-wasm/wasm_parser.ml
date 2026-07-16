@@ -11,6 +11,11 @@ type ch = {
   limit : int;
   mutable has_data_count : bool;
   diagnostics : Wax_utils.Diagnostic.context;
+  (* Gated encodings actually decoded, recorded via [Feature.mark_used]: the
+     binary stores no feature declaration, so this is how a caller learns which
+     optional proposals the module exercises (e.g. to stamp [#![feature]]
+     attributes on decompiled output). *)
+  features : Wax_utils.Feature.set;
 }
 
 let position ch pos =
@@ -223,7 +228,9 @@ let heaptype ch =
   | 0x68 -> Cont
   | 0x75 -> NoCont
   (* [exact x]: the index is a u32 that follows the 0x62 tag. *)
-  | 0x62 -> Exact (uint ch)
+  | 0x62 ->
+      Wax_utils.Feature.mark_used ch.features Custom_descriptors;
+      Exact (uint ch)
   | _ ->
       if i < 0 then error ch "unknown heap type %d" i;
       Type i
@@ -342,6 +349,8 @@ let described_comptype b ch =
       (Some x, input_byte ch)
     else (None, b)
   in
+  if describes <> None || descriptor <> None then
+    Wax_utils.Feature.mark_used ch.features Custom_descriptors;
   (describes, descriptor, comptype b ch)
 
 let subtype i ch =
@@ -403,7 +412,9 @@ let importdesc ch d =
   match d with
   | 0 -> Func { exact = false; typ = uint ch }
   (* 0x20: an exact function import (bit 6 of the func kind marks exactness). *)
-  | 0x20 -> Func { exact = true; typ = uint ch }
+  | 0x20 ->
+      Wax_utils.Feature.mark_used ch.features Custom_descriptors;
+      Func { exact = true; typ = uint ch }
   | 1 -> Table (tabletype ch)
   | 2 -> Memory (memtype ch)
   | 3 -> Global (globaltype ch)
@@ -433,10 +444,12 @@ let import_entry ch =
                (name, importdesc ch (uint ch)))
              ch)
       in
+      Wax_utils.Feature.mark_used ch.features Compact_import_section;
       Group1 { module_; items }
   | 0x7E ->
       let desc = importdesc ch (uint ch) in
       let names = Array.to_list (vec (fun ch -> name ch) ch) in
+      Wax_utils.Feature.mark_used ch.features Compact_import_section;
       Group2 { module_; desc; names }
   | d -> Single { module_; name = nm; desc = importdesc ch d }
 
@@ -1591,7 +1604,8 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
 
 (*** The module reader ***)
 
-let module_ diagnostics ?filename buf =
+let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
+    =
   Wax_utils.Debug.timed "parse" @@ fun () ->
   let ch =
     {
@@ -1601,6 +1615,7 @@ let module_ diagnostics ?filename buf =
       limit = String.length buf;
       has_data_count = false;
       diagnostics;
+      features;
     }
   in
   check_header ch;
@@ -1746,6 +1761,25 @@ let module_ diagnostics ?filename buf =
                   in
                   let names = parse_name_subsections m.names in
                   { m with Ast.Binary.names }
+              | "target_features" ->
+                  (* The tool-conventions feature-detection section: a vector
+                     of (prefix byte, name) entries. Kept verbatim — including
+                     other producers' entries — so the section survives a
+                     round-trip; ['+'] entries with a name we know restore the
+                     module's feature declarations (in [Binary_to_text]). The
+                     convention allows the section at most once; be lenient on
+                     input and concatenate. *)
+                  let entries =
+                    vec
+                      (fun ch ->
+                        let prefix = Char.chr (input_byte ch) in
+                        (prefix, name ch))
+                      ch
+                  in
+                  {
+                    m with
+                    target_features = m.target_features @ Array.to_list entries;
+                  }
               | "metadata.code.branch_hint" ->
                   (* Branch-hinting proposal. Buffer the entries; they are matched
                      to instructions after the code section is parsed. The trailing
@@ -1806,6 +1840,7 @@ let module_ diagnostics ?filename buf =
         code = [];
         data = [];
         names = empty_names;
+        target_features = [];
       }
       0
   in

@@ -7,6 +7,7 @@ exception Unresolved_reference of Wax_wasm.Ast.location
 
 val module_ :
   ?strict_constants:bool ->
+  ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_ ->
   Wax_lang.Ast.location Wax_lang.Ast.module_
@@ -16,4 +17,9 @@ val module_ :
     When [strict_constants] is set (default [false]), every numeric constant is
     wrapped in a cast to its concrete type, so Wax type inference cannot re-type
     an otherwise polymorphic literal and a source-level type mismatch survives
-    the round-trip. *)
+    the round-trip.
+
+    When [features] is given, a [#![feature = "…"]] inner attribute is stamped
+    for each feature recorded as used on it (by the binary decoder or by
+    validation) and not already declared by the module, so the output recompiles
+    standalone. *)

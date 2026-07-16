@@ -187,6 +187,40 @@ only the taken branch's unused-global warning.
   on open (no defines):  [('error', None)]
   after debug=true:      [('warning', 'unused-field')]
 
+A `#![feature = "…"]` inner attribute (Wax) or `(@feature "…")` annotation
+(WAT) enables the named optional proposal for that buffer, with no editor
+configuration: a descriptor-using module carrying it validates clean, while the
+same module without it reports the gated construct.
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > wax_types="rec {\n  type obj = descriptor obj_desc { x: i32 };\n  type obj_desc = describes obj { };\n}\n"
+  > wat_mod="(module (@feature \"custom-descriptors\")\n(rec\n  (type $obj (descriptor $obj_desc) (struct (field $x i32)))\n  (type $obj_desc (describes $obj) (struct))))\n"
+  > bufs=[("declared.wax","wax","#![feature = \"custom-descriptors\"]\n"+wax_types),
+  >       ("plain.wax","wax",wax_types),
+  >       ("declared.wat","wat",wat_mod)]
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}}]
+  > for name,lang,src in bufs:
+  >     S.append({"jsonrpc":"2.0","method":"textDocument/didOpen","params":
+  >               {"textDocument":{"uri":"file:///"+name,"languageId":lang,"version":1,"text":src}}})
+  > S+=[{"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i,pubs=p.stdout,0,{}
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if r.get("method")=="textDocument/publishDiagnostics":
+  >         pubs[r["params"]["uri"].rsplit("/",1)[-1]]=[
+  >             d["message"].split(",")[0] for d in r["params"]["diagnostics"]]
+  > for name,_,_ in bufs: print("%s: %s" % (name, pubs[name] or "clean"))
+  > PY
+  declared.wax: clean
+  plain.wax: ['This uses the custom-descriptors feature', 'This uses the custom-descriptors feature']
+  declared.wat: clean
+
 Diagnostics on `didChange` are debounced: a burst of edits coalesces into one
 analysis (published once the client falls quiet, or on end of input), rather
 than re-checking the whole buffer on every keystroke. Open a clean module, send

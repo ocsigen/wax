@@ -480,6 +480,22 @@ let () =
   diags "bare $ then space (one error)" "(module (func $f (local.get $ )))\n";
   print_newline ();
 
+  (* A module-level (@feature "…") annotation enables the named optional
+     proposal for the buffer, with no editor configuration: a descriptor-using
+     module carrying it validates clean, without it the gated construct is
+     flagged, and an unknown feature name is an error. *)
+  let desc_types =
+    "(rec\n\
+    \  (type $obj (descriptor $obj_desc) (struct (field $x i32)))\n\
+    \  (type $obj_desc (describes $obj) (struct)))\n"
+  in
+  Printf.printf "=== feature annotation ===\n";
+  diags "descriptors with (@feature)"
+    ("(module (@feature \"custom-descriptors\")\n" ^ desc_types ^ ")\n");
+  diags "descriptors without (@feature)" ("(module\n" ^ desc_types ^ ")\n");
+  diags "unknown feature name" "(module (@feature \"bogus\"))\n";
+  print_newline ();
+
   (* Inlay hints: after a numeric index that resolves to a named definition, its
      name. A symbolic use shows nothing (the name is there); an anonymous target
      shows nothing (no name). Positions are (line, column) of the hint anchor. *)

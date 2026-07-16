@@ -224,12 +224,18 @@ let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
       text
   in
   let ast = specialize_wat ~ctx ~color ~text defines ast in
+  (* Share one feature set between validation, which records the gated features
+     the module exercises, and the conversion, which stamps a [#![feature]]
+     attribute for each so the output recompiles standalone. *)
+  let features = Wax_utils.Feature.default () in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
-      ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
+      ~source:(Some text) (fun d ->
+        Wax_wasm.Validation.f ~warn_unused ~features d ast);
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-      ~source:(Some text) (fun d -> Wax_conversion.From_wasm.module_ d ast)
+      ~source:(Some text) (fun d ->
+        Wax_conversion.From_wasm.module_ ~features d ast)
   in
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
@@ -322,9 +328,14 @@ let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
       text
   in
   let ast = specialize_wax ~color ~text defines ast in
+  (* Share one feature set between typing, which enables the features the
+     module declares with [#![feature]] attributes, and the binary emitter,
+     whose compact-import-section encoding is gated on it. *)
+  let features = Wax_utils.Feature.default () in
   let types, ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-      ~source:(Some text) (fun d -> Wax_lang.Typing.f ~warn_unused d ast)
+      ~source:(Some text) (fun d ->
+        Wax_lang.Typing.f ~warn_unused ~features d ast)
   in
   let wasm_ast_text =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
@@ -339,7 +350,7 @@ let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
   let wasm_ast_binary = to_binary ~color ~source:(Some text) wasm_ast_text in
   with_open_out ~color output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
-        wasm_ast_binary)
+        ~features wasm_ast_binary)
 
 let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map =
@@ -353,19 +364,25 @@ let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
   (* Declare any function referenced by ref.func only inside a body, so the
      emitted binary passes strict reference validation. *)
   let ast = Wax_wasm.Declare_refs.module_ ast in
+  (* Share one feature set between validation, which enables the features the
+     module declares with [(@feature)] annotations, and the binary emitter,
+     whose compact-import-section encoding is gated on it. *)
+  let features = Wax_utils.Feature.default () in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
-      ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
+      ~source:(Some text) (fun d ->
+        Wax_wasm.Validation.f ~warn_unused ~features d ast);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
   with_open_out ~color output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
-        wasm_ast_binary)
+        ~features wasm_ast_binary)
 
 (* Parse a Wasm binary, reporting malformed input as a diagnostic (and exiting)
    through the standard diagnostics machinery. *)
-let parse_wasm ~color ?filename text =
+let parse_wasm ~color ?features ?filename text =
   Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-    ~source:None (fun d -> Wax_wasm.Wasm_parser.module_ d ?filename text)
+    ~source:None (fun d ->
+      Wax_wasm.Wasm_parser.module_ d ?features ?filename text)
 
 let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~warn_unused:_
     ~color ~output_color:_ ~fold_mode:_ ~defines:_ ~desugar:_ ~source_map =
@@ -378,8 +395,11 @@ let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~warn_unused:_
 let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines:_ ~desugar:_ ~source_map:_ =
   let text = with_open_in ~color input_file In_channel.input_all in
-  let binary_ast = parse_wasm ~color ?filename:input_file text in
-  let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
+  (* The decoder records the gated features the binary exercises; emit each as
+     a [(@feature)] annotation so the text output is self-describing. *)
+  let features = Wax_utils.Feature.default () in
+  let binary_ast = parse_wasm ~color ~features ?filename:input_file text in
+  let text_ast = Wax_wasm.Binary_to_text.module_ ~features binary_ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
@@ -390,8 +410,12 @@ let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
 let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines:_ ~desugar:_ ~source_map:_ =
   let text = with_open_in ~color input_file In_channel.input_all in
-  let binary_ast = parse_wasm ~color ?filename:input_file text in
-  let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
+  (* The decoder records the gated features the binary exercises; each becomes
+     a [(@feature)] annotation, converted below to a [#![feature]] attribute,
+     so the output recompiles standalone. *)
+  let features = Wax_utils.Feature.default () in
+  let binary_ast = parse_wasm ~color ~features ?filename:input_file text in
+  let text_ast = Wax_wasm.Binary_to_text.module_ ~features binary_ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);

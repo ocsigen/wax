@@ -222,6 +222,17 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
     { f with desc }
   in
 
+  (* A [(@feature "…")] declaration is pure metadata with no core equivalent:
+     drop it, so no annotation remains in the output. Feature resolution has
+     already run by this point (desugaring follows validation); re-ingesting
+     the desugared text needs [-X] again, exactly as desugared strings do not
+     come back as literals. *)
+  let fields =
+    List.filter
+      (fun (f : (Ast.location modulefield, _) Ast.annotated) ->
+        match f.desc with Feature_annotation _ -> false | _ -> true)
+      fields
+  in
   let fields = List.map map_field fields in
   let fields =
     if !needs_string_type then

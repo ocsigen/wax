@@ -834,6 +834,10 @@ module Text : sig
     | Data of { id : name option; init : dataval; mode : 'info datamode }
     (* Our extensions *)
     | String_global of { id : name; typ : idx option; init : datastring }
+    (* A module-level [(@feature "name")] annotation: the module declares it
+       uses the named optional proposal (the Wax [#![feature = "…"]] inner
+       attribute). *)
+    | Feature_annotation of name
     | Module_if_annotation of {
         cond : cond;
         then_fields :
@@ -961,6 +965,11 @@ module Binary : sig
     code : 'info code list;
     data : 'info data list;
     names : names;
+    (* The [target_features] custom section (tool-conventions): one entry per
+       feature, a one-byte prefix (['+'] used/required, ['-'] disallowed) and
+       an opaque name. Third-party entries are preserved verbatim; our own
+       declarations use the [Wax_utils.Feature.name] spelling with ['+']. *)
+    target_features : (char * string) list;
   }
   (** A Wasm module in binary format. *)
   end

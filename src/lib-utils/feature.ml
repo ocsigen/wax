@@ -21,7 +21,11 @@ let enabled_by_default = function
 
 let of_name s = List.find_opt (fun t -> String.equal (name t) s) all
 
-type set = { enabled : t -> bool; mutable used : t list }
+type set = {
+  mutable enabled : t -> bool;
+  explicitly_off : t -> bool;
+  mutable used : t list;
+}
 
 (* Apply [specs] over the built-in defaults; later entries win. *)
 let predicate specs =
@@ -29,14 +33,32 @@ let predicate specs =
     (fun pred (t, b) x -> if x = t then b else pred x)
     enabled_by_default specs
 
-let configure specs = { enabled = predicate specs; used = [] }
+(* Whether [specs]' final word on [x] is an explicit off — as opposed to [x]
+   merely being off by default. *)
+let explicitly_off specs =
+  let final t =
+    List.fold_left (fun acc (x, b) -> if x = t then Some b else acc) None specs
+  in
+  fun x -> final x = Some false
+
+let configure specs =
+  {
+    enabled = predicate specs;
+    explicitly_off = explicitly_off specs;
+    used = [];
+  }
 
 (* The process-wide default configuration (set once from the command line, like
    the warning policy), read by [default]. *)
-let global_config = ref enabled_by_default
-let set_config specs = global_config := predicate specs
-let default () = { enabled = !global_config; used = [] }
+let global_specs = ref []
+let set_config specs = global_specs := specs
+let default () = configure !global_specs
 let is_enabled set t = set.enabled t
+let explicitly_disabled set t = set.explicitly_off t
+
+let declare set t =
+  let enabled = set.enabled in
+  set.enabled <- (fun x -> x = t || enabled x)
 
 let mark_used set t =
   if not (List.mem t set.used) then set.used <- t :: set.used

@@ -12,7 +12,7 @@ Extract each ```wat,check block from every doc page (prefixed by its page):
 Confirm the count (bump and promote when you mark or unmark a block):
 
   $ ls *.wat | wc -l | tr -d ' '
-  13
+  14
 
 Each block must assemble to a valid Wasm binary (a failing block prints its name
 and first error; success prints nothing):

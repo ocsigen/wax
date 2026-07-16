@@ -27,6 +27,32 @@ fn square(x: i32) -> i32 {
     i32.mul))
 ```
 
+## Feature Declaration
+
+A `#![feature = "..."]` inner attribute declares an optional proposal the
+module uses, so it compiles and validates with no `-X` flag.
+
+### Wax
+
+```wax
+#![feature = "custom-descriptors"]
+
+rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { };
+}
+```
+
+### Equivalent WAT
+
+```wat,check
+(module
+  (@feature "custom-descriptors")
+  (rec
+    (type $obj (descriptor $obj_desc) (struct (field $x i32)))
+    (type $obj_desc (describes $obj) (struct))))
+```
+
 ## Arithmetic Functions
 
 ### Wax

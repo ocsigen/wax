@@ -660,6 +660,7 @@ let rec token_rec ctx lexbuf =
   | "(@if" -> IF_ANNOT
   | "(@then" -> THEN_ANNOT
   | "(@else" -> ELSE_ANNOT
+  | "(@feature" -> FEATURE_ANNOT
   (* Branch-hinting proposal: [(@metadata.code.branch_hint "\00"|"\01")]. *)
   | "(@metadata.code.branch_hint" -> BRANCH_HINT_ANNOT
   | "(@", Plus idchar ->
@@ -673,6 +674,7 @@ let rec token_rec ctx lexbuf =
       else if s = "if" then IF_ANNOT
       else if s = "then" then THEN_ANNOT
       else if s = "else" then ELSE_ANNOT
+      else if s = "feature" then FEATURE_ANNOT
       else (
         if not (String.is_valid_utf_8 s) then
           raise

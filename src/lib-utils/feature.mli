@@ -40,6 +40,16 @@ val default : unit -> set
 val is_enabled : set -> t -> bool
 (** Whether [t] is enabled. Does not record usage. *)
 
+val explicitly_disabled : set -> t -> bool
+(** Whether the configuration [set] was built from explicitly disables [t] (an
+    [-X name=off] spec), as opposed to [t] merely being off by default. A module
+    declaring [t] against such a configuration is a conflict. *)
+
+val declare : set -> t -> unit
+(** Enable [t] in [set]: the module declares (with a [#![feature = "…"]]
+    attribute or [(@feature "…")] annotation) that it uses [t]. Check
+    {!explicitly_disabled} first to report a conflict with the command line. *)
+
 val mark_used : set -> t -> unit
 (** Record that [t] is used (whether or not it is enabled). Idempotent. *)
 

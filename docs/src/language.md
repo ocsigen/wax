@@ -23,6 +23,45 @@ enclosing module. A module may carry at most one name.
 the `$name` in a WAT `(module $name …)`; see
 [Module Fields](./correspondence/module_fields.md#module-name).)
 
+## Features
+
+A module can declare the optional proposals it uses (the `-X`/`--feature` set,
+such as `custom-descriptors` or `compact-import-section`) with a
+`#![feature = "..."]` inner attribute at the top of the file, one feature per
+attribute:
+
+```wax,check
+#![feature = "custom-descriptors"]
+
+rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { };
+}
+```
+
+The file is then self-describing: it compiles, validates, and round-trips
+without every consumer passing `-X`, and the editor needs no configuration.
+The value is a feature name exactly as `-X` spells it; an unknown name is an
+error listing the known features. Repeating an attribute is allowed
+(declaring a feature is idempotent).
+
+The attribute states a fact ("this module uses X"), while an explicit
+`-X x=off` states a policy; neither silently overrides the other:
+
+- The file declares X and the command line is silent: X is enabled.
+- The file is silent and the command line passes `-X x`: X is enabled.
+- Both declare and enable X: X is enabled.
+- The file declares X but the command line passes `-X x=off`: this is an
+  error, reported once at the attribute.
+
+(This maps to a module-level `(@feature "...")` annotation in WAT, and to a
+`+name` entry of the conventional `target_features` custom section in the
+binary; see
+[Module Fields](./correspondence/module_fields.md#feature-declarations).
+Decompiling a binary restores the attribute from that section and from the
+gated encodings the module actually uses, so even a binary from a producer
+that wrote no section decompiles to a self-describing module.)
+
 ## Comments
 
 Wax supports C-style comments:

@@ -2055,6 +2055,28 @@ let module_name attributes =
       | _ -> None)
     attributes
 
+(* The features declared by [#![feature = "name"]] inner attributes, as
+   [(@feature "name")] module fields (only top-level attributes count, matching
+   the typer's [apply_declared_features]). *)
+let feature_annotations fields =
+  List.concat_map
+    (fun (field : (_ modulefield, _) Ast.annotated) ->
+      match field.desc with
+      | Module_annotation attrs ->
+          List.filter_map
+            (fun (k, v, _) ->
+              match (k, v) with
+              | "feature", Some { desc = String (_, n); info } ->
+                  Some
+                    {
+                      Ast.desc = Text.Feature_annotation { desc = n; info };
+                      info;
+                    }
+              | _ -> None)
+            attrs
+      | _ -> [])
+    fields
+
 let globaltype mut t : Text.globaltype = { mut; typ = valtype t }
 
 (* Smallest memory size (in 64KiB pages) that holds the declared active data
@@ -2145,7 +2167,7 @@ let reorder_imports lst =
              ~some:(fun e -> List.exists defines e.Ast.desc)
              else_fields
     | Import _ | Import_group1 _ | Import_group2 _ | Types _ | Export _
-    | Start _ | Elem _ | Data _ ->
+    | Start _ | Elem _ | Data _ | Feature_annotation _ ->
         false
   in
   let rec traverse acc (cur : (_ Ast.Text.modulefield, _) Ast.annotated list) =
@@ -2675,6 +2697,10 @@ let module_ diagnostics types fields =
   let wasm_fields =
     if has_conditional then wasm_fields else reorder_imports wasm_fields
   in
+  (* Each [#![feature = "name"]] inner attribute becomes a leading
+     [(@feature "name")] annotation, so the emitted module stays
+     self-describing. *)
+  let wasm_fields = feature_annotations fields @ wasm_fields in
   (* A [#![module = "name"]] inner attribute names the module; carry it into the
      text module's name slot (typing has already ensured at most one). *)
   let mod_name =

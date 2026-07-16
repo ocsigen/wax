@@ -14,7 +14,7 @@ Extract each ```wax,check block:
 Confirm the count (bump and promote when you mark or unmark a block):
 
   $ ls blk*.wax | wc -l | tr -d ' '
-  47
+  48
 
 Each marked block must compile (a failing block prints its name and first
 error; success prints nothing):

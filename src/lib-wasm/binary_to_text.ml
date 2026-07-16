@@ -466,7 +466,7 @@ let make_names_unique (names : B.names) =
     fields = unique_names_indirect names.fields;
   }
 
-let module_ (m : _ B.module_) : _ T.module_ =
+let module_ ?features (m : _ B.module_) : _ T.module_ =
   Wax_utils.Debug.timed "to-text" @@ fun () ->
   let m = { m with names = make_names_unique m.names } in
   let all_subtypes =
@@ -727,10 +727,36 @@ let module_ (m : _ B.module_) : _ T.module_ =
           })
       m.tags
   in
+  (* Emit a [(@feature "…")] annotation for each feature the module comes with:
+     the union of what the decoder recorded as used ([Feature.used], covering
+     binaries whose producer wrote no declaration) and the [target_features]
+     custom section's recognised [+] entries (covering a declared-but-unused
+     feature, which usage detection cannot see). Other producers' entries are
+     not ours to interpret and stay in the binary AST only. *)
+  let feature_annotations =
+    let used =
+      match features with
+      | None -> []
+      | Some features -> Wax_utils.Feature.used features
+    in
+    let declared =
+      List.filter_map
+        (fun (prefix, n) ->
+          if prefix = '+' then Wax_utils.Feature.of_name n else None)
+        m.target_features
+    in
+    List.filter_map
+      (fun f ->
+        if List.mem f used || List.mem f declared then
+          Some (T.Feature_annotation (Ast.no_loc (Wax_utils.Feature.name f)))
+        else None)
+      Wax_utils.Feature.all
+  in
   ( Option.map Ast.no_loc m.names.module_,
     List.map Ast.no_loc
       (List.flatten
          [
+           feature_annotations;
            List.map (fun t -> T.Types t) types;
            imports;
            funcs;

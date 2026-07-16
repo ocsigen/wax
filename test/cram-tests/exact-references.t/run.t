@@ -26,6 +26,7 @@ Exact references survive a binary round-trip.
 
   $ wax -X custom-descriptors exact.wax -f wasm -o exact.wasm
   $ wax -X custom-descriptors exact.wasm -f wax
+  #![feature = "custom-descriptors"]
   type s = { f: i32 };
   type t = fn(&?s) -> &!s;
   type t_2 = fn(&?!s) -> i32;
@@ -46,6 +47,7 @@ Exact references survive a binary round-trip.
 A WAT module using exact references decompiles to the [&!] forms and back.
 
   $ wax -X custom-descriptors roundtrip.wat -f wax
+  #![feature = "custom-descriptors"]
   type s = { f: i32 };
   #[export]
   fn cast(x: &?s) -> &!s {
