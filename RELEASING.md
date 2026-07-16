@@ -7,7 +7,7 @@ number and its own release trigger:
 |-----------|--------------|------------------|-----------------|
 | `wax` toolchain | native binaries on GitHub Releases + `@wax-wasm/wax` on npm | `(version …)` in `dune-project` | push a `vX.Y.Z` tag |
 | `wax` / `wax-lib` on opam | the `ocaml/opam-repository` | `CHANGES.md` (via `dune-release`) | manual, after the `vX.Y.Z` tag |
-| VS Code extension | `wax-wasm.wax` on the VS Code Marketplace | `editors/vscode/package.json` | manual (`vsce publish`) |
+| VS Code extension | `wax-wasm.wax` on the VS Code Marketplace and Open VSX | `editors/vscode/package.json` | manual (`vsce` + `ovsx publish`) |
 | tree-sitter grammar | `tree-sitter-wax` on npm | `tree-sitter.json` / `package.json` / `Cargo.toml` | push a `grammar-vX.Y.Z` tag |
 
 The version numbers are **not** kept in lockstep; release each component on its
@@ -31,6 +31,9 @@ own cadence.
   - `tree-sitter-wax` → workflow `tree-sitter-publish.yml`
 - The VS Code Marketplace publisher `wax-wasm` exists and you have a Personal
   Access Token for it (`vsce login wax-wasm`, or set `VSCE_PAT`).
+- The Open VSX namespace `wax-wasm` is registered (`ovsx create-namespace
+  wax-wasm`) and you have an Open VSX access token from an eclipse.org account
+  (set `OVSX_PAT`).
 
 ---
 
@@ -115,14 +118,22 @@ There is no CI workflow for the extension; publishing is manual.
 2. In `editors/vscode/CHANGELOG.md`, rename the `## Unreleased` section to
    `## X.Y.Z` (create the heading if there is no unreleased section).
 3. Commit and `git push origin main`.
-4. From `editors/vscode/`, publish to the Marketplace:
+4. From `editors/vscode/`, publish to both registries:
    ```sh
-   npx vsce publish        # runs vscode:prepublish (build.sh --minify), then uploads
+   npx vsce publish              # VS Code Marketplace (runs vscode:prepublish = build.sh --minify)
+   npx ovsx publish -p "$OVSX_PAT"  # Open VSX (VSCodium, Cursor, Gitpod, Theia, …)
    ```
-   Or produce a `.vsix` with `npm run package` and upload it through the
-   Marketplace web UI.
+   Or produce a single `.vsix` once with `npm run package` and hand it to both:
+   `npx vsce publish --packagePath wax-*.vsix` and
+   `npx ovsx publish wax-*.vsix -p "$OVSX_PAT"` (also uploadable through each
+   registry's web UI).
 
 Notes:
+- Publish to **both** registries for every release: the Marketplace serves
+  Microsoft's VS Code, Open VSX serves the non-Microsoft builds (VSCodium,
+  Cursor, Gitpod, Eclipse Theia). Skipping Open VSX leaves those users stranded.
+- `ovsx` needs no extra dependency; `npx` fetches it. The token comes from an
+  eclipse.org account authorized for the `wax-wasm` namespace.
 - `editors/vscode/package-lock.json` is git-ignored; only `package.json` matters
   for the release.
 - The extension version is independent of the toolchain version.
