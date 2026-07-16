@@ -19,6 +19,7 @@ depends: [
   "lsp" {>= "1.26.0"}
   "jsonrpc" {>= "1.26.0"}
   "dune-build-info" {>= "3.0.0"}
+  "conf-python-3" {with-test}
   "odoc" {with-doc}
 ]
 build: [

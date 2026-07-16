@@ -10,6 +10,11 @@
    (WAX_WARN correctness=hidden))))
 
 (cram
+ ; These are end-to-end CLI tests (they run the wax binary and, in lsp.t /
+ ; feature-attribute.t / source-map-mappings.t, python3 helpers), so they belong
+ ; to the wax package: opam runs them under `wax` --with-test (binary + python3
+ ; present) and not under `wax-lib` --with-test (where the binary is absent).
+ (package wax)
  (deps
   %{bin:wax}
   (glob_files_rec %{project_root}/docs/src/*.md)))

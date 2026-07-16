@@ -48,5 +48,8 @@
     (jsonrpc (>= 1.26.0))
     ; Embeds the version reported by `wax --version` (git tag at build time).
     (dune-build-info (>= 3.0.0))
+    ; The cram CLI tests (lsp.t, feature-attribute.t, source-map-mappings.t)
+    ; drive the binary through python3 helpers.
+    (conf-python-3 :with-test)
   )
 )
