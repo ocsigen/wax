@@ -1558,60 +1558,70 @@ let module_ ~out_channel ?output_file ?(source_map = false)
         (Ast_utils.flatten_binary_imports m.imports)
     in
     let code_index = ref 0 in
-    let content_start = !file_pos + 1 in
     let cp = Wax_utils.Source_map.checkpoint source_map_t in
-    let len =
-      output_section out_channel 10
-        (Encoder.vec (fun b (c : Ast.location code) ->
-             let this = ref [] in
-             (Encoder.branch_hint_sink :=
-                fun offset hint -> this := (offset, hint) :: !this);
-             let b_code = Buffer.create 128 in
-             let coalesce_locals l =
-               let rec loop acc n t l =
-                 match l with
-                 | [] -> List.rev ((n, t) :: acc)
-                 | t' :: r ->
-                     if t = t' then loop acc (n + 1) t r
-                     else loop ((n, t) :: acc) 1 t' r
-               in
-               match l with [] -> [] | t :: rem -> loop [] 1 t rem
-             in
-             let locals = coalesce_locals c.locals in
-             Encoder.vec
-               (fun b (n, t) ->
-                 Encoder.uint b n;
-                 Encoder.valtype b t)
-               b_code locals;
-             (* This body's mappings are recorded relative to [b_code]; once the
-                length prefix is written we know where the body lands within the
-                section content, so rebase them from body-relative to
-                section-content-relative. The [map_section]-style outer shift
-                below then lifts the whole section to file-absolute offsets. *)
-             let cp_fn = Wax_utils.Source_map.checkpoint source_map_t in
-             Encoder.expr ~end_pos:c.loc.loc_end ~source_map_t b_code c.instrs;
-             Encoder.uint b (Buffer.length b_code);
-             Wax_utils.Source_map.shift_since source_map_t cp_fn
-               ~delta:(Buffer.length b);
-             Buffer.add_buffer b b_code;
-             (match List.rev !this with
-             | [] -> ()
-             | hs ->
-                 branch_hints :=
-                   (num_func_imports + !code_index, hs) :: !branch_hints);
-             incr code_index))
-        m.code
+    let code_content = Buffer.create 1024 in
+    Encoder.vec
+      (fun b (c : Ast.location code) ->
+        let this = ref [] in
+        (Encoder.branch_hint_sink :=
+           fun offset hint -> this := (offset, hint) :: !this);
+        let b_code = Buffer.create 128 in
+        let coalesce_locals l =
+          let rec loop acc n t l =
+            match l with
+            | [] -> List.rev ((n, t) :: acc)
+            | t' :: r ->
+                if t = t' then loop acc (n + 1) t r
+                else loop ((n, t) :: acc) 1 t' r
+          in
+          match l with [] -> [] | t :: rem -> loop [] 1 t rem
+        in
+        let locals = coalesce_locals c.locals in
+        Encoder.vec
+          (fun b (n, t) ->
+            Encoder.uint b n;
+            Encoder.valtype b t)
+          b_code locals;
+        (* This body's mappings are recorded relative to [b_code]; once the
+            length prefix is written we know where the body lands within the
+            section content, so rebase them from body-relative to
+            section-content-relative. The [map_section]-style outer shift
+            below then lifts the whole section to file-absolute offsets. *)
+        let cp_fn = Wax_utils.Source_map.checkpoint source_map_t in
+        Encoder.expr ~end_pos:c.loc.loc_end ~source_map_t b_code c.instrs;
+        Encoder.uint b (Buffer.length b_code);
+        Wax_utils.Source_map.shift_since source_map_t cp_fn
+          ~delta:(Buffer.length b);
+        Buffer.add_buffer b b_code;
+        (match List.rev !this with
+        | [] -> ()
+        | hs ->
+            branch_hints :=
+              (num_func_imports + !code_index, hs) :: !branch_hints);
+        incr code_index)
+      code_content m.code;
+
+    (* metadata.code.branch_hint custom section (after the Function section,
+       before the Code section). *)
+    (match List.rev !branch_hints with
+    | [] -> ()
+    | fhs -> bump (output_branch_hint_section out_channel fhs));
+
+    let len = Buffer.length code_content in
+    let content_start = !file_pos + 1 in
+    Out_channel.output_byte out_channel 10;
+    let rec output_uint i =
+      if i < 128 then Out_channel.output_byte out_channel i
+      else (
+        Out_channel.output_byte out_channel (128 + (i land 127));
+        output_uint (i lsr 7))
     in
+    output_uint len;
     Wax_utils.Source_map.shift_since source_map_t cp
       ~delta:(content_start + leb_size len);
+    Buffer.output_buffer out_channel code_content;
     bump len;
     Encoder.branch_hint_sink := fun _ _ -> ());
-
-  (* metadata.code.branch_hint custom section (after the code section it refers
-     to; custom sections may appear anywhere). *)
-  (match List.rev !branch_hints with
-  | [] -> ()
-  | fhs -> bump (output_branch_hint_section out_channel fhs));
 
   (* 12. Data Section *)
   if m.data <> [] then

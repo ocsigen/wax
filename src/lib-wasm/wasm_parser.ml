@@ -1781,9 +1781,14 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
                     target_features = m.target_features @ Array.to_list entries;
                   }
               | "metadata.code.branch_hint" ->
-                  (* Branch-hinting proposal. Buffer the entries; they are matched
+                  (* Branch-hinting proposal. The section must appear before the
+                     code section. Buffer the entries; they are matched
                      to instructions after the code section is parsed. The trailing
                      section-size check verifies the whole content was consumed. *)
+                  if last_section_order >= 12 then
+                    error ch
+                      "metadata.code.branch_hint must appear before the code \
+                       section";
                   let entries =
                     vec
                       (fun ch ->
