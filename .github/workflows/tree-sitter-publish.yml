@@ -10,11 +10,17 @@ name: Publish grammar
 # `grammar-v0.1.0` publishes tree-sitter-wax 0.1.0. The everyday test-on-push /
 # test-on-PR checks stay in tree-sitter.yml; this workflow only adds publishing.
 #
+# Authentication is npm trusted publishing (OIDC): no NPM_TOKEN secret — the
+# `id-token: write` permission below lets `npm publish` exchange a short-lived
+# GitHub token for npm credentials, and provenance is attached automatically.
+#
 # Before the first publish:
-#   * add an `NPM_TOKEN` repository secret (an npm automation token);
+#   * on npmjs.com, configure a trusted publisher for `tree-sitter-wax` pointing
+#     at this repo and workflow file (tree-sitter-publish.yml);
 #   * confirm the package name `tree-sitter-wax` is available / yours on npm.
-# Provenance also requires the repository to be public, and a `repository` field
-# in tree-sitter-wax/package.json (already present).
+# Trusted publishing needs npm >= 11.5.1 (installed below, since Node 22 ships an
+# older npm) and a public repository, plus the `repository` field already in
+# tree-sitter-wax/package.json.
 
 on:
   push:
@@ -60,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # for npm provenance
+      id-token: write # for trusted publishing (OIDC) + provenance
     steps:
       - uses: actions/checkout@v7
 
@@ -68,6 +74,11 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
+
+      # Node 22 ships an npm older than the 11.5.1 that supports trusted
+      # publishing; upgrade before publishing.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -85,7 +96,7 @@ jobs:
             exit 1
           fi
 
+      # Trusted publishing authenticates via OIDC (no token) and attaches
+      # provenance automatically.
       - name: Publish
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
