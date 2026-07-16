@@ -23,6 +23,6 @@ args = ["lsp"]
 
 [[grammar]]
 name = "wax"
-# Point this at your checkout. A remote works too:
-#   source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" }
-source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" }
+# We recommend pointing this at a local checkout so you can copy the queries.
+# (A remote works too: source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" })
+source = { path = "/path/to/wax/tree-sitter-wax" }

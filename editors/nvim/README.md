@@ -23,7 +23,7 @@ Register the parser:
 ```lua
 require("nvim-treesitter.parsers").get_parser_configs().wax = {
   install_info = {
-    -- A local checkout works; use `url = "https://github.com/ocsigen/wax"` for a remote.
+    -- A local checkout is recommended so you can easily copy the queries below:
     url = "/path/to/wax",
     location = "tree-sitter-wax", -- the grammar lives in this subdirectory
     files = { "src/parser.c", "src/scanner.c" },
@@ -39,8 +39,7 @@ Then run `:TSInstall wax`. Install the queries onto the runtimepath:
 
 ```sh
 mkdir -p ~/.config/nvim/queries/wax
-cp /path/to/wax/tree-sitter-wax/queries/{highlights,locals,injections,indents,textobjects}.scm \
-   ~/.config/nvim/queries/wax/
+cp /path/to/wax/tree-sitter-wax/queries/*.scm ~/.config/nvim/queries/wax/
 ```
 
 `indents.scm` drives the nvim-treesitter indent module and `textobjects.scm`
@@ -59,7 +58,7 @@ npx tree-sitter build -o wax.so          # or: cc -shared -fPIC -Os -Isrc -o wax
 
 mkdir -p ~/.local/share/nvim/site/parser ~/.config/nvim/queries/wax
 cp wax.so ~/.local/share/nvim/site/parser/wax.so
-cp queries/{highlights,locals,injections}.scm ~/.config/nvim/queries/wax/
+cp queries/*.scm ~/.config/nvim/queries/wax/
 ```
 
 Then associate the filetype and start highlighting on `.wax` buffers:
@@ -95,7 +94,13 @@ On Neovim 0.10 or older, start it from a `FileType` autocmd instead:
 ```lua
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "wax",
-  callback = function() vim.lsp.start({ name = "wax", cmd = { "wax", "lsp" } }) end,
+  callback = function(args)
+    vim.lsp.start({
+      name = "wax",
+      cmd = { "wax", "lsp" },
+      root_dir = vim.fs.root(args.buf, { ".git", "dune-project" }),
+    })
+  end,
 })
 ```
 

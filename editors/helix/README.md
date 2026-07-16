@@ -30,8 +30,9 @@ args = ["lsp"]
 
 [[grammar]]
 name = "wax"
-# Remote checkout with the grammar in a subdirectory:
-source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" }
+# We recommend a local checkout so you can easily copy the queries below:
+# (A remote works too: source = { git = "https://github.com/ocsigen/wax", rev = "main", subpath = "tree-sitter-wax" })
+source = { path = "/path/to/wax/tree-sitter-wax" }
 ```
 
 ## Language server
