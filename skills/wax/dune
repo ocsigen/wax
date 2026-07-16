@@ -1,0 +1,20 @@
+; reference.md is the whole Wax language reference, assembled from the mdbook
+; sources (docs/src) by docs/gen_llms and committed here so the skill folder is
+; self-contained and ready to drop into an agent's skills directory. Keep it in
+; sync: regenerate into reference.md.gen and diff against the committed copy
+; under `dune runtest`. After editing a doc page, `dune runtest` fails and
+; `dune promote` updates reference.md (which the `wax mcp` binary also embeds).
+
+(rule
+ (deps
+  (glob_files ../../docs/src/*.md)
+  (glob_files ../../docs/src/correspondence/*.md))
+ (action
+  (with-stdout-to
+   reference.md.gen
+   (run %{exe:../../docs/gen_llms.exe} ../../docs/src))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff reference.md reference.md.gen)))
