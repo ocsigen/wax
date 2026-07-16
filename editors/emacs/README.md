@@ -13,11 +13,9 @@ Since `wax-ts-mode` requires Emacs 29+, you can install it directly from this re
 (use-package wax-ts-mode
   :vc (:url "https://github.com/ocsigen/wax"
        :branch "main"
+       :rev :newest
        :lisp-dir "editors/emacs")
-  :custom
-  (wax-ts-mode-indent-offset 4)
-  :hook
-  (wax-ts-mode . eglot-ensure))
+  :hook (wax-ts-mode . eglot-ensure))
 ```
 
 Alternatively, you can manually put `wax-ts-mode.el` on your `load-path`:

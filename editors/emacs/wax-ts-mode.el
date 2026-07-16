@@ -1,6 +1,7 @@
 ;;; wax-ts-mode.el --- Tree-sitter major mode for Wax -*- lexical-binding: t; -*-
 
 ;; Author: Jérôme Vouillon
+;; Version: 0.1.0
 ;; Keywords: languages, wax, webassembly
 ;; Package-Requires: ((emacs "29.1"))
 ;; SPDX-License-Identifier: MIT

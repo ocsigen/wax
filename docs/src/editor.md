@@ -56,15 +56,24 @@ be on your `PATH`; pair it with the tree-sitter grammar for highlighting.
 Ready-to-use configurations, each with a README, live under
 [`editors/`](https://github.com/ocsigen/wax/tree/main/editors):
 
-- **[Neovim](https://github.com/ocsigen/wax/tree/main/editors/nvim)**: register
+- **[Neovim](https://github.com/ocsigen/wax/blob/main/editors/nvim/README.md)**: register
   the `tree-sitter-wax` parser (nvim-treesitter or the built-in loader) and
   point `vim.lsp` at `wax lsp`.
-- **[Helix](https://github.com/ocsigen/wax/tree/main/editors/helix)**: add the
+- **[Helix](https://github.com/ocsigen/wax/blob/main/editors/helix/README.md)**: add the
   grammar and a `[language-server.wax]` entry running `wax lsp` (a ready-to-paste
   `languages.toml` is included).
-- **[Emacs](https://github.com/ocsigen/wax/tree/main/editors/emacs)**:
+- **[Emacs](https://github.com/ocsigen/wax/blob/main/editors/emacs/README.md)**:
   `wax-ts-mode` provides tree-sitter highlighting, indentation, and `imenu`,
-  with Eglot driving `wax lsp` for the rest. Requires Emacs 29+ and can be installed directly from GitHub using `use-package` with `package-vc`.
+  with Eglot driving `wax lsp` for the rest. Requires Emacs 29+ and can be installed directly from GitHub using `use-package` with `package-vc`:
+
+  ```elisp
+  (use-package wax-ts-mode
+    :vc (:url "https://github.com/ocsigen/wax"
+         :branch "main"
+         :rev :newest
+         :lisp-dir "editors/emacs")
+    :hook (wax-ts-mode . eglot-ensure))
+  ```
 
 The server's flags and behaviour (document sync, position-encoding negotiation)
 are documented under [`wax lsp`](cli.md#language-server) in the CLI reference.
