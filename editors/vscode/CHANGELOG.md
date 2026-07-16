@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Hover types for `.wax`: hovering over an expression shows its inferred type,
   read off the type-checker's typed tree. Works through the recovering parser
@@ -94,9 +94,6 @@
   (functions, `if`/`loop`/`while`/`match`/`try` blocks), `#[if]`/`#[else]`
   branches, and multi-line block comments, from the parse tree instead of by
   indentation.
-
-## 0.2.2
-
 - Large `.wat` / `.wax` files now format in the editor; a non-tail recursion in
   the formatter previously overflowed the (small) wasm call stack on big modules,
   which just silently did nothing.
