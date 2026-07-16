@@ -223,8 +223,7 @@ On a formatter error the buffer is left unchanged and the error is shown."
     (message "Wax tree-sitter grammar is required for wax-ts-mode to fully function.")))
 
 ;;;###autoload
-(when (fboundp 'treesit-ready-p)
-  (add-to-list 'auto-mode-alist '("\\.wax\\'" . wax-ts-mode)))
+(add-to-list 'auto-mode-alist '("\\.wax\\'" . wax-ts-mode))
 
 ;; Automatically register the language server with Eglot if Eglot is loaded
 (with-eval-after-load 'eglot
