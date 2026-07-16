@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-51804260.js";
+            window.path_to_searchindex_js = "searchindex-04ebd011.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -195,15 +195,21 @@
 
 <p>Both compile to identical WebAssembly bytecode.</p>
 <h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<h3 id="npm"><a class="header" href="#npm">npm</a></h3>
+<p>The easiest way to get <code>wax</code> is from npm; it ships a single cross-platform
+WebAssembly build that runs on any Node 22+ (Linux, macOS, Windows):</p>
+<pre><code class="language-sh">npm install -g @wax-wasm/wax
+</code></pre>
 <h3 id="prebuilt-binaries"><a class="header" href="#prebuilt-binaries">Prebuilt binaries</a></h3>
 <p>Native <code>wax</code> executables for Linux, macOS (Apple silicon and Intel), and
-Windows (with <code>SHA256SUMS</code>) are attached to the
-<a href="https://github.com/ocsigen/wax/releases/tag/edge"><code>edge</code> prerelease</a>, which is
-rebuilt on every push to <code>main</code>. Download the one for your platform, make it
-executable, and put it on your <code>PATH</code>:</p>
-<pre><code class="language-sh">curl -LO https://github.com/ocsigen/wax/releases/download/edge/wax-linux-x86_64
+Windows (with <code>SHA256SUMS</code>) are attached to each
+<a href="https://github.com/ocsigen/wax/releases/latest">release</a>. Download the one for
+your platform, make it executable, and put it on your <code>PATH</code>:</p>
+<pre><code class="language-sh">curl -LO https://github.com/ocsigen/wax/releases/latest/download/wax-linux-x86_64
 chmod +x wax-linux-x86_64 &amp;&amp; mv wax-linux-x86_64 /usr/local/bin/wax
 </code></pre>
+<p>The <a href="https://github.com/ocsigen/wax/releases/tag/edge"><code>edge</code> prerelease</a>
+carries the same binaries built from the latest <code>main</code>, rebuilt on every push.</p>
 <h3 id="from-source"><a class="header" href="#from-source">From source</a></h3>
 <p><strong>Requirements:</strong> <a href="https://opam.ocaml.org/">Opam</a> (2.1+) and OCaml 4.14+ (5.0+
 to run the full test suite).</p>
@@ -3945,6 +3951,20 @@ one line per pass as it finishes. The normal output on stdout is
 unchanged.</li>
 </ul>
 </li>
+</ul>
+</li>
+<li>
+<p><strong><code>--version</code></strong></p>
+<ul>
+<li>Print the toolchain version and exit. In a released build this is the git
+tag it was built from; a plain development build reports <code>dev</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong><code>--help</code></strong></p>
+<ul>
+<li>Show the manual page and exit. Also available per subcommand
+(<code>wax format --help</code>, etc.).</li>
 </ul>
 </li>
 </ul>
