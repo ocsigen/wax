@@ -5,7 +5,8 @@ number and its own release trigger:
 
 | Component | Published as | Version lives in | Release trigger |
 |-----------|--------------|------------------|-----------------|
-| `wax` toolchain | native binaries on GitHub Releases + `@wax-wasm/wax` on npm + `wax`/`wax-lib` on opam | `(version …)` in `dune-project` | push a `vX.Y.Z` tag |
+| `wax` toolchain | native binaries on GitHub Releases + `@wax-wasm/wax` on npm | `(version …)` in `dune-project` | push a `vX.Y.Z` tag |
+| `wax` / `wax-lib` on opam | the `ocaml/opam-repository` | `CHANGES.md` (via `dune-release`) | manual, after the `vX.Y.Z` tag |
 | VS Code extension | `wax-wasm.wax` on the VS Code Marketplace | `editors/vscode/package.json` | manual (`vsce publish`) |
 | tree-sitter grammar | `tree-sitter-wax` on npm | `tree-sitter.json` / `package.json` / `Cargo.toml` | push a `grammar-vX.Y.Z` tag |
 
@@ -60,6 +61,44 @@ Notes:
   do not need to edit it by hand.
 - After a release the working tree keeps reporting `X.Y.Z` until you bump
   `(version)` again for the next cycle.
+
+### Publishing `wax` / `wax-lib` to opam-repository
+
+This is a separate, manual step done with
+[`dune-release`](https://github.com/tarides/dune-release) *after* the `vX.Y.Z`
+tag has been pushed and the binaries/npm workflows have finished. It submits both
+packages to `ocaml/opam-repository` so that `opam install wax` works. Until this
+is done for a version, the packages are only installable from source
+(`opam pin add wax https://github.com/ocsigen/wax.git`).
+
+Prerequisites (one-time): `opam install dune-release`, and a GitHub token for
+`dune-release` (`dune-release config` / `~/.config/dune/github.token`).
+
+Per release:
+
+1. Before tagging, add a `## X.Y.Z` section at the top of `CHANGES.md` describing
+   the release. `dune-release` uses this section's version and text.
+2. Do the normal toolchain release above (tag `vX.Y.Z`, push it, let the
+   workflows run).
+3. Build and attach the source tarball, then submit both packages:
+   ```sh
+   dune-release distrib --tag vX.Y.Z          # build the source tarball
+   dune-release publish distrib --tag vX.Y.Z  # attach it to the vX.Y.Z GitHub release
+   dune-release opam pkg --tag vX.Y.Z         # stage packages/wax* locally (both packages)
+   dune-release opam submit                   # open the opam-repository PR (wax + wax-lib)
+   ```
+
+Notes:
+- **Do not run `dune-release publish doc`.** The documentation site is deployed
+  to gh-pages by `deploy.yml`; letting `dune-release` publish docs would fight
+  with it. Only publish the distrib tarball.
+- `dune-release` reuses the existing `vX.Y.Z` GitHub release (created by
+  `release.yml`) and adds the source tarball as another asset, alongside the
+  native binaries. Run it after that release exists, so ordering matters.
+- The generated opam file carries a `version:` field (a side effect of the
+  `(version)` stanza that stamps `wax --version`). opam-repository prefers it
+  absent; if lint flags it, drop the `version:` line from the staged
+  `packages/wax*/wax*.X.Y.Z/opam` before submitting.
 
 ## Releasing the VS Code extension
 
