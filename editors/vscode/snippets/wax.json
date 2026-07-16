@@ -51,7 +51,7 @@
   },
   "Try / catch": {
     "prefix": "try",
-    "body": ["try {", "\t$1", "} catch {", "\t${2:tag} => { $0 }", "}"],
+    "body": ["try {", "\t$1", "} catch [", "\t${2:tag} -> '${3:label}", "]$0"],
     "description": "Try / catch"
   },
   "Match": {
