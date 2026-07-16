@@ -1,4 +1,4 @@
-Compiling to Wasm with --source-map-file emits a Source Map v3 alongside the
+Compiling to Wasm with --source-map emits a Source Map v3 alongside the
 binary: valid JSON, base64-VLQ `mappings`, quoted `sources`, and a `file` field
 naming the generated binary (not the map). A generated position is a byte offset
 from the start of the whole binary, so mappings from different sections sort into
@@ -15,19 +15,37 @@ closing `}` (`g`'s on its own line, `f`'s on the last line).
 recorded as an absent mapping (a 1-field segment) that resets the mapping,
 keeping the preceding `end`'s location from bleeding onto it.
 
-  $ wax decl.wax -f wasm -o decl.wasm --source-map-file decl.wasm.map
-  Usage: wax convert [--help] [OPTION]… [INPUT]
-  wax: unknown option '--source-map-file'. Did you mean '-s'?
-  [124]
+  $ wax decl.wax -f wasm -o decl.wasm --source-map
   $ cat decl.wasm.map
-  cat: decl.wasm.map: No such file or directory
-  [1]
+  {
+    "version": 3,
+    "file": "decl.wasm",
+    "sourceRoot": "",
+    "sources": ["decl.wax"],
+    "sourcesContent": [],
+    "names": [],
+    "mappings": "6BAAoB,EAAE,Q,QAEb,GAGL,EACH"
+  }
+
+The binary also carries a `sourceMappingURL` custom section pointing at the
+map by its basename, so a tool given only the binary finds the map next to it:
+
+  $ grep -ac sourceMappingURL decl.wasm
+  1
+  $ grep -ac decl.wasm.map decl.wasm
+  1
 
 A source map relates a wasm binary's byte offsets to source positions, so it is
 only meaningful for wasm output. Requesting one for text output is rejected
 rather than silently ignored:
 
-  $ wax decl.wax -f wat --source-map-file decl.map
-  Usage: wax convert [--help] [OPTION]… [INPUT]
-  wax: unknown option '--source-map-file'. Did you mean '-s'?
-  [124]
+  $ wax decl.wax -f wat --source-map
+  --source-map is only supported for wasm output
+  [123]
+
+The map is written next to the output file, so writing the binary to stdout
+leaves it nowhere to go; that is rejected too:
+
+  $ wax decl.wax -f wasm --source-map > /dev/null
+  --source-map requires an output file
+  [123]

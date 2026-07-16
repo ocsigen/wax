@@ -8,10 +8,7 @@ never exercise the VLQ sign bit.
 `poly` spans several lines, so consecutive instructions map back and forth across
 columns and lines, which forces negative column deltas (the sign-bit path):
 
-  $ wax sm.wax -f wasm -o sm.wasm --source-map-file sm.wasm.map
-  Usage: wax convert [--help] [OPTION]… [INPUT]
-  wax: unknown option '--source-map-file'. Did you mean '-s'?
-  [124]
+  $ wax sm.wax -f wasm -o sm.wasm --source-map
 
 Decode every segment and assert the invariants: it parses, generated offsets are
 strictly increasing (one mapping per instruction — no two mappings on the same
@@ -55,7 +52,8 @@ negative column delta was decoded.
   > print("all positions within source bounds:", ok(bounds))
   > print("negative column delta exercised:", ok(neg_col))
   > PY
-  Traceback (most recent call last):
-    File "<stdin>", line 4, in <module>
-  FileNotFoundError: [Errno 2] No such file or directory: 'sm.wasm.map'
-  [1]
+  mappings decode: OK
+  generated offsets strictly increasing: OK
+  all mappings in source file 0: OK
+  all positions within source bounds: OK
+  negative column delta exercised: OK
