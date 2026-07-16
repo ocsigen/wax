@@ -3,7 +3,14 @@
  (modes exe wasm)
  (public_name wax)
  (package wax)
- (libraries wax_wasm wax_lang wax_conversion wax_lsp cmdliner unix))
+ (libraries
+  wax_wasm
+  wax_lang
+  wax_conversion
+  wax_lsp
+  cmdliner
+  unix
+  dune-build-info))
 
 ; Install shell completions and manpages for the wax tool (cmdliner 2.x).
 ; `cmdliner install tool-support` runs the built binary to extract them into a

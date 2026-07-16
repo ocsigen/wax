@@ -38,7 +38,9 @@ All 9 conversion pipelines are supported (any combination of wax/wat/wasm as inp
 `wax` is a `Cmd.group` with `convert` as the default command and `format` /
 `check` subcommands. cmdliner won't fall through to the default on a leading
 positional, so `main.ml` rewrites `Sys.argv` (the js_of_ocaml trick) to keep the
-bare `wax <file>` form working — edit that heuristic if adding subcommands.
+bare `wax <file>` form working — edit that heuristic if adding subcommands. The
+group carries `--version` (from `dune-build-info`: the git tag at release build
+time, else `dev`) and cmdliner's built-in `--help`.
 
 **convert** (default) — `dune exec wax -- [options] [INPUT]`. `INPUT` is optional; reads from stdin if omitted.
 

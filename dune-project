@@ -41,5 +41,7 @@
     ; 1.17 has the 3.17 `positionEncoding` capability the server advertises.
     (lsp (>= 1.17.0))
     (jsonrpc (>= 1.17.0))
+    ; Embeds the version reported by `wax --version` (git tag at build time).
+    (dune-build-info (>= 3.0.0))
   )
 )

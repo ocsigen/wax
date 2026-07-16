@@ -258,6 +258,14 @@ server](#language-server)).
           one line per pass as it finishes. The normal output on stdout is
           unchanged.
 
+- **`--version`**
+    - Print the toolchain version and exit. In a released build this is the git
+      tag it was built from; a plain development build reports `dev`.
+
+- **`--help`**
+    - Show the manual page and exit. Also available per subcommand
+      (`wax format --help`, etc.).
+
 ## Examples
 
 **Convert a Wax file to Wasm binary:**

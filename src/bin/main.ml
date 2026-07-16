@@ -1373,6 +1373,14 @@ let convert_cmd =
   let doc = "Convert between WebAssembly formats (the default command)" in
   Cmd.v (Cmd.info "convert" ~doc ~exits ~envs:[ warn_env_info ]) convert_term
 
+(* Embedded by dune-build-info: the git tag/commit stamped in at release build
+   time. [None] in a plain dev build (no VCS placeholder substituted), where we
+   fall back to "dev". *)
+let version =
+  match Build_info.V1.version () with
+  | Some v -> Build_info.V1.Version.to_string v
+  | None -> "dev"
+
 let main_cmd =
   let doc = "Convert between WebAssembly formats (.wat, .wasm, .wax)" in
   let man =
@@ -1407,7 +1415,7 @@ let main_cmd =
     ]
   in
   Cmd.group
-    (Cmd.info "wax" ~doc ~man ~exits ~envs:[ warn_env_info ])
+    (Cmd.info "wax" ~version ~doc ~man ~exits ~envs:[ warn_env_info ])
     ~default:convert_term
     [ convert_cmd; format_cmd; check_cmd; lsp_cmd ]
 
