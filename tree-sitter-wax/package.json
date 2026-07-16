@@ -2,7 +2,7 @@
   "name": "tree-sitter-wax",
   "version": "0.1.0",
   "description": "Tree-sitter grammar for the Wax language (a Rust-like syntax for WebAssembly)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Jérôme Vouillon",
   "repository": {
     "type": "git",

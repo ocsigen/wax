@@ -2,7 +2,9 @@
 name = "tree-sitter-wax"
 description = "Wax grammar for the tree-sitter parsing library"
 version = "0.1.0"
-license = "MIT"
+license = "Apache-2.0"
+homepage = "https://ocsigen.org/wax/"
+repository = "https://github.com/ocsigen/wax"
 keywords = ["incremental", "parsing", "tree-sitter", "wax", "webassembly"]
 categories = ["parser-implementations", "parsing", "text-editors"]
 edition = "2021"

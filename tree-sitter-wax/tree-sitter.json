@@ -12,12 +12,16 @@
   ],
   "metadata": {
     "version": "0.1.0",
-    "license": "MIT",
+    "license": "Apache-2.0",
     "description": "Wax grammar for tree-sitter",
     "authors": [
       {
         "name": "Jérôme Vouillon"
       }
-    ]
+    ],
+    "links": {
+      "repository": "https://github.com/ocsigen/wax",
+      "homepage": "https://ocsigen.org/wax/"
+    }
   }
 }
