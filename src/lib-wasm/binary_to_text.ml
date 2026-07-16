@@ -440,13 +440,28 @@ let id map idx = Option.map Ast.no_loc (B.IntMap.find_opt idx map)
 
 let unique_names map =
   let seen = Hashtbl.create 16 in
-  B.IntMap.filter
-    (fun _ name ->
-      if Hashtbl.mem seen name then false
-      else (
+  let suffixes = Hashtbl.create 16 in
+  B.IntMap.fold
+    (fun idx name acc ->
+      if not (Hashtbl.mem seen name) then (
         Hashtbl.add seen name ();
-        true))
-    map
+        B.IntMap.add idx name acc)
+      else
+        let start_i =
+          match Hashtbl.find_opt suffixes name with
+          | Some i -> i + 1
+          | None -> 1
+        in
+        let rec find_free i =
+          let candidate = Printf.sprintf "%s_%d" name i in
+          if Hashtbl.mem seen candidate then find_free (i + 1)
+          else (candidate, i)
+        in
+        let new_name, last_i = find_free start_i in
+        Hashtbl.replace suffixes name last_i;
+        Hashtbl.add seen new_name ();
+        B.IntMap.add idx new_name acc)
+    map B.IntMap.empty
 
 let unique_names_indirect map = B.IntMap.map unique_names map
 
