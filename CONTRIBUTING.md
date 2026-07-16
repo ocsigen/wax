@@ -166,3 +166,9 @@ A few things specific to writing and reviewing tests:
 - **Read a large `promote` diff before accepting it.** A feature can legitimately
   rewrite many round-trip corpus files, but every changed line should be
   explainable by your change: a surprise line is a bug, not a golden update.
+
+## Releasing
+
+Cutting a release of the toolchain, the VS Code extension, or the tree-sitter
+grammar is documented separately in [`RELEASING.md`](RELEASING.md). The three
+are versioned and released independently.
