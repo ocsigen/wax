@@ -82,16 +82,23 @@ Per release:
    workflows run).
 3. Build and attach the source tarball, then submit both packages:
    ```sh
-   dune-release distrib --tag vX.Y.Z          # build the source tarball
-   dune-release publish distrib --tag vX.Y.Z  # attach it to the vX.Y.Z GitHub release
-   dune-release opam pkg --tag vX.Y.Z         # stage packages/wax* locally (both packages)
-   dune-release opam submit                   # open the opam-repository PR (wax + wax-lib)
+   dune-release distrib --tag vX.Y.Z   # build the source tarball
+   dune-release publish                # attach it to the vX.Y.Z GitHub release
+   dune-release opam pkg               # stage packages/wax* locally (both packages)
+   dune-release opam submit            # open the opam-repository PR (wax + wax-lib)
    ```
+   Only `distrib` needs `--tag`; the later steps reuse the archive and tag it
+   just built, so they take no `--tag` or artefact argument. If your
+   `dune-release` version disagrees, check `dune-release <cmd> --help` (the
+   artefact/`--tag` spelling has changed across versions).
 
 Notes:
-- **Do not run `dune-release publish doc`.** The documentation site is deployed
-  to gh-pages by `deploy.yml`; letting `dune-release` publish docs would fight
-  with it. Only publish the distrib tarball.
+- **Publish only the distribution, not the documentation.** The docs site is
+  deployed to gh-pages by `deploy.yml`; letting `dune-release` publish docs would
+  fight with it. `dune-release publish` uploads the package's default artefacts;
+  confirm the run only attached the tarball to the release and left gh-pages
+  alone (restrict it via `dune-release publish --help` if your version offers
+  the option).
 - `dune-release` reuses the existing `vX.Y.Z` GitHub release (created by
   `release.yml`) and adds the source tarball as another asset, alongside the
   native binaries. Run it after that release exists, so ordering matters.
