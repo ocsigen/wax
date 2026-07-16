@@ -25,7 +25,7 @@
     "type": "git",
     "url": "git+https://github.com/ocsigen/wax.git"
   },
-  "homepage": "https://github.com/ocsigen/wax#readme",
+  "homepage": "https://ocsigen.org/wax/",
   "bugs": {
     "url": "https://github.com/ocsigen/wax/issues"
   }

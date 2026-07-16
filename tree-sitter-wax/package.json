@@ -9,6 +9,7 @@
     "url": "git+https://github.com/ocsigen/wax.git",
     "directory": "tree-sitter-wax"
   },
+  "homepage": "https://ocsigen.org/wax/",
   "main": "bindings/node",
   "keywords": [
     "tree-sitter",

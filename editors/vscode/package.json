@@ -19,6 +19,7 @@
     "url": "https://github.com/ocsigen/wax.git",
     "directory": "editors/vscode"
   },
+  "homepage": "https://ocsigen.org/wax/",
   "engines": {
     "vscode": "^1.60.0"
   },
