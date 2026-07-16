@@ -1,5 +1,7 @@
 (test
  (name test_diagnostic)
+ ; Links cmdliner (a wax dep, not wax-lib), so it runs under wax --with-test.
+ (package wax)
  (libraries
   wax_utils
   wax_wasm
