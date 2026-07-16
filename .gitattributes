@@ -1,1 +1,4 @@
 test/** linguist-vendored
+tree-sitter-wax/src/parser.c linguist-generated
+tree-sitter-wax/src/tree_sitter/** linguist-generated
+tree-sitter-wax/src/*.json linguist-generated
