@@ -40,19 +40,21 @@ The parentheses are required: a bare `tag NAME;` or `fn NAME { … }` (no
 parameter list and no type reference) is a syntax error, not an empty signature.
 
   $ printf 'tag stop;\n' | wax -i wax -f wat
-  Error: A parameter list is required; write '()' for none.
+  Error: A parameter list is required.
    ──➤  -:1:1
   1 │ tag stop;
     · ^^^^^^^^
   2 │ 
+  Help: insert '()'
   [128]
 
 
   $ printf 'fn f { nop; }\n' | wax -i wax -f wat
-  Error: A parameter list is required; write '()' for none.
+  Error: A parameter list is required.
    ──➤  -:1:1
   1 │ fn f { nop; }
     · ^^^^
   2 │ 
+  Help: insert '()'
   [128]
 

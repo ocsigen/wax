@@ -14,6 +14,9 @@ recovering `--all-errors`, and a plain conversion all reject it cleanly:
   1 │ memory m: i64 [577, 239903158239903158951737];
     ·                     ^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
+  Hint:
+    This integer must fit in an unsigned 64-bit value (0 to
+    18446744073709551615).
   [128]
 
 Recovery (--all-errors) reaches the same conversion, so it too must report
@@ -25,6 +28,9 @@ rather than crash:
   1 │ memory m: i64 [577, 239903158239903158951737];
     ·                     ^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
+  Hint:
+    This integer must fit in an unsigned 64-bit value (0 to
+    18446744073709551615).
   [128]
 
 A page-size literal is converted the same way, and is likewise range-checked:
@@ -39,6 +45,9 @@ A page-size literal is converted the same way, and is likewise range-checked:
   1 │ memory m: i32 [1] pagesize 999999999999999999999999;
     ·                            ^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
+  Hint:
+    This integer must fit in an unsigned 64-bit value (0 to
+    18446744073709551615).
   [128]
 
 A limit within range is unaffected:

@@ -11,6 +11,9 @@ check). Regression: found auditing literal-parsing paths.
   1 │ (module (func (export "\u{ffffffffffffffff}")))
     ·                        ^^^^^^^^^^^^^^^^^^^^
   2 │ 
+  Hint:
+    A Unicode escape has the form '\u{XXXX}', where 'XXXX' is the hexadecimal
+    code of a Unicode scalar value.
   [128]
 
 A valid escape still works:

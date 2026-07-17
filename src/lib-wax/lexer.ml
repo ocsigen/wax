@@ -75,10 +75,12 @@ let rec comment_rec lexbuf =
       Buffer.add_string string_buffer (Sedlexing.Utf8.lexeme lexbuf);
       comment_rec lexbuf
   | _ ->
-      raise
-        (Wax_wasm.Parsing.syntax_error_pair
-           ( Sedlexing.lexing_bytes_positions lexbuf,
-             Wax_utils.Message.text (Printf.sprintf "Malformed comment.\n") ))
+      let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
+      Wax_wasm.Parsing.syntax_error
+        ~location:{ Wax_utils.Ast.loc_start; loc_end }
+        ~hint:
+          (Wax_utils.Message.text "A block comment must be closed with '*/'.")
+        (Wax_utils.Message.text (Printf.sprintf "Malformed comment.\n"))
 
 let comment lexbuf =
   Buffer.add_string string_buffer "/*";
@@ -91,11 +93,14 @@ let unicode_escape lexbuf s =
   match Wax_utils.Unicode.scalar_of_hex s with
   | Some u -> u
   | None ->
-      raise
-        (Wax_wasm.Parsing.syntax_error_pair
-           ( Sedlexing.lexing_bytes_positions lexbuf,
-             Wax_utils.Message.text
-               (Printf.sprintf "Malformed Unicode escape.\n") ))
+      let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
+      Wax_wasm.Parsing.syntax_error
+        ~location:{ Wax_utils.Ast.loc_start; loc_end }
+        ~hint:
+          (Wax_utils.Message.text
+             "A Unicode escape has the form '\\u{XXXX}', where 'XXXX' is the \
+              hexadecimal code of a Unicode scalar value.")
+        (Wax_utils.Message.text (Printf.sprintf "Malformed Unicode escape.\n"))
 
 let rec string lexbuf =
   match%sedlex lexbuf with

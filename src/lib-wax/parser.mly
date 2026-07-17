@@ -345,9 +345,20 @@ let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 let decl_sign loc t sign =
   match (t, sign) with
   | None, None ->
-      raise (Wax_wasm.Parsing.syntax_error_pair
-               (loc,
-           Wax_utils.Message.text ("A parameter list is required; write '()' for none.\n") ))
+      (* The message names the exact repair, so derive a quick fix from it: a
+         zero-width insertion of "()" at the end of the declaration parsed so far
+         (the caret [snd loc], right after the name or the [: type] reference),
+         where an empty parameter list belongs. *)
+      let caret = snd loc in
+      Wax_wasm.Parsing.syntax_error
+        ~location:{ Wax_utils.Ast.loc_start = fst loc; loc_end = snd loc }
+        ~fix:
+          {
+            Wax_utils.Diagnostic.edit_location =
+              { Wax_utils.Ast.loc_start = caret; loc_end = caret };
+            new_text = "()";
+          }
+        (Wax_utils.Message.text ("A parameter list is required.\n"))
   | _ -> sign
 
 (* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
@@ -359,11 +370,14 @@ let decl_sign loc t sign =
    digit/hex only (never signed), so [is_int64] and [Uint64.of_string] agree. *)
 let u64_of_int_literal loc n =
   if not (Wax_wasm.Misc.is_int64 n) then
-    raise
-      (Wax_wasm.Parsing.syntax_error_pair
-         ( loc,
-           Wax_utils.Message.text
-             (Printf.sprintf "The integer literal %s is out of range.\n" n) ))
+    Wax_wasm.Parsing.syntax_error
+      ~location:{ Wax_utils.Ast.loc_start = fst loc; loc_end = snd loc }
+      ~hint:
+        (Wax_utils.Message.text
+           "This integer must fit in an unsigned 64-bit value (0 to \
+            18446744073709551615).")
+      (Wax_utils.Message.text
+         (Printf.sprintf "The integer literal %s is out of range.\n" n))
   else Wax_utils.Uint64.of_string n
 
 module V128 = Wax_utils.V128

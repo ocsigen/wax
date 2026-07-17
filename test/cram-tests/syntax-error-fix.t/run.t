@@ -190,3 +190,119 @@ that recovery skips over many tokens to resynchronize past is never turned into 
   3 │     nop;
   4 │ }
   [128]
+
+The two tiers above are derived by the recovery driver. A third tier is
+hand-authored: a raise site whose message already names the exact repair carries
+that repair as a quick `fix`, and one whose message benefits from extra guidance
+carries a prose `hint`. These fire in ordinary (non-recovery) parsing too.
+
+A function or tag declared without a parameter list is the canonical fix: the
+message says to write `()`, so the error carries an insertion of `()` at the
+caret where the empty signature belongs (right after the name):
+
+  $ cat > no-params.wax <<'WAX'
+  > fn f {
+  >     nop;
+  > }
+  > WAX
+
+  $ wax check no-params.wax
+  Error: A parameter list is required.
+   ──➤  no-params.wax:1:1
+  1 │ fn f {
+    · ^^^^
+  2 │     nop;
+  3 │ }
+  Help: insert '()'
+  [128]
+
+The fix is a zero-width insertion edit; in JSON its `edit` object places `()` at
+the caret (the offset just past `fn f`):
+
+  $ wax check --error-format json no-params.wax
+  {"severity":"error","file":"no-params.wax","startLine":1,"startColumn":0,"endLine":1,"endColumn":4,"startOffset":0,"endOffset":4,"message":"A parameter list is required.","warning":null,"hint":null,"related":[],"edit":{"startLine":1,"startColumn":4,"endLine":1,"endColumn":4,"startOffset":4,"endOffset":4,"newText":"()"}}
+  [128]
+
+Applying that edit by hand — inserting `()` after `fn f` — makes the source parse
+cleanly past the error:
+
+  $ cat > with-params.wax <<'WAX'
+  > fn f() {
+  >     nop;
+  > }
+  > WAX
+
+  $ wax check with-params.wax
+
+A hint-only site adds prose without a machine edit. An integer literal beyond the
+unsigned 64-bit range (a memory limit here) reports the valid range:
+
+  $ cat > big-limit.wax <<'WAX'
+  > memory m: i64 [999999999999999999999999999];
+  > WAX
+
+  $ wax check big-limit.wax
+  Error: The integer literal 999999999999999999999999999 is out of range.
+   ──➤  big-limit.wax:1:16
+  1 │ memory m: i64 [999999999999999999999999999];
+    ·                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 │ 
+  Hint:
+    This integer must fit in an unsigned 64-bit value (0 to
+    18446744073709551615).
+  [128]
+
+The hint is serialized as the diagnostic's `hint` field, with no `edit`:
+
+  $ wax check --error-format json big-limit.wax
+  {"severity":"error","file":"big-limit.wax","startLine":1,"startColumn":15,"endLine":1,"endColumn":42,"startOffset":15,"endOffset":42,"message":"The integer literal 999999999999999999999999999 is out of range.","warning":null,"hint":"This integer must fit in an unsigned 64-bit value (0 to 18446744073709551615).","related":[]}
+  [128]
+
+A lexer-level raise carries a hint the same way. An unterminated block comment
+explains the missing closer, in both Wax (`*/`) and WAT (`;)`):
+
+  $ cat > open-comment.wax <<'WAX'
+  > fn f() {
+  >     /* never closed
+  > }
+  > WAX
+
+  $ wax check open-comment.wax
+  Error: Malformed comment.
+   ──➤  open-comment.wax:4:1
+  2 │     /* never closed
+  3 │ }
+  4 │ 
+      ^
+  Hint: A block comment must be closed with '*/'.
+  [128]
+
+  $ cat > open-comment.wat <<'WAT'
+  > (module (; never closed
+  > WAT
+
+  $ wax check open-comment.wat
+  Error: Malformed comment.
+   ──➤  open-comment.wat:2:1
+  1 │ (module (; never closed
+  2 │ 
+      ^
+  Hint: A block comment must be closed with ';)'.
+  [128]
+
+A malformed Unicode escape names the well-formed shape (Wax and WAT alike):
+
+  $ cat > bad-escape.wax <<'WAX'
+  > data d = "\u{110000}";
+  > WAX
+
+  $ wax check bad-escape.wax
+  Error: Malformed Unicode escape.
+   ──➤  bad-escape.wax:1:11
+  1 │ data d = "\u{110000}";
+    ·           ^^^^^^^^^^
+  2 │ 
+  Hint:
+    A Unicode escape has the form '\u{XXXX}', where 'XXXX' is the hexadecimal
+    code of a Unicode scalar value.
+  [128]
