@@ -4045,9 +4045,20 @@ let rec check_hole_order_rec ctx i n =
             |> check_hole_order_in_list ctx args
         | Call (f, args) | TailCall (f, args) ->
             n |> check_hole_order_in_list ctx args |> check_hole_order_rec ctx f
+        | Set (name, Some _, _) ->
+            (* [x op= e] lowers to [local.set x (op (local.get x) e)]: the
+               implicit [local.get x] is a value pushed before [e], just like the
+               [Get x] left operand of the plain [x = x op e]. A hole to its
+               right would then consume from below it -- unencodable without a
+               scratch local -- so reject it, mirroring the plain-binop check
+               (whose [Get x] operand the [BinOp] arm flags). This arm is reached
+               only when [n > 0] (the [n <= 0] guard above returns early), so a
+               receiver read here always precedes an unconsumed hole. *)
+            Error.before_hole ctx.diagnostics ~location:name.info;
+            raise Exit
         | If { cond = i; _ }
         | Let (_, Some i)
-        | Set (_, _, i)
+        | Set (_, None, i)
         | Tee (_, i)
         | Labelled (_, i)
         | UnOp (_, i)
@@ -11387,9 +11398,36 @@ let type_configuration ?(warn_unused = false) ?(build = true)
      name-only [#[import = "name"]] override and [#[export]] (a re-export) are
      meaningful there. *)
   let check_import_decl (decl : (Ast.import_decl, location) annotated) =
-    check_attribute_list diagnostics ~export_ok:true ~start_ok:false
-      ~module_ok:false ~import_ok:true ~default_location:decl.info
-      decl.desc.attributes;
+    (* An imported function may be the module's start function; other imported
+       kinds cannot. *)
+    let start_ok =
+      match decl.desc.kind with Import_func _ -> true | _ -> false
+    in
+    check_attribute_list diagnostics ~export_ok:true ~start_ok ~module_ok:false
+      ~import_ok:true ~default_location:decl.info decl.desc.attributes;
+    (* A [#[start]] import, like a defined start function, must have no
+       parameters and no results (the import was registered above, so its type
+       is resolvable). *)
+    if
+      start_ok
+      && List.exists (fun (k, _, _) -> k = "start") decl.desc.attributes
+    then begin
+      let name = decl.desc.id in
+      let func_typ =
+        let*@ _, tname, _ = Tbl.find ctx.diagnostics ctx.functions name in
+        let*@ _, ty =
+          Tbl.find ctx.diagnostics ctx.types { name with desc = tname }
+        in
+        match ty.typ with Func typ -> Some typ | _ -> None
+      in
+      match func_typ with
+      | Some ft when Array.length ft.params = 0 && Array.length ft.results = 0
+        ->
+          ()
+      | Some _ ->
+          Error.start_function_signature ctx.diagnostics ~location:name.info
+      | None -> ()
+    end;
     (match List.filter (fun (k, _, _) -> k = "import") decl.desc.attributes with
     | _ :: (_, value, _) :: _ ->
         let location =
@@ -11470,7 +11508,9 @@ let type_configuration ?(warn_unused = false) ?(build = true)
        re-exported) is reported, the same way an unused definition is. *)
     let check_unused_import (decl : (Ast.import_decl, location) annotated) =
       let exempt =
-        List.exists (fun (k, _, _) -> k = "export") decl.desc.attributes
+        List.exists
+          (fun (k, _, _) -> k = "export" || k = "start")
+          decl.desc.attributes
       in
       if not exempt then
         match decl.desc.kind with

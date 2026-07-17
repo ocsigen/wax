@@ -13,7 +13,7 @@ Extract each ```wax,check block, prefixed by its page:
 Confirm the count (bump and promote when you mark or unmark a block):
 
   $ ls *.wax | wc -l | tr -d ' '
-  32
+  33
 
 Each marked block must compile (a failing block prints its name and first
 error; success prints nothing):

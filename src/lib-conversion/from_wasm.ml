@@ -1402,9 +1402,20 @@ let blocktype ctx (typ : Src.blocktype option) =
         results = Array.map (fun t -> valtype ctx t) results;
       }
 
-let label_targeted (instrs : _ Src.instr list) =
+let label_name (label : Src.name option) =
+  Option.map (fun l -> l.Ast.desc) label
+
+let label_targeted ?self (instrs : _ Src.instr list) =
+  (* [self] is the block's own source label name, if any. A symbolic [br $self]
+     targets this block regardless of nesting depth (unlike a numeric [br N],
+     whose depth is tracked), so match an [Id] reference against it. This keeps
+     a block reachable only by a name that [sanitize_identifier] later rejects
+     (so it renders under the fallback "l") counted as targeted, which reserves
+     that fallback name and prevents an inner block from colliding with it. *)
   let hit depth (idx : Src.idx) =
-    match idx.desc with Num n -> Uint32.to_int n = depth | Id _ -> false
+    match idx.desc with
+    | Num n -> Uint32.to_int n = depth
+    | Id name -> self = Some name
   in
   let rec any depth instrs = List.exists (one depth) instrs
   and one depth (i : _ Src.instr) =
@@ -1653,7 +1664,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Block { label; typ; block } ->
       let label, ctx =
         push_label ctx ~loop:false
-          ~targeted:(label_targeted block.desc)
+          ~targeted:(label_targeted ?self:(label_name label) block.desc)
           label typ
       in
       let block = Stack.run (instructions ctx block.desc) in
@@ -1671,7 +1682,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Loop { label; typ; block } ->
       let label, ctx =
         push_label ctx ~loop:true
-          ~targeted:(label_targeted block.desc)
+          ~targeted:(label_targeted ?self:(label_name label) block.desc)
           label typ
       in
       let block = Stack.run (instructions ctx block.desc) in
@@ -1688,9 +1699,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               }))
   | If { label; typ; if_block; else_block } ->
       let label, ctx =
+        let self = label_name label in
         push_label ctx ~loop:false
           ~targeted:
-            (label_targeted if_block.desc || label_targeted else_block.desc)
+            (label_targeted ?self if_block.desc
+            || label_targeted ?self else_block.desc)
           label typ
       in
       (* Keep the (then ...)/(else ...) clause locations on the Wax blocks so a
@@ -1725,7 +1738,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | TryTable { label = labl; typ; block; catches } ->
       let labl, block_ctx =
         push_label ctx ~loop:false
-          ~targeted:(label_targeted block.desc)
+          ~targeted:(label_targeted ?self:(label_name labl) block.desc)
           labl typ
       in
       let block = Stack.run (instructions block_ctx block.desc) in
@@ -1755,11 +1768,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       (* A [br] out of the try's body or any of its handler blocks targets the
          one try scope, so all of them bear on whether this label renders. *)
       let targeted =
-        label_targeted block.desc
-        || List.exists (fun (_, b) -> label_targeted b.Ast.desc) catches
+        let self = label_name label in
+        label_targeted ?self block.desc
+        || List.exists (fun (_, b) -> label_targeted ?self b.Ast.desc) catches
         ||
         match catch_all with
-        | Some b -> label_targeted b.Ast.desc
+        | Some b -> label_targeted ?self b.Ast.desc
         | None -> false
       in
       let label, ctx = push_label ctx ~loop:false ~targeted label typ in
@@ -2232,9 +2246,16 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (List.iter (fun t -> ignore (valtype ctx t : Ast.valtype)))
         tys;
       let* cond = Stack.pop_width_preserved in
-      let* e2 = Stack.pop_width_preserved in
-      let* e1 = Stack.pop_width_preserved in
-      Stack.push 1 (with_loc (Select (cond, e1, e2)))
+      let* e2, w2 = Stack.pop_tagged in
+      let* e1, w1 = Stack.pop_tagged in
+      (* The result width is that of the arms (both share the select's type). It
+         is flexible only when BOTH arms are flexible literal trees; if either is
+         grounded it fixes the width and re-parse resolves the other to it (as in
+         [int_bin_op]'s [symbol]). Carrying the combined tag lets a downstream
+         eraser ([i32.wrap_i64]) pin the arms so a flexible i64 select doesn't
+         re-default to i32. *)
+      let width = match (w1, w2) with Some _, Some _ -> w1 | _ -> None in
+      Stack.push_num width (with_loc (Select (cond, e1, e2)))
   | Throw t ->
       let input, _ = tag_arity ctx t in
       let* args = Stack.grab input in
@@ -2355,9 +2376,20 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 0
         (mem_call m meth (addr :: value :: mem_extra with_loc memarg nat))
-  | StoreS (m, memarg, _result_ty, size) ->
+  | StoreS (m, memarg, result_ty, size) ->
       let* value = Stack.pop_width_preserved in
       let* addr = Stack.pop_width_preserved in
+      (* A narrow store ([store8/16/32]) picks its i32/i64 type from the value
+         operand's type on re-parse ([To_wasm]). When that operand is anchor-free
+         (a hole on the polymorphic dead-code stack, or a width-flexible
+         expression), it re-defaults to i32, silently narrowing the i64 form. Pin
+         the value to [i64] for the i64 store, mirroring the atomic path below;
+         [simplify] drops a redundant pin on an already-i64 operand. *)
+      let value =
+        match result_ty with
+        | `I64 -> Stack.pin_width (Some `I64) value
+        | `I32 -> value
+      in
       let meth, nat =
         match size with
         | `I8 -> ("store8", 1)
@@ -2665,6 +2697,11 @@ let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
       Option.iter
         (fun block -> reserve_module_names_in_instrs ctx ns block.Ast.desc)
         catch_all
+  | If_annotation { then_body; else_body; _ } ->
+      reserve_module_names_in_instrs ctx ns then_body.desc;
+      Option.iter
+        (fun b -> reserve_module_names_in_instrs ctx ns b.Ast.desc)
+        else_body
   | Folded (i, l) ->
       reserve_module_names_in_instrs ctx ns l;
       reserve_module_names_in_instr ctx ns i
@@ -3006,10 +3043,11 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
            [#[import = "name"]] is emitted only when the imported name differs
            from the Wax name; consecutive same-module imports are grouped into
            blocks in a later pass. *)
-        let build id kind export_kind =
+        let build ?(start = []) id kind export_kind =
           let attributes =
-            (if nm.Ast.desc = id.Ast.desc then []
-             else [ ("import", Some (string_of_name nm), None) ])
+            start
+            @ (if nm.Ast.desc = id.Ast.desc then []
+               else [ ("import", Some (string_of_name nm), None) ])
             @ exports ctx export_kind id e
           in
           Some
@@ -3023,8 +3061,10 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         match desc with
         | Func { exact; typ } ->
             let typ, sign = typeuse ctx typ in
-            build
-              (Sequence.get_current ctx.functions)
+            let id = Sequence.get_current ctx.functions in
+            (* An imported function named by [(start …)] carries a [#[start]]
+               attribute, like a defined start function. *)
+            build ~start:(start_attribute ctx id) id
               (Import_func { typ; sign; exact })
               Func
         | Tag typ ->
@@ -3277,27 +3317,40 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
 (* Structural equality on function types, ignoring parameter names and source
    locations. Used to replicate the WAT type-use abbreviation, where an inline
    signature reuses an identical existing type rather than minting a new one. *)
-let rec valtype_eq (a : Src.valtype) (b : Src.valtype) =
+let rec valtype_eq ctx (a : Src.valtype) (b : Src.valtype) =
   match (a, b) with
   | I32, I32 | I64, I64 | F32, F32 | F64, F64 | V128, V128 -> true
-  | Ref x, Ref y -> x.nullable = y.nullable && heaptype_eq x.typ y.typ
+  | Ref x, Ref y -> x.nullable = y.nullable && heaptype_eq ctx x.typ y.typ
   | (I32 | I64 | F32 | F64 | V128 | Ref _), _ -> false
 
-and heaptype_eq (a : Src.heaptype) (b : Src.heaptype) =
+and heaptype_eq ctx (a : Src.heaptype) (b : Src.heaptype) =
   match (a, b) with
   | Type i, Type j -> (
-      match (i.Ast.desc, j.Ast.desc) with
-      | Num m, Num n -> Uint32.compare m n = 0
-      | Id s, Id t -> String.equal s t
-      | (Num _ | Id _), _ -> false)
+      (* A numeric [(type N)] and a symbolic [(type $s)] naming the *same*
+         declared type must compare equal: resolve each reference to its
+         canonical type name first. Comparing the raw [Num]/[Id] forms would
+         miss the match, so [elaborate_implicit_types] would mint a spurious
+         implicit type for an inline signature that merely duplicates a declared
+         one, shifting every later numeric type reference. A reference that does
+         not resolve to a declared name (e.g. one pointing at an implicit type,
+         which carries no name here) falls back to raw structural comparison. *)
+      let canon (k : Src.idx) =
+        match Sequence.get ctx.types k with
+        | { Ast.desc = name; _ } -> Some name
+        | exception (Unresolved_reference _ | Numeric_ref_in_conditional _) ->
+            None
+      in
+      match (canon i, canon j) with
+      | Some s, Some t -> String.equal s t
+      | _ -> i.Ast.desc = j.Ast.desc)
   | _ -> a = b
 
-let functype_eq (a : Src.functype) (b : Src.functype) =
+let functype_eq ctx (a : Src.functype) (b : Src.functype) =
   let valtypes a = List.map (fun p -> snd p.Ast.desc) (Array.to_list a) in
   Array.length a.params = Array.length b.params
   && Array.length a.results = Array.length b.results
-  && List.for_all2 valtype_eq (valtypes a.params) (valtypes b.params)
-  && List.for_all2 valtype_eq (Array.to_list a.results)
+  && List.for_all2 (valtype_eq ctx) (valtypes a.params) (valtypes b.params)
+  && List.for_all2 (valtype_eq ctx) (Array.to_list a.results)
        (Array.to_list b.results)
 
 let empty_functype : Src.functype = { params = [||]; results = [||] }
@@ -3338,7 +3391,8 @@ let elaborate_implicit_types ctx fields =
     | Some _ -> () (* references an existing type; mints nothing *)
     | None ->
         let ft = Option.value sign ~default:empty_functype in
-        if not (List.exists (fun (_, ft') -> functype_eq ft ft') !known) then (
+        if not (List.exists (fun (_, ft') -> functype_eq ctx ft ft') !known)
+        then (
           Hashtbl.replace ctx.implicit_types (Uint32.of_int !next) ft;
           record ft;
           incr next)

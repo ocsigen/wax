@@ -2459,8 +2459,11 @@ let module_ diagnostics types fields =
             { module_; name = import_name; id = Some name; desc; exports };
         info = d.info;
       },
-      guarded_export_fields ~loc:d.info ~kind:export_kind ~field_name:name
-        decl.attributes )
+      (* A [#[start]] imported function emits a standalone [(start $f)] field,
+         like a defined start function; only function imports can carry it. *)
+      start_fields ~loc:d.info ~field_name:name decl.attributes
+      @ guarded_export_fields ~loc:d.info ~kind:export_kind ~field_name:name
+          decl.attributes )
   in
   let rec convert_fields fields =
     List.concat_map

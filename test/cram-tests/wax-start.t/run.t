@@ -31,3 +31,32 @@ A module may have at most one start function:
     · ^^^^^^^^^^^^^^^^^^
   3 │ 
   [128]
+
+An imported function may be the start function; the #[start] attribute
+round-trips through the import (rather than being silently dropped):
+
+  $ cat > import-start.wat <<'WAT'
+  > (module (import "m" "f" (func $f)) (start $f))
+  > WAT
+
+  $ wax -i wat -f wax import-start.wat
+  import "m"
+  #[start]
+  fn f();
+
+  $ wax -i wat -f wax import-start.wat | wax -i wax -f wat
+  (import "m" "f" (func $f))
+  (start $f)
+
+An imported start function must also have no parameters and no results:
+
+  $ cat > bad-import-start.wax <<'WAX'
+  > import "m" #[start] fn f(i32);
+  > WAX
+  $ wax check bad-import-start.wax
+  Error: The start function must have no parameters and no results.
+   ──➤  bad-import-start.wax:1:24
+  1 │ import "m" #[start] fn f(i32);
+    ·                        ^
+  2 │ 
+  [128]

@@ -4268,6 +4268,13 @@ fn init() {
 }
 ```
 
+An imported function can also be the start function, running host-provided
+initialization at instantiation:
+
+```wax,check
+import "env" #[start] fn init();
+```
+
 ## Imports
 
 Import fields from a host module with an `import "module" { … }` block; a lone
