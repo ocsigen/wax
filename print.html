@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-78463029.js";
+            window.path_to_searchindex_js = "searchindex-07e66972.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -1704,6 +1704,16 @@ are fine:</p>
 
 <p>This restriction keeps holes unambiguous: they always refer to values already on
 the stack, never to operands appearing later in the expression.</p>
+<p><strong>Not every position accepts a hole.</strong> The scrutinee of a
+<a href="#match"><code>match</code></a>, the index of a <a href="#dispatch"><code>dispatch</code></a>, and the condition of a
+<a href="#while-loops"><code>while</code></a> cannot be a hole. Each of these desugars to a
+nested block structure, and a hole inside a block draws only from that block’s
+own stack, not from the values pending in the enclosing sequence, so there is
+nothing there for it to pick up:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">bad</span>(x: &amp;<span class="hljs-type">any</span>) {
+    x; <span class="hljs-keyword">match</span> _ { … }    <span class="hljs-comment">// Error: A hole '_' cannot be used as a 'match' scrutinee.</span>
+}</span></pre>
+
 <p>When decompiling Wasm or WAT back to Wax, the compiler introduces holes wherever
 an instruction takes an operand from the stack instead of from a nested
 sub-expression, so this same mechanism round-trips stack-style code.</p>
