@@ -1001,34 +1001,39 @@ and instruction_desc ret ctx i : location Text.instr list =
           let operand_code = List.concat_map (instruction ret ctx) stack_args in
           folded loc (mop.m_make memidx memarg lane) operand_code
       (* Binary intrinsics, written with the dot notation *)
+      (* These binary intrinsics all yield their receiver's type, so read it from
+         the receiver ([obj]), not from [i]: as a tail call ([become x.rotl(1)])
+         [i] is the [TailCall] node, which leaves no value on the stack, so its
+         result-type info is empty and [expr_valtype i] would assert. The unary
+         intrinsics below already consult [obj] for the same reason. *)
       | StructGet (obj, { desc = "rotl"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
-          match expr_valtype i with
+          match expr_valtype obj with
           | I32 -> folded loc (BinOp (I32 Rotl)) (obj_code @ arg_code)
           | I64 -> folded loc (BinOp (I64 Rotl)) (obj_code @ arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "rotr"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
-          match expr_valtype i with
+          match expr_valtype obj with
           | I32 -> folded loc (BinOp (I32 Rotr)) (obj_code @ arg_code)
           | I64 -> folded loc (BinOp (I64 Rotr)) (obj_code @ arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "min"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
-          match expr_valtype i with
+          match expr_valtype obj with
           | F32 -> folded loc (BinOp (F32 Min)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 Min)) (obj_code @ arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "max"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
-          match expr_valtype i with
+          match expr_valtype obj with
           | F32 -> folded loc (BinOp (F32 Max)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 Max)) (obj_code @ arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "copysign"; _ }) when receiver_is_value obj
         -> (
           let obj_code = instruction ret ctx obj in
-          match expr_valtype i with
+          match expr_valtype obj with
           | F32 -> folded loc (BinOp (F32 CopySign)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 CopySign)) (obj_code @ arg_code)
           | _ -> assert false)

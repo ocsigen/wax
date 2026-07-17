@@ -12,3 +12,10 @@ fn viaref(x: i32, p: &ft) -> i32 { become (p)(x); }
 
 // An intrinsic cannot be a tail call, so it is evaluated and returned.
 fn grow(n: i32) -> i32 { become mem.grow(n); }
+
+// Binary numeric intrinsics likewise evaluate and return: they take their type
+// from the receiver, so tail position (where the call node carries no result
+// type) does not lose it.
+fn rot(x: i32) -> i32 { become x.rotl(1); }
+
+fn fmin(x: f64, y: f64) -> f64 { become x.min(y); }

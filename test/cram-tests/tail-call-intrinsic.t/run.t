@@ -22,6 +22,17 @@ its result — equivalent to `return <intrinsic>`.
   (func $grow (param $n i32) (result i32)
     (return (memory.grow $mem (local.get $n)))
   )
+  
+  ;; Binary numeric intrinsics likewise evaluate and return: they take their type
+  ;; from the receiver, so tail position (where the call node carries no result
+  ;; type) does not lose it.
+  (func $rot (param $x i32) (result i32)
+    (return (i32.rotl (local.get $x) (i32.const 1)))
+  )
+  
+  (func $fmin (param $x f64) (param $y f64) (result f64)
+    (return (f64.min (local.get $x) (local.get $y)))
+  )
 
 The intrinsic's result must still match the function's declared result type,
 the same tail-call constraint a genuine call is held to.
