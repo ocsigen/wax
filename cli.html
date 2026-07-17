@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-04ebd011.js";
+            window.path_to_searchindex_js = "searchindex-e4e55196.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -454,6 +454,13 @@ UTF-8 bytes; an <code>i16</code> string is UTF-16-encoded; an untyped string reu
 existing <code>(array (mut i8))</code> type when the module has one and otherwise pins
 a synthesised one. A module-level <code>(@string …)</code> global becomes an ordinary
 global.</li>
+<li>Synthesises the declarative element segment (<code>(elem declare func …)</code>) that
+Wax’s lenient reader lets a module omit for a function used by <code>ref.func</code>
+only inside a body, so the output passes strict/spec reference validation.
+This heals a conditional module: WAT emitted from a <code>#[if]</code> module keeps
+its <code>(@if …)</code> and omits the segment, but once the conditionals are resolved
+with <code>-D</code> and desugared the segment is added. It is a no-op when the
+segment is already present (as on the wax-to-wat and binary-to-wat paths).</li>
 <li>Only valid with wat output (<code>-f wat</code>); requesting it for wasm or wax
 output is a usage error.</li>
 <li>Fails (exit <code>128</code>) if a conditional-compilation directive <code>(@if …)</code>

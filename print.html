@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-04ebd011.js";
+            window.path_to_searchindex_js = "searchindex-e4e55196.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -3356,7 +3356,8 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 <p>corresponds to the WAT</p>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span> <span class="hljs-variable">$my_module</span> …)</span></pre>
 
-<p>A module may carry at most one name. See also
+<p>A module may carry at most one name, and it must not appear inside a conditional
+(<code>#[if]</code>/<code>#[else]</code>): the name applies in every configuration. See also
 <a href="#module-name">Module Name</a> in the language guide.</p>
 <h2 id="feature-declarations"><a class="header" href="#feature-declarations">Feature Declarations</a></h2>
 <p>A <code>#![feature = "..."]</code> inner attribute declares an optional proposal the
@@ -3571,6 +3572,10 @@ field):</p>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">init</span>() {
     <span class="hljs-comment">// initialization code</span>
 }</span></pre>
+
+<p>An imported function can also be the start function, running host-provided
+initialization at instantiation:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> <span class="hljs-meta">#[start]</span> <span class="hljs-keyword">fn</span> <span class="hljs-title">init</span>();</span></pre>
 
 <h2 id="imports"><a class="header" href="#imports">Imports</a></h2>
 <p>Import fields from a host module with an <code>import "module" { … }</code> block; a lone
@@ -3917,6 +3922,13 @@ UTF-8 bytes; an <code>i16</code> string is UTF-16-encoded; an untyped string reu
 existing <code>(array (mut i8))</code> type when the module has one and otherwise pins
 a synthesised one. A module-level <code>(@string …)</code> global becomes an ordinary
 global.</li>
+<li>Synthesises the declarative element segment (<code>(elem declare func …)</code>) that
+Wax’s lenient reader lets a module omit for a function used by <code>ref.func</code>
+only inside a body, so the output passes strict/spec reference validation.
+This heals a conditional module: WAT emitted from a <code>#[if]</code> module keeps
+its <code>(@if …)</code> and omits the segment, but once the conditionals are resolved
+with <code>-D</code> and desugared the segment is added. It is a no-op when the
+segment is already present (as on the wax-to-wat and binary-to-wat paths).</li>
 <li>Only valid with wat output (<code>-f wat</code>); requesting it for wasm or wax
 output is a usage error.</li>
 <li>Fails (exit <code>128</code>) if a conditional-compilation directive <code>(@if …)</code>

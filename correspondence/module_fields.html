@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-04ebd011.js";
+            window.path_to_searchindex_js = "../searchindex-e4e55196.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7b4055a9.js"></script>
@@ -189,7 +189,8 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 <p>corresponds to the WAT</p>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span> <span class="hljs-variable">$my_module</span> …)</span></pre>
 
-<p>A module may carry at most one name. See also
+<p>A module may carry at most one name, and it must not appear inside a conditional
+(<code>#[if]</code>/<code>#[else]</code>): the name applies in every configuration. See also
 <a href="../language.html#module-name">Module Name</a> in the language guide.</p>
 <h2 id="feature-declarations"><a class="header" href="#feature-declarations">Feature Declarations</a></h2>
 <p>A <code>#![feature = "..."]</code> inner attribute declares an optional proposal the
@@ -404,6 +405,10 @@ field):</p>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">init</span>() {
     <span class="hljs-comment">// initialization code</span>
 }</span></pre>
+
+<p>An imported function can also be the start function, running host-provided
+initialization at instantiation:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> <span class="hljs-meta">#[start]</span> <span class="hljs-keyword">fn</span> <span class="hljs-title">init</span>();</span></pre>
 
 <h2 id="imports"><a class="header" href="#imports">Imports</a></h2>
 <p>Import fields from a host module with an <code>import "module" { … }</code> block; a lone
