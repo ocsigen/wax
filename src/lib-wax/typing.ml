@@ -5831,9 +5831,11 @@ and type_branch ctx i =
   | Br_on_cast_desc_eq (label, nullable, i', d) ->
       (* As [br_on_cast]; the target [ty] is recovered from the descriptor
          operand [d] ([d : (ref null? (exact_1 Y))], [Y describes X] ⇒ target
-         [(ref nullable (exact_1 X))]). *)
-      let* d, target = descriptor_target ctx ~location:i.info ~nullable d in
+         [(ref nullable (exact_1 X))]). Type the value before the descriptor, as
+         they are evaluated and lowered ([to_wasm]) and as the sibling [CastDesc]
+         arm does, so hole ordering and uninitialized-local tracking match. *)
       let* i' = instruction ctx i' in
+      let* d, target = descriptor_target ctx ~location:i.info ~nullable d in
       let*! ty = target in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
@@ -5875,8 +5877,10 @@ and type_branch ctx i =
            (Array.sub params 0 (max 0 (Array.length params - 1)))
            [| typ2 |])
   | Br_on_cast_desc_eq_fail (label, nullable, i', d) ->
-      let* d, target = descriptor_target ctx ~location:i.info ~nullable d in
+      (* Type the value before the descriptor, matching evaluation/lowering order
+         and the [Br_on_cast_desc_eq] arm above. *)
       let* i' = instruction ctx i' in
+      let* d, target = descriptor_target ctx ~location:i.info ~nullable d in
       let*! ty = target in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;

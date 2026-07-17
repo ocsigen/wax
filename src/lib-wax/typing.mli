@@ -31,8 +31,9 @@ val f :
     types; hand-written Wax is left untouched.
 
     When [warn_unused] is set (default [false]), a [let]-bound local that is
-    never read is reported as a warning (unless its name starts with [_]). Only
-    honored for conditional-free modules. *)
+    never read is reported as a warning (unless its name starts with [_]). A
+    conditional module is checked per reachable configuration, so the warning
+    fires there too. *)
 
 val reserved_type_names : string list
 (** The built-in type names a [type] declaration (or a [rec] member) may not
