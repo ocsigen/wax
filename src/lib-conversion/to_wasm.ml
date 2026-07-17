@@ -894,12 +894,16 @@ and instruction_desc ret ctx i : location Text.instr list =
       let wasm_name = StringMap.find idx.desc ctx.locals in
       folded loc (LocalTee (with_loc idx.info (Text.Id wasm_name))) code
   | Call (f, args) -> (
-      (* Only a memory access has [Labelled] immediates among its arguments,
-         and its cases below rebuild their own code from the positional
-         operands instead of using [arg_code]; skip the labels so this eager
-         shared lowering never sees one. *)
+      (* Shared lowering of the positional operands, forced only by the arms that
+         actually use it. It is [lazy] because several arms (memory/table
+         accesses, array ops) rebuild their own operand code and never force it;
+         lowering has side effects (local allocation, name reservation), so an
+         eager computation would lower those operands a second time — and since a
+         nested call re-enters this arm, that doubling compounds to exponential
+         work in the nesting depth. The labels are dropped here because only a
+         memory access carries [Labelled] immediates, and those arms rebuild. *)
       let arg_code =
-        List.concat_map (instruction ret ctx) (fst (split_labelled args))
+        lazy (List.concat_map (instruction ret ctx) (fst (split_labelled args)))
       in
       match f.desc with
       (* Qualified-path intrinsics. [v128::<shape>(..)] / [v128::bitselect]
@@ -910,7 +914,7 @@ and instruction_desc ret ctx i : location Text.instr list =
           | Some shape ->
               let components = List.map literal_string args in
               folded loc (VecConst { Wax_utils.V128.shape; components }) []
-          | None -> folded loc VecBitselect arg_code)
+          | None -> folded loc VecBitselect (Lazy.force arg_code))
       | Path ({ desc = "atomic"; _ }, { desc = "fence"; _ }) ->
           folded loc AtomicFence []
       | Path (ns, name) ->
@@ -922,15 +926,17 @@ and instruction_desc ret ctx i : location Text.instr list =
             | "i64", "mul_wide_u" -> MulWide Unsigned
             | _ -> assert false (* typing rejects any other path *)
           in
-          folded loc desc arg_code
+          folded loc desc (Lazy.force arg_code)
       | Get idx ->
           if
             Hashtbl.mem ctx.functions idx.desc
             && not (StringMap.mem idx.desc ctx.locals)
-          then folded loc (Call (index idx)) arg_code
+          then folded loc (Call (index idx)) (Lazy.force arg_code)
           else
             let code = instruction ret ctx f in
-            folded loc (CallRef (index (expr_type_name f))) (arg_code @ code)
+            folded loc
+              (CallRef (index (expr_type_name f)))
+              (Lazy.force arg_code @ code)
       (* Atomic access: mem.atomic_*(addr [, val…] [, offset: N]). The method
          name carries the access width (also the natural alignment); the value
          operand's type picks the i32/i64 op. A narrow load's resolving [as
@@ -1009,33 +1015,35 @@ and instruction_desc ret ctx i : location Text.instr list =
       | StructGet (obj, { desc = "rotl"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype obj with
-          | I32 -> folded loc (BinOp (I32 Rotl)) (obj_code @ arg_code)
-          | I64 -> folded loc (BinOp (I64 Rotl)) (obj_code @ arg_code)
+          | I32 -> folded loc (BinOp (I32 Rotl)) (obj_code @ Lazy.force arg_code)
+          | I64 -> folded loc (BinOp (I64 Rotl)) (obj_code @ Lazy.force arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "rotr"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype obj with
-          | I32 -> folded loc (BinOp (I32 Rotr)) (obj_code @ arg_code)
-          | I64 -> folded loc (BinOp (I64 Rotr)) (obj_code @ arg_code)
+          | I32 -> folded loc (BinOp (I32 Rotr)) (obj_code @ Lazy.force arg_code)
+          | I64 -> folded loc (BinOp (I64 Rotr)) (obj_code @ Lazy.force arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "min"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype obj with
-          | F32 -> folded loc (BinOp (F32 Min)) (obj_code @ arg_code)
-          | F64 -> folded loc (BinOp (F64 Min)) (obj_code @ arg_code)
+          | F32 -> folded loc (BinOp (F32 Min)) (obj_code @ Lazy.force arg_code)
+          | F64 -> folded loc (BinOp (F64 Min)) (obj_code @ Lazy.force arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "max"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype obj with
-          | F32 -> folded loc (BinOp (F32 Max)) (obj_code @ arg_code)
-          | F64 -> folded loc (BinOp (F64 Max)) (obj_code @ arg_code)
+          | F32 -> folded loc (BinOp (F32 Max)) (obj_code @ Lazy.force arg_code)
+          | F64 -> folded loc (BinOp (F64 Max)) (obj_code @ Lazy.force arg_code)
           | _ -> assert false)
       | StructGet (obj, { desc = "copysign"; _ }) when receiver_is_value obj
         -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype obj with
-          | F32 -> folded loc (BinOp (F32 CopySign)) (obj_code @ arg_code)
-          | F64 -> folded loc (BinOp (F64 CopySign)) (obj_code @ arg_code)
+          | F32 ->
+              folded loc (BinOp (F32 CopySign)) (obj_code @ Lazy.force arg_code)
+          | F64 ->
+              folded loc (BinOp (F64 CopySign)) (obj_code @ Lazy.force arg_code)
           | _ -> assert false)
       (* No-argument instruction methods written with dot notation:
          [arr.length()], and the unary operators / reinterpret casts below. *)
@@ -1098,8 +1106,8 @@ and instruction_desc ret ctx i : location Text.instr list =
           let m = index name in
           match meth.desc with
           | "size" -> folded loc (MemorySize m) []
-          | "grow" -> folded loc (MemoryGrow m) arg_code
-          | "fill" -> folded loc (MemoryFill m) arg_code
+          | "grow" -> folded loc (MemoryGrow m) (Lazy.force arg_code)
+          | "fill" -> folded loc (MemoryFill m) (Lazy.force arg_code)
           | "copy" -> (
               (* Cross-memory copy names the source memory as the first arg. *)
               match args with
@@ -1107,7 +1115,7 @@ and instruction_desc ret ctx i : location Text.instr list =
                 ->
                   let rest_code = List.concat_map (instruction ret ctx) rest in
                   folded loc (MemoryCopy (m, index src)) rest_code
-              | _ -> folded loc (MemoryCopy (m, m)) arg_code)
+              | _ -> folded loc (MemoryCopy (m, m)) (Lazy.force arg_code))
           | _ (* init *) ->
               let seg =
                 match args with
@@ -1124,8 +1132,8 @@ and instruction_desc ret ctx i : location Text.instr list =
           let t = index name in
           match meth.desc with
           | "size" -> folded loc (TableSize t) []
-          | "grow" -> folded loc (TableGrow t) arg_code
-          | "fill" -> folded loc (TableFill t) arg_code
+          | "grow" -> folded loc (TableGrow t) (Lazy.force arg_code)
+          | "fill" -> folded loc (TableFill t) (Lazy.force arg_code)
           | "copy" -> (
               (* Cross-table copy names the source table as the first arg. *)
               match args with
@@ -1133,7 +1141,7 @@ and instruction_desc ret ctx i : location Text.instr list =
                 ->
                   let rest_code = List.concat_map (instruction ret ctx) rest in
                   folded loc (TableCopy (t, index src)) rest_code
-              | _ -> folded loc (TableCopy (t, t)) arg_code)
+              | _ -> folded loc (TableCopy (t, t)) (Lazy.force arg_code))
           | _ (* init *) ->
               let seg =
                 match args with
@@ -1154,7 +1162,9 @@ and instruction_desc ret ctx i : location Text.instr list =
       | StructGet (obj, { desc = "fill"; _ }) when receiver_is_array ctx obj ->
           let array_code = instruction ret ctx obj in
           let type_name_idx = expr_type_name obj in
-          folded loc (ArrayFill (index type_name_idx)) (array_code @ arg_code)
+          folded loc
+            (ArrayFill (index type_name_idx))
+            (array_code @ Lazy.force arg_code)
       | StructGet (obj, { desc = "copy"; _ }) when receiver_is_array ctx obj ->
           let a1_code = instruction ret ctx obj in
           let type_a1 = expr_type_name obj in
@@ -1162,7 +1172,7 @@ and instruction_desc ret ctx i : location Text.instr list =
           let type_a2 = expr_type_name a2_code in
           folded loc
             (ArrayCopy (index type_a1, index type_a2))
-            (a1_code @ arg_code)
+            (a1_code @ Lazy.force arg_code)
       (* array.init_data / array.init_elem: arr.init(seg, dest, src, len) *)
       | StructGet (obj, { desc = "init"; _ }) when receiver_is_array ctx obj ->
           let seg =
@@ -1189,7 +1199,7 @@ and instruction_desc ret ctx i : location Text.instr list =
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (CallIndirect (index tab, (Some (index ft), None)))
-            (arg_code @ index_code)
+            (Lazy.force arg_code @ index_code)
       | Cast
           ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
             Functype { sign; _ } )
@@ -1198,7 +1208,7 @@ and instruction_desc ret ctx i : location Text.instr list =
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (CallIndirect (index tab, (None, Some (functype sign))))
-            (arg_code @ index_code)
+            (Lazy.force arg_code @ index_code)
       | ArrayGet ({ desc = Get tab; _ }, idx_expr)
         when table_receiver ctx tab.desc
              &&
@@ -1213,10 +1223,12 @@ and instruction_desc ret ctx i : location Text.instr list =
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (CallIndirect (index tab, (Some (index ft), None)))
-            (arg_code @ index_code)
+            (Lazy.force arg_code @ index_code)
       | _ ->
           let code = instruction ret ctx f in
-          folded loc (CallRef (index (expr_type_name f))) (arg_code @ code))
+          folded loc
+            (CallRef (index (expr_type_name f)))
+            (Lazy.force arg_code @ code))
   | TailCall (f, args) -> (
       (* A tail call lowers like the corresponding call (reusing the whole
          intrinsic-and-call dispatch of the [Call] case), then the trailing call
