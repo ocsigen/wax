@@ -127,9 +127,13 @@ jobs:
               `- Replay locally with the SEED printed near the top of the log: \`SEED=<n> fuzz/nightly.sh\`.`,
             ].join('\n');
             const q = { owner: context.repo.owner, repo: context.repo.repo };
-            const open = await github.rest.issues.listForRepo({ ...q, state: 'open', labels: 'nightly-fuzz' });
-            if (open.data.length > 0) {
-              await github.rest.issues.createComment({ ...q, issue_number: open.data[0].number, body });
+            const issues = await github.rest.issues.listForRepo({ ...q, state: 'all', labels: 'nightly-fuzz' });
+            if (issues.data.length > 0) {
+              const issue_number = issues.data[0].number;
+              if (issues.data[0].state === 'closed') {
+                await github.rest.issues.update({ ...q, issue_number, state: 'open' });
+              }
+              await github.rest.issues.createComment({ ...q, issue_number, body });
             } else {
               await github.rest.issues.create({ ...q, title: 'Nightly fuzz run failed', labels: ['nightly-fuzz'], body });
             }
