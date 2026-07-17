@@ -102,9 +102,11 @@ again inside the lowering):
   $ wax check match-unbound.wax 2>&1 | grep -c "is not bound"
   1
 
-A struct literal with an extra (undeclared) field containing a hole no longer
-leaves that hole unconsumed (which tripped [assert (args = [])]); the extra field
-is typed for recovery and its hole participates in the ordering check:
+A struct literal with an extra (undeclared) field containing a hole is rejected
+by the field-count mismatch without crashing (it used to trip
+[assert (args = [])]). The extra field is not typed — with per-field hole slices
+its slot in the pending values is simply dropped — so a hole (or error) inside it
+is not separately reported:
 
   $ cat > extra-field-hole.wax <<'WAX'
   > type p = { a: i32 };
@@ -124,22 +126,11 @@ is typed for recovery and its hole participates in the ordering check:
   2 │ const g: &p = { a: 1, zzz: _ };
     ·               ^^^^^^^^^^^^^^^^
   3 │ 
-  Error: This expression occurs before a hole '_'.
-   ──➤  extra-field-hole.wax:2:20
-  1 │ type p = { a: i32 };
-  2 │ const g: &p = { a: 1, zzz: _ };
-    ·                    ^
-  3 │ 
-  Error: Only constant expressions are allowed here.
-   ──➤  extra-field-hole.wax:2:28
-  1 │ type p = { a: i32 };
-  2 │ const g: &p = { a: 1, zzz: _ };
-    ·                            ^
-  3 │ 
   [128]
 
-An extra field with an unbound name is likewise reported (it used to be silently
-swallowed):
+An extra field's contents are likewise left unanalysed: an unbound name inside
+one is not separately reported (the field-count mismatch already flags the
+field), and this still does not crash:
 
   $ cat > extra-field-unbound.wax <<'WAX'
   > type p = { a: i32 };
@@ -147,7 +138,8 @@ swallowed):
   > WAX
 
   $ wax check extra-field-unbound.wax 2>&1 | grep -c "is not bound"
-  1
+  0
+  [1]
 
 A supertype that is a forward or self reference is invalid (the spec requires a
 supertype to be declared before), so it is dropped and reported; using such a

@@ -8949,26 +8949,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
             in
             (* A source field with no counterpart in the declaration (a
                field-count/name mismatch, already reported) is skipped by the
-               fold above; still type it for recovery, so its holes are consumed
-               and any error inside it is reported. It is appended to the rebuilt
-               node, after the declared fields and in source order — the emission
-               order [to_wasm] follows, so the hole slices and hole-order check
-               (threaded through [typed] across both folds) line up. *)
-            let* fields' =
-              List.fold_left
-                (fun prev (name, written) ->
-                  let* l = prev in
-                  if
-                    Array.exists
-                      (fun f -> (fst f.desc).desc = name.desc)
-                      field_types
-                  then return l
-                  else (
-                    if written = None then record_pun ctx.pun_spans name.info;
-                    let* fi' = typed ctx (field_value name written) in
-                    return ((name, Option.map (fun _ -> fi') written) :: l)))
-                (return fields') fields
-            in
+               fold above and left untyped: with per-field hole slices its slot in
+               the pending values is simply dropped (no threaded arg list to keep
+               balanced, no separate hole-order pass to feed), and the whole
+               construction is being rejected anyway. *)
             (* The fields alone pin this type (re-parse re-resolves to it via
                field inference, which takes precedence over the expected type),
                so a present name is redundant. *)
@@ -9108,24 +9092,9 @@ and check_instruction ?(drop_supertype = false) ctx expected
                           ((name, Option.map (fun _ -> checked) written) :: l))
                   (return []) field_types
               in
-              (* Append any source field absent from the declaration, typed for
-                 recovery, after the declared fields and in source order (see the
-                 [Struct] arm above). *)
-              let* fields' =
-                List.fold_left
-                  (fun prev (name, written) ->
-                    let* l = prev in
-                    if
-                      Array.exists
-                        (fun f -> (fst f.desc).desc = name.desc)
-                        field_types
-                    then return l
-                    else (
-                      if written = None then record_pun ctx.pun_spans name.info;
-                      let* fi' = typed ctx (field_value name written) in
-                      return ((name, Option.map (fun _ -> fi') written) :: l)))
-                  (return fields') fields
-              in
+              (* A source field absent from the declaration is left untyped, as in
+                 the [Struct] arm: its hole-slice slot is dropped and the
+                 construction is rejected regardless. *)
               let*! result = construction_result typ in
               return_expression i (StructDesc (d, List.rev fields')) result
         in
