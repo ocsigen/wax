@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e4e55196.js";
+            window.path_to_searchindex_js = "searchindex-f9e05b46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -298,7 +298,8 @@ uses.</li>
 <li><em>NAME</em> is a single warning, a group, or <code>all</code>:
 <ul>
 <li><code>unused-local</code> (group <code>unused</code>): a local that is declared but never
-read. Produced while validating; shown by default.</li>
+read. Produced while validating; shown by default. Carries a
+quick-fix <code>edit</code> that inserts a <code>_</code> at the name’s start.</li>
 <li><code>unused-field</code> (groups <code>unused</code>, <code>correctness</code>): a module field (a
 function or global) that is defined but never referenced, exported, or
 used as the start function. The module-level analog of <code>unused-local</code>;
@@ -309,7 +310,8 @@ function. Like <code>unused-field</code>, but for imports; <code>_</code> silenc
 by default.</li>
 <li><code>unused-label</code> (groups <code>unused</code>, <code>correctness</code>): a block label that
 is declared but never branched to. Prefix its name with <code>_</code> to silence
-one. Shown by default.</li>
+one. Shown by default. On the Wax side it carries a quick-fix <code>edit</code>
+that deletes the whole <code>'name:</code> prefix.</li>
 <li><code>shift-count-overflow</code> (group <code>correctness</code>): a shift by a constant
 count at least the operand’s bit width. Wasm masks the count modulo
 the width, so the shift is almost certainly not what was meant. Shown
@@ -348,7 +350,9 @@ precedence is easy to misremember are mixed without parentheses: a
 shift (<code>&lt;&lt;</code>/<code>&gt;&gt;</code>) with arithmetic (<code>+</code>, <code>-</code>, …), or a comparison with
 a bitwise operator (<code>&amp;</code>, <code>|</code>, <code>^</code>). The code is correct, but a reader
 may misread the grouping (<code>1 &lt;&lt; nbits - 1</code> is <code>1 &lt;&lt; (nbits - 1)</code>).
-Shown by default. Wax-only: WAT/Wasm have no infix precedence.</li>
+Shown by default. Wax-only: WAT/Wasm have no infix precedence. Carries
+a quick-fix <code>edit</code> that wraps the tighter-binding sub-expression in
+parentheses.</li>
 <li><code>redundant-operation</code> (group <code>redundant</code>): an operation with no effect
 on its result: an arithmetic identity (<code>x + 0</code>, <code>x * 1</code>, <code>x &lt;&lt; 0</code>, …),
 an absorbing operand (<code>x * 0</code>, <code>x &amp; 0</code>), two identical operands
@@ -366,8 +370,30 @@ source name is a Wax reserved word and was renamed (e.g. <code>if</code> →
 <li><code>generated-name</code> (group <code>naming</code>): converting from Wasm, an unnamed
 but referenced parameter was given a generated name (e.g. <code>x</code>), since
 it cannot be rendered anonymously. Hidden by default.</li>
+<li><code>compound-assignment</code> (group <code>suggestion</code>): a plain assignment
+<code>x = x op e</code> can be written with the compound operator <code>x op= e</code>
+(arithmetic and bitwise operators only; <code>x</code> must be the operator’s
+<em>first</em> operand, so <code>x = e - x</code> is left alone). Hidden by default.</li>
+<li><code>field-punning</code> (group <code>suggestion</code>): a struct field initialised from
+the like-named local or global, <code>{x: x}</code>, can use the punning
+shorthand <code>{x}</code>. Hidden by default.</li>
+<li><code>redundant-annotation</code> (group <code>suggestion</code>): a type the inferred type
+already makes redundant and so can be dropped: a <code>let</code> annotation
+(<code>let x: t = e</code> → <code>let x = e</code>, including the anonymous <code>_: t = e</code> and
+each binding of a tuple <code>let (a: t, b) = e</code>), a module-level global
+annotation (<code>let counter: i32 = 0</code> → <code>let counter = 0</code>, likewise for a
+<code>const</code>), a construction type name (<code>{T| …}</code> → <code>{…}</code>), a block result
+type (<code>do t { … }</code> → <code>do { … }</code>), or an <code>if</code> result type
+(<code>if c =&gt; t { … }</code> → <code>if c { … }</code>). Hidden by default.</li>
 </ul>
 </li>
+<li>The <code>suggestion</code> group is reported at a distinct <strong>Suggestion</strong> severity
+(not a warning), and each entry carries a machine-applicable rewrite. These
+are optional simplifications, so they are hidden by default and surface as
+on-demand quick fixes in the VS Code extension; <code>wax check</code> prints them
+when enabled with <code>-W suggestion=warning</code> (or an individual name). A
+redundant <em>cast</em> removal is offered too, but as a fix attached to the
+existing <code>redundant-operation</code> warning rather than a separate suggestion.</li>
 <li><em>LEVEL</em> is one of:
 <ul>
 <li><code>hidden</code>: suppress the warning entirely.</li>
@@ -422,7 +448,11 @@ written to stderr as one JSON object per line (JSON Lines), for an editor,
 CI job, or AI assistant to parse. Each object has <code>severity</code>, <code>file</code>,
 <code>startLine</code>/<code>startColumn</code>/<code>endLine</code>/<code>endColumn</code> (1-based line, 0-based
 column), <code>startOffset</code>/<code>endOffset</code> (byte offsets), <code>message</code>, <code>warning</code>
-(the <a href="#options"><code>-W</code></a> name, or null), <code>hint</code>, and <code>related</code>.</li>
+(the <a href="#options"><code>-W</code></a> name, or null), <code>hint</code>, and <code>related</code>. A diagnostic
+carrying a machine-applicable fix (a <code>suggestion</code>, or a fixable warning
+like a redundant cast, an unused local, an unused label, or a confusing
+precedence mix) also has an <code>edit</code> object: the same span fields for the
+slice to replace, plus its <code>newText</code>.</li>
 <li>With <code>short</code>, each diagnostic is one
 <code>file:line:col: severity: message</code> line (gcc/rustc style, 1-based column),
 for an editor with a line-based error parser (Vim’s <code>errorformat</code>, Emacs
