@@ -54,6 +54,13 @@ gen_block() {  # N nested (block ...) in one function
 gen_wax_paren() {  # fn f() -> i32 { (((0))); } — N nested parenthesised exprs
   printf 'fn f() -> i32 { '; rep '(' "$1"; printf '0'; rep ')' "$1"; printf '; }\n'
 }
+gen_wax_nested_call() {  # mem.load32(mem.load32(... 0 ...)) — N nested calls
+  # A memory access rebuilds its own operand code, so an eager shared lowering of
+  # the argument would re-lower it at every level (exponential). This pins that
+  # the lowering stays linear in nesting depth.
+  printf 'memory mem: i32 [1];\nfn f() -> i32 { '
+  rep 'mem.load32(' "$1"; printf '0'; rep ')' "$1"; printf '; }\n'
+}
 # Width (vector / declaration count): one construct with N elements.
 gen_brtable() {  # a br_table with N labels
   printf '(module (func (block (br_table '; rep '0 ' "$1"
@@ -75,6 +82,7 @@ CASES=(
   "nest-block-print|wat|wat|gen_block"     # + wat printer / folding
   "nest-block-codec|wasm|wasm|gen_block"   # binary reader + writer
   "nest-wax-paren|wax|wasm|gen_wax_paren"  # wax parser + typer
+  "nest-wax-call|wax|wasm|gen_wax_nested_call" # to_wasm arg lowering (linear, not exponential)
   "width-brtable|wat|wasm|gen_brtable"     # label-vector parsing
   "width-locals|wat|wasm|gen_locals"       # local declarations
   "width-funcs|wat|wasm|gen_funcs"         # many functions
