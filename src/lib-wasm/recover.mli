@@ -8,10 +8,11 @@ val sync : Tokens.token -> Parsing.sync_class
     resynchronization points; recovery relies on the nesting-aware skip and on
     auto-closing with {!closers}. *)
 
-val closers : Tokens.token list
+val closers : (Tokens.token * string) list
 (** The closing brackets ([")"]) {!Parsing.Make.parse_recover} may insert to
-    auto-close a construct still open in front of a boundary or at end of input.
-    Passed as its [?closers] argument. *)
+    auto-close a construct still open in front of a boundary or at end of input,
+    each paired with its source spelling (used to build the auto-close quick
+    fix). Passed as its [?closers] argument. *)
 
 val insert : (Tokens.token * Wax_utils.Message.t * bool * string) list
 (** Placeholder tokens {!Parsing.Make.parse_recover} may insert to repair a

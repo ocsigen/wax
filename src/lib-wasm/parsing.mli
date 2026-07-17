@@ -134,7 +134,7 @@ end) : sig
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
     ?insert:(Tokens.token * Wax_utils.Message.t * bool * string) list ->
-    ?closers:Tokens.token list ->
+    ?closers:(Tokens.token * string) list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context
@@ -167,14 +167,17 @@ end) : sig
       candidates also serve [close_pending] (e.g. completing an unclosed
       construct at EOF). Omit ([[]]) to disable insertion.
 
-      [closers] lists the closing-bracket tokens. At end of input inside an
-      unclosed bracketed construct, recovery auto-closes: it inserts whichever
-      of these the parser accepts (and, between them, the [insert] separator
-      when a statement must be terminated first), repeatedly, until EOF is
-      accepted, so the construct the user is still typing reduces into the
-      best-effort AST instead of being unwound away and dropped. The syntax
-      error is still reported; only the recovered AST improves. Omit to keep the
-      unwind-and-discard behaviour.
+      [closers] lists the closing-bracket tokens, each with its source spelling.
+      At end of input inside an unclosed bracketed construct, recovery
+      auto-closes: it inserts whichever of these the parser accepts (and,
+      between them, the [insert] separator when a statement must be terminated
+      first), repeatedly, until EOF is accepted, so the construct the user is
+      still typing reduces into the best-effort AST instead of being unwound
+      away and dropped. The syntax error is still reported; only the recovered
+      AST improves. When the auto-close used {e closers alone} (no [insert]
+      separator), the concatenation of their spellings is attached to that error
+      as a machine-applicable [fix] — a single edit inserting the missing
+      closers at the boundary. Omit to keep the unwind-and-discard behaviour.
 
       [barrier] adapts recovery to a {e fully parenthesized} grammar (WAT),
       which has no separator or leader token: a missing closer then surfaces not
@@ -261,7 +264,7 @@ end) : sig
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
     ?insert:(Tokens.token * Wax_utils.Message.t * bool * string) list ->
-    ?closers:Tokens.token list ->
+    ?closers:(Tokens.token * string) list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->
     Output.t option * syntax_error list * Wax_utils.Trivia.context

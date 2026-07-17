@@ -324,6 +324,42 @@ recovery driver (which derives the fix) is shared:
   wax: "Missing ';'." -> insert ';'
   wat: 'Missing number.' -> insert '0'
 
+The closer-insertion and deletion fixes recovery derives from an auto-close or a
+stray-token drop reach the editor the same way. A Wax buffer left open offers an
+"insert `}`" fix (a zero-width insertion), a WAT nest offers the `))` it needs,
+and a stray closing brace offers a deletion (empty `newText`):
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > def actions(uri, lang, src, rng):
+  >     td={"uri":uri}
+  >     S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >        {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >        {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":lang,"version":1,"text":src}}},
+  >        {"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":td,"range":rng,"context":{"diagnostics":[]}}},
+  >        {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  >     p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  >     o,i,by=p.stdout,0,{}
+  >     while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >         n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >         r=json.loads(o[s:s+n]); i=s+n
+  >         if "id" in r: by[r["id"]]=r.get("result")
+  >     for a in by[2] or []:
+  >         te=a["edit"]["changes"][uri][0]
+  >         print("%s: %s -> newText %r" % (lang, a["kind"], te["newText"]))
+  > actions("file:///co.wax","wax","fn f() {\n    nop;\n",
+  >         {"start":{"line":2,"character":0},"end":{"line":2,"character":0}})
+  > actions("file:///co.wat","wat","(module (func (i32.add (i32.const 1))\n",
+  >         {"start":{"line":1,"character":0},"end":{"line":1,"character":0}})
+  > actions("file:///cd.wax","wax","fn f() {\n    nop;\n}\n}\n",
+  >         {"start":{"line":3,"character":0},"end":{"line":3,"character":1}})
+  > PY
+  wax: quickfix -> newText '}'
+  wat: quickfix -> newText '))'
+  wax: quickfix -> newText ''
+
 Diagnostics on `didChange` are debounced: a burst of edits coalesces into one
 analysis (published once the client falls quiet, or on end of input), rather
 than re-checking the whole buffer on every keystroke. Open a clean module, send

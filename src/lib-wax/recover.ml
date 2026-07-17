@@ -56,5 +56,8 @@ let insert =
 (* The closing brackets recovery may insert to auto-close a construct left open
    at end of input, so the function/block the user is still typing reduces into
    the best-effort AST (for the editor outline) instead of being unwound away.
-   See the [closers] argument of [Parsing.parse_recover]. *)
-let closers = [ Tokens.RBRACE; Tokens.RPAREN; Tokens.RBRACKET ]
+   See the [closers] argument of [Parsing.parse_recover]. Each is paired with
+   its source spelling, so a validated auto-close can offer the concatenation of
+   the closers it inserted (e.g. [")}"]) as a machine-applicable quick fix. *)
+let closers =
+  [ (Tokens.RBRACE, "}"); (Tokens.RPAREN, ")"); (Tokens.RBRACKET, "]") ]

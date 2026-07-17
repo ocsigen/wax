@@ -14,7 +14,8 @@ val insert : (Tokens.token * Wax_utils.Message.t * bool * string) list
     recovered by inserting one (reported as "Missing ';'") rather than by
     skipping to a boundary. Passed as its [?insert] argument. *)
 
-val closers : Tokens.token list
+val closers : (Tokens.token * string) list
 (** The closing-bracket tokens that {!Wax_wasm.Parsing.Make.parse_recover} may
     insert to auto-close a construct left open at end of input, so it still
-    reaches the best-effort AST. Passed as its [?closers] argument. *)
+    reaches the best-effort AST, each paired with its source spelling (used to
+    build the auto-close quick fix). Passed as its [?closers] argument. *)

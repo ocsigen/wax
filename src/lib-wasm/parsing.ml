@@ -294,6 +294,29 @@ struct
          would otherwise loop when the insertion does not actually unblock the
          parse. *)
       let last_insert = ref (-1) in
+      (* Per-skip-episode bookkeeping for the derived deletion quick fix (tier 2,
+         see [offer_sync]): [dropped] collects the source spans of the tokens a
+         resynchronization discards, and [restructured] records whether that
+         episode had to climb the parser stack (a [group_drop] pop or a
+         [place_field] closer insertion). A deletion fix is offered only for the
+         unambiguous single-token case — exactly one token dropped, the sync
+         token then shifted with no stack unwinding, and no restructuring — where
+         removing that one token genuinely makes the region parse. Both are reset
+         when a fresh episode enters [skip]. *)
+      let dropped = ref [] in
+      let restructured = ref false in
+      (* The most recent [InputNeeded] checkpoint the main loop [run] reached —
+         the clean parser state just before the current in-flight token was
+         offered. When that token is the one that errors, this is the state the
+         parser would be in with the token deleted, so the deletion fix
+         ([offer_sync]) tests the resync token's acceptability here: if it is
+         acceptable at this pre-error state, removing the single offending token
+         genuinely lets the region parse. (Testing against the post-error [env]
+         instead would be wrong: reaching [HandlingError] applies the reductions
+         the offending token's lookahead triggers, so [env] is past the clean
+         state.) Not used for any recovery decision, so it never changes what is
+         parsed. *)
+      let clean_input = ref None in
       (* Raised when the lexer cannot make progress past a malformed byte; the
          error is already recorded, so the top-level handler just stops. *)
       let exception Lexing_gave_up in
@@ -410,6 +433,31 @@ struct
             }
             :: !errors
       in
+      (* Attach a derived quick [fix] to the error most recently recorded for the
+         current recovery episode (the head of [errors], put there by [record]
+         just before the repair was attempted). Used by the closer-insertion
+         (tier 1) and single-token-deletion (tier 2) repairs, whose fix is only
+         known once the repair validates — after the error was already recorded.
+         The recorded message and location are left byte-identical; only the
+         [fix] field is filled. A [None] fix or an empty error list is a no-op. *)
+      let attach_fix fix =
+        match (fix, !errors) with
+        | Some _, e :: rest -> errors := { e with fix } :: rest
+        | _ -> ()
+      in
+      (* A zero-width insertion edit at [pos] whose [new_text] is [text] — the
+         closer-insertion quick fix. [None] when [text] is empty (no closer was
+         inserted, so there is nothing to offer). *)
+      let insertion_edit pos text =
+        if text = "" then None
+        else
+          Some
+            {
+              Wax_utils.Diagnostic.edit_location =
+                { Wax_utils.Ast.loc_start = pos; loc_end = pos };
+              new_text = text;
+            }
+      in
       (* Return the token to resynchronize on: the next boundary (or terminal)
          reached by discarding tokens from the supplier. [tok0] is the token
          already in hand (the one that triggered the error, if any); if it is
@@ -437,23 +485,45 @@ struct
          swallow the sibling, while a field-like opener nested in content being
          skipped (a [(func] inside a [(type … (func))] functype) stays ordinary
          content and is descended into, not mistaken for a new field. *)
+      (* Record a token as discarded by the current skip episode (its sync class
+         and its source span), feeding the single-token-deletion fix
+         ([offer_sync], tier 2). Every token [find_sync] pulls and does not return
+         as the resync/barrier token is dropped here, as is a sync token
+         [offer_sync] cannot shift. *)
+      let drop (t, sp, ep) = dropped := (sync t, sp, ep) :: !dropped in
       let rec find_sync depth tok0 =
         let step ((t, tsp, _) as tok) =
           match sync t with
-          | Skip -> find_sync depth None
+          | Skip ->
+              drop tok;
+              find_sync depth None
           | Open -> (
               match barrier with
-              | None -> find_sync (depth + 1) None
+              | None ->
+                  drop tok;
+                  find_sync (depth + 1) None
               | Some (_, is_leader, is_fused) ->
                   if is_fused t then
                     if depth = 0 then `Barrier ([ t ], tsp)
-                    else find_sync (depth + 1) None
+                    else (
+                      drop tok;
+                      find_sync (depth + 1) None)
                   else
                     let ((t2, sp2, _) as tok2) = supplier () in
                     if depth = 0 && is_leader t2 then `Barrier ([ t; t2 ], sp2)
-                    else find_sync (depth + 1) (Some tok2))
-          | Close -> if depth > 0 then find_sync (depth - 1) None else `Sync tok
-          | Boundary -> if depth > 0 then find_sync depth None else `Sync tok
+                    else (
+                      drop tok;
+                      find_sync (depth + 1) (Some tok2)))
+          | Close ->
+              if depth > 0 then (
+                drop tok;
+                find_sync (depth - 1) None)
+              else `Sync tok
+          | Boundary ->
+              if depth > 0 then (
+                drop tok;
+                find_sync depth None)
+              else `Sync tok
           | Leader | Terminal -> `Sync tok
         in
         match tok0 with Some tok -> step tok | None -> step (supplier ())
@@ -595,20 +665,31 @@ struct
          [";"] is a valid empty statement, so it would otherwise self-loop), so
          only finitely many are inserted; [fuel] is a backstop. [pos] is the
          zero-width position the inserted tokens carry. *)
+      (* On success returns [Some (result, text)], where [text] is the
+         concatenation of the {e closer} spellings inserted, in insertion order
+         — the derived quick fix's [new_text]. When an [insert] candidate (a
+         separator/placeholder, not a closer) had to step in, [text] is [None]:
+         the closers-only concatenation would no longer reproduce the validated
+         repair, so no honest closer fix can be offered (the [place_field] caller
+         passes [~with_insert:false], so its repairs are always pure closers and
+         [text] is always [Some]). *)
       let insert_to_goal ~goal ~with_insert pos checkpoint =
-        let rec loop checkpoint prev_insert fuel =
+        let rec loop checkpoint prev_insert fuel text =
           if fuel <= 0 then None
           else
             match goal checkpoint with
-            | Some _ as r -> r
+            | Some r -> Some (r, text)
             | None -> (
                 match
-                  List.find_opt (fun c -> acceptable checkpoint c pos) closers
+                  List.find_opt
+                    (fun (c, _) -> acceptable checkpoint c pos)
+                    closers
                 with
-                | Some c ->
+                | Some (c, spelling) ->
                     loop
                       (settle (MI.offer checkpoint (c, pos, pos)))
                       false (fuel - 1)
+                      (Option.map (fun t -> t ^ spelling) text)
                 | None -> (
                     if (not with_insert) || prev_insert then None
                     else
@@ -620,21 +701,29 @@ struct
                       | Some (tok, _, _, _) ->
                           loop
                             (settle (MI.offer checkpoint (tok, pos, pos)))
-                            true (fuel - 1)
+                            true (fuel - 1) None
                       | None -> None))
         in
-        loop checkpoint false 1000
+        loop checkpoint false 1000 (Some "")
       in
       let close_pending env last =
         match (last, closers) with
         | Some ((t, pos, _) as target), _ :: _
           when match sync t with
                | Close | Boundary | Terminal -> true
-               | Open | Leader | Skip -> false ->
-            insert_to_goal ~with_insert:true pos (MI.input_needed env)
-              ~goal:(fun cp ->
-                if acceptable cp t pos then Some (settle (MI.offer cp target))
-                else None)
+               | Open | Leader | Skip -> false -> (
+            match
+              insert_to_goal ~with_insert:true pos (MI.input_needed env)
+                ~goal:(fun cp ->
+                  if acceptable cp t pos then Some (settle (MI.offer cp target))
+                  else None)
+            with
+            | Some (cp, text) ->
+                (* [text] carries the closers inserted; the fix inserts them at
+                   the boundary [pos] where they belong (empty text or an
+                   [insert]-tainted repair yields no fix). *)
+                Some (cp, insertion_edit pos (Option.value text ~default:""))
+            | None -> None)
         | _ -> None
       in
       (* A fully-parenthesized grammar (WAT) has no separator or leader token, so
@@ -687,8 +776,19 @@ struct
         in
         (* Climb by inserting closers (value-preserving, no [insert] candidates)
            until the barrier tokens settle; see [insert_to_goal]. *)
-        insert_to_goal ~goal:offer_all ~with_insert:false pos
-          (MI.input_needed env)
+        match
+          insert_to_goal ~goal:offer_all ~with_insert:false pos
+            (MI.input_needed env)
+        with
+        | Some (cp, text) ->
+            (* [~with_insert:false] means the repair is always pure closers, so
+               [text] is always [Some]. Inserting closers to reach the field
+               level is a stack climb, so mark the episode restructured — a
+               deletion fix must not be offered for it. *)
+            let text = Option.value text ~default:"" in
+            if text <> "" then restructured := true;
+            Some (cp, insertion_edit pos text)
+        | None -> None
       in
       (* Direct-error barrier route: the held token is a field keyword whose [(]
          already shifted as a folded-instruction opener (the [(module (func …
@@ -729,6 +829,9 @@ struct
       let rec run checkpoint prev last =
         match checkpoint with
         | MI.InputNeeded _ ->
+            (* Clean state just before offering the next token; if that token
+               errors, this is where a single-token deletion would land back. *)
+            clean_input := Some checkpoint;
             let tok = supplier () in
             run (MI.offer checkpoint tok) last (Some tok)
         | MI.Shifting _ -> run (MI.resume checkpoint) prev last
@@ -797,6 +900,9 @@ struct
                 match last with
                 | Some ((t, _, _) as held)
                   when match sync t with Terminal -> false | _ -> true ->
+                    (* Fresh skip episode: reset the deletion-fix bookkeeping. *)
+                    dropped := [];
+                    restructured := false;
                     skip (defuse env held) last
                 | _ -> None)
             | checkpoint -> run checkpoint prev last)
@@ -809,16 +915,26 @@ struct
         | None -> (
             (* Insertion did not apply: record the standard error, then either
                auto-close an inner construct still open in front of the boundary
-               or skip to a boundary. *)
+               or skip to a boundary. A validated auto-close ([close_pending]) or
+               barrier placement ([try_barrier]) hangs its derived closer-fix on
+               that just-recorded error via [attach_fix]. *)
             record checkpoint;
             match abandon_on_raise (fun () -> close_pending env last) with
-            | Some checkpoint -> run checkpoint None None
+            | Some (checkpoint, fix) ->
+                attach_fix fix;
+                run checkpoint None None
             | None -> (
                 match
                   abandon_on_raise (fun () -> try_barrier env prev last)
                 with
-                | Some checkpoint -> run checkpoint None None
-                | None -> skip env last))
+                | Some (checkpoint, fix) ->
+                    attach_fix fix;
+                    run checkpoint None None
+                | None ->
+                    (* Fresh skip episode: reset the deletion-fix bookkeeping. *)
+                    dropped := [];
+                    restructured := false;
+                    skip env last))
       and skip env last =
         match find_sync 0 last with
         | `Barrier (toks, pos) -> place_barrier env toks pos
@@ -860,7 +976,9 @@ struct
            lands in the enclosing context, not grafted onto the incomplete group
            (e.g. [(import "m")] must not absorb the following [(func …)] as its
            descriptor). If the stack cannot be climbed, fall back to offering the
-           closer where the error left us. *)
+           closer where the error left us. Climbing the stack is a restructuring,
+           so a single-token deletion fix must not be offered for this episode. *)
+        restructured := true;
         match pop_to env tok startp with
         | None -> offer_sync env sync_tok
         | Some env' -> (
@@ -869,21 +987,68 @@ struct
             | `Sync sync_tok -> offer_sync env' sync_tok)
       and place_barrier env toks pos =
         (* A new field starts here: place the barrier tokens, closing the
-           enclosing construct as needed. A false barrier makes [place_field]
-           fail; drop it and scan on. *)
+           enclosing construct as needed. A validated placement hangs its derived
+           closer-fix on the episode's recorded error. A false barrier makes
+           [place_field] fail; drop it and scan on. *)
         match abandon_on_raise (fun () -> place_field env toks pos) with
-        | Some checkpoint -> run checkpoint None None
+        | Some (checkpoint, fix) ->
+            attach_fix fix;
+            run checkpoint None None
         | None -> skip env None
-      and offer_sync env ((tok, _, _) as sync_tok) =
+      and offer_sync env ((tok, startp, _) as sync_tok) =
+        (* Deletion fix (tier 2). When the episode dropped exactly one token, that
+           token is always the one that errored (the offending [last]); if the
+           resync token is acceptable at [clean_input] — the clean parser state
+           just before that offending token was offered — then deleting the single
+           offending token is precisely what makes the region parse: with it gone,
+           the parser is back at that clean state and the resync token shifts. Two
+           further guards keep it honest: the episode must not have restructured
+           (a [group_drop] pop or a [place_field] closer-insertion both climb the
+           stack, so "delete this token" would not be the true repair), and the
+           dropped count must be exactly one (a multi-token skip is the "delete
+           these 40 tokens" noise the task rules out). This is the stray-closer /
+           duplicated-token slip; the empty-[new_text] edit spans the dropped
+           token. [in_place] is checked against [clean_input] rather than the
+           post-error [env] because reaching [HandlingError] already applied the
+           reductions the offending token's lookahead triggered, so [env] is past
+           the clean state (e.g. a stray [}] at module level leaves [env] mid the
+           module-list reduction, where EOF needs a pop, yet deleting the [}]
+           plainly parses). *)
+        let in_place =
+          match !clean_input with
+          | Some cp -> acceptable cp tok startp
+          | None -> false
+        in
         match unwind env sync_tok with
-        | Some checkpoint -> run checkpoint None None
+        | Some checkpoint ->
+            (if in_place && not !restructured then
+               match !dropped with
+               (* Only a stray structural token — a closing bracket ([Close]) or
+                  a statement separator ([Boundary]) — is offered for deletion.
+                  Deleting a content token (a keyword, identifier or literal,
+                  [Leader]/[Skip]/[Open]) merely because a trailing separator then
+                  parses would be a misleading "delete this" pointing at the wrong
+                  token, so those are excluded even when the [clean_input] check
+                  passes. *)
+               | [ ((Close | Boundary), sp, ep) ] ->
+                   attach_fix
+                     (Some
+                        {
+                          Wax_utils.Diagnostic.edit_location =
+                            { Wax_utils.Ast.loc_start = sp; loc_end = ep };
+                          new_text = "";
+                        })
+               | _ -> ());
+            run checkpoint None None
         | None -> (
             (* No stacked state can shift this boundary. At end of input there is
                nothing left to try; otherwise drop this boundary and scan on for
                the next one, keeping the same error state to unwind from. *)
             match sync tok with
             | Terminal -> None
-            | _ -> skip env None)
+            | _ ->
+                drop sync_tok;
+                skip env None)
       in
       (* Lexer errors are handled by [recovering_supplier] above (recorded, then
          skipped). [Lexing_gave_up] means it could not make progress, so stop —

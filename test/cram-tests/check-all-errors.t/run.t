@@ -111,6 +111,7 @@ same error state also arises for an invalid token inside an already-closed block
   2 │     let x = 1;
   3 │ 
       ^
+  Help: insert '}'
   [128]
 
 --all-errors also covers WAT input. WAT recovery resynchronizes on parentheses:
@@ -134,6 +135,7 @@ auto-closed body would otherwise trigger are suppressed in recovery mode:
   4 │   (func (i32.const 1)
   5 │ 
       ^
+  Help: insert '))'
   Error:
     Type mismatch: this produces a value of type 'i64', but type 'i32' is
     expected.

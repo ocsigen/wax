@@ -22,8 +22,10 @@ let sync : Tokens.token -> Parsing.sync_class = function
   | _ -> Skip
 
 (* The closing bracket recovery may insert to auto-close a construct still open
-   in front of a boundary (or at end of input); passed as [?closers]. *)
-let closers = [ Tokens.RPAREN ]
+   in front of a boundary (or at end of input); passed as [?closers]. Each is
+   paired with its source spelling, so a validated auto-close can offer the
+   concatenation of the closers it inserted as a machine-applicable quick fix. *)
+let closers = [ (Tokens.RPAREN, ")") ]
 
 (* WAT has no statement separator, but a missing {e operand} is the common
    mid-typing slip — [(call)] wants an index, [(i32.const)] a number. Offering a
