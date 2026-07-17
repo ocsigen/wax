@@ -1,142 +1,17 @@
-clz	&?any	rejected
-clz	&any	rejected
-clz	&?extern	ok
-clz	&extern	ok
-clz	f32	rejected
-clz	f32_s	ok
-clz	f32_u	ok
-clz	f64	rejected
-clz	f64_s	ok
-clz	f64_u	ok
-clz	&fn(i32) -> i32	rejected
-clz	&?fn(i32) -> i32	rejected
-clz	&?i31	ok
-clz	&i31	ok
-clz	i32	ok
-clz	i32_s	rejected
-clz	i32_s_strict	rejected
-clz	i32_u	rejected
-clz	i32_u_strict	rejected
-clz	i64	ok
-clz	i64_s	ok
-clz	i64_s_strict	ok
-clz	i64_u	ok
-clz	i64_u_strict	ok
-clz	v128	rejected
-extern	&any	ok
-extern	&?any	ok
-extern	&?extern	ok
-extern	&extern	ok
-extern	f32	rejected
-extern	f32_s	rejected
-extern	f32_u	rejected
-extern	f64	rejected
-extern	f64_s	rejected
-extern	f64_u	rejected
-extern	&fn(i32) -> i32	rejected
-extern	&?fn(i32) -> i32	rejected
-extern	&?i31	ok
-extern	&i31	ok
-extern	i32	rejected
-extern	i32_s	rejected
-extern	i32_s_strict	rejected
-extern	i32_u	rejected
-extern	i32_u_strict	rejected
-extern	i64	rejected
-extern	i64_s	rejected
-extern	i64_s_strict	rejected
-extern	i64_u	rejected
-extern	i64_u_strict	rejected
-extern	v128	rejected
-f32	&any	rejected
-f32	&?any	rejected
-f32	&extern	rejected
-f32	&?extern	rejected
-f32	f32	ok
-f32	f32_s	rejected
-f32	f32_u	rejected
-f32	f64	ok
-f32	f64_s	rejected
-f32	f64_u	rejected
-f32	&?fn(i32) -> i32	rejected
-f32	&fn(i32) -> i32	rejected
-f32	&?i31	rejected
-f32	&i31	rejected
-f32	i32	rejected
-f32	i32_s	ok
-f32	i32_s_strict	ok
-f32	i32_u	ok
-f32	i32_u_strict	ok
-f32	i64	rejected
-f32	i64_s	ok
-f32	i64_s_strict	ok
-f32	i64_u	ok
-f32	i64_u_strict	ok
-f32	v128	rejected
-f64	&?any	rejected
-f64	&any	rejected
-f64	&extern	rejected
-f64	&?extern	rejected
-f64	f32	ok
-f64	f32_s	rejected
-f64	f32_u	rejected
-f64	f64	ok
-f64	f64_s	rejected
-f64	f64_u	rejected
-f64	&?fn(i32) -> i32	rejected
-f64	&fn(i32) -> i32	rejected
-f64	&i31	rejected
-f64	&?i31	rejected
-f64	i32	rejected
-f64	i32_s	ok
-f64	i32_s_strict	ok
-f64	i32_u	ok
-f64	i32_u_strict	ok
-f64	i64	rejected
-f64	i64_s	ok
-f64	i64_s_strict	ok
-f64	i64_u	ok
-f64	i64_u_strict	ok
-f64	v128	rejected
-Float	&any	rejected
 Float	&?any	rejected
-FloatExpr	&any	rejected
-FloatExpr	&?any	rejected
-FloatExpr	&?extern	rejected
-FloatExpr	&extern	rejected
-FloatExpr	f32	ok
-FloatExpr	f32_s	rejected
-FloatExpr	f32_u	rejected
-FloatExpr	f64	ok
-FloatExpr	f64_s	rejected
-FloatExpr	f64_u	rejected
-FloatExpr	&?fn(i32) -> i32	rejected
-FloatExpr	&fn(i32) -> i32	rejected
-FloatExpr	&i31	rejected
-FloatExpr	&?i31	rejected
-FloatExpr	i32	rejected
-FloatExpr	i32_s	ok
-FloatExpr	i32_s_strict	ok
-FloatExpr	i32_u	ok
-FloatExpr	i32_u_strict	ok
-FloatExpr	i64	rejected
-FloatExpr	i64_s	ok
-FloatExpr	i64_s_strict	ok
-FloatExpr	i64_u	ok
-FloatExpr	i64_u_strict	ok
-FloatExpr	v128	rejected
 Float	&?extern	rejected
+Float	&?fn(i32) -> i32	rejected
+Float	&?i31	rejected
+Float	&any	rejected
 Float	&extern	rejected
+Float	&fn(i32) -> i32	rejected
+Float	&i31	rejected
 Float	f32	ok
 Float	f32_s	rejected
 Float	f32_u	rejected
 Float	f64	ok
 Float	f64_s	rejected
 Float	f64_u	rejected
-Float	&?fn(i32) -> i32	rejected
-Float	&fn(i32) -> i32	rejected
-Float	&?i31	rejected
-Float	&i31	rejected
 Float	i32	rejected
 Float	i32_s	ok
 Float	i32_s_strict	ok
@@ -148,20 +23,45 @@ Float	i64_s_strict	ok
 Float	i64_u	ok
 Float	i64_u_strict	ok
 Float	v128	rejected
-HugeIntFloat	&any	rejected
+FloatExpr	&?any	rejected
+FloatExpr	&?extern	rejected
+FloatExpr	&?fn(i32) -> i32	rejected
+FloatExpr	&?i31	rejected
+FloatExpr	&any	rejected
+FloatExpr	&extern	rejected
+FloatExpr	&fn(i32) -> i32	rejected
+FloatExpr	&i31	rejected
+FloatExpr	f32	ok
+FloatExpr	f32_s	rejected
+FloatExpr	f32_u	rejected
+FloatExpr	f64	ok
+FloatExpr	f64_s	rejected
+FloatExpr	f64_u	rejected
+FloatExpr	i32	rejected
+FloatExpr	i32_s	ok
+FloatExpr	i32_s_strict	ok
+FloatExpr	i32_u	ok
+FloatExpr	i32_u_strict	ok
+FloatExpr	i64	rejected
+FloatExpr	i64_s	ok
+FloatExpr	i64_s_strict	ok
+FloatExpr	i64_u	ok
+FloatExpr	i64_u_strict	ok
+FloatExpr	v128	rejected
 HugeIntFloat	&?any	rejected
 HugeIntFloat	&?extern	rejected
+HugeIntFloat	&?fn(i32) -> i32	rejected
+HugeIntFloat	&?i31	rejected
+HugeIntFloat	&any	rejected
 HugeIntFloat	&extern	rejected
+HugeIntFloat	&fn(i32) -> i32	rejected
+HugeIntFloat	&i31	rejected
 HugeIntFloat	f32	ok
 HugeIntFloat	f32_s	rejected
 HugeIntFloat	f32_u	rejected
 HugeIntFloat	f64	ok
 HugeIntFloat	f64_s	rejected
 HugeIntFloat	f64_u	rejected
-HugeIntFloat	&fn(i32) -> i32	rejected
-HugeIntFloat	&?fn(i32) -> i32	rejected
-HugeIntFloat	&?i31	rejected
-HugeIntFloat	&i31	rejected
 HugeIntFloat	i32	rejected
 HugeIntFloat	i32_s	ok
 HugeIntFloat	i32_s_strict	ok
@@ -173,95 +73,20 @@ HugeIntFloat	i64_s_strict	ok
 HugeIntFloat	i64_u	ok
 HugeIntFloat	i64_u_strict	ok
 HugeIntFloat	v128	rejected
-i31	&?any	ok
-i31	&any	ok
-i31	&extern	ok
-i31	&?extern	ok
-i31	f32	rejected
-i31	f32_s	rejected
-i31	f32_u	rejected
-i31	f64	rejected
-i31	f64_s	rejected
-i31	f64_u	rejected
-i31	&?fn(i32) -> i32	rejected
-i31	&fn(i32) -> i32	rejected
-i31	&i31	ok
-i31	&?i31	ok
-i31	i32	rejected
-i31	i32_s	ok
-i31	i32_s_strict	ok
-i31	i32_u	ok
-i31	i32_u_strict	ok
-i31	i64	rejected
-i31	i64_s	ok
-i31	i64_s_strict	ok
-i31	i64_u	ok
-i31	i64_u_strict	ok
-i31	v128	rejected
-i32	&any	rejected
-i32	&?any	rejected
-i32	&extern	ok
-i32	&?extern	ok
-i32	f32	rejected
-i32	f32_s	ok
-i32	f32_u	ok
-i32	f64	rejected
-i32	f64_s	ok
-i32	f64_u	ok
-i32	&?fn(i32) -> i32	rejected
-i32	&fn(i32) -> i32	rejected
-i32	&?i31	ok
-i32	&i31	ok
-i32	i32	ok
-i32	i32_s	rejected
-i32	i32_s_strict	rejected
-i32	i32_u	rejected
-i32	i32_u_strict	rejected
-i32	i64	rejected
-i32	i64_s	ok
-i32	i64_s_strict	ok
-i32	i64_u	ok
-i32	i64_u_strict	ok
-i32	v128	rejected
-i64	&any	rejected
-i64	&?any	rejected
-i64	&extern	ok
-i64	&?extern	ok
-i64	f32	rejected
-i64	f32_s	ok
-i64	f32_u	ok
-i64	f64	rejected
-i64	f64_s	ok
-i64	f64_u	ok
-i64	&fn(i32) -> i32	rejected
-i64	&?fn(i32) -> i32	rejected
-i64	&?i31	ok
-i64	&i31	ok
-i64	i32	ok
-i64	i32_s	rejected
-i64	i32_s_strict	rejected
-i64	i32_u	rejected
-i64	i32_u_strict	rejected
-i64	i64	ok
-i64	i64_s	rejected
-i64	i64_s_strict	rejected
-i64	i64_u	rejected
-i64	i64_u_strict	rejected
-i64	v128	rejected
 Int	&?any	rejected
-Int	&any	rejected
 Int	&?extern	ok
+Int	&?fn(i32) -> i32	rejected
+Int	&?i31	ok
+Int	&any	rejected
 Int	&extern	ok
+Int	&fn(i32) -> i32	rejected
+Int	&i31	ok
 Int	f32	rejected
 Int	f32_s	ok
 Int	f32_u	ok
 Int	f64	rejected
 Int	f64_s	ok
 Int	f64_u	ok
-Int	&?fn(i32) -> i32	rejected
-Int	&fn(i32) -> i32	rejected
-Int	&i31	ok
-Int	&?i31	ok
 Int	i32	ok
 Int	i32_s	rejected
 Int	i32_s_strict	rejected
@@ -274,19 +99,19 @@ Int	i64_u	ok
 Int	i64_u_strict	ok
 Int	v128	rejected
 LargeInt	&?any	rejected
+LargeInt	&?extern	ok
+LargeInt	&?fn(i32) -> i32	rejected
+LargeInt	&?i31	ok
 LargeInt	&any	rejected
 LargeInt	&extern	ok
-LargeInt	&?extern	ok
+LargeInt	&fn(i32) -> i32	rejected
+LargeInt	&i31	ok
 LargeInt	f32	ok
 LargeInt	f32_s	ok
 LargeInt	f32_u	ok
 LargeInt	f64	ok
 LargeInt	f64_s	ok
 LargeInt	f64_u	ok
-LargeInt	&?fn(i32) -> i32	rejected
-LargeInt	&fn(i32) -> i32	rejected
-LargeInt	&i31	ok
-LargeInt	&?i31	ok
 LargeInt	i32	ok
 LargeInt	i32_s	ok
 LargeInt	i32_s_strict	ok
@@ -299,19 +124,19 @@ LargeInt	i64_u	ok
 LargeInt	i64_u_strict	ok
 LargeInt	v128	rejected
 Null	&?any	ok
+Null	&?extern	ok
+Null	&?fn(i32) -> i32	ok
+Null	&?i31	ok
 Null	&any	ok
 Null	&extern	ok
-Null	&?extern	ok
+Null	&fn(i32) -> i32	ok
+Null	&i31	ok
 Null	f32	rejected
 Null	f32_s	rejected
 Null	f32_u	rejected
 Null	f64	rejected
 Null	f64_s	rejected
 Null	f64_u	rejected
-Null	&fn(i32) -> i32	ok
-Null	&?fn(i32) -> i32	ok
-Null	&?i31	ok
-Null	&i31	ok
 Null	i32	rejected
 Null	i32_s	ok
 Null	i32_s_strict	ok
@@ -324,19 +149,19 @@ Null	i64_u	ok
 Null	i64_u_strict	ok
 Null	v128	rejected
 Number	&?any	rejected
+Number	&?extern	ok
+Number	&?fn(i32) -> i32	rejected
+Number	&?i31	ok
 Number	&any	rejected
 Number	&extern	ok
-Number	&?extern	ok
+Number	&fn(i32) -> i32	rejected
+Number	&i31	ok
 Number	f32	ok
 Number	f32_s	ok
 Number	f32_u	ok
 Number	f64	ok
 Number	f64_s	ok
 Number	f64_u	ok
-Number	&fn(i32) -> i32	rejected
-Number	&?fn(i32) -> i32	rejected
-Number	&i31	ok
-Number	&?i31	ok
 Number	i32	ok
 Number	i32_s	ok
 Number	i32_s_strict	ok
@@ -348,70 +173,20 @@ Number	i64_s_strict	ok
 Number	i64_u	ok
 Number	i64_u_strict	ok
 Number	v128	rejected
-refany	&any	ok
-refany	&?any	ok
-refany	&extern	ok
-refany	&?extern	ok
-refany	f32	rejected
-refany	f32_s	rejected
-refany	f32_u	rejected
-refany	f64	rejected
-refany	f64_s	rejected
-refany	f64_u	rejected
-refany	&?fn(i32) -> i32	rejected
-refany	&fn(i32) -> i32	rejected
-refany	&i31	ok
-refany	&?i31	ok
-refany	i32	rejected
-refany	i32_s	ok
-refany	i32_s_strict	ok
-refany	i32_u	ok
-refany	i32_u_strict	ok
-refany	i64	rejected
-refany	i64_s	ok
-refany	i64_s_strict	ok
-refany	i64_u	ok
-refany	i64_u_strict	ok
-refany	v128	rejected
-reffunc	&any	rejected
-reffunc	&?any	rejected
-reffunc	&?extern	rejected
-reffunc	&extern	rejected
-reffunc	f32	rejected
-reffunc	f32_s	rejected
-reffunc	f32_u	rejected
-reffunc	f64	rejected
-reffunc	f64_s	rejected
-reffunc	f64_u	rejected
-reffunc	&fn(i32) -> i32	ok
-reffunc	&?fn(i32) -> i32	ok
-reffunc	&i31	rejected
-reffunc	&?i31	rejected
-reffunc	i32	rejected
-reffunc	i32_s	rejected
-reffunc	i32_s_strict	rejected
-reffunc	i32_u	rejected
-reffunc	i32_u_strict	rejected
-reffunc	i64	rejected
-reffunc	i64_s	rejected
-reffunc	i64_s_strict	rejected
-reffunc	i64_u	rejected
-reffunc	i64_u_strict	rejected
-reffunc	v128	rejected
-Unknown	&any	rejected
 Unknown	&?any	rejected
 Unknown	&?extern	rejected
+Unknown	&?fn(i32) -> i32	rejected
+Unknown	&?i31	rejected
+Unknown	&any	rejected
 Unknown	&extern	rejected
+Unknown	&fn(i32) -> i32	rejected
+Unknown	&i31	rejected
 Unknown	f32	rejected
 Unknown	f32_s	rejected
 Unknown	f32_u	rejected
 Unknown	f64	rejected
 Unknown	f64_s	rejected
 Unknown	f64_u	rejected
-Unknown	&fn(i32) -> i32	rejected
-Unknown	&?fn(i32) -> i32	rejected
-Unknown	&?i31	rejected
-Unknown	&i31	rejected
 Unknown	i32	rejected
 Unknown	i32_s	rejected
 Unknown	i32_s_strict	rejected
@@ -422,20 +197,21 @@ Unknown	i64_s	rejected
 Unknown	i64_s_strict	rejected
 Unknown	i64_u	rejected
 Unknown	i64_u_strict	rejected
-UnknownRef	&any	rejected
+Unknown	v128	rejected
 UnknownRef	&?any	rejected
-UnknownRef	&extern	rejected
 UnknownRef	&?extern	rejected
+UnknownRef	&?fn(i32) -> i32	rejected
+UnknownRef	&?i31	rejected
+UnknownRef	&any	rejected
+UnknownRef	&extern	rejected
+UnknownRef	&fn(i32) -> i32	rejected
+UnknownRef	&i31	rejected
 UnknownRef	f32	rejected
 UnknownRef	f32_s	rejected
 UnknownRef	f32_u	rejected
 UnknownRef	f64	rejected
 UnknownRef	f64_s	rejected
 UnknownRef	f64_u	rejected
-UnknownRef	&fn(i32) -> i32	rejected
-UnknownRef	&?fn(i32) -> i32	rejected
-UnknownRef	&?i31	rejected
-UnknownRef	&i31	rejected
 UnknownRef	i32	rejected
 UnknownRef	i32_s	rejected
 UnknownRef	i32_s_strict	rejected
@@ -447,21 +223,245 @@ UnknownRef	i64_s_strict	rejected
 UnknownRef	i64_u	rejected
 UnknownRef	i64_u_strict	rejected
 UnknownRef	v128	rejected
-Unknown	v128	rejected
+clz	&?any	rejected
+clz	&?extern	ok
+clz	&?fn(i32) -> i32	rejected
+clz	&?i31	ok
+clz	&any	rejected
+clz	&extern	ok
+clz	&fn(i32) -> i32	rejected
+clz	&i31	ok
+clz	f32	rejected
+clz	f32_s	ok
+clz	f32_u	ok
+clz	f64	rejected
+clz	f64_s	ok
+clz	f64_u	ok
+clz	i32	ok
+clz	i32_s	rejected
+clz	i32_s_strict	rejected
+clz	i32_u	rejected
+clz	i32_u_strict	rejected
+clz	i64	ok
+clz	i64_s	ok
+clz	i64_s_strict	ok
+clz	i64_u	ok
+clz	i64_u_strict	ok
+clz	v128	rejected
+extern	&?any	ok
+extern	&?extern	ok
+extern	&?fn(i32) -> i32	rejected
+extern	&?i31	ok
+extern	&any	ok
+extern	&extern	ok
+extern	&fn(i32) -> i32	rejected
+extern	&i31	ok
+extern	f32	rejected
+extern	f32_s	rejected
+extern	f32_u	rejected
+extern	f64	rejected
+extern	f64_s	rejected
+extern	f64_u	rejected
+extern	i32	rejected
+extern	i32_s	rejected
+extern	i32_s_strict	rejected
+extern	i32_u	rejected
+extern	i32_u_strict	rejected
+extern	i64	rejected
+extern	i64_s	rejected
+extern	i64_s_strict	rejected
+extern	i64_u	rejected
+extern	i64_u_strict	rejected
+extern	v128	rejected
+f32	&?any	rejected
+f32	&?extern	rejected
+f32	&?fn(i32) -> i32	rejected
+f32	&?i31	rejected
+f32	&any	rejected
+f32	&extern	rejected
+f32	&fn(i32) -> i32	rejected
+f32	&i31	rejected
+f32	f32	ok
+f32	f32_s	rejected
+f32	f32_u	rejected
+f32	f64	ok
+f32	f64_s	rejected
+f32	f64_u	rejected
+f32	i32	rejected
+f32	i32_s	ok
+f32	i32_s_strict	ok
+f32	i32_u	ok
+f32	i32_u_strict	ok
+f32	i64	rejected
+f32	i64_s	ok
+f32	i64_s_strict	ok
+f32	i64_u	ok
+f32	i64_u_strict	ok
+f32	v128	rejected
+f64	&?any	rejected
+f64	&?extern	rejected
+f64	&?fn(i32) -> i32	rejected
+f64	&?i31	rejected
+f64	&any	rejected
+f64	&extern	rejected
+f64	&fn(i32) -> i32	rejected
+f64	&i31	rejected
+f64	f32	ok
+f64	f32_s	rejected
+f64	f32_u	rejected
+f64	f64	ok
+f64	f64_s	rejected
+f64	f64_u	rejected
+f64	i32	rejected
+f64	i32_s	ok
+f64	i32_s_strict	ok
+f64	i32_u	ok
+f64	i32_u_strict	ok
+f64	i64	rejected
+f64	i64_s	ok
+f64	i64_s_strict	ok
+f64	i64_u	ok
+f64	i64_u_strict	ok
+f64	v128	rejected
+i31	&?any	ok
+i31	&?extern	ok
+i31	&?fn(i32) -> i32	rejected
+i31	&?i31	ok
+i31	&any	ok
+i31	&extern	ok
+i31	&fn(i32) -> i32	rejected
+i31	&i31	ok
+i31	f32	rejected
+i31	f32_s	rejected
+i31	f32_u	rejected
+i31	f64	rejected
+i31	f64_s	rejected
+i31	f64_u	rejected
+i31	i32	rejected
+i31	i32_s	ok
+i31	i32_s_strict	ok
+i31	i32_u	ok
+i31	i32_u_strict	ok
+i31	i64	rejected
+i31	i64_s	ok
+i31	i64_s_strict	ok
+i31	i64_u	ok
+i31	i64_u_strict	ok
+i31	v128	rejected
+i32	&?any	rejected
+i32	&?extern	ok
+i32	&?fn(i32) -> i32	rejected
+i32	&?i31	ok
+i32	&any	rejected
+i32	&extern	ok
+i32	&fn(i32) -> i32	rejected
+i32	&i31	ok
+i32	f32	rejected
+i32	f32_s	ok
+i32	f32_u	ok
+i32	f64	rejected
+i32	f64_s	ok
+i32	f64_u	ok
+i32	i32	ok
+i32	i32_s	rejected
+i32	i32_s_strict	rejected
+i32	i32_u	rejected
+i32	i32_u_strict	rejected
+i32	i64	rejected
+i32	i64_s	ok
+i32	i64_s_strict	ok
+i32	i64_u	ok
+i32	i64_u_strict	ok
+i32	v128	rejected
+i64	&?any	rejected
+i64	&?extern	ok
+i64	&?fn(i32) -> i32	rejected
+i64	&?i31	ok
+i64	&any	rejected
+i64	&extern	ok
+i64	&fn(i32) -> i32	rejected
+i64	&i31	ok
+i64	f32	rejected
+i64	f32_s	ok
+i64	f32_u	ok
+i64	f64	rejected
+i64	f64_s	ok
+i64	f64_u	ok
+i64	i32	ok
+i64	i32_s	rejected
+i64	i32_s_strict	rejected
+i64	i32_u	rejected
+i64	i32_u_strict	rejected
+i64	i64	ok
+i64	i64_s	rejected
+i64	i64_s_strict	rejected
+i64	i64_u	rejected
+i64	i64_u_strict	rejected
+i64	v128	rejected
+refany	&?any	ok
+refany	&?extern	ok
+refany	&?fn(i32) -> i32	rejected
+refany	&?i31	ok
+refany	&any	ok
+refany	&extern	ok
+refany	&fn(i32) -> i32	rejected
+refany	&i31	ok
+refany	f32	rejected
+refany	f32_s	rejected
+refany	f32_u	rejected
+refany	f64	rejected
+refany	f64_s	rejected
+refany	f64_u	rejected
+refany	i32	rejected
+refany	i32_s	ok
+refany	i32_s_strict	ok
+refany	i32_u	ok
+refany	i32_u_strict	ok
+refany	i64	rejected
+refany	i64_s	ok
+refany	i64_s_strict	ok
+refany	i64_u	ok
+refany	i64_u_strict	ok
+refany	v128	rejected
+reffunc	&?any	rejected
+reffunc	&?extern	rejected
+reffunc	&?fn(i32) -> i32	ok
+reffunc	&?i31	rejected
+reffunc	&any	rejected
+reffunc	&extern	rejected
+reffunc	&fn(i32) -> i32	ok
+reffunc	&i31	rejected
+reffunc	f32	rejected
+reffunc	f32_s	rejected
+reffunc	f32_u	rejected
+reffunc	f64	rejected
+reffunc	f64_s	rejected
+reffunc	f64_u	rejected
+reffunc	i32	rejected
+reffunc	i32_s	rejected
+reffunc	i32_s_strict	rejected
+reffunc	i32_u	rejected
+reffunc	i32_u_strict	rejected
+reffunc	i64	rejected
+reffunc	i64_s	rejected
+reffunc	i64_s_strict	rejected
+reffunc	i64_u	rejected
+reffunc	i64_u_strict	rejected
+reffunc	v128	rejected
 v128	&?any	rejected
+v128	&?extern	rejected
+v128	&?fn(i32) -> i32	rejected
+v128	&?i31	rejected
 v128	&any	rejected
 v128	&extern	rejected
-v128	&?extern	rejected
+v128	&fn(i32) -> i32	rejected
+v128	&i31	rejected
 v128	f32	rejected
 v128	f32_s	rejected
 v128	f32_u	rejected
 v128	f64	rejected
 v128	f64_s	rejected
 v128	f64_u	rejected
-v128	&fn(i32) -> i32	rejected
-v128	&?fn(i32) -> i32	rejected
-v128	&i31	rejected
-v128	&?i31	rejected
 v128	i32	rejected
 v128	i32_s	rejected
 v128	i32_s_strict	rejected

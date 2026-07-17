@@ -205,7 +205,11 @@ for ((w = 0; w < JOBS; w++)); do
   matrix_worker "$first" "$last" &
 done
 wait
-sort "$MATRIX".* >"$MATRIX"
+# Byte-order sort (not locale collation): the row order must be identical on
+# every machine, or the golden diff drifts purely because CI runs under a
+# different LANG (a UTF-8 locale ignores the '&'/'?'/space in the type labels,
+# LANG=C does not). Deterministic order is the whole point of the golden.
+LC_ALL=C sort "$MATRIX".* >"$MATRIX"
 
 matrix_failed=0
 if [ "${REGEN_CAST_MATRIX:-0}" = 1 ]; then
