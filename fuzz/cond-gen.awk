@@ -35,13 +35,14 @@ BEGIN {
   ng = int(rand() * 3) + 2                          # 2-4 globals
   for (g = 0; g < ng; g++) {
     dcond[g] = cond(2)                               # this global's definition condition
-    printf "#[if(%s)]\n", dcond[g]
+    printf "#[if(%s)] {\n", dcond[g]                  # a top-level #[if] gates a braced field group
     printf "const g%d: i32 = %d;\n", g, g
+    printf "}\n"
   }
   printf "\n#[export = \"f\"]\nfn f() -> i32 {\n"
   for (g = 0; g < ng; g++) {
     # An instruction-level #[if] gates a block and REQUIRES an #[else] (unlike a
-    # top-level one, which gates a bare declaration). The then-block references
+    # top-level one, which gates a braced field group with no #[else]). The then-block references
     # g%d. Half the time the use condition is [all(def, ...)], which IMPLIES the
     # global is defined — so the module type-checks only if cond_solver proves
     # the unbound combination infeasible; otherwise it is independent and the
