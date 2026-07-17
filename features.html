@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-07e66972.js";
+            window.path_to_searchindex_js = "searchindex-6819a765.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -213,7 +213,7 @@ relaxed SIMD).</p>
 </thead>
 <tbody>
 <tr><td><code>custom-descriptors</code></td><td>exact reference types, descriptor structs, and the descriptor instructions (<code>descriptor</code> / <code>describes</code>)</td></tr>
-<tr><td><code>compact-import-section</code></td><td>coalesces consecutive same-module imports into one group when emitting the binary. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag; the flag only gates <em>deriving</em> groups from plain imports</td></tr>
+<tr><td><code>compact-import-section</code></td><td>writes same-module imports under one module name in the binary import section. From a text input it lowers a <code>import "m" { … }</code> block / <code>(import "m" (item …) …)</code> group to a compact entry (a shared-type group when the items’ types match, else one type per item; a one-item block flattens; separate imports are never merged). From a binary input it coalesces runs of consecutive same-module plain imports. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag</td></tr>
 </tbody>
 </table>
 </div>
