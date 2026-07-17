@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f9e05b46.js";
+            window.path_to_searchindex_js = "searchindex-78463029.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -449,10 +449,13 @@ CI job, or AI assistant to parse. Each object has <code>severity</code>, <code>f
 <code>startLine</code>/<code>startColumn</code>/<code>endLine</code>/<code>endColumn</code> (1-based line, 0-based
 column), <code>startOffset</code>/<code>endOffset</code> (byte offsets), <code>message</code>, <code>warning</code>
 (the <a href="#options"><code>-W</code></a> name, or null), <code>hint</code>, and <code>related</code>. A diagnostic
-carrying a machine-applicable fix (a <code>suggestion</code>, or a fixable warning
-like a redundant cast, an unused local, an unused label, or a confusing
-precedence mix) also has an <code>edit</code> object: the same span fields for the
-slice to replace, plus its <code>newText</code>.</li>
+carrying a machine-applicable fix (a <code>suggestion</code>, a fixable warning like a
+redundant cast, an unused local, an unused label, or a confusing precedence
+mix, or a syntax error whose recovery insertion derives one — e.g. a
+missing <code>;</code>, under <a href="#check"><code>--all-errors</code></a>) also has an <code>edit</code> object: the
+same span fields for the slice to replace (an empty span, for an
+insertion), plus its <code>newText</code>. Syntax errors report their <code>hint</code> and
+<code>related</code> here too.</li>
 <li>With <code>short</code>, each diagnostic is one
 <code>file:line:col: severity: message</code> line (gcc/rustc style, 1-based column),
 for an editor with a line-based error parser (Vim’s <code>errorformat</code>, Emacs
