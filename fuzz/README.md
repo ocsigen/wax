@@ -60,6 +60,7 @@ fuzz/mutate-wax.sh [count]       # AST-mutate the wax seeds + check them (needs 
 fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec reference (no wasm-tools)
 fuzz/type-fuzz.sh                # type-check GENERATED hand-written-style wax (fuzz_gen); COUNT=N
 fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast lattice
+fuzz/wax-lower-fuzz.sh           # Wax-only lowering: `become <intrinsic>` == `return <intrinsic>`, `x op= e` == `x = x op e` (byte-identical wasm)
 fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness); GEN=N for generated conditions
 fuzz/cond-fromwasm-fuzz.sh       # from_wasm (wat->wax) of conditional modules: an entity referenced only inside (@if) must not be dropped
 
@@ -92,7 +93,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
-`validate-fuzz.sh`, `num-id-fuzz.sh` and `cond-fromwasm-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`validate-fuzz.sh`, `num-id-fuzz.sh`, `cond-fromwasm-fuzz.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -323,6 +324,19 @@ reachable configuration). Each built-in seed references one entity from inside
 `(@if $D …)`, with the enclosing function's parameter left unnamed where a name
 collision is the risk. (Verified: reverting the walker fixes makes the parameter,
 memory-atomic, and element-drop seeds over-reject.)
+
+`wax-lower-fuzz.sh` covers the Wax-specific *lowering* (`to_wasm.ml`) that only
+Wax source reaches — the constructs no wasm/wat corpus decompiles into, so no
+round-trip oracle touches them. It is metamorphic on byte-identical wasm: two
+source forms that are equivalent by definition must lower the same. An intrinsic
+method (`x.rotl(y)`, `x.min(y)`, `x.sqrt()`) cannot be a tail call, so
+`become x.op(…)` must lower exactly like `return x.op(…)`; and `x op= e` is
+`x = x op e`. Enumerating the intrinsics × numeric types × {become, return} and
+the compound operators × types, each pair must both compile (no crash, same
+accept/reject verdict) and to identical wasm. This caught the binary-intrinsic
+tail-call crash (the arms read the operation's type from the call node, which in
+tail position carries no result type, instead of from the receiver — verified:
+reverting the fix crashes all ten `become <binary-intrinsic>` pairs).
 
 ## The folding pass
 
