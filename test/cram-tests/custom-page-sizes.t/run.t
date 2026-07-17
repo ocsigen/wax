@@ -9,6 +9,23 @@ limits (the page size is the byte value 1 or 65536, matching the WAT
   
   (memory $def (export "def") 1)
 
+When a memory omits its limits but declares active data, the minimum is derived
+from the data extent divided by the *page size*, not always 64KiB. A
+[pagesize 1] memory must be at least as large as its highest data byte (here
+100 + 5 = 105) or it would trap on every instantiation; a default 64KiB memory
+still rounds up to one page.
+
+  $ cat > derived.wax <<'WAX'
+  > memory small: i32 pagesize 1 { data d @ [100] = "hello"; }
+  > memory big: i32 { data e @ [100] = "hello"; }
+  > WAX
+
+  $ wax derived.wax -f wat --validate
+  (memory $small 105 (pagesize 1))
+  (data $d (memory $small) (i32.const 100) "hello")
+  (memory $big 1)
+  (data $e (memory $big) (i32.const 100) "hello")
+
 A WebAssembly module using custom page sizes decompiles back to the same
 [pagesize] clause.
 

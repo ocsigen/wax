@@ -2118,24 +2118,57 @@ let lower_data_elem (e : Wax_lang.Ast.data_elem) : Text.datavalelem =
 let lower_data_init loc (init : Wax_lang.Ast.data_elem list) : Text.dataval =
   List.map (fun e -> { desc = lower_data_elem e; info = loc }) init
 
-let derive_min_pages (data : _ Wax_lang.Ast.memdata list) =
+let derive_min_pages ~page_size_log2 (data : _ Wax_lang.Ast.memdata list) =
+  (* The page size is [2^page_size_log2] bytes (default exponent 16, i.e. 64KiB);
+     the custom-page-sizes proposal also allows exponent 0, a 1-byte page. The
+     minimum must cover the highest active-data extent divided by *that* page
+     size, or a small custom-page memory is derived too small and traps on every
+     instantiation. Byte offsets and counts are unsigned 64-bit (memory64), so
+     use unsigned compare/div and unsigned parsing throughout — a signed
+     [max]/[div] would drop or misplace an offset at or above 2^63. *)
+  let page_size =
+    Int64.shift_left 1L (Option.value page_size_log2 ~default:16)
+  in
   let extent =
     List.fold_left
       (fun acc (d : _ Wax_lang.Ast.memdata) ->
         match d.offset.desc with
         | Wax_lang.Ast.Int s -> (
-            try
-              Int64.max acc
-                (Int64.add (Int64.of_string s)
-                   (Int64.of_int
-                      (Wax_wasm.Misc.dataval_byte_length
-                         (lower_data_init Wax_utils.Ast.dummy_loc d.init))))
-            with _ -> acc)
+            (* A memory64 offset can exceed the signed Int64 range; the [0u]
+               prefix parses it as unsigned when the plain read overflows (hex
+               already reads as the bit pattern, so it succeeds on the first
+               try). *)
+            let off =
+              match Int64.of_string_opt s with
+              | Some _ as v -> v
+              | None -> Int64.of_string_opt ("0u" ^ s)
+            in
+            match off with
+            | Some off ->
+                let len =
+                  Int64.of_int
+                    (Wax_wasm.Misc.dataval_byte_length
+                       (lower_data_init Wax_utils.Ast.dummy_loc d.init))
+                in
+                let e = Int64.add off len in
+                (* [off + len] overflowing 2^64 means the segment runs past the
+                   whole address space; treat it as maximal rather than letting
+                   the wrap underestimate the minimum. *)
+                let e = if Int64.unsigned_compare e off < 0 then -1L else e in
+                if Int64.unsigned_compare e acc > 0 then e else acc
+            | None -> acc)
         | _ -> acc)
       0L data
   in
-  let pages = Int64.div (Int64.add extent 65535L) 65536L in
-  Wax_utils.Uint64.of_int64 (if Int64.compare pages 1L < 0 then 1L else pages)
+  (* ceil(extent / page_size), computed without the [+ page_size - 1] that would
+     overflow when extent is within a page of 2^64. *)
+  let q = Int64.unsigned_div extent page_size in
+  let pages =
+    if Int64.equal (Int64.unsigned_rem extent page_size) 0L then q
+    else Int64.add q 1L
+  in
+  Wax_utils.Uint64.of_int64
+    (if Int64.unsigned_compare pages 1L < 0 then 1L else pages)
 
 let storagetype ty = Map.storagetype () ty
 
@@ -2515,7 +2548,7 @@ let module_ diagnostics types fields =
                   { mi; ma; address_type; page_size_log2; shared }
               | None ->
                   {
-                    mi = derive_min_pages data;
+                    mi = derive_min_pages ~page_size_log2 data;
                     ma = None;
                     address_type;
                     page_size_log2;
