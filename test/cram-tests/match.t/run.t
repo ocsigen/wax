@@ -126,3 +126,31 @@ The scrutinee must be a reference:
   3 │         &eq => { return; }
   4 │         null => { return; }
   [128]
+
+A `match` synthesises `arm`/`default` block labels that must avoid a label the
+user defined inside an arm body, or they collide (the synthesised arm takes
+`arm1` instead):
+
+  $ cat > match_arm.wax <<'WAX'
+  > type ints = [mut i32];
+  > fn f(v: &?eq) -> i32 {
+  >     match v {
+  >         a: &ints => { 'arm: do { br 'arm; } return a.length(); }
+  >         _ => { return 0; }
+  >     }
+  > }
+  > WAX
+
+  $ wax match_arm.wax -f wat
+  (type $ints (array (mut i32)))
+  (func $f (param $v eqref) (result i32)
+    (local $a (ref $ints))
+    (block $default
+      (local.set $a
+        (block $arm1 (result (ref $ints))
+          (drop (br_on_cast $arm1 eqref (ref $ints) (local.get $v)))
+          (br $default)))
+      (block $arm (br $arm))
+      (return (array.len (local.get $a))))
+    (return (i32.const 0))
+  )

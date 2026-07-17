@@ -423,8 +423,15 @@ let labels_in_list l =
         lst block.desc;
         List.iter (fun a -> lst a.arm_body.desc) arms
     | Dispatch { index; arms; _ } ->
+        (* Each arm is a labelled block in the lowering, so its label is a
+           definition to avoid — [cases]/[default] are branch-target references
+           to enclosing labels, not defined here. *)
         instr index;
-        List.iter (fun (_, b) -> lst b.desc) arms
+        List.iter
+          (fun (lb, b) ->
+            add (Some lb);
+            lst b.desc)
+          arms
     | Match { scrutinee; arms; default } ->
         instr scrutinee;
         List.iter (fun (_, b) -> lst b.desc) arms;
@@ -507,10 +514,11 @@ let fresh_loop_label ret avoid =
 
 (* Readable labels for a [match] lowering (see [Ast_utils.lower_match]): one
    [arm]/[arm_1]/[arm_2]/… per arm, in order, then [default] for the escape
-   block. Each is bumped with a numeric suffix when an enclosing label (or an
-   already-chosen match label) takes the name, so an arm body's branch to an
-   outer label is never captured. *)
-let fresh_match_labels ret n =
+   block. Each is bumped with a numeric suffix when an enclosing label, a label
+   defined in an arm body ([avoid]), or an already-chosen match label takes the
+   name, so neither an arm body's branch to an outer label nor its own labelled
+   block is captured. *)
+let fresh_match_labels ret ~avoid n =
   let fresh used base =
     let rec pick i =
       let name = if i = 0 then base else base ^ string_of_int i in
@@ -526,7 +534,7 @@ let fresh_match_labels ret n =
       let rest, used = arms (name :: used) (i + 1) in
       (name :: rest, used)
   in
-  let arm_names, used = arms ret.labels 0 in
+  let arm_names, used = arms (avoid @ ret.labels) 0 in
   arm_names @ [ fresh used "default" ]
 
 (* Readable labels for a structured-[try] lowering (see
@@ -1873,10 +1881,14 @@ and instruction_desc ret ctx i : location Text.instr list =
          stays a subtype of the scrutinee, so the scrutinee type is a valid
          source for them all. *)
       let block_info = ([| Some (expr_type scrutinee) |], loc) in
+      let avoid =
+        labels_in_list
+          (default.desc @ List.concat_map (fun (_, b) -> b.desc) arms)
+      in
       let labels =
         List.map
           (fun name -> { desc = name; info = loc })
-          (fresh_match_labels ret (List.length arms))
+          (fresh_match_labels ret ~avoid (List.length arms))
       in
       List.concat_map (instruction ret ctx)
         (Wax_lang.Ast_utils.lower_match ~block_info ~labels ~scrutinee ~arms

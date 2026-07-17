@@ -84,3 +84,27 @@ The index must be an 'i32':
   4 │             'a: { nop; }
   5 │         }
   [128]
+
+A label-less `while` synthesises a fresh `loop` label that must avoid the arm
+labels of a `dispatch` in its body, or the two collide on a shared `'loop` name
+(the synthesised loop takes `loop2` instead):
+
+  $ cat > while_loop.wax <<'WAX'
+  > fn f(x: i32) {
+  >     while x != 0 {
+  >         dispatch x ['loop, else 'done] {
+  >             'done: { }
+  >             'loop: { }
+  >         }
+  >     }
+  > }
+  > WAX
+
+  $ wax while_loop.wax -f wat
+  (func $f (param $x i32)
+    (loop $loop2
+      (if (i32.ne (local.get $x) (i32.const 0))
+        (then
+          (block $loop (block $done (br_table $loop $done (local.get $x))))
+          (br $loop2))))
+  )
