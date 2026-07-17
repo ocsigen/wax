@@ -44,3 +44,29 @@ call_indirect against an implicit type renders the cast inline as &fn(..):
 
   $ wax call-indirect.wat -f wax | wax -i wax -f wasm -v -o /dev/null && echo OK
   OK
+
+A `(type N)` *blocktype* may likewise reference an implicit type. The
+AST-construction path resolved only declared types, so a bare `(block (type 0))`
+naming the inline `(func (param i64) (result i32))` failed to convert; it now
+resolves to that signature like the arity path does:
+
+  $ cat > blocktype.wat <<'WAT'
+  > (module
+  >   (func $g (param i64) (result i32) (i32.const 1))
+  >   (func $h (i64.const 2) (block (type 0) (i32.wrap_i64)) (drop)))
+  > WAT
+
+  $ wax blocktype.wat -f wax
+  fn g(i64) -> i32 {
+      1;
+  }
+  fn h() {
+      2;
+      do (i64) -> i32 {
+          _ as i32;
+      }
+      _ = _;
+  }
+
+  $ wax blocktype.wat -f wax | wax -i wax -f wasm -v -o /dev/null && echo OK
+  OK

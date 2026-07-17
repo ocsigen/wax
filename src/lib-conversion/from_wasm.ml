@@ -1388,10 +1388,17 @@ let blocktype ctx (typ : Src.blocktype option) =
         match (ty_idx, sign) with
         | _, Some sign -> sign
         | Some idx, _ -> (
-            let ty = lookup_type ctx Type idx in
-            match ty.typ with
-            | Struct _ | Array _ | Cont _ -> assert false
-            | Func sign -> sign)
+            (* A numeric [(type N)] may name an implicit type synthesised from an
+               inline signature, which lives in [ctx.implicit_types], not the
+               declared [types] sequence — check it first, as [type_arity] does,
+               before [lookup_type]. *)
+            match implicit_functype ctx idx with
+            | Some sign -> sign
+            | None -> (
+                let ty = lookup_type ctx Type idx in
+                match ty.typ with
+                | Struct _ | Array _ | Cont _ -> assert false
+                | Func sign -> sign))
         | None, None -> assert false
       in
       {
