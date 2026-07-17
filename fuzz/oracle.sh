@@ -181,17 +181,27 @@ case "$verdict:$EXPECT" in
     # reference's parse+validate. REVIEW severity: a mismatch may be a genuine
     # divergence or just a proposal one side parses and the other does not.
     if [ "$FMT" = wasm ] || [ "$FMT" = wat ]; then
+      # Compare wax's STRICT verdict against wasm-tools: wasm-tools (like the
+      # spec reference interpreter) is always strict on reference validation,
+      # whereas wax's default WAT check is deliberately relaxed there — an
+      # undeclared [ref.func] target is auto-declared on lowering, so wax
+      # accepts what wasm-tools rejects by design (docs/src/cli.md,
+      # [--strict-validate]). Without [-s] that documented leniency reports as
+      # a spurious divergence. A separate variable so the downstream oracles
+      # keep exercising wax's default (relaxed) [$verdict].
+      scheck=(check -s "$IN")
+      sverdict="$(classify_wax "${scheck[@]}")"
       if wt_validate "$IN"; then ref=ok; else ref=rejected; fi
       report_diff=0
-      diffmsg="wax says $verdict, wasm-tools says $ref"
-      if [ "$verdict" != "$ref" ]; then
+      diffmsg="wax says $sverdict, wasm-tools says $ref"
+      if [ "$sverdict" != "$ref" ]; then
         if [ "$FMT" = wat ] && ! grep -q '[^[:space:]]' "$IN"; then
           # A whitespace-only WAT is a valid empty module to wax (and to
           # wat2wasm, which warns but accepts); only wasm-tools refuses a bare
           # empty top-level. That divergence is a reference quirk the text
           # mutator hits whenever it deletes every token — suppress it.
           report_diff=0
-        elif [ "$verdict" = ok ] || [ "$FMT" = wat ]; then
+        elif [ "$sverdict" = ok ] || [ "$FMT" = wat ]; then
           # wax MORE LENIENT (accepts what the reference rejects — the soundness
           # direction), or any WAT-text divergence: report directly.
           report_diff=1
@@ -216,7 +226,7 @@ case "$verdict:$EXPECT" in
       fi
       if [ "$report_diff" = 1 ]; then
         finding VALIDATOR_DIFF REVIEW "$IN" "$diffmsg" \
-          "$(repro "${check[@]}"); wasm-tools validate --features all $IN"
+          "$(repro "${scheck[@]}"); wasm-tools validate --features all $IN"
       fi
     fi ;;
 esac
