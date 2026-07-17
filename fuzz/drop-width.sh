@@ -7,9 +7,12 @@
 # width, so an anchor-free literal tree under it re-defaults to i32 on re-parse —
 # silently changing the operand's width and, for a non-mod-2^32-homomorphic op
 # (`div`/`rem`/`>>`/`<<`/`rot`), its VALUE. Confirmed erasers: `drop`, comparisons,
-# `eqz`, `i32.wrap_i64`, and a truncation's source float width. All are invisible
-# to every validity oracle — both the original and the drifted module validate;
-# only execution sees the wrong value / introduced trap.
+# `eqz`, `i32.wrap_i64`, a truncation's source float width, the value operand of a
+# narrow i64 store (`i64.store8/16/32` — its method name carries only the access
+# width), and either arm of a `select` (whose `?:` surface carries no result
+# type, so the arms must be pinned or an interposed eraser cannot reach them).
+# All are invisible to every validity oracle — both the original and the drifted
+# module validate; only execution sees the wrong value / introduced trap.
 #
 # The space is small and enumerable, so we enumerate it: each eraser wraps a
 # width-sensitive i64 tree (and the truncations wrap an f32/f64 const), round-trip
@@ -71,6 +74,32 @@ done
 # so these must pass trivially (a plain i64->i32 boundary check).
 add "drop i32.shr_u (control)" "i32.shr_u" \
   "(module (func (export \"f\") (drop (i32.shr_u (i32.const 4096) (i32.const 40)))))"
+
+# ---- Narrow i64 stores: [i64.store8/16/32] carries the access width in its
+# method name only; the value's i32/i64 type is recovered from the operand, so a
+# width-sensitive i64 value re-defaults to i32 and the stored byte changes (the
+# value is the eraser; the address is always i32). ----
+for i in "${!INNER_EXPR[@]}"; do
+  E="${INNER_EXPR[$i]}"; OP="${INNER_OP[$i]}"
+  for s in store8 store16 store32; do
+    add "$s $OP" "$OP" \
+      "(module (memory 1) (func (export \"f\") (i64.$s (i32.const 0) $E)))"
+  done
+done
+
+# ---- [select] carries no result type on its Wax surface, so its arms must be
+# pinned or an interposed width eraser cannot reach the flexible i64 tree beneath
+# it. Wrap each width-sensitive tree in a same-type select, then erase. ----
+for i in "${!INNER_EXPR[@]}"; do
+  E="${INNER_EXPR[$i]}"; OP="${INNER_OP[$i]}"
+  SEL="(select $E (i64.const 1) (i32.const 1))"
+  add "wrap select $OP" "$OP" \
+    "(module (func (export \"f\") (result i32) (i32.wrap_i64 $SEL)))"
+  add "eqz select $OP" "$OP" \
+    "(module (func (export \"f\") (result i32) (i64.eqz $SEL)))"
+  add "drop select $OP" "$OP" \
+    "(module (func (export \"f\") (drop $SEL)))"
+done
 
 # ---- Truncation source float width: the op's [as int] cast pins the result, not
 # the source, so a bare float operand re-defaults. Values straddle the f32/f64
