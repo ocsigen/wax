@@ -1546,6 +1546,16 @@ let add_type d ctx ty =
       Array.iteri
         (fun i elt ->
           let name, (typ : subtype) = elt.desc in
+          (* Normalization drops a supertype the spec forbids — a forward or self
+             reference, which is not "declared before" (see [subtype]/
+             [defined_before]). Drop it from the source type stored here too, so
+             the source-level walkers ([heap_lub] via [immediate_supertype]) never
+             follow the cyclic edge and loop; the error was already reported. *)
+          let typ =
+            match ity.(i).supertype with
+            | None -> { typ with supertype = None }
+            | Some _ -> typ
+          in
           Tbl.override ctx.types name
             (Wax_wasm.Types.Def (Wax_wasm.Types.Id.add i' i), typ))
         ty;
@@ -5181,6 +5191,13 @@ let rebuild_while ~stepped ~labelled typed_list =
    typed default, and the typed scrutinee (the innermost operand of the test
    chain) — [None] when there are no arms, so the scrutinee never appears in the
    lowering. *)
+(* Raised by [rebuild_match] when the type-checked lowering is not the block
+   nesting the lowering produces. That shape is guaranteed only when typing
+   SUCCEEDS; an erroneous scrutinee (e.g. a hole that underflows, or one whose
+   type failed to resolve) can make the checker recover into a different shape,
+   so the callers catch this and fall back rather than crashing. *)
+exception Match_shape
+
 let rebuild_match typed_list arms =
   match arms with
   | [] -> ([], typed_list, None)
@@ -5188,7 +5205,7 @@ let rebuild_match typed_list arms =
       let block_body blk =
         match blk.desc with
         | Ast.Block { block; _ } -> block.desc
-        | _ -> assert false
+        | _ -> raise Match_shape
       in
       (* Strip a wrapper block's leading consume of its inner block, returning
          that inner block and the arm body following it. *)
@@ -5201,10 +5218,10 @@ let rebuild_match typed_list arms =
             { desc = Ast.Let ([ (None, _) ], Some inner); _ } :: body ) ->
             (inner, body)
         | Ast.MatchNull, inner :: body -> (inner, body)
-        | _ -> assert false
+        | _ -> raise Match_shape
       in
       let escape, default =
-        match typed_list with x :: r -> (x, r) | [] -> assert false
+        match typed_list with x :: r -> (x, r) | [] -> raise Match_shape
       in
       (* The innermost block's body is [drop chain; br escape]; the chain wraps
          the scrutinee in one [br_on_cast]/[br_on_null] per arm, so descend that
@@ -5222,7 +5239,7 @@ let rebuild_match typed_list arms =
                 | _ -> c
             in
             descend (List.length arms) chain
-        | _ -> assert false
+        | _ -> raise Match_shape
       in
       let rec peel blk = function
         | [] ->
@@ -7341,7 +7358,20 @@ and type_block_construct ctx i =
           ~default
       in
       let typed = block ctx i.info None [||] [||] [||] lowered in
-      let arms', default', scrut_opt = rebuild_match typed arms in
+      let arms', default', scrut_opt =
+        (* On an erroneous scrutinee the typed lowering may not peel apart into
+           the expected block nesting; recover with empty arm/default bodies (the
+           module is already being rejected — the rebuilt node only feeds the
+           formatter/editor) and type the scrutinee on its own, rather than
+           crashing. *)
+        try rebuild_match typed arms
+        with Match_shape ->
+          ( List.map
+              (fun (pat, orig) -> (pat, { desc = []; info = orig.info }))
+              arms,
+            [],
+            None )
+      in
       let scrut' = match_recover_scrutinee ctx scrutinee scrut_opt in
       (* The chain's casts require a reference scrutinee; flag a non-reference
          here (the failed cast in the lowered form reports at the same spot). *)
@@ -9111,10 +9141,13 @@ and check_toplevel ?(drop_supertype = false) ctx expected i =
   let args, (i', needed) =
     check_instruction ~drop_supertype ctx expected i args
   in
-  assert (args = []);
-  (* A misplaced hole ([_] after a value) is reported by [check_hole_order];
-     it returns [false] only after reporting that error, so recover rather than
-     asserting. *)
+  (* [count] holes were popped above; typing normally consumes them all, but on
+     erroneous input a sub-typer can short-circuit and skip a hole-bearing
+     subexpression (one of many recovery paths), leaving an operand unconsumed.
+     Tolerate that rather than asserting — the module is already being rejected.
+     (Hole handling is due for a more robust rework.) [check_hole_order] likewise
+     recovers on a misplaced hole. *)
+  ignore (args : _ list);
   ignore (check_hole_order ctx i' count : bool);
   return (i', needed)
 
@@ -9625,7 +9658,20 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
           ~default
       in
       let* typed = block_contents ctx [||] lowered in
-      let arms', default', scrut_opt = rebuild_match typed arms in
+      let arms', default', scrut_opt =
+        (* On an erroneous scrutinee the typed lowering may not peel apart into
+           the expected block nesting; recover with empty arm/default bodies (the
+           module is already being rejected — the rebuilt node only feeds the
+           formatter/editor) and type the scrutinee on its own, rather than
+           crashing. *)
+        try rebuild_match typed arms
+        with Match_shape ->
+          ( List.map
+              (fun (pat, orig) -> (pat, { desc = []; info = orig.info }))
+              arms,
+            [],
+            None )
+      in
       let scrut' = match_recover_scrutinee ctx scrutinee scrut_opt in
       (match match_scrut_reftype ctx scrut' with
       | Some _ -> ()
@@ -9642,18 +9688,18 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let count = count_holes i in
       let* args = pop_many ctx i count [] in
       let args, res = instruction ctx i args in
-      (* Should not fail *)
-      assert (args = []);
-      (* [check_hole_order] reports a misplaced hole and returns [false]; recover
-         rather than asserting. *)
+      (* Tolerate a hole operand left unconsumed by error recovery; see
+         [check_toplevel]. *)
+      ignore (args : _ list);
       ignore (check_hole_order ctx res count : bool);
       return res |> unreachable
   | _ ->
       let count = count_holes i in
       let* args = pop_many ctx i count [] in
       let args, res = instruction ctx i args in
-      (* Should not fail *)
-      assert (args = []);
+      (* Tolerate a hole operand left unconsumed by error recovery; see
+         [check_toplevel]. *)
+      ignore (args : _ list);
       ignore (check_hole_order ctx res count : bool);
       return res
 
@@ -9842,7 +9888,9 @@ and block_contents ctx results l =
             let count = count_holes i in
             let* args = pop_many ctx i count [] in
             let args, i' = instruction ctx i args in
-            assert (args = []);
+            (* Tolerate a hole operand left unconsumed by error recovery; see
+               [check_toplevel]. *)
+            ignore (args : _ list);
             ignore (check_hole_order ctx i' count : bool);
             let* () =
               push_results

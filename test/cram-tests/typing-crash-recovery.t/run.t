@@ -152,3 +152,29 @@ swallowed):
 
   $ wax check extra-field-unbound.wax 2>&1 | grep -c "is not bound"
   1
+
+A supertype that is a forward or self reference is invalid (the spec requires a
+supertype to be declared before), so it is dropped and reported; using such a
+type in a `match` no longer hangs the subtype walk (it used to loop over the
+cyclic supertype chain):
+
+  $ cat > super-cycle.wax <<'WAX'
+  > type t: t = { x: i32 };
+  > fn f(a: &any) -> i32 { match a { p: &t => { return 0; } _ => { return -1; } } }
+  > WAX
+
+  $ wax check super-cycle.wax 2>&1 | grep -c "is not bound"
+  1
+
+A struct literal with a hole under such an erroneous type no longer crashes: the
+unconsumed hole operand left by the aborted recovery is tolerated rather than
+tripping an assertion:
+
+  $ cat > super-cycle-hole.wax <<'WAX'
+  > type t: u = { x: i32 };
+  > type u = { x: i32 };
+  > fn f() { {t| x: _ }; }
+  > WAX
+
+  $ wax check super-cycle-hole.wax >/dev/null 2>&1; echo $?
+  128
