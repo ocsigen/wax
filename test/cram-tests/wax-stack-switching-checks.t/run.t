@@ -67,7 +67,7 @@ a continuation target stays rejected there unconditionally:
   Error: Continuation types cannot be used in a cast instruction.
    ──➤  test-cont.wax:1:27
   1 │ fn f() { unreachable; _ = _ is &?cont; }
-    ·                           ^
+    ·                           ^^^^^^^^^^^
   2 │ 
   [128]
 

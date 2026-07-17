@@ -316,15 +316,18 @@ module Error = struct
   (* A shift whose constant count is at least the operand's bit width. Wasm
      shifts mask the count modulo the width, so the result is very likely not
      what was intended. *)
+  (* [count] is the shift count as an unsigned 64-bit value (a hex literal such
+     as [0xffff_ffff_ffff_ffff] is a large positive count, not [-1]), so print
+     and reduce it unsigned. *)
   let shift_overflow context ~location ~width count =
     warn ~warning:Wax_utils.Warning.Shift_overflow ~universal:true context
       ~location
       ~hint:
         ((text "Wasm masks the count modulo" ++ Message.int width)
         ^^ text "," ++ text "shifting by"
-           ++ Message.int64 (Int64.rem count (Int64.of_int width))
+           ++ Message.uint64 (Int64.unsigned_rem count (Int64.of_int width))
            ++ text "instead.")
-      (text "The shift count" ++ Message.int64 count
+      (text "The shift count" ++ Message.uint64 count
        ++ text "is at least the operand width ("
       ^^ Message.int width ^^ text " bits).")
 
@@ -1610,6 +1613,11 @@ type module_context = {
       (* Names of block labels branched to so far in the current function
          (marked by [branch_target]). A [ref] so a branch nested in a block
          propagates to the function level. Reset per function. *)
+  deferred_lints : (unit -> unit) list ref;
+      (* Lints that must read a result cell only once typing has pinned it (the
+         [shift-count-overflow] lint reads the shifted operand's width, which a
+         later context can widen). Accumulated across the whole configuration and
+         flushed at the end of [type_configuration], when every cell is final. *)
   label_decls : ident list;
       (* The block labels declared in the current function's body, collected up
          front from the source AST (see [collect_labels]), so one never branched
@@ -2366,6 +2374,16 @@ let branch_target ctx label =
   in
   find ctx.control_types label
 
+(* Whether [label] resolves to an in-scope control label. Unlike
+   [branch_target], reports nothing and records no use; used to tell an unbound
+   label (already diagnosed) from a legitimately void target when both present as
+   [[||]]. *)
+let label_in_scope ctx label =
+  List.exists
+    (fun (l, _) ->
+      match l with Some l' -> l'.desc = label.desc | None -> false)
+    ctx.control_types
+
 (* Draw "did you mean" suggestions from the namespaces an identifier may
    legitimately name, which depends on how it is used:
    - [Get] reads any value, so a local, a global or a function;
@@ -2598,21 +2616,51 @@ let int_literal_value_is_zero e = int_literal_value_is 0L e
 
 (* [x << n] / [x >> n] with a constant [n] at least the operand's bit width:
    Wasm masks [n] modulo the width, so the shift is almost certainly not what
-   was meant. Only fires when the operand is a concrete i32/i64 (so the width is
-   known) and [n] a non-negative literal. *)
+   was meant. The operand width comes from the result cell: a concrete i32/i64,
+   or a still-flexible integer at its default width (Number/Int -> i32,
+   LargeInt -> i64). This is deferred (see [ctx.deferred_lints]) until typing
+   finishes, so a literal a later context pins to a wider type is already
+   concrete here — [1 << 40] typed [i64] is fine, typed [i32] is not — and only a
+   genuinely unconstrained operand falls back to a default. *)
 let lint_shift ctx op result rhs =
   match op.desc with
   | Shl | Shr _ -> (
       match rhs.desc with
       | Ast.Int s -> (
-          match (int_literal_value s, Cell.get result) with
-          | Some n, Valtype { internal = (I32 | I64) as t; _ } when n >= 0L ->
-              let width = match t with I32 -> 32 | _ -> 64 in
-              if n >= Int64.of_int width then
-                Error.shift_overflow ctx.diagnostics ~location:op.info ~width n
-          | _ -> ())
+          match
+            match Cell.get result with
+            | Valtype { internal = I32; _ } | Number | Int -> Some 32
+            | Valtype { internal = I64; _ } | LargeInt -> Some 64
+            | _ -> None
+          with
+          | None -> ()
+          | Some width -> (
+              (* Parse the count unsigned: a hex literal past [2^63] wraps to a
+                 negative [int64] under a signed parse, so compare unsigned. A
+                 literal exceeding [u64] ([None]) is left alone (astronomically
+                 large, and beyond what the message can render). *)
+              let bits = String.concat "" (String.split_on_char '_' s) in
+              let count =
+                if String.starts_with ~prefix:"0x" bits then
+                  Int64.of_string_opt bits
+                else Int64.of_string_opt ("0u" ^ bits)
+              in
+              match count with
+              | Some n when Int64.unsigned_compare n (Int64.of_int width) >= 0
+                ->
+                  Error.shift_overflow ctx.diagnostics ~location:op.info ~width
+                    n
+              | _ -> ()))
       | _ -> ())
   | _ -> ()
+
+(* Run and clear the lints deferred until their result cells were pinned (see
+   [ctx.deferred_lints]). Called once each per-body scope (global initializers,
+   then each function body) finishes typing, so the diagnostics stay in source
+   order rather than all landing at the end of the module. *)
+let flush_deferred_lints ctx =
+  List.iter (fun f -> f ()) (List.rev !(ctx.deferred_lints));
+  ctx.deferred_lints := []
 
 (* Integer [/] or [%] by a constant zero always traps. [Div (Some _)] and
    [Rem _] are the integer forms ([Div None] is float division, which does not
@@ -3148,12 +3196,18 @@ let check_resume_handlers ctx ~result_types handlers =
                     "this handler must take the tag's parameters followed by a \
                      continuation of the remaining result type"
               in
-              (* The handler label receives the tag's parameters followed by a
-                 continuation of type [cont (ts4 -> result_types)]. *)
-              let n = Array.length ts' in
-              if n <> Array.length ts3 + 1 then mismatch ()
+              (* When the label is unbound, [branch_target] has already reported
+                 it and returned [[||]]; skip the contract check so the same
+                 label is not flagged a second time (as the unknown-tag arm
+                 above skips it). *)
+              if not (label_in_scope ctx label) then ()
               else begin
-                (* The continuation slot may be a block result still being
+                (* The handler label receives the tag's parameters followed by a
+                   continuation of type [cont (ts4 -> result_types)]. *)
+                let n = Array.length ts' in
+                if n <> Array.length ts3 + 1 then mismatch ()
+                else begin
+                  (* The continuation slot may be a block result still being
                    inferred (the Wasm->Wax [simplify] pass), presented as a
                    [Collecting] cell. Reading it to validate the contract is a use
                    the join cannot re-derive, so mark its annotation needed (kept);
@@ -3163,33 +3217,36 @@ let check_resume_handlers ctx ~result_types handlers =
                    (n > 1) is never inferred and its slots are concrete. A cell
                    inferring with no declared annotation resolves to [None] below
                    and so fails the contract check, as it must. *)
-                (match Cell.get ts'.(n - 1) with
-                | Collecting cs -> cs.needed <- true
-                | _ -> ());
-                Array.iteri
-                  (fun i p ->
-                    let _, t = p.desc in
-                    match
-                      (internalize_valtype ctx t, internal_of_inferred ts'.(i))
-                    with
-                    | Some it, Some it' ->
-                        if not (Wax_wasm.Types.val_subtype info it.internal it')
-                        then mismatch ()
-                    | _ -> ())
-                  ts3;
-                match internal_of_inferred ts'.(n - 1) with
-                | Some (Ref { typ = ht; _ }) -> (
-                    match cont_functype ctx ht with
-                    | Some ft' -> (
-                        match (to_internal ts4, to_internal result_types) with
-                        | Some params, Some results ->
-                            if
-                              not
-                                (functype_matches info { params; results } ft')
-                            then mismatch ()
-                        | _ -> ())
-                    | None -> mismatch ())
-                | _ -> mismatch ()
+                  (match Cell.get ts'.(n - 1) with
+                  | Collecting cs -> cs.needed <- true
+                  | _ -> ());
+                  Array.iteri
+                    (fun i p ->
+                      let _, t = p.desc in
+                      match
+                        (internalize_valtype ctx t, internal_of_inferred ts'.(i))
+                      with
+                      | Some it, Some it' ->
+                          if
+                            not
+                              (Wax_wasm.Types.val_subtype info it.internal it')
+                          then mismatch ()
+                      | _ -> ())
+                    ts3;
+                  match internal_of_inferred ts'.(n - 1) with
+                  | Some (Ref { typ = ht; _ }) -> (
+                      match cont_functype ctx ht with
+                      | Some ft' -> (
+                          match (to_internal ts4, to_internal result_types) with
+                          | Some params, Some results ->
+                              if
+                                not
+                                  (functype_matches info { params; results } ft')
+                              then mismatch ()
+                          | _ -> ())
+                      | None -> mismatch ())
+                  | _ -> mismatch ()
+                end
               end)
       | OnSwitch tag -> (
           match Tbl.find ctx.diagnostics ctx.tags tag with
@@ -3547,7 +3604,10 @@ let rec find_eager_hazard (e : _ Ast.instr) =
   | Test (a, _)
   | Labelled (_, a)
   | ArrayDefault (_, a)
-  | StructDefaultDesc a ->
+  | StructDefaultDesc a
+  (* An [on]-clause only ever wraps a resume-family call — itself a hazard — so
+     descend into it rather than treating it as a nested control construct. *)
+  | On (a, _) ->
       find_eager_hazard a
   | Array (_, a, b) -> descend [ a; b ]
   | ArrayFixed (_, l) | Sequence l -> descend l
@@ -3563,8 +3623,8 @@ let rec find_eager_hazard (e : _ Ast.instr) =
   | StructDefault _ | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _
   | TryCatch _ | Br _ | Br_if _ | Br_table _ | Dispatch _ | Match _
   | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _
-  | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ | Hinted _ | On _
-  | Return _ | Select _ | If_annotation _ ->
+  | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ | Hinted _ | Return _
+  | Select _ | If_annotation _ ->
       None
 
 (* Report an eager-evaluation hazard in the [?:] branch [arm]; [select] is the
@@ -3590,27 +3650,44 @@ let binop_kind_name = function
    operand is immediately preceded by [(] (a right operand) or followed by [)]
    (a left operand), skipping whitespace. With no source available, assume it is
    parenthesized (so the lint stays silent rather than risk a false positive). *)
-let operand_parenthesized ctx ~side (child : _ Ast.instr) =
+let operand_parenthesized ctx ~op ~side (child : _ Ast.instr) =
   match Wax_utils.Diagnostic.source ctx.diagnostics with
   | None -> true
-  | Some src -> (
+  | Some src ->
       let is_space = function ' ' | '\t' | '\n' | '\r' -> true | _ -> false in
       let n = String.length src in
-      match side with
-      | `Right ->
-          let rec back i =
-            if i < 0 then false
-            else if is_space src.[i] then back (i - 1)
-            else src.[i] = '('
+      (* Index of the next significant (non-trivia) character at or after [i],
+         skipping whitespace and comments — line ([//…]) and nesting block
+         ([/*…*/]) — so a comment between an operand and its bracket does not
+         hide the parenthesis (a whitespace-only skip used to warn spuriously). *)
+      let rec skip_fwd i =
+        if i >= n then i
+        else if is_space src.[i] then skip_fwd (i + 1)
+        else if i + 1 < n && src.[i] = '/' && src.[i + 1] = '/' then
+          let rec eol j = if j >= n || src.[j] = '\n' then j else eol (j + 1) in
+          skip_fwd (eol (i + 2))
+        else if i + 1 < n && src.[i] = '/' && src.[i + 1] = '*' then
+          let rec blk depth j =
+            if j + 1 >= n then n
+            else if src.[j] = '/' && src.[j + 1] = '*' then
+              blk (depth + 1) (j + 2)
+            else if src.[j] = '*' && src.[j + 1] = '/' then
+              if depth = 1 then j + 2 else blk (depth - 1) (j + 2)
+            else blk depth (j + 1)
           in
-          back (child.info.loc_start.pos_cnum - 1)
-      | `Left ->
-          let rec fwd i =
-            if i >= n then false
-            else if is_space src.[i] then fwd (i + 1)
-            else src.[i] = ')'
-          in
-          fwd child.info.loc_end.pos_cnum)
+          skip_fwd (blk 1 (i + 2))
+        else i
+      in
+      let significant_is c from = from < n && src.[from] = c in
+      (* Both operands are tested by scanning forward, since a parenthesised
+         operand always has a bracket downstream: the right operand's [(] follows
+         the operator, the left operand's [)] follows the operand. *)
+      let from =
+        match side with
+        | `Right -> skip_fwd op.info.loc_end.pos_cnum
+        | `Left -> skip_fwd child.info.loc_end.pos_cnum
+      in
+      significant_is (match side with `Right -> '(' | `Left -> ')') from
 
 (* The [precedence] lint: flag a binary operator [op] one of whose operands is
    itself a binary operator of a confusingly-related class (see
@@ -3625,7 +3702,7 @@ let lint_precedence ctx (op : (binop, location) annotated) e1 e2 =
       | BinOp (inner_op, _, _)
         when Ast_utils.confusing_precedence outer
                (Ast_utils.binop_kind inner_op.desc)
-             && not (operand_parenthesized ctx ~side child) ->
+             && not (operand_parenthesized ctx ~op ~side child) ->
           Error.precedence ctx.diagnostics ~location:op.info
             ~inner:inner_op.info ~outer_kind:(binop_kind_name outer)
             ~inner_kind:(binop_kind_name (Ast_utils.binop_kind inner_op.desc))
@@ -4853,6 +4930,18 @@ let take_labels ctx ~allowed labelled =
 let mem_immediates ctx ~location ~example ~nstack ~has_lane find positional =
   let nargs = List.length positional in
   let extra = List.filteri (fun k _ -> k >= nstack) positional in
+  let nimms = if has_lane then 3 else 2 in
+  (* The extras are the pre-labelled positional-immediate syntax only when they
+     are all integer literals and no more than the immediate count; otherwise
+     they are an ordinary arity error and must not be read as immediates (else a
+     non-literal extra, e.g. a local, cascades into a bogus memarg error). *)
+  let migration =
+    extra <> []
+    && List.length extra <= nimms
+    && List.for_all
+         (fun a -> match a.Ast.desc with Ast.Int _ -> true | _ -> false)
+         extra
+  in
   (if nargs < nstack then
      Error.value_count_mismatch ctx.diagnostics ~location ~expected:nstack
        ~provided:nargs
@@ -4860,21 +4949,16 @@ let mem_immediates ctx ~location ~example ~nstack ~has_lane find positional =
      match extra with
      | [] -> ()
      | a :: _ ->
-         let nimms = if has_lane then 3 else 2 in
-         if
-           List.length extra <= nimms
-           && List.for_all
-                (fun a ->
-                  match a.Ast.desc with Ast.Int _ -> true | _ -> false)
-                extra
-         then
+         if migration then
            Error.positional_memory_immediate ctx.diagnostics
              ~location:(snd a.Ast.info) ~example
          else
            Error.value_count_mismatch ctx.diagnostics ~location ~expected:nstack
              ~provided:nargs);
   let pick name k =
-    match find name with Some e -> Some e | None -> List.nth_opt extra k
+    match find name with
+    | Some e -> Some e
+    | None -> if migration then List.nth_opt extra k else None
   in
   if has_lane then (pick "lane" 0, pick "align" 1, pick "offset" 2)
   else (None, pick "align" 0, pick "offset" 1)
@@ -6309,7 +6393,12 @@ and type_arith ctx i =
                         (Wax_wasm.Types.val_subtype (subtyping_info ctx) ty
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
-                | UnknownRef, (UnknownRef | Null) | Null, UnknownRef -> ()
+                (* Two nulls compare as [ref.eq (ref.null none) (ref.null none)],
+                   both bottom (hence [eqref]); accept them like the
+                   bottom-reference cases rather than falling into the numeric
+                   comparison below. *)
+                | UnknownRef, (UnknownRef | Null) | Null, (UnknownRef | Null) ->
+                    ()
                 (* Any non-reference operands are the ordinary numeric comparison.
                    [check_num_concrete] reports the same mismatch otherwise. *)
                 | _ -> check_num_concrete ctx ~location:op.info ty1 ty2);
@@ -6328,7 +6417,10 @@ and type_arith ctx i =
                 i32_cell)
       in
       if ctx.warn_unused then begin
-        lint_shift ctx op ty i2';
+        (* Deferred: the shift lint reads the operand width from [ty], which a
+           later context can still widen (e.g. [1 << 40] pinned [i64]). *)
+        ctx.deferred_lints :=
+          (fun () -> lint_shift ctx op ty i2') :: !(ctx.deferred_lints);
         lint_division ctx op i2';
         lint_comparison ctx op i1' i2';
         lint_redundant ctx op i1' i2'
@@ -6662,8 +6754,8 @@ and type_cast ctx i =
       if not (cast ctx ty' (Ref t)) then
         Error.invalid_cast ctx.diagnostics ~location:(snd value'.info) ty';
       return_expression i (CastDesc (value', nullable, d')) ty
-  | Test (i, ty) ->
-      let* i' = instruction ctx i in
+  | Test (operand, ty) ->
+      let* i' = instruction ctx operand in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
       (* The operand's natural type, before [check_type] below concretises it. *)
@@ -10750,6 +10842,10 @@ let rec functions ctx fields =
                let* () = pop_args ctx ~location return_types in
                return body)
           in
+          (* The body is fully typed, so the deferred lints (shift-count widths)
+             can now read their pinned cells; run them here, in this function, so
+             they stay in source order among the other diagnostics. *)
+          flush_deferred_lints ctx;
           (* A local or label whose name starts with [_] is intentionally
              unused. *)
           if ctx.warn_unused then begin
@@ -11065,6 +11161,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       read_locals = ref StringSet.empty;
       local_decls = ref [];
       used_labels = ref StringSet.empty;
+      deferred_lints = ref [];
       label_decls = [];
       assigned_locals = StringSet.empty;
       initialized_locals = StringSet.empty;
@@ -11295,6 +11392,10 @@ let type_configuration ?(warn_unused = false) ?(build = true)
     }
   in
   let phased_fields = globals ctx fields in
+  (* Global initializers are fully typed now; run their deferred lints (see
+     [ctx.deferred_lints]) before the function bodies, keeping every diagnostic
+     in source order. *)
+  flush_deferred_lints ctx;
   let typed_fields = functions ctx phased_fields in
   (* Report module fields — functions and globals — that are defined but never
      referenced (the module-level analog of an unused local). A field is exempt

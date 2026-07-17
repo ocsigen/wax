@@ -20,6 +20,7 @@ let type_ s = Atom (Colors.Type, true, s)
 let styled style s = Atom (style, false, s)
 let int n = Atom (Colors.Constant, false, string_of_int n)
 let int64 n = Atom (Colors.Constant, false, Int64.to_string n)
+let uint64 n = Atom (Colors.Constant, false, Printf.sprintf "%Lu" n)
 let bool b = Atom (Colors.Constant, false, string_of_bool b)
 let raw f = Raw f
 let empty = Empty

@@ -40,6 +40,11 @@ val styled : Colors.style -> string -> t
 
 val int : int -> t
 val int64 : Int64.t -> t
+
+val uint64 : Int64.t -> t
+(** [uint64 n] renders [n] as an unsigned 64-bit integer, so a value with the
+    high bit set prints as its magnitude rather than a negative number. *)
+
 val bool : bool -> t
 
 val raw : (Styled_printer.t -> unit) -> t
