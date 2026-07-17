@@ -5,6 +5,8 @@
 #
 # (Fixtures named `bad*.wax` that are merely *semantic* errors — e.g. type
 # errors — are NOT listed here: they parse cleanly and are positive tests.)
+test/cram-tests/all-errors-semantic-raise.t/module-else.wax
+test/cram-tests/all-errors-semantic-raise.t/stmt-raise.wax
 test/cram-tests/check-all-errors.t/missing-semi.wax
 test/cram-tests/check-all-errors.t/mixed.wax
 test/cram-tests/check-all-errors.t/multi.wax

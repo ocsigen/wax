@@ -211,6 +211,18 @@ Other suites under `test/`:
 
 A few top-level `.expected` golden files also exist (e.g. `test/output.wat.expected`); `dune promote` accepts changes to those too. Per Rule 1, never hand-edit `.expected` output or `test/` `dune` rules to make a test pass.
 
+The tree-sitter grammar (`tree-sitter-wax/`) is a separate node subproject with
+its own CI (`.github/workflows/tree-sitter.yml`), **not run by `dune runtest`**.
+Its corpus smoke test parses every `.wax` fixture under `test/cram-tests/` (plus
+doc examples) and asserts zero ERROR/MISSING nodes, so a newly added
+*syntactically* invalid fixture (a negative parse test) must also be registered
+in `tree-sitter-wax/test/expected-errors.txt` — otherwise the tree-sitter job
+goes red even though `dune runtest` is green (wax's parser enforces some
+semantic constraints, e.g. pow2 page sizes or escape ranges, that the pure
+grammar does not, so the two disagree on which fixtures parse). Check locally
+before pushing fixture or grammar changes with `npm run smoke` in
+`tree-sitter-wax/`.
+
 ## Documentation
 
 User-facing docs live in the `docs/` mdbook (`docs/src/*.md`). When a change affects user-visible behavior, update the relevant page in the same commit:
