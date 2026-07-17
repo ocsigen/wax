@@ -1,18 +1,43 @@
 (** Generic parsing utilities. *)
 
-exception
-  Syntax_error of (Lexing.position * Lexing.position) * Wax_utils.Message.t
-(** Exception raised when a syntax error occurs, with location range and
-    message. *)
-
 type syntax_error = {
   location : Wax_utils.Ast.location;
   message : Wax_utils.Message.t;
   related : Wax_utils.Diagnostic.label list;
+  hint : Wax_utils.Message.t option;
+  fix : Wax_utils.Diagnostic.edit option;
 }
-(** A syntax error returned as data by [parse_diagnostics]: the location range,
-    the human-readable message, and any related labels (e.g. the matching
-    opening delimiter). *)
+(** A syntax error, both the payload of {!Syntax_error} and the value
+    [parse_diagnostics] / [parse_recover] return: the location range, the
+    human-readable message, any related labels (e.g. the matching opening
+    delimiter), an optional prose [hint], and an optional machine-applicable
+    quick [fix] (a text edit, reusing {!Wax_utils.Diagnostic.edit} so a syntax
+    error's fix flows through the same editor/LSP code-action path as the
+    typer's suggestions). Recovery derives a [fix] mechanically from an
+    insertion repair (see {!Make.parse_recover}). *)
+
+exception Syntax_error of syntax_error
+(** Raised when a syntax error occurs, carrying the structured payload above. *)
+
+val syntax_error :
+  location:Wax_utils.Ast.location ->
+  ?related:Wax_utils.Diagnostic.label list ->
+  ?hint:Wax_utils.Message.t ->
+  ?fix:Wax_utils.Diagnostic.edit ->
+  Wax_utils.Message.t ->
+  'a
+(** [syntax_error ~location ?related ?hint ?fix message] raises {!Syntax_error}
+    with the structured payload. Smart constructor used by every enriched raise
+    site (the lexers and both grammars), so the payload shape is spelled once.
+*)
+
+val syntax_error_pair :
+  (Lexing.position * Lexing.position) * Wax_utils.Message.t -> exn
+(** [syntax_error_pair ((loc_start, loc_end), message)] builds (without raising)
+    the {!Syntax_error} value from the legacy position-pair payload, with no
+    [related]/[hint]/[fix]. It keeps the many pre-existing
+    [raise (Syntax_error (pair, msg))] sites in the lexers and grammars a
+    one-token change; new code should prefer the raising {!syntax_error}. *)
 
 type sync_class =
   | Open
@@ -108,7 +133,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:(Tokens.token * Wax_utils.Message.t * bool) list ->
+    ?insert:(Tokens.token * Wax_utils.Message.t * bool * string) list ->
     ?closers:Tokens.token list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->
@@ -126,17 +151,21 @@ end) : sig
       as a language server that must report all errors and keep a partial AST
       across them.
 
-      [insert] is a list of candidate tokens (each with the diagnostic to
-      report) that recovery may {e insert} in front of an offending token
-      instead of skipping to a boundary — a statement separator like [;], or a
-      placeholder operand like a zero [0] that lets an incomplete construct
-      complete. The candidates are tried in order; the engine's [acceptable]
-      answers whether one fits, and the repair is kept only if the offending
-      token then shifts too (validated, so a wrong guess is discarded).
-      Insertion is attempted at most once per source position, so it cannot
-      loop; it falls back to skip-based recovery. The candidates also serve
-      [close_pending] (e.g. completing an unclosed construct at EOF). Omit
-      ([[]]) to disable insertion.
+      [insert] is a list of candidate tokens (each
+      [(token, diagnostic, move_pos, source_text)]: the token to insert, the
+      diagnostic to report, whether to place the caret at the previous token's
+      end rather than the offending token, and the token's source spelling used
+      as the derived quick fix's [new_text]) that recovery may {e insert} in
+      front of an offending token instead of skipping to a boundary — a
+      statement separator like [;], or a placeholder operand like a zero [0]
+      that lets an incomplete construct complete. The candidates are tried in
+      order; the engine's [acceptable] answers whether one fits, and the repair
+      is kept only if the offending token then shifts too (validated, so a wrong
+      guess is discarded); a validated repair also attaches [source_text] as a
+      machine-applicable [fix]. Insertion is attempted at most once per source
+      position, so it cannot loop; it falls back to skip-based recovery. The
+      candidates also serve [close_pending] (e.g. completing an unclosed
+      construct at EOF). Omit ([[]]) to disable insertion.
 
       [closers] lists the closing-bracket tokens. At end of input inside an
       unclosed bracketed construct, recovery auto-closes: it inserts whichever
@@ -231,7 +260,7 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:(Tokens.token * Wax_utils.Message.t * bool) list ->
+    ?insert:(Tokens.token * Wax_utils.Message.t * bool * string) list ->
     ?closers:Tokens.token list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->

@@ -291,6 +291,39 @@ action over its identical line returns nothing.
   if-branch (debug=true): 1 action(s)
   else-branch (dropped):  0 action(s)
 
+A syntax error's recovery-derived quick fix is served through the same code-action
+path. A dropped `;` in a Wax buffer offers an "insert `;`" fix, and a WAT operand
+left out offers its placeholder — parity between the two languages, since the
+recovery driver (which derives the fix) is shared:
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > def actions(uri, lang, src, rng):
+  >     td={"uri":uri}
+  >     S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >        {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >        {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":lang,"version":1,"text":src}}},
+  >        {"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":td,"range":rng,"context":{"diagnostics":[]}}},
+  >        {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  >     p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  >     o,i,by=p.stdout,0,{}
+  >     while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >         n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >         r=json.loads(o[s:s+n]); i=s+n
+  >         if "id" in r: by[r["id"]]=r.get("result")
+  >     for a in by[2] or []:
+  >         te=a["edit"]["changes"][uri][0]
+  >         print("%s: %r -> insert %r" % (lang, a["title"], te["newText"]))
+  > actions("file:///s.wax","wax","fn f() -> i32 {\n    let x = 1\n    let y = 2;\n    x + y;\n}\n",
+  >         {"start":{"line":1,"character":0},"end":{"line":1,"character":13}})
+  > actions("file:///s.wat","wat","(module (func (result i32) (i32.const)))\n",
+  >         {"start":{"line":0,"character":27},"end":{"line":0,"character":38}})
+  > PY
+  wax: "Missing ';'." -> insert ';'
+  wat: 'Missing number.' -> insert '0'
+
 Diagnostics on `didChange` are debounced: a burst of edits coalesces into one
 analysis (published once the client falls quiet, or on end of input), rather
 than re-checking the whole buffer on every keystroke. Open a clean module, send

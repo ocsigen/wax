@@ -673,37 +673,41 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
               Some [ TextEdit.create ~range:(full_range src) ~newText:text ]))
   | Lsp.Client_request.CodeAction { textDocument; range; _ } ->
       (* Turn the toolchain's machine-applicable diagnostics (the [Suggestion]s —
-         punning, compound assignment, a redundant annotation — and a fixable
-         warning like a redundant cast) into quick fixes, mirroring the VS Code
-         extension's [CodeActionProvider]. The overlap filtering — and the
-         specialization to the configured [defines], matching the published
-         diagnostics — lives in [Wax_editor.code_actions]; here we only convert
-         positions and marshal each [(title, edit)] into a [WorkspaceEdit]. *)
+         punning, compound assignment, a redundant annotation — a fixable warning
+         like a redundant cast, and a syntax error's recovery-derived quick fix)
+         into quick fixes, mirroring the VS Code extension's [CodeActionProvider].
+         The overlap filtering — and, for Wax, the specialization to the
+         configured [defines] matching the published diagnostics — lives in
+         [Wax_editor.code_actions] / [Wat_editor.code_actions]; here we only
+         convert positions and marshal each [(title, edit)] into a
+         [WorkspaceEdit]. WAT is served by [Wat_editor] (no defines). *)
       let uri = textDocument.uri in
-      if is_wat uri then None
-      else
-        with_doc uri (fun src ->
-            Wax_editor.code_actions ~encoding:!encoding src !defines
-              (range.start.line, range.start.character)
-              (range.end_.line, range.end_.character)
-            |> List.map (fun (title, (e : Wax_utils.Diagnostic.edit)) ->
-                let edit =
-                  WorkspaceEdit.create
-                    ~changes:
-                      [
-                        ( uri,
-                          [
-                            TextEdit.create
-                              ~range:(range_of_location src e.edit_location)
-                              ~newText:e.new_text;
-                          ] );
-                      ]
-                    ()
-                in
-                `CodeAction
-                  (CodeAction.create ~title ~kind:CodeActionKind.QuickFix ~edit
-                     ()))
-            |> Option.some)
+      with_doc uri (fun src ->
+          (if is_wat uri then
+             Wat_editor.code_actions ~encoding:!encoding src
+               (range.start.line, range.start.character)
+               (range.end_.line, range.end_.character)
+           else
+             Wax_editor.code_actions ~encoding:!encoding src !defines
+               (range.start.line, range.start.character)
+               (range.end_.line, range.end_.character))
+          |> List.map (fun (title, (e : Wax_utils.Diagnostic.edit)) ->
+              let edit =
+                WorkspaceEdit.create
+                  ~changes:
+                    [
+                      ( uri,
+                        [
+                          TextEdit.create
+                            ~range:(range_of_location src e.edit_location)
+                            ~newText:e.new_text;
+                        ] );
+                    ]
+                  ()
+              in
+              `CodeAction
+                (CodeAction.create ~title ~kind:CodeActionKind.QuickFix ~edit ()))
+          |> Option.some)
   | _ ->
       Jsonrpc.Response.Error.raise
         (Jsonrpc.Response.Error.make

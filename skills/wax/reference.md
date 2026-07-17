@@ -4605,10 +4605,13 @@ server](#language-server)).
       `startLine`/`startColumn`/`endLine`/`endColumn` (1-based line, 0-based
       column), `startOffset`/`endOffset` (byte offsets), `message`, `warning`
       (the [`-W`](#options) name, or null), `hint`, and `related`. A diagnostic
-      carrying a machine-applicable fix (a `suggestion`, or a fixable warning
-      like a redundant cast, an unused local, an unused label, or a confusing
-      precedence mix) also has an `edit` object: the same span fields for the
-      slice to replace, plus its `newText`.
+      carrying a machine-applicable fix (a `suggestion`, a fixable warning like a
+      redundant cast, an unused local, an unused label, or a confusing precedence
+      mix, or a syntax error whose recovery insertion derives one — e.g. a
+      missing `;`, under [`--all-errors`](#check)) also has an `edit` object: the
+      same span fields for the slice to replace (an empty span, for an
+      insertion), plus its `newText`. Syntax errors report their `hint` and
+      `related` here too.
     - With `short`, each diagnostic is one
       `file:line:col: severity: message` line (gcc/rustc style, 1-based column),
       for an editor with a line-based error parser (Vim's `errorformat`, Emacs

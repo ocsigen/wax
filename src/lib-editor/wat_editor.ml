@@ -470,6 +470,30 @@ let check_string src =
   let a = analyze src in
   a.a_syntax @ a.a_diagnostics
 
+(* Quick fixes for a code-action request over the range, mirroring
+   [Wax_editor.code_actions]: every diagnostic carrying a machine-applicable
+   [edit] whose edit span (or the diagnostic span it anchors to) meets the
+   request range. WAT has no conditional-compilation defines, so unlike the Wax
+   side there is nothing to specialize. The shared recovery driver derives the
+   syntax-error fixes ([Wax_wasm.Recover.insert]); a validation lint's [edit]
+   (e.g. a redundant cast) rides along the same way. *)
+let code_actions ?(encoding = UTF16) src (start_line, start_char)
+    (end_line, end_char) =
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let meets (loc : Wax_utils.Ast.location) =
+    let s = position ~encoding src loc.loc_start in
+    let e = position ~encoding src loc.loc_end in
+    le (start_line, start_char) e && le s (end_line, end_char)
+  in
+  check_string src
+  |> List.filter_map (fun (d : diag) ->
+      match d.edit with
+      | None -> None
+      | Some edit ->
+          if meets edit.edit_location || meets d.location then
+            Some (d.message, edit)
+          else None)
+
 let to_wax_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
   | Error { message; _ } ->

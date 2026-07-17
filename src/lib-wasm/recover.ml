@@ -41,8 +41,9 @@ let insert =
   [
     ( Tokens.ID (Wax_utils.Ast.no_loc "_"),
       Wax_utils.Message.text "Missing index.",
-      false );
-    (Tokens.NAT "0", Wax_utils.Message.text "Missing number.", false);
+      false,
+      "$_" );
+    (Tokens.NAT "0", Wax_utils.Message.text "Missing number.", false, "0");
   ]
 
 (* A missing closer — [(module (func … (func …] with a [)] left out — surfaces

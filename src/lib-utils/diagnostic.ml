@@ -186,6 +186,32 @@ let print_hint ?(output = Format.err_formatter) ~theme hint =
         ()
         (fun f -> render_body ~theme f m)
 
+(* Render a machine-applicable [edit] as a "help"-style line, describing the
+   rewrite in prose (e.g. [Help: insert ';']). Only shown for an unnamed [Error]
+   — i.e. a syntax error: it says what is wrong, not how to repair it, so the
+   derived quick fix (a recovery insertion, see [Wax_wasm.Parsing]) is worth
+   spelling out. A [Suggestion] or [Warning] carrying an edit — even one promoted
+   to [Error] severity by [-W name=error], which is why the guard also checks
+   [warning = None] — already states its fix in its own message (see [suggest_*]
+   in typing.ml), so surfacing the raw edit text there would be redundant. The
+   machine form travels in JSON for every severity regardless (see
+   [output_error_json]). *)
+let print_fix ?(output = Format.err_formatter) ~theme ~severity ?warning edit =
+  match (severity, warning, edit) with
+  | Error, None, Some { edit_location; new_text } ->
+      let action =
+        if
+          edit_location.Ast.loc_start.Lexing.pos_cnum
+          = edit_location.loc_end.Lexing.pos_cnum
+        then Printf.sprintf "insert '%s'" new_text
+        else if new_text = "" then "remove this"
+        else Printf.sprintf "replace with '%s'" new_text
+      in
+      Format.fprintf output "@[<2>%a:@ %s@]@."
+        (with_style theme.hint_header (fun f () -> Format.fprintf f "Help"))
+        () action
+  | _ -> ()
+
 let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity ~hint
     msg =
   Format.fprintf output "@[<2>%a:@ %t@]@."
@@ -288,9 +314,10 @@ let get_hunks annotations =
 let modern = true
 
 let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
-    ~location ~severity ?hint ?(related = []) msg =
+    ~location ~severity ?warning ?hint ?edit ?(related = []) msg =
   match !global_format with
-  | Json -> output_error_json ~output ~location ~severity ?hint ~related msg
+  | Json ->
+      output_error_json ~output ~location ~severity ?hint ~related ?edit msg
   | Short -> output_error_short ~output ~location ~severity msg
   | Human ->
       let annotations = get_annotations ~theme ~severity ~location ~related in
@@ -433,7 +460,8 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
             incr curr_line
           done)
         hunks;
-      print_hint ~output ~theme hint
+      print_hint ~output ~theme hint;
+      print_fix ~output ~theme ~severity ?warning edit
 
 let output_error ?(output = Format.err_formatter) ~theme ~source ~location
     ~severity ?warning ?hint ?edit ?(related = []) msg =
@@ -451,7 +479,7 @@ let output_error ?(output = Format.err_formatter) ~theme ~source ~location
             output_error_no_source ~output ~theme ~location ~severity ?hint msg
         | Some source ->
             output_error_with_source ~output ~theme ~source ~location ~severity
-              ?hint ~related msg)
+              ?warning ?hint ?edit ~related msg)
 
 (* Where and how a context renders. Held only by a rendering context; a
    [collector] has none — it merely accumulates entries (see [collected]) for a

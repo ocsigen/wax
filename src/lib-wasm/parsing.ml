@@ -1,11 +1,39 @@
-exception
-  Syntax_error of (Lexing.position * Lexing.position) * Wax_utils.Message.t
-
 type syntax_error = {
   location : Wax_utils.Ast.location;
   message : Wax_utils.Message.t;
   related : Wax_utils.Diagnostic.label list;
+  hint : Wax_utils.Message.t option;
+  fix : Wax_utils.Diagnostic.edit option;
 }
+
+exception Syntax_error of syntax_error
+
+(* Smart constructor: build the structured payload and raise. Every raise site
+   (the two lexers and both grammars' semantic actions) funnels through this —
+   directly or via a per-file thin wrapper that turns a position pair into the
+   [Ast.location] — so the payload shape is spelled once here. [related]/[hint]
+   enrich the diagnostic exactly as {!Wax_utils.Diagnostic} does; [fix] carries a
+   machine-applicable quick fix (a text edit), reusing {!Wax_utils.Diagnostic.edit}
+   so the editor/LSP code-action path is shared with the typer's suggestions. *)
+let syntax_error ~location ?(related = []) ?hint ?fix message =
+  raise (Syntax_error { location; message; related; hint; fix })
+
+(* Build (without raising) the {!Syntax_error} value from the legacy
+   position-pair payload [((loc_start, loc_end), message)]. The many raise sites
+   in the two lexers and both grammars predate the structured record and read
+   [raise (Syntax_error (pair, msg))]; routing them through this keeps each a
+   one-token change ([Syntax_error] -> [syntax_error_pair]) while the record
+   shape stays spelled once. New or enriched sites (attaching [related]/[hint]/
+   [fix]) should use the raising {!syntax_error} instead. *)
+let syntax_error_pair ((loc_start, loc_end), message) =
+  Syntax_error
+    {
+      location = { Wax_utils.Ast.loc_start; loc_end };
+      message;
+      related = [];
+      hint = None;
+      fix = None;
+    }
 
 type sync_class = Open | Close | Boundary | Leader | Terminal | Skip
 
@@ -24,16 +52,16 @@ let show text positions =
   E.extract text positions |> E.sanitize |> E.compress
   |> E.shorten 20 (* max width 43 *)
 
-let report_syntax_error ?(related = []) ~color source (loc_start, loc_end) msg =
+let report_syntax_error ~color source (e : syntax_error) =
   let theme = Wax_utils.Diagnostic.get_theme ?color () in
   Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
-    ~location:{ loc_start; loc_end } ~related msg;
+    ~location:e.location ~related:e.related ?hint:e.hint ?edit:e.fix e.message;
   (* The diagnostic has been printed; re-raise so the caller decides how to
      terminate rather than exiting the process here. The CLI maps this to exit
      code 128 (rejected input, like a validation or type error, not the
      usage-error code; see the exit-code contract in bin/main.ml), while an
      in-process embedder can catch it instead of having the whole process die. *)
-  raise (Syntax_error ((loc_start, loc_end), msg))
+  raise (Syntax_error e)
 
 let read filename = In_channel.with_open_bin filename In_channel.input_all
 
@@ -211,6 +239,8 @@ struct
              location = { Wax_utils.Ast.loc_start; loc_end };
              message = Wax_utils.Message.text message;
              related;
+             hint = None;
+             fix = None;
            })
 
     (* Parse, returning the AST or a structured syntax error, without printing:
@@ -230,14 +260,7 @@ struct
              (fail_detailed text buffer)
              supplier checkpoint)
       with
-      | Detailed_error e -> Error e
-      | Syntax_error ((loc_start, loc_end), msg) ->
-          Error
-            {
-              location = { Wax_utils.Ast.loc_start; loc_end };
-              message = msg;
-              related = [];
-            }
+      | Detailed_error e | Syntax_error e -> Error e
       | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
           let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
           Error
@@ -247,6 +270,8 @@ struct
                 Wax_utils.Message.text
                   "Input file contains malformed UTF-8 byte sequences";
               related = [];
+              hint = None;
+              fix = None;
             }
 
     (* Panic-mode error recovery, sync-token variant. This uses only the
@@ -273,7 +298,9 @@ struct
          error is already recorded, so the top-level handler just stops. *)
       let exception Lexing_gave_up in
       let record_error location message =
-        errors := { location; message; related = [] } :: !errors
+        errors :=
+          { location; message; related = []; hint = None; fix = None }
+          :: !errors
       in
       (* Lexer-level recovery. A bad character or malformed byte makes
          [Lexer.token] raise rather than surface as a parser [HandlingError];
@@ -298,8 +325,8 @@ struct
           else raise Lexing_gave_up
         in
         try base_supplier () with
-        | Syntax_error ((loc_start, loc_end), message) ->
-            record_error { Wax_utils.Ast.loc_start; loc_end } message;
+        | Syntax_error e ->
+            record_error e.location e.message;
             resume ()
         | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
             let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
@@ -335,6 +362,8 @@ struct
             location = { Wax_utils.Ast.loc_start; loc_end };
             message = Wax_utils.Message.text message;
             related;
+            hint = None;
+            fix = None;
           }
           :: !errors
       in
@@ -354,7 +383,7 @@ struct
         done;
         !ok
       in
-      let record_missing message (pos : Lexing.position)
+      let record_missing ?fix message (pos : Lexing.position)
           (end_pos : Lexing.position) =
         let already_flagged =
           match !errors with
@@ -376,6 +405,8 @@ struct
               location = { Wax_utils.Ast.loc_start = pos; loc_end = pos };
               message;
               related = [];
+              hint = None;
+              fix;
             }
             :: !errors
       in
@@ -494,17 +525,32 @@ struct
             in
             (* Try each candidate token in order; keep the first that both is
                acceptable and, once the held token is offered on top, leaves the
-               parser wanting more input or accepting (the validation check). *)
-            let attempt (tok, message, move_pos) =
+               parser wanting more input or accepting (the validation check). On a
+               validated repair, derive a machine-applicable quick fix
+               mechanically from the insertion: a zero-width edit at the caret
+               (where the missing token belongs) inserting [new_text], the
+               candidate's source spelling from the [insert] configuration. It
+               rides on the error [record_missing] flags, so it is attached only
+               when the insertion really unblocked the parse — a speculative
+               attempt that never validates (see below) produces nothing. *)
+            let attempt (tok, message, move_pos, new_text) =
               if not (acceptable cp tok startp) then None
               else
                 match settle (MI.offer cp (tok, startp, startp)) with
                 | MI.InputNeeded _ as after_insert -> (
                     match settle (MI.offer after_insert held) with
                     | (MI.InputNeeded _ | MI.Accepted _) as after_held ->
+                        let caret = if move_pos then insert_pos else startp in
+                        let fix =
+                          {
+                            Wax_utils.Diagnostic.edit_location =
+                              { loc_start = caret; loc_end = caret };
+                            new_text;
+                          }
+                        in
                         if move_pos then
-                          record_missing message insert_pos startp
-                        else record_missing message startp startp;
+                          record_missing ~fix message insert_pos startp
+                        else record_missing ~fix message startp startp;
                         Some after_held
                     | _ -> None)
                 | _ -> None
@@ -568,10 +614,10 @@ struct
                     else
                       match
                         List.find_opt
-                          (fun (tok, _, _) -> acceptable checkpoint tok pos)
+                          (fun (tok, _, _, _) -> acceptable checkpoint tok pos)
                           insert
                       with
-                      | Some (tok, _, _) ->
+                      | Some (tok, _, _, _) ->
                           loop
                             (settle (MI.offer checkpoint (tok, pos, pos)))
                             true (fuel - 1)
@@ -744,8 +790,10 @@ struct
               else env
             in
             match MI.resume checkpoint with
-            | exception Syntax_error ((loc_start, loc_end), message) -> (
-                record_error { Wax_utils.Ast.loc_start; loc_end } message;
+            | exception Syntax_error e -> (
+                (* Push the full structured payload (keeping any [related]/[hint]/
+                   [fix] the semantic action attached), not just location+message. *)
+                errors := e :: !errors;
                 match last with
                 | Some ((t, _, _) as held)
                   when match sync t with Terminal -> false | _ -> true ->
@@ -846,8 +894,8 @@ struct
       let ast =
         try run (P.Incremental.parse start) None None with
         | Lexing_gave_up -> None
-        | Syntax_error ((loc_start, loc_end), message) ->
-            record_error { Wax_utils.Ast.loc_start; loc_end } message;
+        | Syntax_error e ->
+            errors := e :: !errors;
             None
         | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
             let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
@@ -864,8 +912,7 @@ struct
     let parse_from_string ?color ~filename text =
       match parse_diagnostics ~filename text with
       | Ok ast -> ast
-      | Error { location = { loc_start; loc_end }; message; related } ->
-          report_syntax_error ~related ~color text (loc_start, loc_end) message
+      | Error e -> report_syntax_error ~color text e
   end
 
   let parse_from_string ?color ~filename text =

@@ -15,6 +15,18 @@ val format_string : string -> (string, string) result
    syntax errors so all are reported, not just the first. *)
 val check_string : string -> diag list
 
+(* Quick fixes for a code-action request over the range [(start_line,
+   start_char) .. (end_line, end_char)] (each a zero-based (line, character) in
+   [?encoding] units): every diagnostic carrying a machine-applicable [edit]
+   whose span meets the range, as [(title, edit)]. The WAT mirror of
+   {!Wax_editor.code_actions} (WAT has no defines to specialize to). *)
+val code_actions :
+  ?encoding:position_encoding ->
+  string ->
+  int * int ->
+  int * int ->
+  (string * Wax_utils.Diagnostic.edit) list
+
 (* Hover at a (line, character) position: the type the innermost instruction
    under the cursor leaves on the stack. *)
 val hover_string :

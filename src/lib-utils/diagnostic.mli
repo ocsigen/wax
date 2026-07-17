@@ -147,12 +147,18 @@ val output_error_with_source :
   source:string ->
   location:Ast.location ->
   severity:severity ->
+  ?warning:Warning.t ->
   ?hint:Message.t ->
+  ?edit:edit ->
   ?related:label list ->
   Message.t ->
   unit
-(** [output_error_with_source ?output ~theme ~source ~location ~severity ?hint
-     ?related message] prints an error message with a source code snippet. *)
+(** [output_error_with_source ?output ~theme ~source ~location ~severity
+     ?warning ?hint ?edit ?related message] prints an error message with a
+    source code snippet. A machine-applicable [edit] is rendered as a "help"
+    line (in the [Human] format, only for an [Error] carrying no [warning] name,
+    i.e. a syntax error — see [print_fix]) and as an [edit] object (in [Json]);
+    it is the quick fix a syntax error's recovery insertion derives. *)
 
 val get_theme : ?color:Colors.flag -> ?palette:Colors.theme -> unit -> theme
 (** [get_theme ?color ?palette ()] returns the diagnostic theme. [palette]

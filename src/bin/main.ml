@@ -736,7 +736,7 @@ let check format_opt strict color warnings features debug error_format defines
             (fun (e : Wax_wasm.Parsing.syntax_error) ->
               Wax_utils.Diagnostic.report d ~location:e.location
                 ~severity:Wax_utils.Diagnostic.Error ~related:e.related
-                ~message:e.message ())
+                ?hint:e.hint ?edit:e.fix ~message:e.message ())
             syntax_errors;
           Wax_utils.Diagnostic.set_recovery d (syntax_errors <> [])
         in

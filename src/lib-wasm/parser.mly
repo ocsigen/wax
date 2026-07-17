@@ -266,7 +266,7 @@ let page_size_log2 loc (n : Uint32.t) =
     exp n 0
   else
     raise
-      (Parsing.Syntax_error
+      (Parsing.syntax_error_pair
          (loc, Wax_utils.Message.text "The page size must be a power of two."))
 
 let with_loc loc desc =
@@ -277,7 +277,7 @@ let map_fst f (x, y) = (f x, y)
 let check_constant f loc s =
   if not (f s) then
     raise
-      (Parsing.Syntax_error
+      (Parsing.syntax_error_pair
          ( loc,
              Wax_utils.Message.text (Printf.sprintf "Constant %s is out of range.\n" s) ))
 
@@ -291,7 +291,7 @@ let compact_import loc module_ elems : _ Ast.Text.modulefield =
   let as_item = function
     | `Item it -> it
     | `Type _ ->
-        raise (Parsing.Syntax_error
+        raise (Parsing.syntax_error_pair
                  (loc,
              Wax_utils.Message.text ("A shared import type must be the group's last element.\n") ))
   in
@@ -303,11 +303,11 @@ let compact_import loc module_ elems : _ Ast.Text.modulefield =
   match trailing with
   | Some (tid, tdesc) ->
       if Option.is_some tid then
-        raise (Parsing.Syntax_error
+        raise (Parsing.syntax_error_pair
                  (loc,
              Wax_utils.Message.text ("A shared import type may not bind an identifier.\n") ));
       if List.exists (fun (_, _, t) -> Option.is_some t) items then
-        raise (Parsing.Syntax_error
+        raise (Parsing.syntax_error_pair
                  (loc,
              Wax_utils.Message.text ("With a shared type, each import item names only.\n") ));
       Import_group2
@@ -319,12 +319,12 @@ let compact_import loc module_ elems : _ Ast.Text.modulefield =
             match t with
             | Some (tid, desc) ->
                 if Option.is_some id then
-                  raise (Parsing.Syntax_error
+                  raise (Parsing.syntax_error_pair
                            (loc,
              Wax_utils.Message.text ("An import item with its own type binds its id in that type.\n") ));
                 (name, tid, desc)
             | None ->
-                raise (Parsing.Syntax_error
+                raise (Parsing.syntax_error_pair
                          (loc,
              Wax_utils.Message.text ("This import item needs a type, or a shared final type.\n") )))
           items
@@ -348,10 +348,25 @@ let check_labels lab (lab' : Ast.Text.name option) =
         | None -> true
       in
       if mismatch then
-        raise
-          (Parsing.Syntax_error
-             ( (lab'.info.loc_start, lab'.info.loc_end),
-             Wax_utils.Message.text (Printf.sprintf "Label mismatch.\n") ))
+        (* Point a related label back at the opening label (when there is one),
+           and hint at the rule — the structured payload the smart constructor
+           carries, rendered by the human/JSON emitters alike. *)
+        let related =
+          match lab with
+          | Some lab ->
+              [
+                {
+                  Wax_utils.Diagnostic.location = lab.Ast.info;
+                  message = Wax_utils.Message.text "The block was opened here.";
+                };
+              ]
+          | None -> []
+        in
+        Parsing.syntax_error ~location:lab'.info ~related
+          ~hint:
+            (Wax_utils.Message.text
+               "The closing label must match the opening label, or be omitted.")
+          (Wax_utils.Message.text "Label mismatch.\n")
 
 (* Branch-hinting proposal: decode a [(@metadata.code.branch_hint "…")] payload.
    The string is a single byte: 0x00 = unlikely, otherwise likely. *)
@@ -361,7 +376,7 @@ let branch_hint_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
   | 1 -> true
   | _ ->
       raise
-        (Parsing.Syntax_error
+        (Parsing.syntax_error_pair
            (loc,
              Wax_utils.Message.text ("A branch hint must be \"\\00\" or \"\\01\".\n") ))
 
@@ -434,7 +449,7 @@ index:
 name: s = STRING
   { if not (String.is_valid_utf_8 s.Ast.desc) then
       raise
-        (Parsing.Syntax_error
+        (Parsing.syntax_error_pair
            ( (s.info.Ast.loc_start, s.info.loc_end),
              Wax_utils.Message.text (Printf.sprintf "Malformed name \"%s\".\n"
                (snd (Wax_utils.Unicode.escape_string s.desc))) ));
@@ -973,7 +988,7 @@ folded_instruction:
         Uchar.utf_decode_length c <> String.length s.desc
       then
         raise
-          (Parsing.Syntax_error
+          (Parsing.syntax_error_pair
              ( $sloc,
              Wax_utils.Message.text (Printf.sprintf "Malformed char \"%s\".\n"
                  (snd (Wax_utils.Unicode.escape_string s.desc))) ));

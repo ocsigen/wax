@@ -49,7 +49,8 @@ let insert =
   [
     ( Tokens.SEMI,
       Wax_utils.Message.(text "Missing" ++ (code ";" ^^ text ".")),
-      true );
+      true,
+      ";" );
   ]
 
 (* The closing brackets recovery may insert to auto-close a construct left open

@@ -53,7 +53,10 @@ let render_labels labels =
     (fun (l : Wax_utils.Diagnostic.label) -> (render l.message, l.location))
     labels
 
-(* A syntax error, as a diagnostic (with its related labels but no hint). *)
+(* A syntax error, as a diagnostic, carrying its related labels, any prose hint,
+   and any machine-applicable quick [fix] (a recovery-derived text edit, surfaced
+   as the diag's [edit] so it flows through the same code-action path as the
+   typer's suggestions — see [Wax_editor.code_actions]). *)
 let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
   {
     severity = Wax_utils.Diagnostic.Error;
@@ -61,8 +64,8 @@ let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
     message = Wax_utils.Message.to_plain_string e.message;
     warning = None;
     unnecessary = false;
-    hint = None;
-    edit = None;
+    hint = Option.map render e.hint;
+    edit = e.fix;
     related = render_labels e.related;
   }
 

@@ -13,7 +13,7 @@ val closers : Tokens.token list
     auto-close a construct still open in front of a boundary or at end of input.
     Passed as its [?closers] argument. *)
 
-val insert : (Tokens.token * Wax_utils.Message.t * bool) list
+val insert : (Tokens.token * Wax_utils.Message.t * bool * string) list
 (** Placeholder tokens {!Parsing.Make.parse_recover} may insert to repair a
     construct missing a required token — a zero-width [0] for a missing numeric
     operand or index — each with the diagnostic to report. Passed as its
