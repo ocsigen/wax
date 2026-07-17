@@ -3922,53 +3922,6 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | Float _ | StructDefault _ ->
       ()
 
-(* If [meth] names an intrinsic written as a method on a value receiver — a SIMD
-   lane/vector op [v.add_i32x4(b)], or a scalar [x.copysign(y)], [x.min(y)],
-   [x.rotl(y)] — the number of leading constant lane immediates in its argument
-   list (always 0 for the scalar ops), else [None]. Such a call evaluates the
-   receiver before its operands, unlike a generic call whose callee is evaluated
-   last; the leading SIMD lane immediates are static and never reach the stack.
-   The set of names matches the call dispatch (see [type_simd_vector_op_call],
-   [type_binary_intrinsic_call]). This is decided by name alone — but the same
-   names are only receiver-first when the receiver is actually a value, see
-   [receiver_is_value]. *)
-let intrinsic_method_imms meth =
-  match Wax_wasm.Simd.classify meth with
-  | Some { free = false; imm; _ } -> (
-      match imm with No_imm -> Some 0 | Lane _ -> Some 1 | Shuffle -> Some 16)
-  | _ -> (
-      match meth with
-      | "rotl" | "rotr" | "copysign" | "min" | "max" -> Some 0
-      | _ -> None)
-
-(* Whether [obj], the receiver of an [obj.meth(args)] call, is a value rather
-   than a reference. Only a value receiver makes [meth] an intrinsic evaluated
-   receiver-first: when [obj] is a reference, [obj.meth] may instead load a
-   function-pointer field, so the call is an indirect call whose arguments are
-   evaluated first (then the loaded callee). Treating that as receiver-first
-   could hide a value occurring before a hole, so the reorder is gated on this. *)
-let receiver_is_value ctx obj =
-  match Cell.get (expression_type ctx obj) with
-  | Null | Valtype { internal = Ref _; _ } -> false
-  | _ -> true
-
-(* Whether the receiver of an [obj.meth(..)] call is a concrete array — the case
-   that makes a [fill]/[copy]/[init] method an array operation (evaluated
-   receiver-first), as opposed to a struct-field/indirect call or a static
-   memory/table form (both args-first / static-receiver). Reads the receiver's
-   type cell directly: a memory/table receiver carries no value type ([||]), for
-   which [expression_type] would spuriously report "not an expression". *)
-let receiver_is_array ctx recv =
-  match fst recv.Ast.info with
-  | [| cell |] -> (
-      match Cell.get cell with
-      | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> (
-          match Tbl.find_opt ctx.type_context.types ty with
-          | Some t -> ( match (snd t).typ with Array _ -> true | _ -> false)
-          | None -> false)
-      | _ -> false)
-  | _ -> false
-
 (* Whether the receiver of a scalar-intrinsic-method call [recv.min(..)] names a
    reference (e.g. a struct) rather than a numeric value. Decided purely, by
    looking the name up in the locals / globals — no typing, so the dispatch can
@@ -4040,242 +3993,56 @@ let cast_is_transparent ctx ~cast ~operand =
       | _ -> false)
   | _ -> false
 
-let rec check_hole_order_rec ctx i n =
-  match i.desc with
-  | Hole -> n - 1
-  | Get name
-    when memory_receiver ctx name || table_receiver ctx name
-         || segment_receiver ctx name ->
-      (* A memory/table name (a method/index receiver [mem.load(..)], [tab[..]],
-         or a cross-mem/table [copy] source) or a data/element segment name (a
-         [seg.drop()] receiver or an [init] operand) is a static immediate, not a
-         stack value, so it never counts as occurring before a hole. *)
-      n
-  | _ when n <= 0 -> n
-  | Cast (inner, _) when cast_is_transparent ctx ~cast:i ~operand:inner ->
-      (* A nop cast (see [cast_is_transparent]) is transparent: recurse into the
-         operand, which is itself flagged if it is a value occurring before a
-         hole, without counting the cast as such — so [(_ as T)] with a hole
-         already of type [T] is fine even when later holes remain. A non-nop
-         cast falls through to the normal handling below. *)
-      check_hole_order_rec ctx inner n
-  | _ ->
-      let n =
-        match i.desc with
-        | Block _ | Loop _ | While _ | TryTable _ | Try _ | TryCatch _
-        | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _
-        | String _ | Int _ | Float _ | Get _ | Path _ | Null | Unreachable | Nop
-        | Let (_, None)
-        | Br (_, None)
-        | Return None ->
-            n
-        (* A table reference [tab[..]] has a static receiver (the table name),
-           not an evaluated operand, so it does not count as occurring before a
-           hole; only the index/value do. *)
-        | ArrayGet ({ desc = Get tab; _ }, r) when table_receiver ctx tab ->
-            check_hole_order_rec ctx r n
-        | ArraySet ({ desc = Get tab; _ }, idx, v) when table_receiver ctx tab
-          ->
-            n |> check_hole_order_rec ctx idx |> check_hole_order_rec ctx v
-        | BinOp (_, l, r)
-        | Array (_, l, r)
-        | ArraySegment (_, _, l, r)
-        | ArrayGet (l, r) ->
-            n |> check_hole_order_rec ctx l |> check_hole_order_rec ctx r
-        | ArraySet (t, i, v) ->
-            n |> check_hole_order_rec ctx t |> check_hole_order_rec ctx i
-            |> check_hole_order_rec ctx v
-        | Call ({ desc = StructGet (obj, meth); _ }, args)
-          when intrinsic_method_imms meth.desc <> None
-               && receiver_is_value ctx obj ->
-            (* An intrinsic method on a value receiver, [recv.op(imms.., ops..)].
-               [to_wasm] evaluates the receiver first, then the non-immediate
-               stack operands; any leading SIMD lane immediates ([Lane]/[Shuffle])
-               are static and never reach the operand stack. Mirror that order so
-               a static lane index — or an operand of a receiver-first scalar op
-               like [copysign] — is not mistaken for a value before a hole. A
-               reference receiver is excluded ([receiver_is_value]): it could be a
-               function-pointer field, i.e. an args-first indirect call. *)
-            let nimm = Option.get (intrinsic_method_imms meth.desc) in
-            let operands = List.filteri (fun k _ -> k >= nimm) args in
-            n
-            |> check_hole_order_rec ctx obj
-            |> check_hole_order_in_list ctx operands
-        | Call ({ desc = StructGet (recv, meth); _ }, args)
-          when (match meth.desc with
-                 | "fill" | "copy" | "init" -> true
-                 | _ -> false)
-               && receiver_is_array ctx recv ->
-            (* [arr.fill/copy/init] on an array receiver is a receiver-first array
-               operation, like the intrinsics above: [to_wasm] and the type
-               checker both evaluate the array receiver before the operands, so
-               mirror that order. The same method name on a non-array receiver is
-               a struct-field/indirect call or a static memory/table form, all of
-               which the general case below handles (args-first, with a static
-               [Get name] receiver not counted). The arity is not re-checked —
-               typing has already validated it. *)
-            n
-            |> check_hole_order_rec ctx recv
-            |> check_hole_order_in_list ctx args
-        | Call (f, args) | TailCall (f, args) ->
-            n |> check_hole_order_in_list ctx args |> check_hole_order_rec ctx f
-        | Set (name, Some _, _) ->
-            (* [x op= e] lowers to [local.set x (op (local.get x) e)]: the
-               implicit [local.get x] is a value pushed before [e], just like the
-               [Get x] left operand of the plain [x = x op e]. A hole to its
-               right would then consume from below it -- unencodable without a
-               scratch local -- so reject it, mirroring the plain-binop check
-               (whose [Get x] operand the [BinOp] arm flags). This arm is reached
-               only when [n > 0] (the [n <= 0] guard above returns early), so a
-               receiver read here always precedes an unconsumed hole. *)
-            Error.before_hole ctx.diagnostics ~location:name.info;
-            raise Exit
-        | If { cond = i; _ }
-        | Let (_, Some i)
-        | Set (_, None, i)
-        | Tee (_, i)
-        | Labelled (_, i)
-        | UnOp (_, i)
-        | Cast (i, _)
-        | Test (i, _)
-        | NonNull i
-        | Br (_, Some i)
-        | Br_if (_, i)
-        | Hinted (_, i)
-        | On (i, _)
-        | Br_table (_, i)
-        | Br_on_null (_, i)
-        | Br_on_non_null (_, i)
-        | Br_on_cast (_, _, i)
-        | Br_on_cast_fail (_, _, i)
-        | ArrayDefault (_, i)
-        | ThrowRef i
-        | ContNew (_, i)
-        | Return (Some i)
-        | StructDefaultDesc i
-        | GetDescriptor i
-        | StructGet (i, _) ->
-            check_hole_order_rec ctx i n
-        | CastDesc (i1, _, i2)
-        | Br_on_cast_desc_eq (_, _, i1, i2)
-        | Br_on_cast_desc_eq_fail (_, _, i1, i2)
-        | StructSet (i1, _, i2) ->
-            n |> check_hole_order_rec ctx i1 |> check_hole_order_rec ctx i2
-        | Sequence l
-        | ArrayFixed (_, l)
-        | ContBind (_, _, l)
-        | Suspend (_, l)
-        | Resume (_, _, l)
-        | ResumeThrow (_, _, _, l)
-        | ResumeThrowRef (_, _, l)
-        | Switch (_, _, l)
-        | Throw (_, l) ->
-            check_hole_order_in_list ctx l n
-        | Struct (_, l) ->
-            let fields =
-              match Cell.get (expression_type ctx i) with
-              | Valtype { typ = Ref { typ = Type t | Exact t; _ }; _ } -> (
-                  match lookup_struct_type ctx t with
-                  | Some fields ->
-                      let field_map =
-                        List.fold_left
-                          (fun acc (name, instr) ->
-                            StringMap.add name.desc instr acc)
-                          StringMap.empty l
-                      in
-                      (* Reorder fields according to definition. Pinned fields
-                         ([None]) are [Get]s with no hole, so drop them. A field
-                         declared but absent from a recovered (erroneous) literal
-                         is missing from [field_map], so drop it too. *)
-                      let declared =
-                        Array.map
-                          (fun field ->
-                            Option.join
-                              (StringMap.find_opt (fst field.desc).desc
-                                 field_map))
-                          fields
-                        |> Array.to_list |> List.filter_map Fun.id
-                      in
-                      (* A source field absent from the definition (a recovered
-                         error) is typed last, in source order; traverse it here
-                         in that same order so its holes are counted. *)
-                      let extra =
-                        List.filter_map
-                          (fun (name, instr) ->
-                            if
-                              Array.exists
-                                (fun f -> (fst f.desc).desc = name.desc)
-                                fields
-                            then None
-                            else instr)
-                          l
-                      in
-                      declared @ extra
-                  | None -> List.filter_map snd l)
-              | _ -> List.filter_map snd l
-            in
-            check_hole_order_in_list ctx fields n
-        | StructDesc (d, l) ->
-            (* As [Struct], with the descriptor operand evaluated last (after the
-               field values). *)
-            let fields =
-              match Cell.get (expression_type ctx i) with
-              | Valtype { typ = Ref { typ = Type t | Exact t; _ }; _ } -> (
-                  match lookup_struct_type ctx t with
-                  | Some fields ->
-                      let field_map =
-                        List.fold_left
-                          (fun acc (name, instr) ->
-                            StringMap.add name.desc instr acc)
-                          StringMap.empty l
-                      in
-                      let declared =
-                        Array.map
-                          (fun field ->
-                            Option.join
-                              (StringMap.find_opt (fst field.desc).desc
-                                 field_map))
-                          fields
-                        |> Array.to_list |> List.filter_map Fun.id
-                      in
-                      (* Extra (recovered) source fields, in source order, as in
-                         the [Struct] arm. *)
-                      let extra =
-                        List.filter_map
-                          (fun (name, instr) ->
-                            if
-                              Array.exists
-                                (fun f -> (fst f.desc).desc = name.desc)
-                                fields
-                            then None
-                            else instr)
-                          l
-                      in
-                      declared @ extra
-                  | None -> List.filter_map snd l)
-              | _ -> List.filter_map snd l
-            in
-            check_hole_order_in_list ctx (fields @ [ d ]) n
-        | Select (c, t, e) ->
-            n |> check_hole_order_rec ctx t |> check_hole_order_rec ctx e
-            |> check_hole_order_rec ctx c
-        | Hole -> assert false
-      in
-      if n = 0 then 0
-      else (
-        Error.before_hole ctx.diagnostics ~location:(snd i.info);
-        raise Exit)
+(* The threaded state of the expression typer's monad ([return]/[let*]):
+   [pending] holds the stack values a [Hole] may consume, handed to each
+   subexpression as an exact slice at every distribution point (see [with_slice]),
+   so consumption no longer depends on the textual order the children are typed
+   in — a sibling that errors, recovers or is typed out of order (a [StructDesc]
+   descriptor, a peeked call callee) cannot desynchronise the rest. [value_loc]
+   and [reported] fold in the hole-order check: [value_loc] is the source location
+   of the first value-producing operand emitted in the current distribution, so
+   reaching a hole-bearing operand after it means a hole occurs after a value on
+   the stack (unencodable) — reported at that value, with [reported] guarding a
+   duplicate. *)
+type 'a hole_st = {
+  pending : 'a list;
+  value_loc : location option;
+  reported : bool;
+}
 
-and check_hole_order_in_list ctx l n =
-  List.fold_left (fun n i -> check_hole_order_rec ctx i n) n l
+(* Split [l] after [n] elements, tolerating [n] past the end. *)
+let rec list_split n l =
+  if n <= 0 then ([], l)
+  else
+    match l with
+    | [] -> ([], [])
+    | x :: r ->
+        let a, b = list_split (n - 1) r in
+        (x :: a, b)
 
-let check_hole_order ctx l n =
-  try
-    let _ : int = check_hole_order_rec ctx l n in
-    true
-  with Exit -> false
+(* Whether an operand pushes a value onto the stack (so a following hole would
+   consume it rather than the intended pending value). A [Hole] pushes nothing (it
+   names an already-present pending value); a transparent cast (see
+   [cast_is_transparent]) lowers to no instruction, so it pushes exactly what its
+   operand does; every other operand emits at least one value-producing
+   instruction. Static receivers (memory/table/segment names, a [tab[..]] table)
+   are immediates, not operands, and never reach here. *)
+let rec emits_value ctx node =
+  match node.desc with
+  | Hole -> false
+  | Cast (inner, _) when cast_is_transparent ctx ~cast:node ~operand:inner ->
+      emits_value ctx inner
+  | _ -> true
 
-let pop_parameter st = match st with [] -> assert false | x :: r -> (r, x)
+(* Consume the pending value a [Hole] stands for. Per-subexpression slicing
+   ([with_slice]) hands each hole its own slot, so an empty [pending] here is a
+   recovery-only path: a hole-bearing sibling was skipped or an operand
+   underflowed (already reported). Recover with an [Error] value rather than the
+   former [assert false] (exit 125). *)
+let pop_parameter st =
+  match st.pending with
+  | x :: r -> ({ st with pending = r }, x)
+  | [] -> (st, Cell.make Error)
 
 let _print_arg_stack f l =
   Format.pp_print_list
@@ -5776,7 +5543,71 @@ let deliver_to_branch_target ctx ~loc ~types ~params =
       types params
   else params
 
-let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
+(* Once a value-producing operand has been seen, record its location so a later
+   hole in the same distribution can be flagged against it. *)
+let bump_value_loc ctx st node =
+  match st.value_loc with
+  | Some _ -> st
+  | None ->
+      if emits_value ctx node then { st with value_loc = Some (snd node.info) }
+      else st
+
+(* Type one operand of a distribution point against exactly its own hole-slice —
+   the front [count_holes child] pending values — and fold in the hole-order
+   check (see [hole_st]). [run] is the child-typer applied to the child (an
+   [instruction]/[check_instruction] action), [node_of] extracts the typed
+   instruction from its result (identity, resp. [fst]). The child's own leftover
+   is dropped: it receives its slice and nothing more, so it cannot desynchronise
+   its siblings. Fast path — no pending values means the whole subtree is
+   hole-free, so skip counting (but still note whether a value was emitted, for a
+   later sibling's hole). *)
+let hole_child ctx child node_of run st =
+  match st.pending with
+  | [] ->
+      let st', r = run st in
+      (bump_value_loc ctx st' (node_of r), r)
+  | pending ->
+      let n = count_holes child in
+      let reported =
+        if (not st.reported) && n > 0 && st.value_loc <> None then (
+          Error.before_hole ctx.diagnostics ~location:(Option.get st.value_loc);
+          true)
+        else st.reported
+      in
+      let slice, rest = list_split n pending in
+      let st', r = run { st with pending = slice; reported } in
+      (bump_value_loc ctx { st' with pending = rest } (node_of r), r)
+
+(* Fold one already-typed operand [node] (untyped form [child]) into the running
+   hole-order state, as [hole_child] does inline, but for an operand typed out of
+   its emission position — a call callee or [StructDesc] descriptor, emitted last
+   but typed first for its type. [st.value_loc] must already reflect the operands
+   emitted before it. *)
+let fold_operand ctx child node st =
+  let st =
+    if (not st.reported) && count_holes child > 0 && st.value_loc <> None then (
+      Error.before_hole ctx.diagnostics ~location:(Option.get st.value_loc);
+      { st with reported = true })
+    else st
+  in
+  bump_value_loc ctx st node
+
+(* Bridge from the statement (stack) monad to the expression monad: pop the
+   [count_holes i] hole operands off the operand stack into the pending list and
+   run [f] (an expression-monad action) with a fresh hole state, returning its
+   result in the stack monad. Typing hands each hole its slice and the hole-order
+   check runs inline ([hole_child]); the final expression state is discarded (a
+   leftover pending is a recovery-only artefact, see [pop_parameter]). *)
+let with_holes ctx i build =
+  let* pending = pop_many ctx i (count_holes i) [] in
+  (* [build ()] is forced only here, after [pop_many], so a stack underflow it
+     reports is queued before any diagnostic the typer emits eagerly (before its
+     first monadic step). *)
+  let _st, r = build () { pending; value_loc = None; reported = false } in
+  return r
+
+let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
+    =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
   | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | If_annotation _
@@ -5918,9 +5749,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i (Sequence l')
         (Array.map (expression_type ctx) (Array.of_list l'))
   | Select (i1, i2, i3) ->
-      let* i2' = instruction ctx i2 in
-      let* i3' = instruction ctx i3 in
-      let* i1' = instruction ctx i1 in
+      (* Emission order is the two branch values then the condition (the [select]
+         pops the condition last), so type them in that order for the hole
+         slices and hole-order check. *)
+      let* i2' = typed ctx i2 in
+      let* i3' = typed ctx i3 in
+      let* i1' = typed ctx i1 in
       check_type ctx i1' i32_cell;
       let*! ty =
         let ty1 = expression_type ctx i2' in
@@ -5939,13 +5773,22 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
 
 and descriptor_target ctx ~location ~nullable d =
   (* The custom-descriptors casts/branches write only the descriptor operand [d];
-     the target reference type is recovered from it. [d : (ref null? (exact_1 Y))]
-     with [Y describes X], so the target is [(ref nullable (exact_1 X))]: the
-     described type [X] and the exactness [exact_1] both come from [d], and only
-     the result nullability is written (the leading [?]). Returns the typed
-     operand and the recovered target reftype ([None] once an error is reported —
-     [d] is not a reference to a descriptor type). *)
-  let* d' = instruction ctx d in
+     the target reference type is recovered from it. [d] is emitted last, on top
+     of the value operand (see [CastDesc]/[Br_on_cast_desc_eq]), so [typed] slices
+     and hole-order-checks it as the trailing operand. Returns the typed operand
+     and the recovered target reftype. ([StructDesc] instead types the descriptor
+     first — for the struct type — and folds it in last itself, so it uses
+     [descriptor_reftype] directly.) *)
+  let* d' = typed ctx d in
+  return (d', descriptor_reftype ctx ~location ~nullable d')
+
+(* Recover the target reference type of a descriptor cast/branch/allocation from
+   the (typed) descriptor operand [d' : (ref null? (exact_1 Y))] with
+   [Y describes X]: the target is [(ref nullable (exact_1 X))] — the described
+   type [X] and the exactness [exact_1] come from [d'], only the result
+   nullability is written. [None] (with [type_without_descriptor] reported) when
+   [d'] is not a reference to a descriptor type. *)
+and descriptor_reftype ctx ~location ~nullable d' =
   let target =
     match Cell.get (expression_type ctx d') with
     | Valtype { typ = Ref { typ = (Type y | Exact y) as yt; _ }; _ } -> (
@@ -5959,7 +5802,16 @@ and descriptor_target ctx ~location ~nullable d =
   (match target with
   | Some _ -> ()
   | None -> Error.type_without_descriptor ctx.diagnostics ~location);
-  return (d', target)
+  target
+
+(* [typed]/[typed_check] wrap the two child-typers ([instruction]/
+   [check_instruction]) in [hole_child], the slice + hole-order machinery defined
+   before the recursion. *)
+and typed ctx child = hole_child ctx child Fun.id (instruction ctx child)
+
+and typed_check ?drop_supertype ctx expected child =
+  hole_child ctx child fst
+    (check_instruction ?drop_supertype ctx expected child)
 
 and type_branch ctx i =
   (* The branch instructions: [br], [br_if], [br_table] and the [br_on_*]
@@ -6260,7 +6112,7 @@ and type_branch ctx i =
          [(ref nullable (exact_1 X))]). Type the value before the descriptor, as
          they are evaluated and lowered ([to_wasm]) and as the sibling [CastDesc]
          arm does, so hole ordering and uninitialized-local tracking match. *)
-      let* i' = instruction ctx i' in
+      let* i' = typed ctx i' in
       let* d, target = descriptor_target ctx ~location:i.info ~nullable d in
       let*! ty = target in
       if is_cont_heaptype ctx ty.typ then
@@ -6305,7 +6157,7 @@ and type_branch ctx i =
   | Br_on_cast_desc_eq_fail (label, nullable, i', d) ->
       (* Type the value before the descriptor, matching evaluation/lowering order
          and the [Br_on_cast_desc_eq] arm above. *)
-      let* i' = instruction ctx i' in
+      let* i' = typed ctx i' in
       let* d, target = descriptor_target ctx ~location:i.info ~nullable d in
       let*! ty = target in
       if is_cont_heaptype ctx ty.typ then
@@ -6630,8 +6482,10 @@ and type_cont_method_call ctx i ~handlers recv meth args =
             (None, args))
     | _ -> (None, args)
   in
+  (* Emission order: the payload arguments, then the continuation receiver (on
+     top), then the resume/switch. *)
   let* args' = instructions ctx args in
-  let* recv' = instruction ctx recv in
+  let* recv' = typed ctx recv in
   let l' = args' @ [ recv' ] in
   let*! ct = cont_operand_type ctx recv' in
   match meth.desc with
@@ -6703,8 +6557,8 @@ and type_arith ctx i =
      unary ([-a], [a as i64]) form. *)
   match i.desc with
   | BinOp (op, i1, i2) ->
-      let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
+      let* i1' = typed ctx i1 in
+      let* i2' = typed ctx i2 in
       let ty =
         let ty1 = expression_type ctx i1' in
         let ty2 = expression_type ctx i2' in
@@ -7192,8 +7046,9 @@ and type_cast ctx i =
   | CastDesc (value, nullable, d) ->
       (* [value as [?]descriptor(d)]: a descriptor-equality cast. The target type
          is recovered from [d] ([d : (ref null? (exact_1 Y))], [Y describes X] ⇒
-         target [(ref nullable (exact_1 X))]). *)
-      let* value' = instruction ctx value in
+         target [(ref nullable (exact_1 X))]). The value is pushed first, the
+         descriptor on top of it, so type them in that (emission) order. *)
+      let* value' = typed ctx value in
       let* d', target = descriptor_target ctx ~location:i.info ~nullable d in
       let*! t = target in
       let*! ty = internalize ctx (Ref t) in
@@ -7335,7 +7190,8 @@ and type_aggregate_access ctx i =
       in
       return_expression i (GetDescriptor i') ty
   | StructSet (i1, field, i2) ->
-      let* i1' = instruction ctx i1 in
+      (* Emission order: the struct receiver, then the stored value. *)
+      let* i1' = typed ctx i1 in
       (* Resolve the field's declared type (pure, reporting any field error)
          before typing the value, so the value can be checked against it and a
          struct/array literal can drop its name. The value is then typed on
@@ -7381,9 +7237,9 @@ and type_aggregate_access ctx i =
       let* i2' =
         match expected with
         | Some cell ->
-            let* i2', _ = check_instruction ctx cell i2 in
+            let* i2', _ = typed_check ctx cell i2 in
             return i2'
-        | None -> instruction ctx i2
+        | None -> typed ctx i2
       in
       return_statement i (StructSet (i1', field, i2')) [||]
   (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
@@ -7397,8 +7253,9 @@ and type_aggregate_access ctx i =
         (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
         typ
   | ArrayGet (i1, i2) -> (
-      let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
+      (* Emission order: the array, then the index. *)
+      let* i1' = typed ctx i1 in
+      let* i2' = typed ctx i2 in
       check_type ctx i2' i32_cell;
       match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
@@ -7421,23 +7278,26 @@ and type_aggregate_access ctx i =
   | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
     when table_receiver ctx tabname ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
-      let* i2' = instruction ctx i2 in
+      (* The table name is a static immediate; the index then the value are the
+         emitted operands. *)
+      let* i2' = typed ctx i2 in
       check_type ctx i2' (address_cell at);
       (* Check the stored value against the table's element type, so a
          struct/array literal can drop its name. *)
       let* i3' =
         match internalize ctx (Ref rt) with
         | Some cell ->
-            let* i3', _ = check_instruction ctx cell i3 in
+            let* i3', _ = typed_check ctx cell i3 in
             return i3'
-        | None -> instruction ctx i3
+        | None -> typed ctx i3
       in
       return_statement i
         (ArraySet ({ desc = Get tabname; info = ([||], recv.info) }, i2', i3'))
         [||]
   | ArraySet (i1, i2, i3) -> (
-      let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
+      (* Emission order: the array, the index, then the stored value. *)
+      let* i1' = typed ctx i1 in
+      let* i2' = typed ctx i2 in
       check_type ctx i2' i32_cell;
       match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
@@ -7454,26 +7314,26 @@ and type_aggregate_access ctx i =
           let* i3' =
             match expected with
             | Some cell ->
-                let* i3', _ = check_instruction ctx cell i3 in
+                let* i3', _ = typed_check ctx cell i3 in
                 return i3'
-            | None -> instruction ctx i3
+            | None -> typed ctx i3
           in
           return_statement i (ArraySet (i1', i2', i3')) [||]
       | Error ->
           (* Receiver already failed to type; recover silently (still type the
              value so its holes are consumed). *)
-          let* i3' = instruction ctx i3 in
+          let* i3' = typed ctx i3 in
           return_statement i (ArraySet (i1', i2', i3')) [||]
       | Unknown | UnknownRef ->
           (* The receiver's type is unknown (unreachable / branch code) or only
              a reference (its array type cannot be resolved), so the element
              cannot be written. Still type the value so its holes are
              consumed. *)
-          let* i3' = instruction ctx i3 in
+          let* i3' = typed ctx i3 in
           Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||]
       | _ ->
-          let* i3' = instruction ctx i3 in
+          let* i3' = typed ctx i3 in
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||])
   | _ -> assert false (* only invoked on a struct/array access *)
@@ -8430,10 +8290,11 @@ and type_table_mgmt_call ctx i func recv name meth args =
   | _ -> bad ()
 
 and type_array_fill_call ctx i func a meth j v n =
-  let* a' = instruction ctx a in
-  let* j' = instruction ctx j in
-  let* v' = instruction ctx v in
-  let* n' = instruction ctx n in
+  (* Emission order: the array receiver, then index, value, count. *)
+  let* a' = typed ctx a in
+  let* j' = typed ctx j in
+  let* v' = typed ctx v in
+  let* n' = typed ctx n in
   check_type ctx n' i32_cell;
   check_type ctx j' i32_cell;
   (match Cell.get (expression_type ctx a') with
@@ -8460,11 +8321,12 @@ and type_array_fill_call ctx i func a meth j v n =
     [||]
 
 and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
-  let* a1' = instruction ctx a1 in
-  let* i1' = instruction ctx i1 in
-  let* a2' = instruction ctx a2 in
-  let* i2' = instruction ctx i2 in
-  let* n' = instruction ctx n in
+  (* Emission order: dest array, dest index, src array, src index, count. *)
+  let* a1' = typed ctx a1 in
+  let* i1' = typed ctx i1 in
+  let* a2' = typed ctx a2 in
+  let* i2' = typed ctx i2 in
+  let* n' = typed ctx n in
   check_type ctx n' i32_cell;
   check_type ctx i2' i32_cell;
   let ty' = expression_type ctx a2' in
@@ -8496,7 +8358,9 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
     [||]
 
 and type_array_init_call ctx i func a meth arg1 rest =
-  let* a' = instruction ctx a in
+  (* Emission order: the array receiver, then the dest/src/len operands (the
+     segment [arg1] is a static immediate typed below). *)
+  let* a' = typed ctx a in
   match arg1.desc with
   | Get seg ->
       let sinfo = arg1.info in
@@ -8549,7 +8413,7 @@ and type_array_init_call ctx i func a meth arg1 rest =
    recovery and editor features (signature help) still see the call. Gated on an
    array receiver, so a struct field of the same name stays an indirect call. *)
 and type_array_method_recovery ctx i func recv meth args =
-  let* recv' = instruction ctx recv in
+  let* recv' = typed ctx recv in
   let* args' = instructions ctx args in
   let expected = match meth.desc with "fill" -> 3 | _ -> 4 in
   if List.length args' <> expected then
@@ -8560,7 +8424,9 @@ and type_array_method_recovery ctx i func recv meth args =
     [||]
 
 and type_binary_intrinsic_call ctx i func i1 meth op args =
-  let* i1' = instruction ctx i1 in
+  (* A scalar binary intrinsic on a value receiver ([x.min(y)]): the receiver is
+     pushed first, then the operand. *)
+  let* i1' = typed ctx i1 in
   let* args' = instructions ctx args in
   let is_int = match op with "rotl" | "rotr" -> true | _ -> false in
   let call args'' =
@@ -8681,9 +8547,16 @@ and type_unary_intrinsic_call ctx i func recv meth =
 
 and type_simd_vector_op_call ctx i func recv meth args =
   let op = Option.get (Simd.classify meth.desc) in
-  let* recv' = instruction ctx recv in
-  let* args' = instructions ctx args in
   let nimm = match op.imm with No_imm -> 0 | Lane _ -> 1 | Shuffle -> 16 in
+  (* Emission order: the v128 (or scalar, for splat) receiver, then the trailing
+     stack operands. The leading [nimm] lane immediates are static — not pushed,
+     never holes — so type them plainly, between the two, without a hole slice or
+     a hole-order contribution. *)
+  let* recv' = typed ctx recv in
+  let imms, stack_args = list_split nimm args in
+  let* imms' = plain_instructions ctx imms in
+  let* stack_args' = instructions ctx stack_args in
+  let args' = imms' @ stack_args' in
   let nstack_extra = List.length op.operands - 1 in
   let nargs = List.length args' in
   if nargs <> nimm + nstack_extra then
@@ -8926,7 +8799,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
                 (fun prev (name, written) ->
                   let* l = prev in
                   if written = None then record_pun ctx.pun_spans name.info;
-                  let* fi' = instruction ctx (field_value name written) in
+                  let* fi' = typed ctx (field_value name written) in
                   return ((name, Option.map (fun _ -> fi') written) :: l))
                 (return []) fields
             in
@@ -8959,9 +8832,9 @@ and check_instruction ?(drop_supertype = false) ctx expected
                         let i' = field_value name written in
                         match internalize ctx (unpack_type f) with
                         | Some cell ->
-                            let* i', _ = check_instruction ctx cell i' in
+                            let* i', _ = typed_check ctx cell i' in
                             return i'
-                        | None -> instruction ctx i'
+                        | None -> typed ctx i'
                       in
                       (* Preserve punning: a punned field ([written = None]) stays
                          [None] so the printer re-emits [{x}]; the check above
@@ -8972,10 +8845,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
             (* A source field with no counterpart in the declaration (a
                field-count/name mismatch, already reported) is skipped by the
                fold above; still type it for recovery, so its holes are consumed
-               (else the leftover trips [assert (args = [])]) and any error
-               inside it is reported. It is appended to the rebuilt node, after
-               the declared fields and in source order — the order in which its
-               holes were just consumed, which [check_hole_order] then follows. *)
+               and any error inside it is reported. It is appended to the rebuilt
+               node, after the declared fields and in source order — the emission
+               order [to_wasm] follows, so the hole slices and hole-order check
+               (threaded through [typed] across both folds) line up. *)
             let* fields' =
               List.fold_left
                 (fun prev (name, written) ->
@@ -8987,7 +8860,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
                   then return l
                   else (
                     if written = None then record_pun ctx.pun_spans name.info;
-                    let* fi' = instruction ctx (field_value name written) in
+                    let* fi' = typed ctx (field_value name written) in
                     return ((name, Option.map (fun _ -> fi') written) :: l)))
                 (return fields') fields
             in
@@ -9045,82 +8918,108 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       return (node, true)
   | StructDesc (d, fields) ->
-      if ctx.suggest then
-        List.iter
-          (fun (name, written) -> suggest_punning ctx name written)
-          fields;
-      (* [{ descriptor(d) | fields }]: the struct type [X] is recovered from [d]
-         ([d : (ref (exact Y))], [Y describes X]); the field values are then
-         checked against [X]'s fields. *)
-      let* d, target =
-        descriptor_target ctx ~location:i.info ~nullable:false d
-      in
-      let* node =
-        match Option.map (fun (t : reftype) -> named_heaptype t.typ) target with
-        | None | Some None ->
-            let* fields' =
-              List.fold_left
-                (fun prev (name, written) ->
-                  let* l = prev in
-                  if written = None then record_pun ctx.pun_spans name.info;
-                  let* fi' = instruction ctx (field_value name written) in
-                  return ((name, Option.map (fun _ -> fi') written) :: l))
-                (return []) fields
-            in
-            return_expression i
-              (StructDesc (d, List.rev fields'))
-              (Cell.make Error)
-        | Some (Some typ) ->
-            let*! field_types = lookup_struct_type ctx typ in
-            if List.length fields <> Array.length field_types then
-              Error.field_count_mismatch ctx.diagnostics ~location:i.info
-                ~expected:(Array.length field_types)
-                ~provided:(List.length fields);
-            let* fields' =
-              Array.fold_left
-                (fun prev field ->
-                  let name, (f : fieldtype) = field.desc in
-                  match
-                    List.find_opt (fun (idx, _) -> name.desc = idx.desc) fields
-                  with
-                  | None ->
-                      Error.missing_field ctx.diagnostics ~location:i.info name;
-                      prev
-                  | Some (name, written) ->
-                      let* l = prev in
-                      let* checked =
-                        let i' = field_value name written in
-                        match internalize ctx (unpack_type f) with
-                        | Some cell ->
-                            let* i', _ = check_instruction ctx cell i' in
-                            return i'
-                        | None -> instruction ctx i'
-                      in
-                      return ((name, Option.map (fun _ -> checked) written) :: l))
-                (return []) field_types
-            in
-            (* Append any source field absent from the declaration, typed for
-               recovery, after the declared fields and in source order (see the
-               [Struct] arm above). *)
-            let* fields' =
-              List.fold_left
-                (fun prev (name, written) ->
-                  let* l = prev in
-                  if
-                    Array.exists
-                      (fun f -> (fst f.desc).desc = name.desc)
-                      field_types
-                  then return l
-                  else (
+      (* [{ descriptor(d) | fields }] lowers to [struct.new_desc], which pushes
+         the field values then the descriptor on top. But the descriptor's type
+         [Y] (with [Y describes X]) fixes the struct type [X] the fields are
+         checked against, so the descriptor must be typed FIRST — out of emission
+         order, which the explicit hole slices make sound, and as the original
+         code did, so the initialized-local analysis is unchanged. Split the
+         pending values: the fields take the front slice, the descriptor the tail;
+         type the descriptor against the tail with a fresh hole state, the fields
+         in emission order over the front slice, then fold the descriptor into the
+         hole-order check as the last operand. *)
+      fun st ->
+        if ctx.suggest then
+          List.iter
+            (fun (name, written) -> suggest_punning ctx name written)
+            fields;
+        let front_holes =
+          List.fold_left
+            (fun acc (_, w) -> acc + Option.fold ~none:0 ~some:count_holes w)
+            0 fields
+        in
+        let front_pending, tail_pending = list_split front_holes st.pending in
+        let _, d =
+          instruction ctx d
+            { pending = tail_pending; value_loc = None; reported = false }
+        in
+        let target =
+          descriptor_reftype ctx ~location:i.info ~nullable:false d
+        in
+        let type_body =
+          match
+            Option.map (fun (t : reftype) -> named_heaptype t.typ) target
+          with
+          | None | Some None ->
+              let* fields' =
+                List.fold_left
+                  (fun prev (name, written) ->
+                    let* l = prev in
                     if written = None then record_pun ctx.pun_spans name.info;
-                    let* fi' = instruction ctx (field_value name written) in
-                    return ((name, Option.map (fun _ -> fi') written) :: l)))
-                (return fields') fields
-            in
-            let*! result = construction_result typ in
-            return_expression i (StructDesc (d, List.rev fields')) result
-      in
-      return (node, true)
+                    let* fi' = typed ctx (field_value name written) in
+                    return ((name, Option.map (fun _ -> fi') written) :: l))
+                  (return []) fields
+              in
+              return_expression i
+                (StructDesc (d, List.rev fields'))
+                (Cell.make Error)
+          | Some (Some typ) ->
+              let*! field_types = lookup_struct_type ctx typ in
+              if List.length fields <> Array.length field_types then
+                Error.field_count_mismatch ctx.diagnostics ~location:i.info
+                  ~expected:(Array.length field_types)
+                  ~provided:(List.length fields);
+              let* fields' =
+                Array.fold_left
+                  (fun prev field ->
+                    let name, (f : fieldtype) = field.desc in
+                    match
+                      List.find_opt
+                        (fun (idx, _) -> name.desc = idx.desc)
+                        fields
+                    with
+                    | None ->
+                        Error.missing_field ctx.diagnostics ~location:i.info
+                          name;
+                        prev
+                    | Some (name, written) ->
+                        let* l = prev in
+                        let* checked =
+                          let i' = field_value name written in
+                          match internalize ctx (unpack_type f) with
+                          | Some cell ->
+                              let* i', _ = typed_check ctx cell i' in
+                              return i'
+                          | None -> typed ctx i'
+                        in
+                        return
+                          ((name, Option.map (fun _ -> checked) written) :: l))
+                  (return []) field_types
+              in
+              (* Append any source field absent from the declaration, typed for
+                 recovery, after the declared fields and in source order (see the
+                 [Struct] arm above). *)
+              let* fields' =
+                List.fold_left
+                  (fun prev (name, written) ->
+                    let* l = prev in
+                    if
+                      Array.exists
+                        (fun f -> (fst f.desc).desc = name.desc)
+                        field_types
+                    then return l
+                    else (
+                      if written = None then record_pun ctx.pun_spans name.info;
+                      let* fi' = typed ctx (field_value name written) in
+                      return ((name, Option.map (fun _ -> fi') written) :: l)))
+                  (return fields') fields
+              in
+              let*! result = construction_result typ in
+              return_expression i (StructDesc (d, List.rev fields')) result
+        in
+        let st1, node = type_body { st with pending = front_pending } in
+        let st2 = fold_operand ctx d d { st1 with pending = [] } in
+        (st2, (node, true))
   | StructDefaultDesc d ->
       let* d, target =
         descriptor_target ctx ~location:i.info ~nullable:false d
@@ -9148,15 +9047,15 @@ and check_instruction ?(drop_supertype = false) ctx expected
               Error.cannot_infer_array_type ctx.diagnostics ~location:i.info)
         with
         | None ->
-            let* i1' = instruction ctx i1 in
-            let* i2' = instruction ctx i2 in
+            let* i1' = typed ctx i1 in
+            let* i2' = typed ctx i2 in
             check_type ctx i2' i32_cell;
             return_expression i (Array (None, i1', i2')) (Cell.make Error)
         | Some typ ->
             (* Resolve the element type (pure) before typing the element value,
                so a struct/array literal or null cast there can be inferred /
                drop its name. The value is still typed first (then the count),
-               preserving the source order and hole consumption. *)
+               preserving the emission order and hole slices. *)
             let elt =
               match lookup_array_type ctx typ with
               | Some field' -> internalize ctx (unpack_type field')
@@ -9165,11 +9064,11 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let* i1' =
               match elt with
               | Some cell ->
-                  let* i1', _ = check_instruction ctx cell i1 in
+                  let* i1', _ = typed_check ctx cell i1 in
                   return i1'
-              | None -> instruction ctx i1
+              | None -> typed ctx i1
             in
-            let* i2' = instruction ctx i2 in
+            let* i2' = typed ctx i2 in
             check_type ctx i2' i32_cell;
             let emitted = emitted_name ty typ ~field_unique:false in
             let*! result = construction_result typ in
@@ -9208,7 +9107,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
               List.fold_left
                 (fun prev i' ->
                   let* l = prev in
-                  let* i' = instruction ctx i' in
+                  let* i' = typed ctx i' in
                   return (i' :: l))
                 (return []) instrs
             in
@@ -9227,9 +9126,9 @@ and check_instruction ?(drop_supertype = false) ctx expected
                   let* i' =
                     match elt with
                     | Some cell ->
-                        let* i', _ = check_instruction ctx cell i' in
+                        let* i', _ = typed_check ctx cell i' in
                         return i'
-                    | None -> instruction ctx i'
+                    | None -> typed ctx i'
                   in
                   return (i' :: l))
                 (return []) instrs
@@ -9246,16 +9145,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
               Error.cannot_infer_array_type ctx.diagnostics ~location:i.info)
         with
         | None ->
-            let* off' = instruction ctx off in
-            let* len' = instruction ctx len in
+            let* off' = typed ctx off in
+            let* len' = typed ctx len in
             check_type ctx off' i32_cell;
             check_type ctx len' i32_cell;
             return_expression i
               (ArraySegment (None, seg, off', len'))
               (Cell.make Error)
         | Some typ ->
-            let* off' = instruction ctx off in
-            let* len' = instruction ctx len in
+            let* off' = typed ctx off in
+            let* len' = typed ctx len in
             check_type ctx off' i32_cell;
             check_type ctx len' i32_cell;
             (* A reference element means [array.new_elem] (the segment is an
@@ -9595,9 +9494,9 @@ and check_instruction ?(drop_supertype = false) ctx expected
          synthesis. The keep-bool is the disjunction of the branches' — the
          surrounding binding annotation is load-bearing iff a branch relied on it
          (e.g. to drop a name, or because its own type differs from [expected]). *)
-      let* i2', needed2 = check_instruction ~drop_supertype ctx expected i2 in
-      let* i3', needed3 = check_instruction ~drop_supertype ctx expected i3 in
-      let* i1' = instruction ctx i1 in
+      let* i2', needed2 = typed_check ~drop_supertype ctx expected i2 in
+      let* i3', needed3 = typed_check ~drop_supertype ctx expected i3 in
+      let* i1' = typed ctx i1 in
       check_type ctx i1' i32_cell;
       (* The result is the branches' join, not [expected]: each branch is already
          [<: expected], so this keeps the select's precise type (e.g. [&bytes]
@@ -9637,26 +9536,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
    stack into the parameter list, run [check_instruction] on them, and surface its keep-bool.
    Used for an annotated global initializer (a constant expression). *)
 and check_toplevel ?(drop_supertype = false) ctx expected i =
-  let count = count_holes i in
-  let* args = pop_many ctx i count [] in
-  let args, (i', needed) =
-    check_instruction ~drop_supertype ctx expected i args
-  in
-  (* [count] holes were popped above; typing normally consumes them all, but on
-     erroneous input a sub-typer can short-circuit and skip a hole-bearing
-     subexpression (one of many recovery paths), leaving an operand unconsumed.
-     Tolerate that rather than asserting — the module is already being rejected.
-     (Hole handling is due for a more robust rework.) [check_hole_order] likewise
-     recovers on a misplaced hole. *)
-  ignore (args : _ list);
-  ignore (check_hole_order ctx i' count : bool);
-  return (i', needed)
+  with_holes ctx i (fun () -> check_instruction ~drop_supertype ctx expected i)
 
 (* Peek the parameter types of a call's callee syntactically, when it is a name
    referring to a function or a funcref-typed variable. This reads no stack and
-   reports nothing, so the evaluation order (arguments, then callee) and hole
-   binding are unchanged; the callee is still typed normally afterwards. The
-   result is used only to check each argument against its parameter. *)
+   reports nothing, so the evaluation order (arguments, then callee) is
+   unchanged; the callee is still typed normally afterwards. The result is used
+   only to check each argument against its parameter. Crucially it does not
+   {e type} the callee, so the initialized-local analysis (threaded in
+   execution order) still sees the callee — emitted last — after the arguments,
+   one of which may [local.tee] the very local the callee reads. *)
 and peek_call_params ctx callee =
   (* The user heap-type name a hole-free callee resolves to, computed purely (no
      typing, no stack effect): a function name, a funcref-typed variable, or a
@@ -9712,7 +9601,7 @@ and typed_call_args ctx l param_types =
       let rec go k = function
         | [] -> return []
         | a :: r ->
-            let* a', _ = check_instruction ctx params.(k) a in
+            let* a', _ = typed_check ctx params.(k) a in
             let* r' = go (k + 1) r in
             return (a' :: r')
       in
@@ -9743,9 +9632,16 @@ and check_against ctx expected i =
       return i'
 
 and type_indirect_call ctx i i' l =
+  (* Arguments are pushed first, then the callee reference, then [call_ref]; type
+     them in that same (emission) order so the hole slices and the hole-order
+     check match [to_wasm], and so the initialized-local analysis sees the callee
+     (which may read a local an argument [local.tee]s) after those arguments. The
+     parameter types are peeked syntactically (no typing, no stack effect), so an
+     argument can still be checked against its parameter without typing the callee
+     early. *)
   let param_types = peek_call_params ctx i' in
   let* l' = typed_call_args ctx l param_types in
-  let* i' = instruction ctx i' in
+  let* i' = typed ctx i' in
   match Cell.get (expression_type ctx i') with
   | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
       let*! typ = lookup_func_type ctx ty in
@@ -9974,11 +9870,27 @@ and type_wide_arith_call ctx i func ns name args =
         [| valtype_cell i64_valtype; valtype_cell i64_valtype |]
 
 and instructions ctx l : _ -> _ * _ list =
+  (* A run of operands emitted left-to-right (call/constructor arguments, a
+     [throw] payload, a resume/switch operand list, …): each takes its own
+     hole-slice in this same (emission) order, so [typed] also folds in the
+     hole-order check across them. *)
+  match l with
+  | [] -> return []
+  | i :: r ->
+      let* i' = typed ctx i in
+      let* r' = instructions ctx r in
+      return (i' :: r')
+
+(* Like [instructions] but for static immediate operands (SIMD lane indices) that
+   are not pushed on the stack: type them plainly, so they take no hole slice and
+   do not count as values in the hole-order check. They are constant integers and
+   never carry a hole. *)
+and plain_instructions ctx l =
   match l with
   | [] -> return []
   | i :: r ->
       let* i' = instruction ctx i in
-      let* r' = instructions ctx r in
+      let* r' = plain_instructions ctx r in
       return (i' :: r')
 
 (* Type a memory-access call's argument list: a [Labelled] immediate has its
@@ -9992,12 +9904,15 @@ and mem_call_arguments ctx l : _ -> _ * _ list =
   | i :: r -> (
       match i.desc with
       | Ast.Labelled (lbl, e) ->
+          (* A labelled memarg ([offset: N]) is a static immediate, not a stack
+             operand: type it plainly (it never carries a hole, and must not count
+             as a value in the hole-order check — see [typed]). *)
           let* e' = instruction ctx e in
           let* r' = mem_call_arguments ctx r in
           return
             ({ desc = Labelled (lbl, e'); info = (fst e'.info, i.info) } :: r')
       | _ ->
-          let* i' = instruction ctx i in
+          let* i' = typed ctx i in
           let* r' = mem_call_arguments ctx r in
           return (i' :: r'))
 
@@ -10009,10 +9924,12 @@ and mem_call_arguments ctx l : _ -> _ * _ list =
 and match_recover_scrutinee ctx scrutinee = function
   | Some scrut' -> scrut'
   | None ->
-      let holes =
+      let pending =
         List.init (count_holes scrutinee) (fun _ -> Cell.make Error)
       in
-      snd (instruction ctx scrutinee holes)
+      snd
+        (instruction ctx scrutinee
+           { pending; value_loc = None; reported = false })
 
 and toplevel_instruction ctx i : stack -> stack * 'b =
   if debug then Format.eprintf "%a@." Output.instr i;
@@ -10186,22 +10103,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
            })
         [||]
   | TailCall _ | Br _ | Br_table _ | Throw _ | ThrowRef _ | Return _ ->
-      let count = count_holes i in
-      let* args = pop_many ctx i count [] in
-      let args, res = instruction ctx i args in
-      (* Tolerate a hole operand left unconsumed by error recovery; see
-         [check_toplevel]. *)
-      ignore (args : _ list);
-      ignore (check_hole_order ctx res count : bool);
+      let* res = with_holes ctx i (fun () -> instruction ctx i) in
       return res |> unreachable
   | _ ->
-      let count = count_holes i in
-      let* args = pop_many ctx i count [] in
-      let args, res = instruction ctx i args in
-      (* Tolerate a hole operand left unconsumed by error recovery; see
-         [check_toplevel]. *)
-      ignore (args : _ list);
-      ignore (check_hole_order ctx res count : bool);
+      let* res = with_holes ctx i (fun () -> instruction ctx i) in
       return res
 
 (* Check that each [try_table] catch clause forwards the right value types to its
@@ -10386,13 +10291,7 @@ and block_contents ctx results l =
                against it would discard it ([has_expectation] is false). Instead
                synthesize the value — a nested block runs its own inference — and
                push its type, to be collected by the enclosing block. *)
-            let count = count_holes i in
-            let* args = pop_many ctx i count [] in
-            let args, i' = instruction ctx i args in
-            (* Tolerate a hole operand left unconsumed by error recovery; see
-               [check_toplevel]. *)
-            ignore (args : _ list);
-            ignore (check_hole_order ctx i' count : bool);
+            let* i' = with_holes ctx i (fun () -> instruction ctx i) in
             let* () =
               push_results
                 (Array.to_list
