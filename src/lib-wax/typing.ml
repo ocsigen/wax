@@ -649,6 +649,13 @@ module Error = struct
        ++ text (Wax_utils.Feature.name feature ^ "=off")
       ^^ text ".")
 
+  let feature_declaration_in_conditional context ~location =
+    report context ~location
+      (text "A" ++ kw "#![feature = \"…\"]"
+      ++ text
+           "declaration states a fact about the whole module and must appear \
+            at the top level, not inside a conditional.")
+
   (* A secondary caret at [location] labelled with an inferred value type. Used
      to point at each branch of an [if]/select whose branches are in
      incompatible type hierarchies: there is no common supertype — and, unlike a
@@ -809,6 +816,10 @@ module Error = struct
       ++ (kw "offset" ^^ text ",")
       ++ kw "align" ++ text "and" ++ kw "lane"
       ++ text "immediates of a memory access.")
+
+  let become_on_stack_switching context ~location =
+    report context ~location
+      (kw "become" ++ text "cannot apply to a stack-switching operation.")
 
   let unknown_argument_label context ~location ~suggestions x =
     report ?hint:(did_you_mean suggestions) context ~location
@@ -5272,14 +5283,21 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       | Call (i'', l') ->
           check_subtypes ctx ~location:i.info (fst typed.info) ctx.return_types;
           return_statement i (TailCall (i'', l')) [||]
+      | Unreachable ->
+          (* Typing the call already failed: a [let*!] on a [None] lookup yields
+             an [Unreachable] node typed [Error] (with the error already
+             reported). There is no tail call to form; propagate the failed
+             result rather than re-reporting or [assert false]. *)
+          return typed
       | _ ->
-          (* The target types to a non-[Call] only when typing it already
-             failed: a [let*!] on a [None] lookup yields an [Unreachable] node
-             typed [Error] (with the error already reported). A call that
-             type-checks is always a [Call] — an ill-formed or indirect callee
-             too, via [type_indirect_call] — so there is no tail call to form
-             here; propagate the failed result rather than re-reporting or
-             [assert false]. *)
+          (* The call type-checked but is not a [Call]: it is a stack-switching
+             operation ([resume]/[resume_throw]/[resume_throw_ref]/[switch] on a
+             continuation receiver, or [k::new]/[k::bind]), to which no tail call
+             can apply. Report it rather than silently dropping the [become]
+             marker (which would also skip the return-type check); recover with
+             the plain operation. (A well-formed direct or indirect call is
+             always a [Call], via [type_indirect_call].) *)
+          Error.become_on_stack_switching ctx.diagnostics ~location:i.info;
           return typed)
   | Labelled (_, e) ->
       (* A labelled argument is only meaningful as a direct argument of a
@@ -8182,7 +8200,15 @@ and type_simd_free_intrinsic_call ctx i func ns name args =
                  Error.constant_expression_required ctx.diagnostics
                    ~location:(snd a.info))
           args'
-    | None -> List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
+    | None ->
+        (* The only non-const free intrinsic is [bitselect], which takes exactly
+           three v128 operands; check its arity as the const branch checks
+           theirs, so an under/over-application is rejected here rather than
+           slipping through to an unrelated stack error during lowering. *)
+        if List.length args' <> 3 then
+          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+            ~expected:3 ~provided:(List.length args');
+        List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
     return_expression i (Call (callee, args')) (simd_cell TV128))
 
 (* Bidirectional checking mode: type [i] against an [expected] type and report
@@ -10279,9 +10305,11 @@ let rec check_constant_instruction ctx i =
       | Some (mut, _) ->
           if mut then Error.constant_global_required ctx.diagnostics ~location
       | None -> (* ref.func *) ())
-  | Null | StructDefault _ | ArrayDefault _ | Int _ | Float _ | Char _
-  | String _ ->
-      ()
+  | Null | StructDefault _ | Int _ | Float _ | Char _ | String _ -> ()
+  (* [array.new_default] fills with the field default, but its length is an
+     arbitrary expression that must itself be constant (like the sibling [Array]
+     / [ArrayFixed] / [ContNew] constructors). *)
+  | ArrayDefault (_, len) -> check_constant_instruction ctx len
   (* A punned field ([None], written [{x}]) is a [Get] of the like-named global,
      so it must satisfy the same constant-global rule; check that implicit [Get].
      The [storagetype] array of the fabricated node is unused by the [Get] arm. *)
@@ -11792,6 +11820,37 @@ let apply_declared_features diagnostics features fields =
                       Wax_utils.Feature.declare features feature)
               | _ -> ())
             attrs
+      (* A feature declaration nested in a conditional is only seen here, never
+         applied (it states a module-wide fact and is resolved before any branch
+         is specialized), so the gated constructs it was meant to enable would
+         still error. Diagnose the misplacement rather than accepting it
+         silently; [check_attribute_list] otherwise allows the annotation in a
+         conditional. *)
+      | Conditional { then_fields; else_fields; _ } ->
+          let rec reject fields =
+            List.iter
+              (fun (field : (_ modulefield, _) annotated) ->
+                match field.desc with
+                | Module_annotation attrs ->
+                    List.iter
+                      (fun (key, value, _) ->
+                        if key = "feature" then
+                          let location =
+                            match value with
+                            | Some v -> v.info
+                            | None -> field.info
+                          in
+                          Error.feature_declaration_in_conditional diagnostics
+                            ~location)
+                      attrs
+                | Conditional { then_fields; else_fields; _ } ->
+                    reject then_fields.desc;
+                    Option.iter (fun e -> reject e.desc) else_fields
+                | _ -> ())
+              fields
+          in
+          reject then_fields.desc;
+          Option.iter (fun e -> reject e.desc) else_fields
       | _ -> ())
     fields
 
