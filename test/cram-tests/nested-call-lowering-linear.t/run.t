@@ -9,7 +9,9 @@ essentially instantly.
   > for _ in range(100): e="mem.load32(%s)" % e
   > open("deep.wax","w").write("memory mem: i32 [1];\nfn f() -> i32 { %s; }\n" % e)'
 
-  $ timeout 60 wax deep.wax -f wat -o /dev/null && echo OK
+  $ python3 -c 'import subprocess
+  > subprocess.run(["wax","deep.wax","-f","wat","-o","/dev/null"],timeout=60,check=True)
+  > print("OK")'
   OK
 
 It also still lowers to correct, valid wasm:
