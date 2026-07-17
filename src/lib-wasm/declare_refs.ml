@@ -35,23 +35,50 @@ let module_ ((name, fields) : Ast.location T.module_) : Ast.location T.module_ =
   if List.exists is_conditional fields then (name, fields)
   else begin
     (* [body] = ref.func targets in function bodies (these need declaring);
-       [declared] = those already referenced in element / global initialisers. *)
+       [declared] = the functions already "declared as referenceable" — the
+       same set the validator builds in [Validation]'s [ctx.refs]: a function
+       named by a [ref.func] in a constant initialiser (element / global /
+       table), or exported. A function's positional index [fi] is counted like
+       the validator does (imports first, then definitions, over the
+       group-expanded fields) so an anonymous inline-exported function matches a
+       numeric [ref.func]. *)
     let body = ref [] and declared = ref KeySet.empty in
     let note_declared expr =
       List.iter
         (fun idx -> declared := KeySet.add (key_of_idx idx) !declared)
         (refs_instrs [] expr)
     in
+    (* A function's own key: its name if it has one, otherwise its position. *)
+    let self_key id fi =
+      match id with Some (n : T.name) -> Id n.desc | None -> Num fi
+    in
+    let fi = ref 0 in
     List.iter
       (fun f ->
         match f.desc with
-        | T.Func { instrs; _ } -> body := refs_instrs !body instrs
+        | T.Import { desc = T.Func _; id; exports; _ } ->
+            if exports <> [] then
+              declared := KeySet.add (self_key id !fi) !declared;
+            incr fi
+        | T.Import _ -> ()
+        | T.Func { instrs; id; exports; _ } ->
+            body := refs_instrs !body instrs;
+            if exports <> [] then
+              declared := KeySet.add (self_key id !fi) !declared;
+            incr fi
         | T.Global { init; _ } -> note_declared init
         | T.Elem { init; mode; _ } -> (
             List.iter note_declared init;
             match mode with Active (_, off) -> note_declared off | _ -> ())
+        | T.Table { init; _ } -> (
+            match init with
+            | Init_default -> ()
+            | Init_expr e -> note_declared e
+            | Init_segment segs -> List.iter note_declared segs)
+        | T.Export { kind = Func; index; _ } ->
+            declared := KeySet.add (key_of_idx index) !declared
         | _ -> ())
-      fields;
+      (List.concat_map Ast_utils.expand_import_group fields);
     (* The undeclared body references, in source order, without duplicates. *)
     let undeclared =
       List.rev

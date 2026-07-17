@@ -2823,7 +2823,10 @@ let module_ diagnostics types fields =
      referenced function may itself be conditionally defined, so the segment
      would reference an index that is absent under some configuration. Until the
      segment can be gated per condition, skip it entirely for conditional
-     modules. *)
+     modules: the conditional WAT this produces is Wax-only text, and to obtain
+     spec-consumable plain WAT from such a module, resolve the conditionals with
+     [-D] and emit with [--desugar], which synthesises the segment over the
+     specialised output (see [Wax_wasm.Desugar] / [Wax_wasm.Declare_refs]). *)
   let has_conditional = module_has_conditional fields in
   let elem_declare : (_ Text.modulefield, _) Ast.annotated list =
     let funcs =

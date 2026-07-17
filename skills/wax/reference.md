@@ -4602,6 +4602,13 @@ server](#language-server)).
       existing `(array (mut i8))` type when the module has one and otherwise pins
       a synthesised one. A module-level `(@string …)` global becomes an ordinary
       global.
+    - Synthesises the declarative element segment (`(elem declare func …)`) that
+      Wax's lenient reader lets a module omit for a function used by `ref.func`
+      only inside a body, so the output passes strict/spec reference validation.
+      This heals a conditional module: WAT emitted from a `#[if]` module keeps
+      its `(@if …)` and omits the segment, but once the conditionals are resolved
+      with `-D` and desugared the segment is added. It is a no-op when the
+      segment is already present (as on the wax-to-wat and binary-to-wat paths).
     - Only valid with wat output (`-f wat`); requesting it for wasm or wax
       output is a usage error.
     - Fails (exit `128`) if a conditional-compilation directive `(@if …)`

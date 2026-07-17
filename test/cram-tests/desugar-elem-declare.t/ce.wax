@@ -1,0 +1,4 @@
+type ft = fn() -> i32;
+#[if(FOO)] { fn h() {} }
+fn callee() -> i32 { 42; }
+fn main() -> &ft { callee; }

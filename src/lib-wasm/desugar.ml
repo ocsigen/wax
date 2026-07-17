@@ -254,4 +254,9 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
         ]
     else fields
   in
-  (name, fields)
+  (* Plain WebAssembly requires every function used by [ref.func] in a body to
+     be declared; Wax's lenient reader lets the segment be omitted, so synthesise
+     it here (a no-op when the segment is already present, as on the wax->wat and
+     binary->wat paths). Any [(@if ...)] has already raised above, so
+     [Declare_refs]'s conditional guard sees none. *)
+  Declare_refs.module_ (name, fields)
