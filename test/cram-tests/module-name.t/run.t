@@ -105,3 +105,20 @@ Conversely, the field-level attributes are rejected as inner attributes:
   2 │ fn f() {}
   3 │ 
   [128]
+
+The module name applies in every configuration, so it must not sit inside a
+conditional (its guard would otherwise be silently dropped) — rejected the same
+way as a misplaced `#![feature]`:
+
+  $ printf '#[if(FOO)] {\n  #![module = "m"]\n}\nfn f() {}\n' > cond.wax
+  $ wax -i wax -f wat cond.wax --validate
+  Error:
+    A '#![module = "…"]' name annotation applies to the whole module and must
+    appear at the top level, not inside a conditional.
+   ──➤  cond.wax:2:15
+  1 │ #[if(FOO)] {
+  2 │   #![module = "m"]
+    ·               ^^^
+  3 │ }
+  4 │ fn f() {}
+  [128]

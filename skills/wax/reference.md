@@ -3913,7 +3913,8 @@ corresponds to the WAT
 (module $my_module …)
 ```
 
-A module may carry at most one name. See also
+A module may carry at most one name, and it must not appear inside a conditional
+(`#[if]`/`#[else]`): the name applies in every configuration. See also
 [Module Name](../language.md#module-name) in the language guide.
 
 ## Feature Declarations

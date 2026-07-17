@@ -659,6 +659,13 @@ module Error = struct
            "declaration states a fact about the whole module and must appear \
             at the top level, not inside a conditional.")
 
+  let module_name_in_conditional context ~location =
+    report context ~location
+      (text "A" ++ kw "#![module = \"…\"]"
+      ++ text
+           "name annotation applies to the whole module and must appear at the \
+            top level, not inside a conditional.")
+
   (* A secondary caret at [location] labelled with an inferred value type. Used
      to point at each branch of an [if]/select whose branches are in
      incompatible type hierarchies: there is no common supertype — and, unlike a
@@ -12013,10 +12020,11 @@ let apply_declared_features diagnostics features fields =
                       Wax_utils.Feature.declare features feature)
               | _ -> ())
             attrs
-      (* A feature declaration nested in a conditional is only seen here, never
-         applied (it states a module-wide fact and is resolved before any branch
-         is specialized), so the gated constructs it was meant to enable would
-         still error. Diagnose the misplacement rather than accepting it
+      (* A feature declaration or a module name nested in a conditional is only
+         seen here, never applied: both state a module-wide fact resolved before
+         any branch is specialized (a guarded module name is dropped by
+         [to_wasm]'s top-level scan; a guarded feature leaves its gated
+         constructs erroring). Diagnose the misplacement rather than accepting it
          silently; [check_attribute_list] otherwise allows the annotation in a
          conditional. *)
       | Conditional { then_fields; else_fields; _ } ->
@@ -12027,14 +12035,16 @@ let apply_declared_features diagnostics features fields =
                 | Module_annotation attrs ->
                     List.iter
                       (fun (key, value, _) ->
+                        let location =
+                          match value with
+                          | Some v -> v.info
+                          | None -> field.info
+                        in
                         if key = "feature" then
-                          let location =
-                            match value with
-                            | Some v -> v.info
-                            | None -> field.info
-                          in
                           Error.feature_declaration_in_conditional diagnostics
-                            ~location)
+                            ~location
+                        else if key = "module" then
+                          Error.module_name_in_conditional diagnostics ~location)
                       attrs
                 | Conditional { then_fields; else_fields; _ } ->
                     reject then_fields.desc;
