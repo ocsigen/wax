@@ -94,7 +94,8 @@ server](#language-server)).
     - Set the reporting level of a warning produced during validation.
     - *NAME* is a single warning, a group, or `all`:
         - `unused-local` (group `unused`): a local that is declared but never
-          read. Produced while validating; shown by default.
+          read. Produced while validating; shown by default. Carries a
+          quick-fix `edit` that inserts a `_` at the name's start.
         - `unused-field` (groups `unused`, `correctness`): a module field (a
           function or global) that is defined but never referenced, exported, or
           used as the start function. The module-level analog of `unused-local`;
@@ -105,7 +106,8 @@ server](#language-server)).
           by default.
         - `unused-label` (groups `unused`, `correctness`): a block label that
           is declared but never branched to. Prefix its name with `_` to silence
-          one. Shown by default.
+          one. Shown by default. On the Wax side it carries a quick-fix `edit`
+          that deletes the whole `'name:` prefix.
         - `shift-count-overflow` (group `correctness`): a shift by a constant
           count at least the operand's bit width. Wasm masks the count modulo
           the width, so the shift is almost certainly not what was meant. Shown
@@ -144,7 +146,9 @@ server](#language-server)).
           shift (`<<`/`>>`) with arithmetic (`+`, `-`, …), or a comparison with
           a bitwise operator (`&`, `|`, `^`). The code is correct, but a reader
           may misread the grouping (`1 << nbits - 1` is `1 << (nbits - 1)`).
-          Shown by default. Wax-only: WAT/Wasm have no infix precedence.
+          Shown by default. Wax-only: WAT/Wasm have no infix precedence. Carries
+          a quick-fix `edit` that wraps the tighter-binding sub-expression in
+          parentheses.
         - `redundant-operation` (group `redundant`): an operation with no effect
           on its result: an arithmetic identity (`x + 0`, `x * 1`, `x << 0`, …),
           an absorbing operand (`x * 0`, `x & 0`), two identical operands
@@ -172,9 +176,11 @@ server](#language-server)).
         - `redundant-annotation` (group `suggestion`): a type the inferred type
           already makes redundant and so can be dropped: a `let` annotation
           (`let x: t = e` → `let x = e`, including the anonymous `_: t = e` and
-          each binding of a tuple `let (a: t, b) = e`), a construction type name
-          (`{T| …}` → `{…}`), or a block result type (`do t { … }` → `do { … }`).
-          Hidden by default.
+          each binding of a tuple `let (a: t, b) = e`), a module-level global
+          annotation (`let counter: i32 = 0` → `let counter = 0`, likewise for a
+          `const`), a construction type name (`{T| …}` → `{…}`), a block result
+          type (`do t { … }` → `do { … }`), or an `if` result type
+          (`if c => t { … }` → `if c { … }`). Hidden by default.
     - The `suggestion` group is reported at a distinct **Suggestion** severity
       (not a warning), and each entry carries a machine-applicable rewrite. These
       are optional simplifications, so they are hidden by default and surface as
@@ -228,7 +234,11 @@ server](#language-server)).
       CI job, or AI assistant to parse. Each object has `severity`, `file`,
       `startLine`/`startColumn`/`endLine`/`endColumn` (1-based line, 0-based
       column), `startOffset`/`endOffset` (byte offsets), `message`, `warning`
-      (the [`-W`](#options) name, or null), `hint`, and `related`.
+      (the [`-W`](#options) name, or null), `hint`, and `related`. A diagnostic
+      carrying a machine-applicable fix (a `suggestion`, or a fixable warning
+      like a redundant cast, an unused local, an unused label, or a confusing
+      precedence mix) also has an `edit` object: the same span fields for the
+      slice to replace, plus its `newText`.
     - With `short`, each diagnostic is one
       `file:line:col: severity: message` line (gcc/rustc style, 1-based column),
       for an editor with a line-based error parser (Vim's `errorformat`, Emacs

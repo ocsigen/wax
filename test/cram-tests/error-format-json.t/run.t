@@ -11,7 +11,7 @@ A type error, as JSON (still exit 128):
 A warning (an unused local) carries its severity and its -W name; exit stays 0:
 
   $ wax check --error-format=json unused.wax
-  {"severity":"warning","file":"unused.wax","startLine":1,"startColumn":20,"endLine":1,"endColumn":21,"startOffset":20,"endOffset":21,"message":"The local variable 'x' is never used.","warning":"unused-local","hint":null,"related":[]}
+  {"severity":"warning","file":"unused.wax","startLine":1,"startColumn":20,"endLine":1,"endColumn":21,"startOffset":20,"endOffset":21,"message":"The local variable 'x' is never used.","warning":"unused-local","hint":null,"related":[],"edit":{"startLine":1,"startColumn":20,"endLine":1,"endColumn":20,"startOffset":20,"endOffset":20,"newText":"_"}}
 
 The default output is unchanged, human-readable with a source snippet:
 

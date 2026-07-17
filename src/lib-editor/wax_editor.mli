@@ -31,6 +31,21 @@ val check_string : string -> diag list
    parseable defines this is exactly [check_string]. *)
 val check_string_with_defines : string -> string list -> diag list
 
+(* The quick fixes for a code-action request over a range: every specialized
+   diagnostic ([check_string_with_defines src defines]) carrying a
+   machine-applicable [edit] whose edit span, or the diagnostic span it anchors
+   to, meets the request range. The range is two zero-based (line, character)
+   positions (start and end, in [?encoding] units). Each fix is
+   [(title, edit)] — the diagnostic message and the rewrite; the caller converts
+   positions and marshals it. *)
+val code_actions :
+  ?encoding:position_encoding ->
+  string ->
+  string list ->
+  int * int ->
+  int * int ->
+  (string * Wax_utils.Diagnostic.edit) list
+
 (* Hover at a (line, character) position: the type of the innermost expression
    there, or what a name (a type reference, an assignment target, a bare global)
    resolves to; [None] over a statement or an unresolved node. *)

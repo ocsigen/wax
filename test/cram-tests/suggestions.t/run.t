@@ -170,3 +170,79 @@ containing a ':' does not fool it: the suggestion still points at the real type.
     ·                   ^^^
   3 │     a;
   4 │ }
+
+A module-level global gets the same redundant-annotation suggestion as a `let`,
+for both a mutable `let` global and an immutable `const`:
+
+  $ cat > g.wax <<'WAX'
+  > let counter: i32 = 0;
+  > const PI: f64 = 3.14159;
+  > fn use() -> f64 { counter; PI; }
+  > WAX
+  $ wax check -W redundant-annotation=warning g.wax
+  Suggestion:
+    This type annotation is redundant; the initializer's type is inferred.
+   ──➤  g.wax:1:14
+  1 │ let counter: i32 = 0;
+    ·              ^^^
+  2 │ const PI: f64 = 3.14159;
+  3 │ fn use() -> f64 { counter; PI; }
+  Suggestion:
+    This type annotation is redundant; the initializer's type is inferred.
+   ──➤  g.wax:2:11
+  1 │ let counter: i32 = 0;
+  2 │ const PI: f64 = 3.14159;
+    ·           ^^^
+  3 │ fn use() -> f64 { counter; PI; }
+  4 │ 
+  Error: This value remains on the stack.
+   ──➤  g.wax:3:19
+  1 │ let counter: i32 = 0;
+  2 │ const PI: f64 = 3.14159;
+  3 │ fn use() -> f64 { counter; PI; }
+    ·                   ^^^^^^^
+  4 │ 
+  [128]
+
+An `if` whose `=> t` result type the context already pins is redundant too; the
+suggestion's edit deletes the whole `=> t`:
+
+  $ cat > i.wax <<'WAX'
+  > fn f(c: i32) -> i32 {
+  >     if c => i32 { 1; } else { 2; };
+  > }
+  > WAX
+  $ wax check -W redundant-annotation=warning i.wax
+  Suggestion: This result type is redundant; it is inferred from the context.
+   ──➤  i.wax:2:13
+  1 │ fn f(c: i32) -> i32 {
+  2 │     if c => i32 { 1; } else { 2; };
+    ·             ^^^
+  3 │ }
+  4 │ 
+
+A suggestion's machine-applicable edit is serialized by `--error-format json`, as
+an `edit` object with the replacement span and its `newText`. Here the redundant
+`if` result type's edit deletes `=> i32`:
+
+  $ wax check -W redundant-annotation=warning --error-format json i.wax
+  {"severity":"suggestion","file":"i.wax","startLine":2,"startColumn":12,"endLine":2,"endColumn":15,"startOffset":34,"endOffset":37,"message":"This result type is redundant; it is inferred from the context.","warning":"redundant-annotation","hint":null,"related":[],"edit":{"startLine":2,"startColumn":9,"endLine":2,"endColumn":15,"startOffset":31,"endOffset":37,"newText":""}}
+
+Some correctness/`unused` warnings also carry a quick-fix `edit`, surfaced the
+same way in JSON: `unused-local` inserts a `_` at the name's start, `unused-label`
+deletes the whole `'name:` prefix, and `precedence` wraps the confusing
+sub-expression in parentheses:
+
+  $ cat > w.wax <<'WAX'
+  > fn f(a: i32, b: i32) -> i32 {
+  >     let x = 1;
+  >     'lbl: do i32 { 0; };
+  >     a & b == 0;
+  > }
+  > WAX
+  $ wax check -W unused-local=warning -W unused-label=warning -W precedence=warning --error-format json w.wax
+  {"severity":"warning","file":"w.wax","startLine":4,"startColumn":10,"endLine":4,"endColumn":12,"startOffset":80,"endOffset":82,"message":"Operator precedence here is easy to misread.","warning":"precedence","hint":"Add parentheses to make the grouping explicit.","related":[{"startLine":4,"startColumn":6,"endLine":4,"endColumn":7,"startOffset":76,"endOffset":77,"message":"This bitwise operator binds tighter than the comparison operator."}],"edit":{"startLine":4,"startColumn":4,"endLine":4,"endColumn":9,"startOffset":74,"endOffset":79,"newText":"(a & b)"}}
+  {"severity":"error","file":"w.wax","startLine":3,"startColumn":4,"endLine":3,"endColumn":23,"startOffset":49,"endOffset":68,"message":"This value remains on the stack.","warning":null,"hint":null,"related":[]}
+  {"severity":"warning","file":"w.wax","startLine":2,"startColumn":8,"endLine":2,"endColumn":9,"startOffset":38,"endOffset":39,"message":"The local variable 'x' is never used.","warning":"unused-local","hint":null,"related":[],"edit":{"startLine":2,"startColumn":8,"endLine":2,"endColumn":8,"startOffset":38,"endOffset":38,"newText":"_"}}
+  {"severity":"warning","file":"w.wax","startLine":3,"startColumn":4,"endLine":3,"endColumn":8,"startOffset":49,"endOffset":53,"message":"The label 'lbl' is never used.","warning":"unused-label","hint":null,"related":[],"edit":{"startLine":3,"startColumn":4,"endLine":3,"endColumn":10,"startOffset":49,"endOffset":55,"newText":""}}
+  [128]

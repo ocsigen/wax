@@ -78,9 +78,10 @@ let set_format f = global_format := f
 (* Emit one diagnostic as a single-line JSON object. Line/column are the usual
    1-based line / 0-based column; byte offsets ([pos_cnum]) index into the
    source, for an agent that rewrites the raw bytes. [warning]/[hint] are null
-   when absent; [related] is always an array. *)
+   when absent; [related] is always an array. A machine-applicable [edit], when
+   present, is an object with the same span fields plus its ["newText"]. *)
 let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
-    msg =
+    ?edit msg =
   let col (p : Lexing.position) = p.pos_cnum - p.pos_bol in
   let span { Ast.loc_start; loc_end } : (string * Yojson.Safe.t) list =
     [
@@ -124,7 +125,15 @@ let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
                          ("message", `String (Message.to_plain_string l.message));
                        ]))
                  related) );
-        ])
+        ]
+      @
+      match edit with
+      | Some { edit_location; new_text } ->
+          [
+            ( "edit",
+              `Assoc (span edit_location @ [ ("newText", `String new_text) ]) );
+          ]
+      | None -> [])
   in
   Format.pp_print_string output (Yojson.Safe.to_string obj);
   Format.pp_print_newline output ()
@@ -427,10 +436,11 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
       print_hint ~output ~theme hint
 
 let output_error ?(output = Format.err_formatter) ~theme ~source ~location
-    ~severity ?warning ?hint ?(related = []) msg =
+    ~severity ?warning ?hint ?edit ?(related = []) msg =
   match !global_format with
   | Json ->
-      output_error_json ~output ~location ~severity ?warning ?hint ~related msg
+      output_error_json ~output ~location ~severity ?warning ?hint ~related
+        ?edit msg
   | Short -> output_error_short ~output ~location ~severity ?warning msg
   | Human -> (
       if location.Ast.loc_start = Lexing.dummy_pos then
@@ -539,13 +549,13 @@ let output_errors ?exit_on_error context =
                   message;
                   related;
                   warning;
-                  edit = _;
+                  edit;
                   universal = _;
                 } :
                  t) ->
             output_error ~output:render.output ~theme:render.theme
-              ~source:context.source ~location ~severity ?warning ?hint ~related
-              message)
+              ~source:context.source ~location ~severity ?warning ?hint ?edit
+              ~related message)
           context.queue;
         Queue.clear context.queue;
         if exit_on_error then exit 128)
@@ -588,7 +598,7 @@ let report context ~location ~severity ?warning ?(universal = false) ?hint ?edit
       | None -> ()
       | Some ((Warning | Suggestion) as severity) ->
           output_error ~output:render.output ~theme:render.theme
-            ~source:context.source ~location ~severity ?warning ?hint
+            ~source:context.source ~location ~severity ?warning ?hint ?edit
             ~related:all_related message
       | Some Error ->
           Queue.push (entry Error) context.queue;

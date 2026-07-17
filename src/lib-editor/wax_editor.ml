@@ -230,24 +230,70 @@ let define_bindings defines =
    so a define used inconsistently (bound as a boolean where a version is
    wanted) still surfaces. Syntax errors are configuration-independent and always
    reported. *)
+let check_with_bindings src bindings =
+  let ast_opt, syntax_errors, _ctx =
+    Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
+      ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
+  in
+  let a_syntax = List.map syntax_error_diag syntax_errors in
+  match ast_opt with
+  | None -> a_syntax
+  | Some ast ->
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
+      let ast, _dropped = Wax_lang.Cond_specialize.module_ d bindings ast in
+      (try Wax_lang.Typing.check ~warn_unused:true ~suggest:true d ast
+       with Wax_utils.Diagnostic.Aborted -> ());
+      a_syntax @ collected_diags d
+
+(* Cache the specialized diagnostics keyed by [(source, defines)], mirroring
+   [analysis_cache]. The empty-defines path already delegates to the cached
+   [check_string], so only the specialized path needs its own cache — but an
+   editor's [provideCodeActions] fires on every cursor move with the defines set,
+   so without this each move would re-parse and re-type-check the buffer. Same
+   size / eviction / exact-key matching as [analysis_cache]. *)
+let defines_cache_size = 4
+let defines_cache : ((string * string list) * diag list) list ref = ref []
+
 let check_string_with_defines src defines =
   let bindings = define_bindings defines in
   if Wax_wasm.Cond_specialize.is_empty bindings then check_string src
   else
-    let ast_opt, syntax_errors, _ctx =
-      Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
-        ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src
-    in
-    let a_syntax = List.map syntax_error_diag syntax_errors in
-    match ast_opt with
-    | None -> a_syntax
-    | Some ast ->
-        let d = Wax_utils.Diagnostic.collector ~source:src () in
-        Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
-        let ast, _dropped = Wax_lang.Cond_specialize.module_ d bindings ast in
-        (try Wax_lang.Typing.check ~warn_unused:true ~suggest:true d ast
-         with Wax_utils.Diagnostic.Aborted -> ());
-        a_syntax @ collected_diags d
+    let key = (src, defines) in
+    match List.assoc_opt key !defines_cache with
+    | Some d -> d
+    | None ->
+        let d = check_with_bindings src bindings in
+        defines_cache :=
+          (key, d)
+          :: List.filteri (fun i _ -> i < defines_cache_size - 1) !defines_cache;
+        d
+
+(* The quick fixes for a code-action request over the range [(start_line,
+   start_char) .. (end_line, end_char)] (each a zero-based (line, character)
+   position in [encoding] units, as the editor sends them, specialized to the
+   [defines]): every diagnostic carrying a machine-applicable [edit] whose edit
+   span — or the diagnostic span it anchors to — meets the request range. Each
+   fix is [(title, edit)]: the diagnostic message and the rewrite. The overlap
+   filtering lives here so the LSP server and the JS wrapper only convert
+   positions and marshal; it is the shared mirror of the VS Code
+   [CodeActionProvider]. *)
+let code_actions ?(encoding = UTF16) src defines (start_line, start_char)
+    (end_line, end_char) =
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let meets (loc : Wax_utils.Ast.location) =
+    let s = position ~encoding src loc.loc_start in
+    let e = position ~encoding src loc.loc_end in
+    le (start_line, start_char) e && le s (end_line, end_char)
+  in
+  check_string_with_defines src defines
+  |> List.filter_map (fun (d : diag) ->
+      match d.edit with
+      | None -> None
+      | Some edit ->
+          if meets edit.edit_location || meets d.location then
+            Some (d.message, edit)
+          else None)
 
 let cell_to_string cell =
   Format.asprintf "%a" Wax_lang.Infer.output_inferred_type cell

@@ -199,14 +199,6 @@ let range_of_location src (loc : Wax_utils.Ast.location) =
   let el, ec = Editor_common.position ~encoding:!encoding src loc.loc_end in
   Range.create ~start:(position sl sc) ~end_:(position el ec)
 
-(* Whether two ranges touch, so a code action offered for the cursor/selection
-   [a] fires when it overlaps the span [b] it anchors to or rewrites. *)
-let ranges_overlap (a : Range.t) (b : Range.t) =
-  let le (p : Position.t) (q : Position.t) =
-    p.line < q.line || (p.line = q.line && p.character <= q.character)
-  in
-  le a.start b.end_ && le b.start a.end_
-
 (* The span of the whole buffer, for a full-document formatting edit. The end
    column is measured in the negotiated encoding: bytes under UTF-8, UTF-16 code
    units under UTF-16. *)
@@ -683,40 +675,34 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
       (* Turn the toolchain's machine-applicable diagnostics (the [Suggestion]s —
          punning, compound assignment, a redundant annotation — and a fixable
          warning like a redundant cast) into quick fixes, mirroring the VS Code
-         extension's [CodeActionProvider]. Any diagnostic carrying an [edit]
-         whose span (or the span it anchors to) meets the requested [range]
-         becomes a [WorkspaceEdit]; the diagnostic's message is the fix title. *)
+         extension's [CodeActionProvider]. The overlap filtering — and the
+         specialization to the configured [defines], matching the published
+         diagnostics — lives in [Wax_editor.code_actions]; here we only convert
+         positions and marshal each [(title, edit)] into a [WorkspaceEdit]. *)
       let uri = textDocument.uri in
       if is_wat uri then None
       else
         with_doc uri (fun src ->
-            Wax_editor.check_string src
-            |> List.filter_map (fun (d : Editor_common.diag) ->
-                match d.edit with
-                | None -> None
-                | Some { edit_location; new_text } ->
-                    let edit_range = range_of_location src edit_location in
-                    if
-                      ranges_overlap range edit_range
-                      || ranges_overlap range (range_of_location src d.location)
-                    then
-                      let edit =
-                        WorkspaceEdit.create
-                          ~changes:
-                            [
-                              ( uri,
-                                [
-                                  TextEdit.create ~range:edit_range
-                                    ~newText:new_text;
-                                ] );
-                            ]
-                          ()
-                      in
-                      Some
-                        (`CodeAction
-                           (CodeAction.create ~title:d.message
-                              ~kind:CodeActionKind.QuickFix ~edit ()))
-                    else None)
+            Wax_editor.code_actions ~encoding:!encoding src !defines
+              (range.start.line, range.start.character)
+              (range.end_.line, range.end_.character)
+            |> List.map (fun (title, (e : Wax_utils.Diagnostic.edit)) ->
+                let edit =
+                  WorkspaceEdit.create
+                    ~changes:
+                      [
+                        ( uri,
+                          [
+                            TextEdit.create
+                              ~range:(range_of_location src e.edit_location)
+                              ~newText:e.new_text;
+                          ] );
+                      ]
+                    ()
+                in
+                `CodeAction
+                  (CodeAction.create ~title ~kind:CodeActionKind.QuickFix ~edit
+                     ()))
             |> Option.some)
   | _ ->
       Jsonrpc.Response.Error.raise

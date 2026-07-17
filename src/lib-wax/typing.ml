@@ -270,10 +270,17 @@ module Error = struct
         ~universal:true ~edit ~message ()
 
   (* A local declared by a [let] but never read. Prefix its name with [_] to
-     silence the warning. *)
+     silence the warning — offered as a quick fix by a zero-width [edit] that
+     inserts the [_] at the name's start. *)
   let unused_local context ~location x =
     warn ~warning:Wax_utils.Warning.Unused_local ~universal:true context
       ~location
+      ~edit:
+        {
+          Wax_utils.Diagnostic.edit_location =
+            { location with loc_end = location.loc_start };
+          new_text = "_";
+        }
       (text "The local variable" ++ name x ++ text "is never used.")
 
   (* A module field (a function or global) declared but never referenced,
@@ -318,9 +325,39 @@ module Error = struct
           else "This cast is redundant: the value already has this type."))
 
   (* A block label declared but never branched to. Prefix its name with [_] to
-     silence the warning. *)
+     silence the warning. As a quick fix, offer deleting the whole ['name:]
+     prefix: [location] already spans ['name] (the leading quote through the
+     name), and a short source scan extends it over the trailing [:] and the
+     same-line whitespace up to the keyword. Bails (no edit) if the [:] is not
+     found where expected. *)
   let unused_label context ~location x =
-    warn ~warning:Wax_utils.Warning.Unused_label ~universal:true context
+    let edit =
+      match Wax_utils.Diagnostic.source context with
+      | None -> None
+      | Some src ->
+          let n = String.length src in
+          let is_ws c = c = ' ' || c = '\t' in
+          let i = ref location.loc_end.Lexing.pos_cnum in
+          while !i < n && is_ws src.[!i] do
+            incr i
+          done;
+          if !i < n && src.[!i] = ':' then (
+            incr i;
+            while !i < n && is_ws src.[!i] do
+              incr i
+            done;
+            Some
+              {
+                Wax_utils.Diagnostic.edit_location =
+                  {
+                    location with
+                    loc_end = { location.loc_end with pos_cnum = !i };
+                  };
+                new_text = "";
+              })
+          else None
+    in
+    warn ?edit ~warning:Wax_utils.Warning.Unused_label ~universal:true context
       ~location
       (text "The label" ++ name x ++ text "is never used.")
 
@@ -409,8 +446,9 @@ module Error = struct
      without parentheses (see {!lint_precedence}). [location] is the outer
      operator, [inner] the tighter-binding one; the [kind]s name the two
      operator classes ("shift", "arithmetic", "comparison", "bitwise"). *)
-  let precedence context ~location ~inner ~outer_kind ~inner_kind =
-    warn ~warning:Wax_utils.Warning.Precedence ~universal:true context ~location
+  let precedence ?edit context ~location ~inner ~outer_kind ~inner_kind =
+    warn ?edit ~warning:Wax_utils.Warning.Precedence ~universal:true context
+      ~location
       ~related:
         [
           {
@@ -3024,19 +3062,6 @@ let block_result_redundant ctx typ ~expected ~result_cell =
   | Some a, Some b -> valtype_equal ctx a b
   | _ -> false
 
-(* The [typ] to store for such a construct after its body is typed: fill an
-   omitted result from [expected] (so re-parse / [to_wasm] recovers it), or drop
-   a declared result on [simplify] when it equals the context — then re-parse
-   recovers the same type from the same context, so nothing is lost. *)
-let context_block_typ ctx typ ~expected ~result_cell =
-  if typ.results = [||] then
-    match standalone_valtype ctx expected with
-    | Some iv -> { typ with results = [| iv.typ |] }
-    | None -> typ
-  else if ctx.simplify && block_result_redundant ctx typ ~expected ~result_cell
-  then { typ with results = [||] }
-  else typ
-
 (* The exact user heap-type name [expected] pins, if any — usable to supply an
    omitted struct/array type name. A supertype top ([any]/[eq]/[struct]/[array]/
    …) or a floating/non-ref cell returns [None]: construction needs the exact
@@ -3745,7 +3770,24 @@ let lint_precedence ctx (op : (binop, location) annotated) e1 e2 =
         when Ast_utils.confusing_precedence outer
                (Ast_utils.binop_kind inner_op.desc)
              && not (operand_parenthesized ctx ~op ~side child) ->
-          Error.precedence ctx.diagnostics ~location:op.info
+          (* The fix is to parenthesise the tighter-binding sub-expression the
+             lint identifies ([child]). An edit is one contiguous replacement, so
+             it replaces [child]'s span with '(' ^ its source slice ^ ')'. *)
+          let edit =
+            match Wax_utils.Diagnostic.source ctx.diagnostics with
+            | Some src ->
+                let s = child.info.loc_start.pos_cnum
+                and e = child.info.loc_end.pos_cnum in
+                if 0 <= s && s <= e && e <= String.length src then
+                  Some
+                    {
+                      Wax_utils.Diagnostic.edit_location = child.info;
+                      new_text = "(" ^ String.sub src s (e - s) ^ ")";
+                    }
+                else None
+            | None -> None
+          in
+          Error.precedence ?edit ctx.diagnostics ~location:op.info
             ~inner:inner_op.info ~outer_kind:(binop_kind_name outer)
             ~inner_kind:(binop_kind_name (Ast_utils.binop_kind inner_op.desc))
       | _ -> ())
@@ -4303,6 +4345,13 @@ let span (loc_start : Lexing.position) (loc_end : Lexing.position) :
     Ast.location =
   { Ast.loc_start; loc_end }
 
+(* A deletion edit: the machine-applicable rewrite that removes the span [loc]
+   (an empty replacement). The removal-style suggestions — a redundant
+   annotation, a punned field's [: x], a construction/block/if result type, a
+   redundant cast — all build this. *)
+let deletion_edit (loc : Ast.location) : Wax_utils.Diagnostic.edit =
+  { Wax_utils.Diagnostic.edit_location = loc; new_text = "" }
+
 (* [s] with every comment blanked to spaces (newlines kept, so byte offsets and
    line structure are preserved). Wax has [//] line comments and nesting [/* */]
    block comments; the source-scanning suggestions run on this so a delimiter
@@ -4344,11 +4393,15 @@ let blank_comments s =
 (* Locate the ': t' type annotation in the source between a binding name's end
    ([name_end]) and the boundary after it ([boundary] — the initializer, the next
    binding, or the tuple close). The AST keeps no span for the annotation, so it
-   is recovered from the source: skip past the ':', then scan to the terminator
-   at paren-depth 0 (so a type like [&fn(i32, i32) -> i32] is not cut at an inner
-   comma). Returns a pair: the type's own span (to underline) and the ': t' span
-   to delete (from the ':' to the type's end, so a comment before it is kept).
-   [None] when the annotation spans several lines or cannot be isolated. *)
+   is recovered from the source: skip past the ':', then scan to the first of
+   [,] [=] [;] [)] []] that terminates it. This is safe because every annotation
+   position parses a [value_type] (see [value_type] in parser.mly) — an
+   identifier or [&[?][!]ident] — a short token sequence that never contains any
+   of those characters or a bracket (an inline [&fn(...)] type exists only in
+   cast position, never here). Returns a pair: the type's own span (to underline)
+   and the ': t' span to delete (from the ':' to the type's end, so a comment
+   before it is kept). [None] when the annotation spans several lines or cannot
+   be isolated. *)
 let annotation_spans ctx (name_end : Lexing.position)
     (boundary : Lexing.position) =
   if name_end.pos_lnum <> boundary.pos_lnum then None
@@ -4363,21 +4416,18 @@ let annotation_spans ctx (name_end : Lexing.position)
         | None -> None
         | Some colon ->
             let n = String.length gap in
-            let depth = ref 0 and i = ref (colon + 1) and stop = ref n in
-            (try
-               while !i < n do
-                 (match gap.[!i] with
-                 | '(' | '[' -> incr depth
-                 | (')' | ']') when !depth > 0 -> decr depth
-                 | ')' | ']' | ',' | '=' | ';' ->
-                     stop := !i;
-                     raise Exit
-                 | _ -> ());
-                 incr i
-               done
-             with Exit -> ());
+            let stop =
+              let rec scan i =
+                if i >= n then n
+                else
+                  match gap.[i] with
+                  | ')' | ']' | ',' | '=' | ';' -> i
+                  | _ -> scan (i + 1)
+              in
+              scan (colon + 1)
+            in
             let is_ws c = c = ' ' || c = '\t' in
-            let s = ref (colon + 1) and e = ref !stop in
+            let s = ref (colon + 1) and e = ref stop in
             while !s < !e && is_ws gap.[!s] do
               incr s
             done;
@@ -4390,6 +4440,22 @@ let annotation_spans ctx (name_end : Lexing.position)
                 { name_end with pos_cnum = name_end.pos_cnum + off }
               in
               Some (span (at !s) (at !e), span (at colon) (at !e)))
+
+(* Suggest dropping a binding's redundant type annotation — the ': t' that the
+   initializer's inferred type already pins ([let x: t = e] -> [let x = e], and
+   likewise for each binding of a tuple [let] and a redundant global annotation).
+   The span is recovered by [annotation_spans]; the edit deletes the ': t',
+   underlining just the type. *)
+let suggest_redundant_annotation ctx ~name_end ~boundary =
+  match annotation_spans ctx name_end boundary with
+  | Some (type_span, delete_span) ->
+      Error.suggest ~warning:Wax_utils.Warning.Redundant_annotation
+        ~edit:(deletion_edit delete_span)
+        ctx.diagnostics ~location:type_span
+        (Wax_utils.Message.text
+           "This type annotation is redundant; the initializer's type is \
+            inferred.")
+  | None -> ()
 
 (* The binary operators that have a compound-assignment form [x op= e] (the
    arithmetic and bitwise ones); comparisons are excluded. Mirrors the parser's
@@ -4435,12 +4501,7 @@ let suggest_punning ctx (name : ident) written =
   match written with
   | Some ({ desc = Get g; _ } as value) when g.desc = name.desc ->
       Error.suggest ~warning:Wax_utils.Warning.Field_punning
-        ~edit:
-          {
-            Wax_utils.Diagnostic.edit_location =
-              span name.info.loc_end value.info.loc_end;
-            new_text = "";
-          }
+        ~edit:(deletion_edit (span name.info.loc_end value.info.loc_end))
         ctx.diagnostics ~location:name.info
         (Wax_utils.Message.text
            (Printf.sprintf "This field can use the punning shorthand '%s'."
@@ -4464,12 +4525,7 @@ let suggest_drop_type_name ctx (name : ident) =
       if !i < n && src.[!i] = '|' then
         let after = { name.info.loc_end with pos_cnum = !i + 1 } in
         Error.suggest ~warning:Wax_utils.Warning.Redundant_annotation
-          ~edit:
-            {
-              Wax_utils.Diagnostic.edit_location =
-                span name.info.loc_start after;
-              new_text = "";
-            }
+          ~edit:(deletion_edit (span name.info.loc_start after))
           ctx.diagnostics ~location:name.info
           (Wax_utils.Message.text
              "This type name is redundant; it is inferred here.")
@@ -4483,60 +4539,122 @@ let suggest_drop_type_name ctx (name : ident) =
    one is not matched), and it bails unless keyword and brace are on one line, so
    a wrong edit is never produced. *)
 let suggest_block_result ctx ~keyword (block_start : Lexing.position)
+    (brace_start : Lexing.position) =
+  match
+    if block_start.pos_lnum <> brace_start.pos_lnum then None
+    else
+      Option.map blank_comments
+        (source_slice ctx (span block_start brace_start))
+  with
+  | None -> ()
+  | Some prefix -> (
+      let is_id c =
+        (c >= 'a' && c <= 'z')
+        || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9')
+        || c = '_'
+      in
+      let m = String.length keyword and n = String.length prefix in
+      let rec find i =
+        if i + m > n then None
+        else if
+          String.sub prefix i m = keyword
+          && (i = 0 || not (is_id prefix.[i - 1]))
+          && (i + m = n || not (is_id prefix.[i + m]))
+        then Some i
+        else find (i + 1)
+      in
+      match find 0 with
+      | None -> ()
+      | Some k ->
+          let is_ws c = c = ' ' || c = '\t' in
+          let s = ref (k + m) and e = ref n in
+          while !s < n && is_ws prefix.[!s] do
+            incr s
+          done;
+          while !e > !s && is_ws prefix.[!e - 1] do
+            decr e
+          done;
+          if !s < !e then
+            let at off =
+              { block_start with pos_cnum = block_start.pos_cnum + off }
+            in
+            Error.suggest
+              ~warning:Wax_utils.Warning.Redundant_annotation
+                (* Delete just the type token, so a comment before the [{] is kept;
+                 the formatter tidies the leftover spacing. *)
+              ~edit:(deletion_edit (span (at !s) (at !e)))
+              ctx.diagnostics
+              ~location:(span (at !s) (at !e))
+              (Wax_utils.Message.text
+                 "This result type is redundant; it is inferred from the \
+                  context."))
+
+(* Suggest dropping an [if]'s redundant result type — the [=> t] between the
+   condition and the [{] that the context already pins (the [if]-expression
+   analogue of [suggest_block_result]). The AST keeps no span for it, so it is
+   found in the source between the condition's end and the brace: locate the
+   [=>], then take the type up to the brace. Comments are blanked first and it
+   bails unless [=>] and brace are on one line. The edit deletes the whole
+   [=> t]. *)
+let suggest_if_result ctx (cond_end : Lexing.position)
+    (brace_start : Lexing.position) =
+  match
+    if cond_end.pos_lnum <> brace_start.pos_lnum then None
+    else
+      Option.map blank_comments (source_slice ctx (span cond_end brace_start))
+  with
+  | None -> ()
+  | Some gap -> (
+      let n = String.length gap in
+      let rec find i =
+        if i + 1 >= n then None
+        else if gap.[i] = '=' && gap.[i + 1] = '>' then Some i
+        else find (i + 1)
+      in
+      match find 0 with
+      | None -> ()
+      | Some arrow ->
+          let is_ws c = c = ' ' || c = '\t' in
+          let s = ref (arrow + 2) and e = ref n in
+          while !s < n && is_ws gap.[!s] do
+            incr s
+          done;
+          while !e > !s && is_ws gap.[!e - 1] do
+            decr e
+          done;
+          if !s < !e then
+            let at off = { cond_end with pos_cnum = cond_end.pos_cnum + off } in
+            Error.suggest
+              ~warning:Wax_utils.Warning.Redundant_annotation
+                (* Delete the whole '=> t'; the formatter tidies the spacing. *)
+              ~edit:(deletion_edit (span (at arrow) (at !e)))
+              ctx.diagnostics
+              ~location:(span (at !s) (at !e))
+              (Wax_utils.Message.text
+                 "This result type is redundant; it is inferred from the \
+                  context."))
+
+(* The [typ] to store for a do/loop/try/try_table block after its body is typed:
+   fill an omitted result from [expected] (so re-parse / [to_wasm] recovers it),
+   or drop a declared result on [simplify] when it equals the context — then
+   re-parse recovers the same type from the same context, so nothing is lost.
+   Under [ctx.suggest] the same redundant result type is offered as an editor
+   quick fix (see [suggest_block_result]). Both the [simplify] drop and the
+   suggestion key on [block_result_redundant], so they cannot drift.
+   [keyword]/[block_start]/[brace_start] locate the '<keyword> t {' the source
+   scan trims the type from. *)
+let context_block_typ ctx ~keyword (block_start : Lexing.position)
     (brace_start : Lexing.position) typ ~expected ~result_cell =
-  if ctx.suggest && block_result_redundant ctx typ ~expected ~result_cell then
-    match
-      if block_start.pos_lnum <> brace_start.pos_lnum then None
-      else
-        Option.map blank_comments
-          (source_slice ctx (span block_start brace_start))
-    with
-    | None -> ()
-    | Some prefix -> (
-        let is_id c =
-          (c >= 'a' && c <= 'z')
-          || (c >= 'A' && c <= 'Z')
-          || (c >= '0' && c <= '9')
-          || c = '_'
-        in
-        let m = String.length keyword and n = String.length prefix in
-        let rec find i =
-          if i + m > n then None
-          else if
-            String.sub prefix i m = keyword
-            && (i = 0 || not (is_id prefix.[i - 1]))
-            && (i + m = n || not (is_id prefix.[i + m]))
-          then Some i
-          else find (i + 1)
-        in
-        match find 0 with
-        | None -> ()
-        | Some k ->
-            let is_ws c = c = ' ' || c = '\t' in
-            let s = ref (k + m) and e = ref n in
-            while !s < n && is_ws prefix.[!s] do
-              incr s
-            done;
-            while !e > !s && is_ws prefix.[!e - 1] do
-              decr e
-            done;
-            if !s < !e then
-              let at off =
-                { block_start with pos_cnum = block_start.pos_cnum + off }
-              in
-              Error.suggest ~warning:Wax_utils.Warning.Redundant_annotation
-                ~edit:
-                  {
-                    (* Delete just the type token, so a comment before the [{] is
-                       kept; the formatter tidies the leftover spacing. *)
-                    Wax_utils.Diagnostic.edit_location = span (at !s) (at !e);
-                    new_text = "";
-                  }
-                ctx.diagnostics
-                ~location:(span (at !s) (at !e))
-                (Wax_utils.Message.text
-                   "This result type is redundant; it is inferred from the \
-                    context."))
+  let redundant = block_result_redundant ctx typ ~expected ~result_cell in
+  if ctx.suggest && redundant then
+    suggest_block_result ctx ~keyword block_start brace_start;
+  if typ.results = [||] then
+    match standalone_valtype ctx expected with
+    | Some iv -> { typ with results = [| iv.typ |] }
+    | None -> typ
+  else if ctx.simplify && redundant then { typ with results = [||] }
+  else typ
 
 (* Lint a reference cast ([is_test = false]) or test ([is_test = true]) given the
    operand's inferred type and the interned target type. Under single-inheritance
@@ -4566,12 +4684,7 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
         let edit =
           match operand_location with
           | Some (ol : Ast.location) when ctx.suggest && not is_test ->
-              Some
-                {
-                  Wax_utils.Diagnostic.edit_location =
-                    span ol.loc_end location.loc_end;
-                  new_text = "";
-                }
+              Some (deletion_edit (span ol.loc_end location.loc_end))
           | _ -> None
         in
         Error.redundant_cast ?edit ctx.diagnostics ~location ~is_test
@@ -7535,19 +7648,8 @@ and type_let ctx i =
                      pos_cnum = i.info.loc_start.pos_cnum + 1;
                    }
              in
-             match annotation_spans ctx name_end (snd i'.info).loc_start with
-             | Some (type_span, delete_span) ->
-                 Error.suggest ~warning:Wax_utils.Warning.Redundant_annotation
-                   ~edit:
-                     {
-                       Wax_utils.Diagnostic.edit_location = delete_span;
-                       new_text = "";
-                     }
-                   ctx.diagnostics ~location:type_span
-                   (Wax_utils.Message.text
-                      "This type annotation is redundant; the initializer's \
-                       type is inferred.")
-             | None -> ());
+             suggest_redundant_annotation ctx ~name_end
+               ~boundary:(snd i'.info).loc_start);
           return_statement i
             (Let ([ (name_opt, if drop then None else Some annot) ], Some i'))
             [||])
@@ -7587,8 +7689,8 @@ and type_let ctx i =
                 (* Suggest dropping a redundant annotation in a tuple binding
                    ([let (a: t, b) = e] -> [let (a, b) = e]). The span after this
                    binding's type is the next binding's name (or, for the last,
-                   the initializer); [annotation_spans]'s depth scan finds where
-                   the type ends before that boundary. *)
+                   the initializer); [annotation_spans] finds where the type ends
+                   before that boundary. *)
                 (if ctx.suggest && redundant then
                    match fst binding with
                    | Some name ->
@@ -7601,23 +7703,8 @@ and type_let ctx i =
                        in
                        Option.iter
                          (fun boundary ->
-                           match
-                             annotation_spans ctx name.info.loc_end boundary
-                           with
-                           | Some (type_span, delete_span) ->
-                               Error.suggest
-                                 ~warning:Wax_utils.Warning.Redundant_annotation
-                                 ~edit:
-                                   {
-                                     Wax_utils.Diagnostic.edit_location =
-                                       delete_span;
-                                     new_text = "";
-                                   }
-                                 ctx.diagnostics ~location:type_span
-                                 (Wax_utils.Message.text
-                                    "This type annotation is redundant; the \
-                                     initializer's type is inferred.")
-                           | None -> ())
+                           suggest_redundant_annotation ctx
+                             ~name_end:name.info.loc_end ~boundary)
                          boundary
                    | None -> ());
                 binding')
@@ -9329,20 +9416,18 @@ and check_instruction ?(drop_supertype = false) ctx expected
       (* The if's result (its annotation, or [expected] when omitted) must fit
          the context — catches e.g. an [=> i64] if where [i32] is expected. *)
       check_subtype ctx ~location:i.info result_cell expected;
+      (* An annotated [=> t] equal to what the context pins is redundant: dropped
+         on [simplify] (Wasm->Wax), and offered as a quick fix under [ctx.suggest]
+         (deleting the [=> t]). Both key on the same test. *)
+      let redundant = block_result_redundant ctx typ ~expected ~result_cell in
+      if ctx.suggest && redundant then
+        suggest_if_result ctx cond.info.loc_end if_block.info.loc_start;
       let typ =
         if omitted then
           match standalone_valtype ctx expected with
           | Some iv -> { typ with results = [| iv.typ |] }
           | None -> typ
-        else if
-          ctx.simplify
-          &&
-          match
-            (standalone_valtype ctx expected, standalone_valtype ctx result_cell)
-          with
-          | Some a, Some b -> valtype_equal ctx a b
-          | _ -> false
-        then { typ with results = [||] }
+        else if ctx.simplify && redundant then { typ with results = [||] }
         else typ
       in
       (* The caller's binding annotation (e.g. [let x: T = ..]) is redundant iff
@@ -9408,9 +9493,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
-      suggest_block_result ctx ~keyword:"do" i.info.loc_start
-        blkloc.info.loc_start typ ~expected ~result_cell;
-      let typ = context_block_typ ctx typ ~expected ~result_cell in
+      let typ =
+        context_block_typ ctx ~keyword:"do" i.info.loc_start
+          blkloc.info.loc_start typ ~expected ~result_cell
+      in
       let* node =
         return_statement i
           (Block { label; typ; block = { blkloc with desc = instrs' } })
@@ -9432,9 +9518,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
-      suggest_block_result ctx ~keyword:"loop" i.info.loc_start
-        blkloc.info.loc_start typ ~expected ~result_cell;
-      let typ = context_block_typ ctx typ ~expected ~result_cell in
+      let typ =
+        context_block_typ ctx ~keyword:"loop" i.info.loc_start
+          blkloc.info.loc_start typ ~expected ~result_cell
+      in
       let* node =
         return_statement i
           (Loop { label; typ; block = { blkloc with desc = instrs' } })
@@ -9455,9 +9542,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
       check_trytable_catches ctx catches;
       let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
-      suggest_block_result ctx ~keyword:"try" i.info.loc_start
-        blkloc.info.loc_start typ ~expected ~result_cell;
-      let typ = context_block_typ ctx typ ~expected ~result_cell in
+      let typ =
+        context_block_typ ctx ~keyword:"try" i.info.loc_start
+          blkloc.info.loc_start typ ~expected ~result_cell
+      in
       let* node =
         return_statement i
           (TryTable
@@ -9482,9 +9570,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
-      suggest_block_result ctx ~keyword:"try" i.info.loc_start
-        blkloc.info.loc_start typ ~expected ~result_cell;
-      let typ = context_block_typ ctx typ ~expected ~result_cell in
+      let typ =
+        context_block_typ ctx ~keyword:"try" i.info.loc_start
+          blkloc.info.loc_start typ ~expected ~result_cell
+      in
       let* node =
         return_statement i
           (Try
@@ -11180,10 +11269,16 @@ let rec globals ctx fields =
                            (valtype_cell ity) def)
                     in
                     Tbl.add ctx.diagnostics ctx.globals name (mut, Some ity);
-                    let drop =
-                      ctx.simplify && (not needed)
-                      && not (is_null_initializer def')
+                    let redundant =
+                      (not needed) && not (is_null_initializer def')
                     in
+                    (* Offer dropping the redundant annotation as a quick fix for
+                       hand-written Wax, exactly as a [let] binding does; the
+                       [simplify] drop below is the Wasm->Wax mirror. *)
+                    if ctx.suggest && redundant then
+                      suggest_redundant_annotation ctx
+                        ~name_end:name.info.loc_end ~boundary:def.info.loc_start;
+                    let drop = ctx.simplify && redundant in
                     ((if drop then None else Some annot), def'))
             | None ->
                 (* No annotation: the global takes the initializer's type, the
@@ -11544,6 +11639,12 @@ let check_attributes diagnostics field =
 let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
     ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
+  (* [simplify] (the Wasm->Wax rewrite that drops redundant annotations) and
+     [suggest] (offering those same drops as editor quick fixes on hand-written
+     Wax) are mutually exclusive: [simplify] removes the very nodes [suggest]
+     would flag. The [suggest_*] helpers rely on this. *)
+  if simplify && suggest then
+    invalid_arg "Typing: simplify and suggest are exclusive";
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
   let links = resolve_links in

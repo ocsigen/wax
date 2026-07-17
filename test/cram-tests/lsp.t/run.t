@@ -185,7 +185,7 @@ only the taken branch's unused-global warning.
   > print("after debug=true:     ", pubs[1])
   > PY
   on open (no defines):  [('error', None)]
-  after debug=true:      [('warning', 'unused-field')]
+  after debug=true:      [('warning', 'redundant-annotation'), ('warning', 'unused-field')]
 
 A `#![feature = "…"]` inner attribute (Wax) or `(@feature "…")` annotation
 (WAT) enables the named optional proposal for that buffer, with no editor
@@ -257,6 +257,39 @@ a `CodeAction` with the fix title, kind `quickfix`, and a `WorkspaceEdit`:
   kind: quickfix
   edit: (1,7)-(1,12) newText=''
   stderr: (empty)
+
+Code actions specialize to the same `wax.define` configuration the published
+diagnostics do (read from `initializationOptions`): a suggestion in a branch the
+defines rule out is not offered. With `debug=true` the `#[if]` branch is live and
+its redundant annotation is offered; the `#[else]` branch is dropped, so a code
+action over its identical line returns nothing.
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///cd.wax"; td={"uri":uri}
+  > src="#[if(debug)]\n{\n  let a: i32 = 0;\n}\n#[else]\n{\n  let b: i32 = 0;\n}\n"
+  > init={"processId":None,"rootUri":None,"capabilities":{},"initializationOptions":{"define":["debug=true"]}}
+  > def action(line):
+  >     return {"jsonrpc":"2.0","id":10+line,"method":"textDocument/codeAction",
+  >             "params":{"textDocument":td,"range":{"start":{"line":line,"character":2},"end":{"line":line,"character":16}},"context":{"diagnostics":[]}}}
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":init},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wax","version":1,"text":src}}},
+  >    action(2), action(6),
+  >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i,by=p.stdout,0,{}
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if "id" in r: by[r["id"]]=r["result"]
+  > print("if-branch (debug=true): %d action(s)" % len(by[12]))
+  > print("else-branch (dropped):  %d action(s)" % len(by[16]))
+  > PY
+  if-branch (debug=true): 1 action(s)
+  else-branch (dropped):  0 action(s)
 
 Diagnostics on `didChange` are debounced: a burst of edits coalesces into one
 analysis (published once the client falls quiet, or on end of input), rather
