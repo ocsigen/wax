@@ -133,6 +133,11 @@ if [ "$exec_wast" -gt 0 ]; then
     # above cannot reach (text-only miscompiles: symbolic-vs-numeric refs,
     # unsanitizable identifiers, width re-inference).
     run "MODE=wax-text" exec-ref.sh "${exec_wasts[@]}"
+    # Same pipeline, but one identifier per module renamed to a Wax-hostile
+    # spelling first (semantics-preserving), so a name-hygiene miscompile — an
+    # unsanitizable label colliding with a generated one and retargeting a
+    # branch — shows up as a behavioural regression against the assertions.
+    run "MODE=wax-text" "HOSTILE_SEED=$SEED" exec-ref.sh "${exec_wasts[@]}"
     run exec-mutate.sh "${exec_wasts[@]}"
   fi
 fi

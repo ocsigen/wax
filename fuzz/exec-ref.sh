@@ -19,6 +19,11 @@
 #       wasm binary cannot exercise: it drives from_wasm's WAT reader, so
 #       text-only miscompiles like symbolic-vs-numeric references and
 #       unsanitizable identifiers become behaviourally observable).
+# HOSTILE_SEED: with MODE=wax-text, rename one identifier per module to a
+#       Wax-hostile spelling (unsanitizable / fallback-colliding / keyword)
+#       before wax sees it — semantics-preserving, so the assertions still hold
+#       unless wax's name hygiene miscompiles (e.g. a colliding label retargets a
+#       branch).
 # REF:  path to the reference interpreter (default ~/sources/Wasm/interpreter/wasm).
 # With no arguments, runs the whole core suite. Exits non-zero on any regression.
 

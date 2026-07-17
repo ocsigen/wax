@@ -33,6 +33,67 @@ const MUTATE_SEED = process.env.MUTATE_SEED;
 const MUTATE_STEPS = parseInt(process.env.MUTATE_STEPS || "10", 10);
 let modIndex = 0;
 
+// Hostile-identifier mode (MODE=wax-text only). When HOSTILE_SEED is set, each
+// module's WAT text has one identifier uniformly renamed to a spelling that
+// stresses wax's name hygiene BEFORE it reaches wax: a name sanitize_identifier
+// rejects (so it renders under a generated fallback), a name that collides with
+// a generated fallback (l/x/f/t/g/m/e/d), or a Wax keyword. A uniform rename of
+// one token to a fresh spelling is semantics-preserving, so the script's
+// assertions still hold — unless wax mishandles the hostile name (e.g. an
+// unsanitizable label collides with a generated one and a branch retargets).
+const HOSTILE_SEED = process.env.HOSTILE_SEED;
+// Unsanitizable first (runs of separators), then fallback-colliding, then
+// keywords — the classes the name-hygiene passes must each survive.
+const HOSTILE_NAMES = [
+  "$a--b", "$--", "$!!!", "$..", "$<>",
+  "$l", "$x", "$f", "$t", "$g", "$m", "$e", "$d",
+  "$while", "$do", "$fn", "$let", "$if",
+];
+let hostileIndex = 0;
+
+// Scan a WAT text, invoking [onId] for each $identifier token that is real code
+// (outside string literals, line comments `;;`, and nestable block comments
+// `(; ;)`) and [onOther] for every other run of characters. A `$` inside a
+// string — e.g. an export name `(export "$")` — must not be mistaken for an
+// identifier, or renaming would corrupt the export.
+function scanWat(text, onId, onOther) {
+  const isDelim = (c) => c === undefined || /[\s()";]/.test(c);
+  let i = 0;
+  const n = text.length;
+  let run = 0; // start of the current pending onOther slice
+  const flush = (end) => { if (end > run) onOther(text.slice(run, end)); };
+  while (i < n) {
+    const c = text[i];
+    if (c === '"') { let j = i + 1; while (j < n && text[j] !== '"') { if (text[j] === "\\") j++; j++; } i = j + 1; continue; }
+    if (c === ";" && text[i + 1] === ";") { while (i < n && text[i] !== "\n") i++; continue; }
+    if (c === "(" && text[i + 1] === ";") { let d = 1; i += 2; while (i < n && d > 0) { if (text[i] === "(" && text[i + 1] === ";") { d += 1; i += 2; } else if (text[i] === ";" && text[i + 1] === ")") { d -= 1; i += 2; } else i++; } continue; }
+    if (c === "$") { flush(i); let j = i + 1; while (j < n && !isDelim(text[j])) j++; onId(text.slice(i, j)); run = j; i = j; continue; }
+    i++;
+  }
+  flush(n);
+}
+
+// Uniformly rename one $identifier (chosen by [seed]) to a hostile spelling not
+// already present, returning the rewritten text. Whole-token, real-code only
+// (never inside a string/comment). A no-op if there is no token, or no unused
+// hostile name.
+function hostileRename(text, seed) {
+  const toks = new Set();
+  scanWat(text, (id) => toks.add(id), () => {});
+  const list = [...toks];
+  if (list.length === 0) return text;
+  const pick = list[seed % list.length];
+  let repl = null;
+  for (let i = 0; i < HOSTILE_NAMES.length; i++) {
+    const cand = HOSTILE_NAMES[(seed + i) % HOSTILE_NAMES.length];
+    if (!toks.has(cand)) { repl = cand; break; }
+  }
+  if (repl === null) return text;
+  let out = "";
+  scanWat(text, (id) => { out += id === pick ? repl : id; }, (s) => { out += s; });
+  return out;
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wastrw-"));
 let recompiled = 0, failed = 0;
 
@@ -125,10 +186,17 @@ function rewriteModule(group) {
   if (!m || m[2] === "binary" || m[2] === "quote") return group; // not a text module
   const name = m[1] ? " " + m[1] : "";
   const wat = path.join(tmp, "m.wat"), ref = path.join(tmp, "m.wasm"), out = path.join(tmp, "m.out.wasm");
-  fs.writeFileSync(wat, group);
   // Text-input path: feed the module's WAT source straight to wax, bypassing the
-  // wasm-tools assembly the binary modes need.
+  // wasm-tools assembly the binary modes need. Optionally rename one identifier
+  // to a hostile spelling first (semantics-preserving), to stress wax's name
+  // hygiene on real modules with real assertions.
   if (MODE === "wax-text") {
+    let text = group;
+    if (HOSTILE_SEED !== undefined) {
+      text = hostileRename(group, (parseInt(HOSTILE_SEED, 10) | 0) + hostileIndex);
+      hostileIndex++;
+    }
+    fs.writeFileSync(wat, text);
     if (waxCompileText(wat, out)) {
       recompiled++;
       return "(module" + name + " binary " + escape(fs.readFileSync(out)) + ")";
@@ -136,6 +204,7 @@ function rewriteModule(group) {
     failed++;
     return group;
   }
+  fs.writeFileSync(wat, group);
   if (run(WT, ["parse", wat, "-o", ref]) && transformModule(ref, out)) {
     recompiled++;
     return "(module" + name + " binary " + escape(fs.readFileSync(out)) + ")";

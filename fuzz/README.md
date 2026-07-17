@@ -514,12 +514,20 @@ the module through wasm-tools first, so they exercise wax's *binary* reader and
 never see what a binary normalizes away — symbolic-vs-numeric references,
 unsanitizable identifiers, width re-inference — whereas `wax-text` drives
 `from_wasm`'s WAT reader, making those text-only miscompiles behaviourally
-observable. A module the runner cannot instantiate (unsupported proposal) or
-wax cannot recompile is skipped and counted, not failed.
+observable. `HOSTILE_SEED=N` (with `MODE=wax-text`) goes further: it renames one
+identifier per module to a spelling that stresses wax's name hygiene — a name
+`sanitize_identifier` rejects (rendered under a generated fallback), a name that
+collides with a fallback (`l`/`x`/`f`/`t`/…), or a Wax keyword — before wax sees
+it. The rename is a uniform whole-token substitution outside strings/comments,
+so it is semantics-preserving and the assertions still hold unless wax
+mishandles the hostile name (e.g. an unsanitizable label colliding with a
+generated one so a branch retargets). A module the runner cannot instantiate
+(unsupported proposal) or wax cannot recompile is skipped and counted, not
+failed.
 
 | Script            | Runner | Reach |
 |-------------------|--------|-------|
-| `exec-ref.sh`     | WebAssembly reference interpreter | Widest — GC, SIMD, exceptions, multi-memory (not stack switching). Runs `.wast` directly via `wast-rewrite.js`. `MODE=wax-text` also covers the WAT-text input pipeline. |
+| `exec-ref.sh`     | WebAssembly reference interpreter | Widest — GC, SIMD, exceptions, multi-memory (not stack switching). Runs `.wast` directly via `wast-rewrite.js`. `MODE=wax-text` also covers the WAT-text input pipeline; add `HOSTILE_SEED=N` to rename one identifier per module to a Wax-hostile spelling first (name-hygiene stress). |
 | `exec-interp.sh`  | wabt `spectest-interp` | SIMD/v128, GC, memory64; but `wast2json` crashes on ~100 core files. |
 | `exec.sh`         | Node (`exec-run.js`) | MVP + common proposals; no v128. |
 
