@@ -792,6 +792,12 @@ module Error = struct
   let before_hole context ~location =
     report context ~location (text "This expression occurs before a hole '_'.")
 
+  let hole_in_control_operand context ~location ~construct ~role =
+    report context ~location
+      (text "A hole" ++ kw "_" ++ text "cannot be used as a" ++ kw construct
+       ++ text role
+      ^^ text ".")
+
   let duplicated_field context ~location x =
     report context ~location
       ((text "Several fields have the same name" ++ name x) ^^ text ".")
@@ -5606,6 +5612,29 @@ let with_holes ctx i build =
   let _st, r = build () { pending; value_loc = None; reported = false } in
   return r
 
+(* A [match] scrutinee, [dispatch] index or [while] condition is evaluated inside
+   the blocks the construct lowers to, whose stack excludes the enclosing
+   statement's pending values — so a hole there has nothing to consume (and could
+   not be re-consumed each iteration of a [while]). Reject it with a clear error
+   rather than the stack-underflow cascade it would otherwise trigger, and replace
+   the whole operand with [Unreachable] so the rest of the construct still
+   type-checks for recovery. Returns the (possibly replaced) operand and whether
+   it was rejected, so the caller can skip a follow-up check that would cascade.
+   [from_wasm] never emits such a hole — a recovered [match] scrutinee is
+   re-readable (see [Recover_match.same_scrut], never a hole) and a while
+   condition sits in the leading test of a void loop — so this only rejects
+   hand-written code. *)
+let reject_control_holes ctx ~construct ~role ~recovery operand =
+  if count_holes operand > 0 then (
+    Error.hole_in_control_operand ctx.diagnostics ~location:operand.info
+      ~construct ~role;
+    (* Replace the whole operand with a hole-free value of the shape the
+       construct expects ([recovery]: a null reference for a scrutinee, [0] for
+       an [i32] index/condition), so the lowering type-checks without a
+       stack-underflow or wrong-shape cascade on top of the reported error. *)
+    ({ operand with desc = recovery }, true))
+  else (operand, false)
+
 let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
     =
   if debug then Format.eprintf "%a@." Output.instr i;
@@ -7664,6 +7693,10 @@ and type_block_construct ctx i =
             check_dups (l.desc :: seen) r
       in
       check_dups [] arms;
+      let index, _ =
+        reject_control_holes ctx ~construct:"dispatch" ~role:"index"
+          ~recovery:(Ast.Int "0") index
+      in
       (* Type-check against the equivalent blocks (see [Ast_utils.lower_dispatch])
          as a void block body — the outermost case block followed by the first
          arm's trailing body. This validates the index is an [i32], every
@@ -7691,6 +7724,10 @@ and type_block_construct ctx i =
          in [To_wasm]. The scrutinee is threaded into the lowering and typed
          there (so a hole draws its type from the enclosing test); it is then
          recovered from the typed form rather than typed a second time. *)
+      let scrutinee, scrut_had_holes =
+        reject_control_holes ctx ~construct:"match" ~role:"scrutinee"
+          ~recovery:Ast.Null scrutinee
+      in
       let labels = match_labels i.info arms in
       let lowered =
         Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
@@ -7713,10 +7750,14 @@ and type_block_construct ctx i =
       in
       let scrut' = match_recover_scrutinee ctx scrutinee scrut_opt in
       (* The chain's casts require a reference scrutinee; flag a non-reference
-         here (the failed cast in the lowered form reports at the same spot). *)
-      (match match_scrut_reftype ctx scrut' with
-      | Some _ -> ()
-      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
+         here (the failed cast in the lowered form reports at the same spot).
+         Skip it when the scrutinee was a rejected hole — the replacement
+         [Unreachable] is not a reference and would cascade a spurious error. *)
+      (if not scrut_had_holes then
+         match match_scrut_reftype ctx scrut' with
+         | Some _ -> ()
+         | None ->
+             Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
       return_statement i
         (Match
            {
@@ -7746,6 +7787,10 @@ and type_block_construct ctx i =
          (continue) runs the step. Then rebuild a typed [While], keeping the
          high-level form for the formatter and for the identical re-lowering in
          [To_wasm]. *)
+      let cond, _ =
+        reject_control_holes ctx ~construct:"while" ~role:"condition"
+          ~recovery:(Ast.Int "0") cond
+      in
       let lowered =
         Ast_utils.lower_while ~block_info:i.info
           ~fresh_loop:(Ast.no_loc Ast_utils.synthetic_loop_label)
@@ -10055,6 +10100,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
             check_dups (l.desc :: seen) r
       in
       check_dups [] arms;
+      let index, _ =
+        reject_control_holes ctx ~construct:"dispatch" ~role:"index"
+          ~recovery:(Ast.Int "0") index
+      in
       let lowered =
         Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default ~arms
       in
@@ -10070,6 +10119,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
          lowering and typed there; it is then recovered from the typed form
          rather than typed a second time (which reported every scrutinee error
          twice and crashed on a bare hole scrutinee). *)
+      let scrutinee, scrut_had_holes =
+        reject_control_holes ctx ~construct:"match" ~role:"scrutinee"
+          ~recovery:Ast.Null scrutinee
+      in
       let labels = match_labels i.info arms in
       let lowered =
         Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
@@ -10091,9 +10144,11 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
             None )
       in
       let scrut' = match_recover_scrutinee ctx scrutinee scrut_opt in
-      (match match_scrut_reftype ctx scrut' with
-      | Some _ -> ()
-      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
+      (if not scrut_had_holes then
+         match match_scrut_reftype ctx scrut' with
+         | Some _ -> ()
+         | None ->
+             Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
       return_statement i
         (Match
            {

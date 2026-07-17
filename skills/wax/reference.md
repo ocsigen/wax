@@ -2067,6 +2067,19 @@ fn bad() -> i32 {
 This restriction keeps holes unambiguous: they always refer to values already on
 the stack, never to operands appearing later in the expression.
 
+**Not every position accepts a hole.** The scrutinee of a
+[`match`](#match), the index of a [`dispatch`](#dispatch), and the condition of a
+[`while`](#while-loops) cannot be a hole. Each of these desugars to a
+nested block structure, and a hole inside a block draws only from that block's
+own stack, not from the values pending in the enclosing sequence, so there is
+nothing there for it to pick up:
+
+```wax
+fn bad(x: &any) {
+    x; match _ { … }    // Error: A hole '_' cannot be used as a 'match' scrutinee.
+}
+```
+
 When decompiling Wasm or WAT back to Wax, the compiler introduces holes wherever
 an instruction takes an operand from the stack instead of from a nested
 sub-expression, so this same mechanism round-trips stack-style code.

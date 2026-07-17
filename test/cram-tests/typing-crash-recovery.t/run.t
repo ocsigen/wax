@@ -58,9 +58,11 @@ raises [Not_found] in the hole-order pass:
   3 │ 
   [128]
 
-A [match] with a hole scrutinee no longer reaches the empty-stack assertion; the
-scrutinee is typed once, inside the lowering, so its errors are reported a single
-time:
+A [match] with a hole scrutinee is rejected with a clear diagnostic rather than
+the old empty-stack cascade: the scrutinee is evaluated inside the lowering's
+blocks, where the enclosing statement's pending stack values are out of reach, so
+a hole there has nothing to consume. (The trailing value is then genuinely
+unconsumed, hence the second error.)
 
   $ cat > match-hole.wax <<'WAX'
   > type t = { x: i32 };
@@ -68,13 +70,7 @@ time:
   > WAX
 
   $ wax check match-hole.wax
-  Error: The stack is empty.
-   ──➤  match-hole.wax:2:20
-  1 │ type t = { x: i32 };
-  2 │ fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }
-    ·                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  3 │ 
-  Error: A reference type is expected here.
+  Error: A hole '_' cannot be used as a 'match' scrutinee.
    ──➤  match-hole.wax:2:26
   1 │ type t = { x: i32 };
   2 │ fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }
