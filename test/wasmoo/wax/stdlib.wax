@@ -103,14 +103,14 @@ fn caml_named_value(s: &eq) -> &?eq {
 }
 
 #[export]
-fn caml_register_named_value(name: &eq, v: &eq) -> &eq {
+fn caml_register_named_value(name: &eq, value: &eq) -> &eq {
     let h = caml_string_hash(0 as &i31, name) as i32_s %u Named_value_size;
-    let r = named_value_table[h];
+    let next = named_value_table[h];
     'not_found: do {
-        (br_on_null 'not_found assoc_find(name, r)).value = v;
+        (br_on_null 'not_found assoc_find(name, next)).value = value;
         return 0 as &i31;
     }
-    named_value_table[h] = { name: name as &bytes, value: v, next: r };
+    named_value_table[h] = { name: name as &bytes, value, next };
     0 as &i31;
 }
 
@@ -166,11 +166,12 @@ fn grow_global_data(min_idx: i32) {
 #[export]
 let link_info: &block = [0 as &i31, 0 as &i31, 0 as &i31, 0 as &i31, 0 as &i31];
 
-// Field indices for $link_info (after tag at 0)
-const LINK_INFO_SECTIONS = 1;
+// Field indices for $link_info (after tag at 0). Only SYMBOLS is currently
+// read by the runtime; the others are documented for the layout:
+//   LINK_INFO_SECTIONS = 1
 const LINK_INFO_SYMBOLS = 2;
-const LINK_INFO_PRIM_COUNT = 3;
-const LINK_INFO_ALIASES = 4;
+//   LINK_INFO_PRIM_COUNT = 3
+//   LINK_INFO_ALIASES = 4
 
 // Next available index for dynamically loaded modules not in the
 // static symbols table. Initialized when symbols are set.
@@ -202,15 +203,15 @@ fn caml_set_link_info(info: &eq) -> &eq {
                     max = idx;
                 }
                 // Build key from global_name
-                let key =
+                let name =
                     make_symbol_key(
                         // is_predef = tag of global_name block
                         (pair[1] as &block)[0] as i32_u,
                         (pair[1] as &block)[1] as &bytes,
                     );
                 // Insert into symbol hash table
-                let h = caml_string_hash(0 as &i31, key) as i32_s %u symbol_table_size;
-                symbol_table[h] = { name: key, value: pair[2], next: symbol_table[h] };
+                let h = caml_string_hash(0 as &i31, name) as i32_s %u symbol_table_size;
+                symbol_table[h] = { name, value: pair[2], next: symbol_table[h] };
                 j += 1;
                 br 'loop;
             }
@@ -249,8 +250,6 @@ fn lookup_symbol(name: &eq, kind: i32) -> i32 {
     }
     -1;
 }
-
-let caml_register_global_idx = 0;
 
 #[export]
 fn caml_register_global_by_index(v: &eq, idx: &eq) -> &eq {

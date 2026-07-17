@@ -108,8 +108,8 @@
 )
 
 (func $caml_copy_int64 (export "caml_copy_int64")
-  (param $i i64) (result (ref eq))
-  (struct.new $int64 (global.get $int64_ops) (local.get $i))
+  (param $i64 i64) (result (ref eq))
+  (struct.new $int64 (global.get $int64_ops) (local.get $i64))
 )
 
 (func $Int64_val (export "Int64_val") (param $v (ref eq)) (result i64)

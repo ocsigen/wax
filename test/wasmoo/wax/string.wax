@@ -153,6 +153,13 @@ fn caml_bytes_get16(v: &eq, p: i32) -> i32 {
 }
 
 #[export]
+#[export = "caml_string_get16u"]
+fn caml_bytes_get16u(v: &eq, p: i32) -> i32 {
+    let s = v as &bytes;
+    s[p] as i32_u | s[p + 1] as i32_u << 8;
+}
+
+#[export]
 #[export = "caml_string_get32"]
 fn caml_bytes_get32(v: &eq, p: i32) -> i32 {
     let s = v as &bytes;
@@ -162,6 +169,13 @@ fn caml_bytes_get32(v: &eq, p: i32) -> i32 {
     if p + 3 >=u s.length() {
         caml_bound_error();
     }
+    s[p] as i32_u | s[p + 1] as i32_u << 8 | (s[p + 2] as i32_u << 16 | s[p + 3] as i32_u << 24);
+}
+
+#[export]
+#[export = "caml_string_get32u"]
+fn caml_bytes_get32u(v: &eq, p: i32) -> i32 {
+    let s = v as &bytes;
     s[p] as i32_u | s[p + 1] as i32_u << 8 | (s[p + 2] as i32_u << 16 | s[p + 3] as i32_u << 24);
 }
 
@@ -181,6 +195,15 @@ fn caml_bytes_get64(v: &eq, p: i32) -> i64 {
 }
 
 #[export]
+#[export = "caml_string_get64u"]
+fn caml_bytes_get64u(v: &eq, p: i32) -> i64 {
+    let s = v as &bytes;
+    s[p] as i64_u | s[p + 1] as i64_u << 8 | (s[p + 2] as i64_u << 16 | s[p + 3] as i64_u << 24)
+        | (s[p + 4] as i64_u << 32 | s[p + 5] as i64_u << 40
+               | (s[p + 6] as i64_u << 48 | s[p + 7] as i64_u << 56));
+}
+
+#[export]
 fn caml_bytes_set16(vs: &eq, p: i32, v: i32) -> &eq {
     let s = vs as &bytes;
     if p <s 0 {
@@ -189,6 +212,14 @@ fn caml_bytes_set16(vs: &eq, p: i32, v: i32) -> &eq {
     if p + 1 >=u s.length() {
         caml_bound_error();
     }
+    s[p] = v;
+    s[p + 1] = v >>u 8;
+    0 as &i31;
+}
+
+#[export]
+fn caml_bytes_set16u(vs: &eq, p: i32, v: i32) -> &eq {
+    let s = vs as &bytes;
     s[p] = v;
     s[p + 1] = v >>u 8;
     0 as &i31;
@@ -211,6 +242,16 @@ fn caml_bytes_set32(vs: &eq, p: i32, v: i32) -> &eq {
 }
 
 #[export]
+fn caml_bytes_set32u(vs: &eq, p: i32, v: i32) -> &eq {
+    let s = vs as &bytes;
+    s[p] = v;
+    s[p + 1] = v >>u 8;
+    s[p + 2] = v >>u 16;
+    s[p + 3] = v >>u 24;
+    0 as &i31;
+}
+
+#[export]
 fn caml_bytes_set64(vs: &eq, p: i32, v: i64) -> &eq {
     let s = vs as &bytes;
     if p <s 0 {
@@ -219,6 +260,20 @@ fn caml_bytes_set64(vs: &eq, p: i32, v: i64) -> &eq {
     if p + 7 >=u s.length() {
         caml_bound_error();
     }
+    s[p] = v as i32;
+    s[p + 1] = (v >>u 8) as i32;
+    s[p + 2] = (v >>u 16) as i32;
+    s[p + 3] = (v >>u 24) as i32;
+    s[p + 4] = (v >>u 32) as i32;
+    s[p + 5] = (v >>u 40) as i32;
+    s[p + 6] = (v >>u 48) as i32;
+    s[p + 7] = (v >>u 56) as i32;
+    0 as &i31;
+}
+
+#[export]
+fn caml_bytes_set64u(vs: &eq, p: i32, v: i64) -> &eq {
+    let s = vs as &bytes;
     s[p] = v as i32;
     s[p + 1] = (v >>u 8) as i32;
     s[p + 2] = (v >>u 16) as i32;

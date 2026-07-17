@@ -34,7 +34,6 @@ import "int64" {
     fn caml_copy_int64(i64) -> &eq;
     fn Int64_val(&eq) -> i64;
 }
-import "obj" const double_array_tag: i32;
 import "compare" const unordered: i32;
 import "hash" {
     fn caml_hash_mix_int(i32, i32) -> i32;
@@ -68,8 +67,8 @@ import "marshal" {
     type dat = { array: &array, offset: i32, len: i32 };
 
     #[export]
-    fn ta_create(kind: i32, sz: i32) -> &extern {
-        let a =
+    fn ta_create(kind: i32, len: i32) -> &extern {
+        let array =
             'cont: do {
                 dispatch kind [
                     'f32, 'f64, 'i8, 'i8, 'i16, 'i16, 'i32, 'i64, 'i32, 'i32, 'f32, 'f64, 'i8,
@@ -77,32 +76,32 @@ import "marshal" {
                 ] {
                     'i64: {
                         // i64
-                        sz >>u= 1;
-                        br 'cont [i64_array|0; sz];
+                        len >>u= 1;
+                        br 'cont [i64_array|0; len];
                     }
                     'i32: {
                         // i32
-                        br 'cont [i32_array|0; sz];
+                        br 'cont [i32_array|0; len];
                     }
                     'i16: {
                         // i16
-                        br 'cont [i16_array|0; sz];
+                        br 'cont [i16_array|0; len];
                     }
                     'i8: {
                         // i8
-                        br 'cont [i8_array|0; sz];
+                        br 'cont [i8_array|0; len];
                     }
                     'f64: {
                         // f64
-                        br 'cont [f64_array|0; sz];
+                        br 'cont [f64_array|0; len];
                     }
                     'f32: {
                         // f32
-                        [f32_array|0; sz];
+                        [f32_array|0; len];
                     }
                 }
             };
-        { array: a, offset: 0, len: sz } as &extern;
+        { array, offset: 0, len } as &extern;
     }
 
     fn ta_fill_int(b: &extern, v: i32) {
@@ -212,12 +211,12 @@ import "marshal" {
     #[export]
     fn ta_subarray(b: &extern, s: i32, e: i32) -> &extern {
         let d = b as &dat;
-        let a = d.array;
-        if a is &i64_array {
+        let array = d.array;
+        if array is &i64_array {
             s >>u= 1;
             e >>u= 1;
         }
-        { array: a, offset: d.offset + s, len: e - s } as &extern;
+        { array, offset: d.offset + s, len: e - s } as &extern;
     }
 
     #[export]
@@ -585,18 +584,18 @@ fn bigarray_hash(vba: &eq) -> i32 {
                 h = caml_hash_mix_int(h, dv_get_i32_unaligned(view, i, 1));
             }
             let w = 0;
-            dispatch (len & 3) [ '_0_bytes, '_1_byte, '_2_bytes, else '_3_bytes ] {
-                '_3_bytes: {
+            dispatch (len & 3) [ 'zero_bytes, 'one_byte, 'two_bytes, else 'three_bytes ] {
+                'three_bytes: {
                     w = dv_get_ui8(view, i + 2) << 16;
                 }
-                '_2_bytes: {
+                'two_bytes: {
                     w |= dv_get_ui8(view, i + 1) << 8;
                 }
-                '_1_byte: {
+                'one_byte: {
                     w |= dv_get_ui8(view, i);
                     h = caml_hash_mix_int(h, w);
                 }
-                '_0_bytes: {
+                'zero_bytes: {
                     return h;
                 }
             }
@@ -731,18 +730,18 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
 const intern_overflow = "input_value: cannot read bigarray with 64-bit OCaml ints";
 
 fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
-    let num_dims = caml_deserialize_int_4(s);
+    let ba_num_dims = caml_deserialize_int_4(s);
     // CAML_BA_MAX_NUM_DIMS is 16; the unsigned test also rejects a
     // negative (hostile) count.
-    if num_dims >u 16 {
+    if ba_num_dims >u 16 {
         caml_failwith("input_value: wrong number of bigarray dimensions");
     }
     let flags = caml_deserialize_int_4(s);
-    let kind = flags & 0xff;
-    let dim: &int_array = [0; num_dims];
+    let ba_kind = flags & 0xff;
+    let ba_dim: &int_array = [0; ba_num_dims];
     let i: i32;
     let len: i32;
-    while i <u num_dims : (i += 1) {
+    while i <u ba_num_dims : (i += 1) {
         len = caml_deserialize_uint_2(s);
         if len == 0xffff {
             // A dimension that does not fit in a 32-bit machine
@@ -753,19 +752,19 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
             }
             len = l as i32;
         }
-        dim[i] = len;
+        ba_dim[i] = len;
     }
-    len = caml_ba_get_size(dim);
-    let dat = caml_ba_create_buffer(kind, len);
-    let view = dv_make(dat);
+    len = caml_ba_get_size(ba_dim);
+    let ba_data = caml_ba_create_buffer(ba_kind, len);
+    let ba_view = dv_make(ba_data);
     let b =
         {
             ops: bigarray_ops,
-            ba_data: dat,
-            ba_view: view,
-            ba_dim: dim,
-            ba_num_dims: num_dims,
-            ba_kind: kind,
+            ba_data,
+            ba_view,
+            ba_dim,
+            ba_num_dims,
+            ba_kind,
             ba_layout: flags >>u 8,
         };
     'done: do {
@@ -783,7 +782,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // float64
                 len <<= 3;
                 while i <u len : (i += 8) {
-                    dv_set_f64(view, i, caml_deserialize_int_8(s).from_bits(), littleEndian);
+                    dv_set_f64(ba_view, i, caml_deserialize_int_8(s).from_bits(), littleEndian);
                 }
                 br 'done;
             }
@@ -796,7 +795,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // float32
                 len <<= 2;
                 while i <u len : (i += 4) {
-                    dv_set_f32(view, i, caml_deserialize_int_4(s).from_bits(), littleEndian);
+                    dv_set_f32(ba_view, i, caml_deserialize_int_4(s).from_bits(), littleEndian);
                 }
                 br 'done;
             }
@@ -804,7 +803,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // int64
                 len <<= 3;
                 while i <u len : (i += 8) {
-                    dv_set_i64(view, i, caml_deserialize_int_8(s), littleEndian);
+                    dv_set_i64(ba_view, i, caml_deserialize_int_8(s), littleEndian);
                 }
                 br 'done;
             }
@@ -819,7 +818,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // int32
                 len <<= 2;
                 while i <u len : (i += 4) {
-                    dv_set_i32(view, i, caml_deserialize_int_4(s), littleEndian);
+                    dv_set_i32(ba_view, i, caml_deserialize_int_4(s), littleEndian);
                 }
                 br 'done;
             }
@@ -827,20 +826,20 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // int16 / uint16 / float16
                 len <<= 1;
                 while i <u len : (i += 2) {
-                    dv_set_i16(view, i, caml_deserialize_sint_2(s), littleEndian);
+                    dv_set_i16(ba_view, i, caml_deserialize_sint_2(s), littleEndian);
                 }
                 br 'done;
             }
             'int8: {
                 // int8 / uint8
                 while i <u len : (i += 1) {
-                    dv_set_i8(view, i, caml_deserialize_sint_1(s));
+                    dv_set_i8(ba_view, i, caml_deserialize_sint_1(s));
                 }
             }
         }
     }
     b;
-    (4 + num_dims) * 4;
+    (4 + ba_num_dims) * 4;
 }
 
 fn caml_ba_get_size(dim: &int_array) -> i32 {
@@ -876,29 +875,29 @@ const ba_create_negative_dim = "Bigarray.create: negative dimension";
 
 #[export]
 fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
-    let kind = vkind as i32_s;
+    let ba_kind = vkind as i32_s;
     let vdim = d as &block;
-    let num_dims = vdim.length() - 1;
-    if num_dims >u CAML_BA_MAX_NUM_DIMS {
+    let ba_num_dims = vdim.length() - 1;
+    if ba_num_dims >u CAML_BA_MAX_NUM_DIMS {
         caml_invalid_argument(ba_create_bad_dims);
     }
-    let dim: &int_array = [0; num_dims];
+    let ba_dim: &int_array = [0; ba_num_dims];
     let i = 0;
-    while i <u num_dims : (i += 1) {
+    while i <u ba_num_dims : (i += 1) {
         let n = vdim[i + 1] as i32_s;
         if n <s 0 {
             caml_invalid_argument(ba_create_negative_dim);
         }
-        dim[i] = n;
+        ba_dim[i] = n;
     }
-    let dat = caml_ba_create_buffer(kind, caml_ba_get_size(dim));
+    let ba_data = caml_ba_create_buffer(ba_kind, caml_ba_get_size(ba_dim));
     {
         ops: bigarray_ops,
-        ba_data: dat,
-        ba_view: dv_make(dat),
-        ba_dim: dim,
-        ba_num_dims: num_dims,
-        ba_kind: kind,
+        ba_data,
+        ba_view: dv_make(ba_data),
+        ba_dim,
+        ba_num_dims,
+        ba_kind,
         ba_layout: layout as i32_s,
     };
 }
@@ -910,26 +909,26 @@ const ta_too_large = "Typed_array.to_genarray: too large";
 {
     #[export]
     fn caml_ba_from_typed_array(v: &eq) -> &eq {
-        let dat = ta_normalize((unwrap(v) as &?extern)!);
-        let kind = ta_kind(dat);
-        if kind <s 0 {
+        let ba_data = ta_normalize((unwrap(v) as &?extern)!);
+        let ba_kind = ta_kind(ba_data);
+        if ba_kind <s 0 {
             caml_invalid_argument(ta_unsupported_kind);
         }
-        if kind == 14 // Uint8ClampedArray
+        if ba_kind == 14 // Uint8ClampedArray
         {
-            kind = 3;
+            ba_kind = 3;
         }
-        let len = ta_length(dat);
+        let len = ta_length(ba_data);
         if len <s 0 {
             caml_invalid_argument(ta_too_large);
         }
         {
             ops: bigarray_ops,
-            ba_data: dat,
-            ba_view: dv_make(dat),
+            ba_data,
+            ba_view: dv_make(ba_data),
             ba_dim: [len],
             ba_num_dims: 1,
-            ba_kind: kind,
+            ba_kind,
             ba_layout: 0,
         };
     }
@@ -939,15 +938,15 @@ const ta_too_large = "Typed_array.to_genarray: too large";
     // kind 3). Used for bigstrings, which are char bigarrays.
     #[export]
     fn caml_ba_char_of_typed_array(v: &eq) -> &eq {
-        let dat = ta_normalize((unwrap(v) as &?extern)!);
-        let len = ta_length(dat);
+        let ba_data = ta_normalize((unwrap(v) as &?extern)!);
+        let len = ta_length(ba_data);
         if len <s 0 {
             caml_invalid_argument(ta_too_large);
         }
         {
             ops: bigarray_ops,
-            ba_data: dat,
-            ba_view: dv_make(dat),
+            ba_data,
+            ba_view: dv_make(ba_data),
             ba_dim: [len],
             ba_num_dims: 1,
             ba_kind: 12, // char
@@ -1448,7 +1447,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     if num_inds >u b.ba_num_dims as i32_u {
         caml_invalid_argument(too_many_indices);
     }
-    let sub_dim: &int_array = [0; num_dims - num_inds];
+    let ba_dim: &int_array = [0; num_dims - num_inds];
     let index: &int_array;
     let i: i32;
     let offset: i32;
@@ -1458,24 +1457,24 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
             index[num_dims + i - num_inds] = ind[i + 1] as i32_u;
         }
         offset = caml_ba_offset(b, index);
-        sub_dim.copy(0, b.ba_dim, 0, num_dims - num_inds);
+        ba_dim.copy(0, b.ba_dim, 0, num_dims - num_inds);
     } else {
         index = [0; num_dims];
         while i <u num_inds : (i += 1) {
             index[i] = ind[i + 1] as i32_u;
         }
         offset = caml_ba_offset(b, index);
-        sub_dim.copy(0, b.ba_dim, num_inds, num_dims - num_inds);
+        ba_dim.copy(0, b.ba_dim, num_inds, num_dims - num_inds);
     }
     let mul = caml_ba_size_per_element(b.ba_kind as i32_u);
-    let size = caml_ba_get_size(sub_dim);
-    let sub_data = ta_subarray(b.ba_data, offset * mul, (offset + size) * mul);
+    let size = caml_ba_get_size(ba_dim);
+    let ba_data = ta_subarray(b.ba_data, offset * mul, (offset + size) * mul);
     {
         ops: bigarray_ops,
-        ba_data: sub_data,
-        ba_view: dv_make(sub_data),
-        ba_dim: sub_dim,
-        ba_num_dims: sub_dim.length(),
+        ba_data,
+        ba_view: dv_make(ba_data),
+        ba_dim,
+        ba_num_dims: ba_dim.length(),
         ba_kind: b.ba_kind as i32_u,
         ba_layout: b.ba_layout as i32_u,
     };
@@ -1488,13 +1487,13 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
     let ba = vba as &bigarray;
     let ofs = vofs as i32_s;
     let len = vlen as i32_s;
-    let num_dims = ba.ba_num_dims as i32_u;
+    let ba_num_dims = ba.ba_num_dims as i32_u;
     let dim = ba.ba_dim;
     let mul = 1;
     let changed_dim: i32;
     let i: i32;
     if ba.ba_layout as i32_u {
-        changed_dim = num_dims - 1;
+        changed_dim = ba_num_dims - 1;
         ofs -= 1;
         i = 0;
         while i <u changed_dim : (i += 1) {
@@ -1503,24 +1502,24 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
     } else {
         changed_dim = 0;
         i = 1;
-        while i <u num_dims : (i += 1) {
+        while i <u ba_num_dims : (i += 1) {
             mul *= dim[i];
         }
     }
     if (ofs <s 0) | (len <s 0) | (ofs + len >s dim[changed_dim]) {
         caml_invalid_argument(bad_subarray);
     }
-    let new_dim: &int_array = [0; num_dims];
-    new_dim.copy(0, dim, 0, num_dims);
-    new_dim[changed_dim] = len;
+    let ba_dim: &int_array = [0; ba_num_dims];
+    ba_dim.copy(0, dim, 0, ba_num_dims);
+    ba_dim[changed_dim] = len;
     mul *= caml_ba_size_per_element(ba.ba_kind as i32_u);
-    let new_data = ta_subarray(ba.ba_data, ofs * mul, (ofs + len) * mul);
+    let ba_data = ta_subarray(ba.ba_data, ofs * mul, (ofs + len) * mul);
     {
         ops: bigarray_ops,
-        ba_data: new_data,
-        ba_view: dv_make(new_data),
-        ba_dim: new_dim,
-        ba_num_dims: num_dims,
+        ba_data,
+        ba_view: dv_make(ba_data),
+        ba_dim,
+        ba_num_dims,
         ba_kind: ba.ba_kind as i32_u,
         ba_layout: ba.ba_layout as i32_u,
     };
@@ -1626,20 +1625,20 @@ const size_mismatch = "Bigarray.reshape: size mismatch";
 #[export]
 fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
     let vdim = vd as &block;
-    let num_dims = vdim.length() - 1;
+    let ba_num_dims = vdim.length() - 1;
     let b = vb as &bigarray;
-    if num_dims >u CAML_BA_MAX_NUM_DIMS {
+    if ba_num_dims >u CAML_BA_MAX_NUM_DIMS {
         caml_invalid_argument(bad_number_dim);
     }
     let num_elts: i64 = 1;
-    let dim: &int_array = [0; num_dims];
+    let ba_dim: &int_array = [0; ba_num_dims];
     let i: i32;
-    while i <u num_dims : (i += 1) {
+    while i <u ba_num_dims : (i += 1) {
         let d = vdim[i + 1] as i32_s;
         if d <s 0 {
             caml_invalid_argument(negative_dim);
         }
-        dim[i] = d;
+        ba_dim[i] = d;
         num_elts *= d as i64_s;
         if num_elts != num_elts as i32 as i64_s {
             caml_raise_out_of_memory();
@@ -1652,8 +1651,8 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
         ops: bigarray_ops,
         ba_data: b.ba_data,
         ba_view: b.ba_view,
-        ba_dim: dim,
-        ba_num_dims: num_dims,
+        ba_dim,
+        ba_num_dims,
         ba_kind: b.ba_kind as i32_u,
         ba_layout: b.ba_layout as i32_u,
     };
@@ -1662,23 +1661,23 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
 #[export]
 fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
     let b = vb as &bigarray;
-    let layout = vlayout as i32_s;
-    if b.ba_layout as i32_u != layout {
-        let num_dims = b.ba_num_dims as i32_u;
+    let ba_layout = vlayout as i32_s;
+    if b.ba_layout as i32_u != ba_layout {
+        let ba_num_dims = b.ba_num_dims as i32_u;
         let dim = b.ba_dim;
-        let new_dim: &int_array = [0; num_dims];
+        let ba_dim: &int_array = [0; ba_num_dims];
         let i: i32;
-        while i <u num_dims : (i += 1) {
-            new_dim[i] = dim[num_dims - i - 1];
+        while i <u ba_num_dims : (i += 1) {
+            ba_dim[i] = dim[ba_num_dims - i - 1];
         }
         {
             ops: bigarray_ops,
             ba_data: b.ba_data,
             ba_view: b.ba_view,
-            ba_dim: new_dim,
-            ba_num_dims: num_dims,
+            ba_dim,
+            ba_num_dims,
             ba_kind: b.ba_kind as i32_u,
-            ba_layout: layout,
+            ba_layout,
         };
     } else {
         vb;
@@ -1926,6 +1925,13 @@ fn caml_ba_uint8_get16(vba: &eq, i: i32) -> i32 {
 }
 
 #[export]
+fn caml_ba_uint8_get16u(vba: &eq, i: i32) -> i32 {
+    let ba = vba as &bigarray;
+    let view = ba.ba_view;
+    become dv_get_ui16_unaligned(view, i, 1);
+}
+
+#[export]
 fn caml_ba_uint8_get32(vba: &eq, i: i32) -> i32 {
     let ba = vba as &bigarray;
     let view = ba.ba_view;
@@ -1936,6 +1942,13 @@ fn caml_ba_uint8_get32(vba: &eq, i: i32) -> i32 {
         caml_bound_error();
     }
     dv_get_i32_unaligned(view, i, 1);
+}
+
+#[export]
+fn caml_ba_uint8_get32u(vba: &eq, i: i32) -> i32 {
+    let ba = vba as &bigarray;
+    let view = ba.ba_view;
+    become dv_get_i32_unaligned(view, i, 1);
 }
 
 #[export]
@@ -1952,6 +1965,13 @@ fn caml_ba_uint8_get64(vba: &eq, i: i32) -> i64 {
 }
 
 #[export]
+fn caml_ba_uint8_get64u(vba: &eq, i: i32) -> i64 {
+    let ba = vba as &bigarray;
+    let view = ba.ba_view;
+    dv_get_i64_unaligned(view, i, 1);
+}
+
+#[export]
 fn caml_ba_uint8_set16(vba: &eq, i: i32, d: i32) -> &eq {
     let ba = vba as &bigarray;
     let view = ba.ba_view;
@@ -1961,6 +1981,14 @@ fn caml_ba_uint8_set16(vba: &eq, i: i32, d: i32) -> &eq {
     if i + 1 >=u ba.ba_dim[0] {
         caml_bound_error();
     }
+    dv_set_i16_unaligned(view, i, d, 1);
+    0 as &i31;
+}
+
+#[export]
+fn caml_ba_uint8_set16u(vba: &eq, i: i32, d: i32) -> &eq {
+    let ba = vba as &bigarray;
+    let view = ba.ba_view;
     dv_set_i16_unaligned(view, i, d, 1);
     0 as &i31;
 }
@@ -1980,6 +2008,14 @@ fn caml_ba_uint8_set32(vba: &eq, i: i32, d: i32) -> &eq {
 }
 
 #[export]
+fn caml_ba_uint8_set32u(vba: &eq, i: i32, d: i32) -> &eq {
+    let ba = vba as &bigarray;
+    let view = ba.ba_view;
+    dv_set_i32_unaligned(view, i, d, 1);
+    0 as &i31;
+}
+
+#[export]
 fn caml_ba_uint8_set64(vba: &eq, i: i32, d: i64) -> &eq {
     let ba = vba as &bigarray;
     let view = ba.ba_view;
@@ -1989,6 +2025,14 @@ fn caml_ba_uint8_set64(vba: &eq, i: i32, d: i64) -> &eq {
     if i + 7 >=u ba.ba_dim[0] {
         caml_bound_error();
     }
+    dv_set_i64_unaligned(view, i, d, 1);
+    0 as &i31;
+}
+
+#[export]
+fn caml_ba_uint8_set64u(vba: &eq, i: i32, d: i64) -> &eq {
+    let ba = vba as &bigarray;
+    let view = ba.ba_view;
     dv_set_i64_unaligned(view, i, d, 1);
     0 as &i31;
 }
@@ -2134,8 +2178,8 @@ fn caml_ba_get_view(vba: &eq) -> &extern {
 }
 
 #[export]
-fn caml_ba_set_data(vba: &eq, dat: &extern) {
-    (vba as &bigarray).ba_data = dat;
+fn caml_ba_set_data(vba: &eq, ba_data: &extern) {
+    (vba as &bigarray).ba_data = ba_data;
 }
 
 #[export]
@@ -2144,14 +2188,20 @@ fn caml_ba_get_dim(vba: &eq) -> &int_array {
 }
 
 #[export]
-fn caml_ba_alloc(kind: i32, layout: i32, num_dims: i32, dat: &extern, dim: &int_array) -> &eq {
+fn caml_ba_alloc(
+    ba_kind: i32,
+    ba_layout: i32,
+    ba_num_dims: i32,
+    ba_data: &extern,
+    ba_dim: &int_array,
+) -> &eq {
     {
         ops: bigarray_ops,
-        ba_data: dat,
-        ba_view: dv_make(dat),
-        ba_dim: dim,
-        ba_num_dims: num_dims,
-        ba_kind: kind,
-        ba_layout: layout,
+        ba_data,
+        ba_view: dv_make(ba_data),
+        ba_dim,
+        ba_num_dims,
+        ba_kind,
+        ba_layout,
     };
 }

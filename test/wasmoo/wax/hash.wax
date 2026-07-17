@@ -121,18 +121,18 @@ fn caml_hash_mix_string(h: i32, s: &bytes) -> i32 {
             );
     }
     let w = 0;
-    dispatch (len & 3) [ '_0_bytes, '_1_byte, '_2_bytes, else '_3_bytes ] {
-        '_3_bytes: {
+    dispatch (len & 3) [ 'zero_bytes, 'one_byte, 'two_bytes, else 'three_bytes ] {
+        'three_bytes: {
             w = s[i + 2] as i32_u << 16;
         }
-        '_2_bytes: {
+        'two_bytes: {
             w |= s[i + 1] as i32_u << 8;
         }
-        '_1_byte: {
+        'one_byte: {
             w |= s[i] as i32_u;
             h = caml_hash_mix_int(h, w);
         }
-        '_0_bytes: {
+        'zero_bytes: {
             h ^ len;
         }
     }

@@ -86,8 +86,7 @@
   (local.set $key
     (array.new $bytes (i32.const 0) (i32.add (local.get $len) (i32.const 7))))
   (array.copy $bytes $bytes (local.get $key) (i32.const 0)
-    (ref.cast (ref $bytes) (global.get $predef_prefix)) (i32.const 0)
-    (i32.const 7))
+    (global.get $predef_prefix) (i32.const 0) (i32.const 7))
   (array.copy $bytes $bytes (local.get $key) (i32.const 7) (local.get $name)
     (i32.const 0) (local.get $len))
   (local.get $key)
@@ -129,24 +128,25 @@
 )
 
 (func (export "caml_register_named_value")
-  (param $name (ref eq)) (param $v (ref eq)) (result (ref eq))
-  (local $h i32) (local $r (ref null $assoc))
+  (param $name (ref eq)) (param $value (ref eq)) (result (ref eq))
+  (local $h i32) (local $next (ref null $assoc))
   (local.set $h
     (i32.rem_u
       (i31.get_s
         (ref.cast (ref i31)
           (call $caml_string_hash (ref.i31 (i32.const 0)) (local.get $name))))
       (global.get $Named_value_size)))
-  (local.set $r
+  (local.set $next
     (array.get $assoc_array (global.get $named_value_table) (local.get $h)))
   (block $not_found
     (struct.set $assoc 1
       (br_on_null $not_found
-        (call $assoc_find (local.get $name) (local.get $r))) (local.get $v))
+        (call $assoc_find (local.get $name) (local.get $next)))
+      (local.get $value))
     (return (ref.i31 (i32.const 0))))
   (array.set $assoc_array (global.get $named_value_table) (local.get $h)
     (struct.new $assoc (ref.cast (ref $bytes) (local.get $name))
-      (local.get $v) (local.get $r)))
+      (local.get $value) (local.get $next)))
   (ref.i31 (i32.const 0))
 )
 
@@ -227,11 +227,12 @@
     (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)))
 )
 
-;; Field indices for $link_info (after tag at 0)
-(global $LINK_INFO_SECTIONS i32 (i32.const 1))
+;; Field indices for $link_info (after tag at 0). Only SYMBOLS is currently
+;; read by the runtime; the others are documented for the layout:
+;;   LINK_INFO_SECTIONS = 1
 (global $LINK_INFO_SYMBOLS i32 (i32.const 2))
-(global $LINK_INFO_PRIM_COUNT i32 (i32.const 3))
-(global $LINK_INFO_ALIASES i32 (i32.const 4))
+;;   LINK_INFO_PRIM_COUNT = 3
+;;   LINK_INFO_ALIASES = 4
 
 ;; Next available index for dynamically loaded modules not in the
 ;; static symbols table. Initialized when symbols are set.
@@ -240,7 +241,7 @@
 (func (export "caml_set_link_info") (param $info (ref eq)) (result (ref eq))
   (local $arr (ref $block)) (local $pair (ref $block)) (local $j i32)
   (local $n i32) (local $h i32) (local $max i32) (local $idx i32)
-  (local $key (ref $bytes))
+  (local $name (ref $bytes))
   (global.set $link_info (ref.cast (ref $block) (local.get $info)))
   ;; Compute next_idx from symbols field
   (if
@@ -277,7 +278,7 @@
           (if (i32.gt_s (local.get $idx) (local.get $max))
             (then (local.set $max (local.get $idx))))
           ;; Build key from global_name
-          (local.set $key
+          (local.set $name
             (call $make_symbol_key
               ;; is_predef = tag of global_name block
               (i31.get_u
@@ -297,9 +298,9 @@
               (i31.get_s
                 (ref.cast (ref i31)
                   (call $caml_string_hash (ref.i31 (i32.const 0))
-                    (local.get $key)))) (global.get $symbol_table_size)))
+                    (local.get $name)))) (global.get $symbol_table_size)))
           (array.set $assoc_array (global.get $symbol_table) (local.get $h)
-            (struct.new $assoc (local.get $key)
+            (struct.new $assoc (local.get $name)
               (array.get $block (local.get $pair) (i32.const 2))
               (array.get $assoc_array (global.get $symbol_table)
                 (local.get $h))))
@@ -350,8 +351,6 @@
                     (global.get $symbol_table_size))))))))))
   (i32.const -1)
 )
-
-(global $caml_register_global_idx (mut i32) (i32.const 0))
 
 (func (export "caml_register_global_by_index")
   (param $v (ref eq)) (param $idx (ref eq)) (result (ref eq))

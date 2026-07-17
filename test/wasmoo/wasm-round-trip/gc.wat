@@ -216,3 +216,19 @@
   (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
+
+(@if (>= $ocaml_version (5 6 0))
+  (@then
+    (global $caml_runtime_hashtbl_randomized (mut i32) (i32.const 0))
+
+    (func $caml_runtime_hashtbl_randomize
+      (export "caml_runtime_hashtbl_randomize")
+      (param (ref eq)) (result (ref eq))
+      (global.set $caml_runtime_hashtbl_randomized (i32.const 1))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_runtime_hashtbl_is_randomized
+      (export "caml_runtime_hashtbl_is_randomized")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (global.get $caml_runtime_hashtbl_randomized))))
+)

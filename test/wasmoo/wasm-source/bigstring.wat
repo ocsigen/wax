@@ -22,8 +22,6 @@
       (func $caml_js_get (param (ref eq)) (param (ref eq)) (result (ref eq))))
    (import "bigarray" "caml_ba_to_typed_array"
      (func $caml_ba_to_typed_array (param (ref eq)) (result (ref eq))))
-   (import "bigarray" "caml_ba_from_typed_array"
-      (func $caml_ba_from_typed_array (param (ref eq)) (result (ref eq))))
    (import "bigarray" "caml_ba_char_of_typed_array"
       (func $caml_ba_char_of_typed_array (param (ref eq)) (result (ref eq))))
    (import "bigarray" "caml_ba_sub"
@@ -97,11 +95,11 @@
                (local.set $i (i32.add (local.get $i) (i32.const 4)))
                (br $loop))))
       (local.set $w (i32.const 0))
-      (block $0_bytes
-         (block $1_byte
-            (block $2_bytes
-               (block $3_bytes
-                  (br_table $0_bytes $1_byte $2_bytes $3_bytes
+      (block $zero_bytes
+         (block $one_byte
+            (block $two_bytes
+               (block $three_bytes
+                  (br_table $zero_bytes $one_byte $two_bytes $three_bytes
                      (i32.and (local.get $len) (i32.const 3))))
                (local.set $w
                   (i32.shl (call $dv_get_ui8 (local.get $view)

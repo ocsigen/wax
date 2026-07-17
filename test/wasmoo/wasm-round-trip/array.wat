@@ -31,6 +31,7 @@
 )
 
 (func $caml_make_vect (export "caml_make_vect") (export "caml_array_make")
+  (export "caml_uniform_array_make")
   (param $n (ref eq)) (param $v (ref eq)) (result (ref eq))
   (local $sz i32) (local $fv (ref $float)) (local $f f64)
   (local $b (ref $block))

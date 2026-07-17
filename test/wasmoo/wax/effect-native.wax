@@ -49,8 +49,16 @@
     type bytes = [mut i8];
     type function_1 = fn(&eq, &eq) -> &eq;
     type closure = open { /*(field i32)*/ func: &function_1 };
-    type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
-    type closure_3: closure = open { .., direct: &function_3 };
+    #[if(ocaml_version < (5, 6, 0))]
+    {
+        type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
+        type closure_3: closure = open { .., direct: &function_3 };
+    }
+    #[else]
+    {
+        type function_2 = fn(&eq, &eq, &eq) -> &eq;
+        type closure_2: closure = open { .., direct: &function_2 };
+    }
 
     // Effect types
 
@@ -89,18 +97,17 @@
         become (f as &func_closure).func();
     }
 
-    fn unhandled_effect_wrapper(start: &thunk) {
+    fn unhandled_effect_wrapper(func: &thunk) {
         let continuation = continuation::new(wrapper_cont);
-        let f: &eq = {func_closure| func: start };
+        let f: &eq = {func_closure| func };
         let v: &eq = 0 as &i31;
         'loop: loop {
-            let (resume_res_0, resume_res_1) =
-                'handle_effect: do () -> (&eq, &continuation) {
-                    continuation.resume(f, v) on [effect -> 'handle_effect];
-                    return;
-                };
-            continuation = resume_res_1;
-            v = resume_res_0;
+            'handle_effect: do () -> (&eq, &continuation) {
+                continuation.resume(f, v) on [effect -> 'handle_effect];
+                return;
+            }
+            continuation = _;
+            v = _;
             f = raise_unhandled_closure;
             br 'loop;
         }
@@ -123,7 +130,7 @@
         let fiber = vfiber as &fiber;
         let exn =
             'handle_exception: do {
-                let (resume_res_0, resume_res_1) =
+                let (val, continuation) =
                     'handle_effect: do () -> (&eq, &continuation) {
                         let res =
                             try_legacy {
@@ -140,17 +147,28 @@
                         become (f as &closure).func(res, f := fiber.value);
                     };
                 // handle effect
-                fiber.continuation = resume_res_1;
-                become (f as &closure_3).direct(
-                    resume_res_0,
-                    [block|cont_tag as &i31, fiber, fiber],
-                    if tail == 0 as &i31 {
-                        fiber;
-                    } else {
-                        tail;
-                    },
-                    f := fiber.effect,
-                );
+                fiber.continuation = continuation;
+                #[if(ocaml_version < (5, 6, 0))]
+                {
+                    become (f as &closure_3).direct(
+                        val,
+                        [block|cont_tag as &i31, fiber, fiber],
+                        if tail == 0 as &i31 {
+                            fiber;
+                        } else {
+                            tail;
+                        },
+                        f := fiber.effect,
+                    );
+                }
+                #[else]
+                {
+                    become (f as &closure_2).direct(
+                        val,
+                        [block|cont_tag as &i31, fiber, fiber],
+                        f := fiber.effect,
+                    );
+                }
             };
         // handle exception
         become (f as &closure).func(exn, f := fiber.exn);
@@ -158,10 +176,22 @@
 
     // Perform
 
-    #[export = "%reperform"]
-    fn f(eff: &eq, continuation: &eq, tail: &eq) -> &eq {
-        let (res_0, res_1) = suspend effect(eff);
-        become resume_fiber((continuation as &block)[1]!, res_0, res_1, tail);
+    #[if(ocaml_version < (5, 6, 0))]
+    {
+        #[export = "%reperform"]
+        fn f(eff: &eq, continuation: &eq, tail: &eq) -> &eq {
+            let (res_0, res_1) = suspend effect(eff);
+            become resume_fiber((continuation as &block)[1]!, res_0, res_1, tail);
+        }
+    }
+    #[else]
+    {
+        #[export = "%reperform"]
+        fn f(eff: &eq, continuation: &eq, _tail: &eq) -> &eq {
+            let tail = (continuation as &block)[2];
+            let (res_0, res_1) = suspend effect(eff);
+            become resume_fiber((continuation as &block)[1]!, res_0, res_1, tail);
+        }
     }
 
     #[export = "%perform"]
@@ -180,14 +210,14 @@
     }
 
     #[export]
-    fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
-        { value: hv, exn: hx, effect: hf, continuation: continuation::new(initial_cont) };
+    fn caml_alloc_stack(value: &eq, exn: &eq, effect: &eq) -> &eq {
+        { value, exn, effect, continuation: continuation::new(initial_cont) };
     }
 
     #[export = "%with_stack"]
-    fn f_3(hv: &eq, hx: &eq, hf: &eq, f: &eq, v: &eq) -> &eq {
+    fn f_3(value: &eq, exn: &eq, effect: &eq, f: &eq, v: &eq) -> &eq {
         become resume_fiber(
-            { value: hv, exn: hx, effect: hf, continuation: continuation::new(initial_cont) },
+            { value, exn, effect, continuation: continuation::new(initial_cont) },
             f,
             v,
             0 as &i31,
@@ -195,9 +225,9 @@
     }
 
     #[export = "%with_stack_bind"]
-    fn f_4(hv: &eq, hx: &eq, hf: &eq, dyn: &eq, bind: &eq, f: &eq, v: &eq) -> &eq {
+    fn f_4(value: &eq, exn: &eq, effect: &eq, dyn: &eq, bind: &eq, f: &eq, v: &eq) -> &eq {
         become resume_fiber(
-            { value: hv, exn: hx, effect: hf, continuation: continuation::new(initial_cont) },
+            { value, exn, effect, continuation: continuation::new(initial_cont) },
             f,
             v,
             0 as &i31,

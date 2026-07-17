@@ -266,26 +266,26 @@
 
     (func $caml_js_object (export "caml_js_object")
       (param $va (ref eq)) (result (ref eq))
-      (local $a (ref $block)) (local $l i32) (local $i i32) (local $o anyref)
+      (local $a (ref $block)) (local $l i32) (local $i i32) (local $js anyref)
       (local $p (ref $block))
       (local.set $a (ref.cast (ref $block) (local.get $va)))
       (local.set $l (array.len (local.get $a)))
       (local.set $i (i32.const 1))
-      (local.set $o (call $new_obj))
+      (local.set $js (call $new_obj))
       (loop $loop
         (if (i32.lt_u (local.get $i) (local.get $l))
           (then
             (local.set $p
               (ref.cast (ref $block)
                 (array.get $block (local.get $a) (local.get $i))))
-            (call $set (local.get $o)
+            (call $set (local.get $js)
               (call $unwrap
                 (call $caml_jsstring_of_bytes
                   (array.get $block (local.get $p) (i32.const 1))))
               (call $unwrap (array.get $block (local.get $p) (i32.const 2))))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (br $loop))))
-      (struct.new $js (local.get $o)))
+      (struct.new $js (local.get $js)))
 
     (func $caml_js_from_array (export "caml_js_from_array")
       (param $va (ref eq)) (result (ref eq))

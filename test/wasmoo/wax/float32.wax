@@ -1,4 +1,3 @@
-import "fail" fn caml_failwith(&eq);
 import "marshal" {
     fn caml_serialize_int_4(&eq, i32);
     fn caml_deserialize_int_4(&eq) -> i32;
@@ -14,14 +13,18 @@ import "float" {
 }
 import "bigarray" {
     fn caml_ba_uint8_get32(&eq, i32) -> i32;
+    fn caml_ba_uint8_get32u(&eq, i32) -> i32;
     fn caml_ba_uint8_set32(&eq, i32, i32) -> &eq;
+    fn caml_ba_uint8_set32u(&eq, i32, i32) -> &eq;
 }
 import "string" {
     fn caml_string_get32(&eq, i32) -> i32;
+    fn caml_string_get32u(&eq, i32) -> i32;
     fn caml_bytes_get32(&eq, i32) -> i32;
+    fn caml_bytes_get32u(&eq, i32) -> i32;
     fn caml_bytes_set32(&eq, i32, i32) -> &eq;
+    fn caml_bytes_set32u(&eq, i32, i32) -> &eq;
 }
-import "array" fn caml_make_vect(&eq, &eq) -> &eq;
 
 type float = { f: f64 };
 
@@ -68,8 +71,8 @@ const float32_ops =
 
 type float32: custom = { .., f32: f32 };
 
-fn box_float32(f: f32) -> &eq {
-    { ops: float32_ops, f32: f };
+fn box_float32(f32: f32) -> &eq {
+    { ops: float32_ops, f32 };
 }
 
 fn unbox_float32(f: &eq) -> f32 {
@@ -266,11 +269,14 @@ fn caml_fma_float32_bytecode(x: &eq, y: &eq, z: &eq) -> &eq {
     );
 }
 
-const zero = { ops: float32_ops, f32: 0 };
-
 #[export]
 fn caml_ba_uint8_getf32(a: &eq, i: i32) -> f32 {
     caml_ba_uint8_get32(a, i).from_bits();
+}
+
+#[export]
+fn caml_ba_uint8_getf32u(a: &eq, i: i32) -> f32 {
+    caml_ba_uint8_get32u(a, i).from_bits();
 }
 
 #[export]
@@ -279,13 +285,28 @@ fn caml_ba_uint8_setf32(a: &eq, i: i32, v: f32) -> &eq {
 }
 
 #[export]
+fn caml_ba_uint8_setf32u(a: &eq, i: i32, v: f32) -> &eq {
+    caml_ba_uint8_set32u(a, i, v.to_bits());
+}
+
+#[export]
 fn caml_string_getf32(a: &eq, i: i32) -> f32 {
     caml_string_get32(a, i).from_bits();
 }
 
 #[export]
+fn caml_string_getf32u(a: &eq, i: i32) -> f32 {
+    caml_string_get32u(a, i).from_bits();
+}
+
+#[export]
 fn caml_bytes_getf32(a: &eq, i: i32) -> f32 {
     caml_bytes_get32(a, i).from_bits();
+}
+
+#[export]
+fn caml_bytes_getf32u(a: &eq, i: i32) -> f32 {
+    caml_bytes_get32u(a, i).from_bits();
 }
 
 #[export]
@@ -312,4 +333,9 @@ fn caml_simd_float32_max_bytecode(x: f32, y: f32) -> f32 {
     } else {
         y;
     }
+}
+
+#[export]
+fn caml_bytes_setf32u(a: &eq, i: i32, v: f32) -> &eq {
+    caml_bytes_set32u(a, i, v.to_bits());
 }

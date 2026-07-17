@@ -185,12 +185,12 @@ const PREFIX_SMALL_STRING = 0x20;
 const CODE_INT8 = 0x00;
 const CODE_INT16 = 0x01;
 const CODE_INT32 = 0x02;
-const CODE_INT64 = 0x03;
+// CODE_INT64 = 0x03 (decoded via the br_table in $intern_rec; unsupported)
 const CODE_SHARED8 = 0x04;
 const CODE_SHARED16 = 0x05;
 const CODE_SHARED32 = 0x06;
 const CODE_BLOCK32 = 0x08;
-const CODE_BLOCK64 = 0x13;
+// CODE_BLOCK64 = 0x13 (decoded via the br_table in $intern_rec; unsupported)
 const CODE_STRING8 = 0x09;
 const CODE_STRING32 = 0x0A;
 const CODE_DOUBLE_BIG = 0x0B;
@@ -199,8 +199,9 @@ const CODE_DOUBLE_ARRAY8_BIG = 0x0D;
 const CODE_DOUBLE_ARRAY8_LITTLE = 0x0E;
 const CODE_DOUBLE_ARRAY32_BIG = 0x0F;
 const CODE_DOUBLE_ARRAY32_LITTLE = 0x07;
-const CODE_CODEPOINTER = 0x10;
-const CODE_INFIXPOINTER = 0x11;
+// CODE_CODEPOINTER = 0x10
+// CODE_INFIXPOINTER = 0x11
+// (decoded via the br_table in $intern_rec; unsupported)
 const CODE_CUSTOM = 0x12;
 const CODE_CUSTOM_LEN = 0x18;
 const CODE_CUSTOM_FIXED = 0x19;
@@ -411,7 +412,7 @@ fn decompress_input(s: &intern_state, h: &marshal_header, prim: &eq) {
 fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
     caml_init_custom_operations();
     let res: &block = [0 as &i31];
-    let sp: &?stack_item = { blk: res, pos: 0, next: null };
+    let next: &?stack_item = { blk: res, pos: 0, next: null };
     let size = h.num_objects;
     if size {
         s.obj_table = [0 as &i31; size];
@@ -422,13 +423,13 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
         let len: i32;
         let ofs: i32;
         'loop: loop {
-            let item = br_on_null 'exit sp;
+            let item = br_on_null 'exit next;
             let dest = item.blk;
             let pos = item.pos;
             let pos' = pos + 1;
             item.pos = pos';
             if pos' == dest.length() {
-                sp = item.next;
+                next = item.next;
             }
             'done: do {
                 'read_block: do {
@@ -580,7 +581,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                 b[0] = tg as &i31;
                 if size {
                     register_object(s, b);
-                    sp = { blk: b, pos: 1, next: sp };
+                    next = { blk: b, pos: 1, next };
                 }
                 v = b;
                 br 'done;
@@ -1014,7 +1015,7 @@ const abstract_value = "output_value: abstract value";
 const cust_value = "output_value: abstract value (Custom)";
 
 fn extern_rec(s: &extern_state, v: &eq) {
-    let sp: &?stack_item;
+    let next: &?stack_item;
     'loop: loop {
         let pos: i32;
         'next_item: do {
@@ -1024,9 +1025,9 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_int(s, iv as i32_s);
                     br 'next_item;
                 }
-                bv: &block => {
-                    let tg = bv[0] as i32_u;
-                    sz = bv.length() - 1;
+                blk: &block => {
+                    let tg = blk[0] as i32_u;
+                    sz = blk.length() - 1;
                     if !sz {
                         extern_header(s, 0, tg);
                         br 'next_item;
@@ -1040,9 +1041,9 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_header(s, sz, tg);
                     extern_size(s, sz, sz);
                     if sz >u 1 {
-                        sp = { blk: bv, pos: 2, next: sp };
+                        next = { blk, pos: 2, next };
                     }
-                    v = bv[1];
+                    v = blk[1];
                     br 'loop;
                 }
                 _ => {
@@ -1099,14 +1100,14 @@ fn extern_rec(s: &extern_state, v: &eq) {
         }
         // next_item
         'done: do {
-            let item = br_on_null 'done sp;
+            let item = br_on_null 'done next;
             let b = item.blk;
             pos = item.pos;
             v = b[pos];
             pos += 1;
             item.pos = pos;
             if pos == b.length() {
-                sp = item.next;
+                next = item.next;
             }
             br 'loop;
         }
@@ -1174,12 +1175,12 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
 
 #[export]
 fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &eq) -> &eq {
-    let buf = vbuf as &bytes;
+    let dat = vbuf as &bytes;
     let pos = vpos as i32_u;
     let len = vlen as i32_u;
-    let blk = { next: null, end: pos + len, dat: buf };
+    let blk = { next: null, end: pos + len, dat };
     let (r_0, r_1, _) = extern_value(flags, blk, pos + 20, 1, v);
-    buf.copy(pos, r_1, 0, 20);
+    dat.copy(pos, r_1, 0, 20);
     // Return the number of bytes written: 20-byte header + data.
     (r_0 + 20) as &i31;
 }

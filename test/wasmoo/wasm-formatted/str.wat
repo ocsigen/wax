@@ -82,7 +82,7 @@
   (param $vre (ref eq)) (param $s (ref $bytes)) (param $pos i32)
   (param $accept_partial_match i32) (result (ref eq))
   (local $res (ref $block)) (local $s' (ref $bytes)) (local $set (ref $bytes))
-  (local $len i32) (local $instr i32) (local $arg i32) (local $i i32)
+  (local $len i32) (local $instr i32) (local $idx i32) (local $i i32)
   (local $j i32) (local $l i32) (local $re (ref $block))
   (local $prog (ref $block)) (local $cpool (ref $block))
   (local $normtable (ref $bytes)) (local $numgroups i32)
@@ -155,11 +155,11 @@
                                               (br_if $prefix_match
                                                 (i32.eq (local.get $pos)
                                                   (local.get $len)))
-                                              (local.set $arg
+                                              (local.set $idx
                                                 (i32.shr_u (local.get $instr)
                                                   (i32.const 8)))
                                               (br_if $backtrack
-                                                (i32.ne (local.get $arg)
+                                                (i32.ne (local.get $idx)
                                                   (array.get_u $bytes
                                                     (local.get $s)
                                                     (local.get $pos))))
@@ -171,11 +171,11 @@
                                             (br_if $prefix_match
                                               (i32.eq (local.get $pos)
                                                 (local.get $len)))
-                                            (local.set $arg
+                                            (local.set $idx
                                               (i32.shr_u (local.get $instr)
                                                 (i32.const 8)))
                                             (br_if $backtrack
-                                              (i32.ne (local.get $arg)
+                                              (i32.ne (local.get $idx)
                                                 (array.get_u $bytes
                                                   (local.get $normtable)
                                                   (array.get_u $bytes
@@ -186,14 +186,14 @@
                                                 (i32.const 1)))
                                             (br $continue))
                                           ;; STRING
-                                          (local.set $arg
+                                          (local.set $idx
                                             (i32.shr_u (local.get $instr)
                                               (i32.const 8)))
                                           (local.set $s'
                                             (ref.cast (ref $bytes)
                                               (array.get $block
                                                 (local.get $cpool)
-                                                (i32.add (local.get $arg)
+                                                (i32.add (local.get $idx)
                                                   (i32.const 1)))))
                                           (local.set $i (i32.const 0))
                                           (local.set $l
@@ -223,14 +223,14 @@
                                                 (br $loop))))
                                           (br $continue))
                                         ;; STRINGNORM
-                                        (local.set $arg
+                                        (local.set $idx
                                           (i32.shr_u (local.get $instr)
                                             (i32.const 8)))
                                         (local.set $s'
                                           (ref.cast (ref $bytes)
                                             (array.get $block
                                               (local.get $cpool)
-                                              (i32.add (local.get $arg)
+                                              (i32.add (local.get $idx)
                                                 (i32.const 1)))))
                                         (local.set $i (i32.const 0))
                                         (local.set $l
@@ -265,7 +265,7 @@
                                       (br_if $prefix_match
                                         (i32.eq (local.get $pos)
                                           (local.get $len)))
-                                      (local.set $arg
+                                      (local.set $idx
                                         (i32.shr_u (local.get $instr)
                                           (i32.const 8)))
                                       (br_if $backtrack
@@ -274,7 +274,7 @@
                                             (ref.cast (ref $bytes)
                                               (array.get $block
                                                 (local.get $cpool)
-                                                (i32.add (local.get $arg)
+                                                (i32.add (local.get $idx)
                                                   (i32.const 1))))
                                             (array.get_u $bytes (local.get $s)
                                               (local.get $pos)))))
@@ -336,37 +336,37 @@
                                                 (local.get $pos)))))
                                         (br $backtrack))))))
                               ;; BEGGROUP
-                              (local.set $arg
+                              (local.set $idx
                                 (i32.shr_u (local.get $instr) (i32.const 8)))
                               (local.set $stack
                                 (struct.new $undo (local.get $stack)
-                                  (local.get $group_start) (local.get $arg)
+                                  (local.get $group_start) (local.get $idx)
                                   (array.get $int_array
                                     (local.get $group_start)
-                                    (local.get $arg))))
+                                    (local.get $idx))))
                               (array.set $int_array (local.get $group_start)
-                                (local.get $arg) (local.get $pos))
+                                (local.get $idx) (local.get $pos))
                               (br $continue))
                             ;; ENDGROUP
-                            (local.set $arg
+                            (local.set $idx
                               (i32.shr_u (local.get $instr) (i32.const 8)))
                             (local.set $stack
                               (struct.new $undo (local.get $stack)
-                                (local.get $group_end) (local.get $arg)
+                                (local.get $group_end) (local.get $idx)
                                 (array.get $int_array (local.get $group_end)
-                                  (local.get $arg))))
+                                  (local.get $idx))))
                             (array.set $int_array (local.get $group_end)
-                              (local.get $arg) (local.get $pos))
+                              (local.get $idx) (local.get $pos))
                             (br $continue))
                           ;; REFGROUP
-                          (local.set $arg
+                          (local.set $idx
                             (i32.shr_u (local.get $instr) (i32.const 8)))
                           (local.set $i
                             (array.get $int_array (local.get $group_start)
-                              (local.get $arg)))
+                              (local.get $idx)))
                           (local.set $j
                             (array.get $int_array (local.get $group_end)
-                              (local.get $arg)))
+                              (local.get $idx)))
                           (br_if $backtrack
                             (i32.or (i32.lt_s (local.get $i) (i32.const 0))
                               (i32.lt_s (local.get $j) (i32.const 0))))
@@ -388,7 +388,7 @@
                                 (br $loop))))
                           (br $continue))
                         ;; SIMPLEOPT
-                        (local.set $arg
+                        (local.set $idx
                           (i32.shr_u (local.get $instr) (i32.const 8)))
                         (if (i32.lt_u (local.get $pos) (local.get $len))
                           (then
@@ -396,7 +396,7 @@
                               (call $in_bitset
                                 (ref.cast (ref $bytes)
                                   (array.get $block (local.get $cpool)
-                                    (i32.add (local.get $arg) (i32.const 1))))
+                                    (i32.add (local.get $idx) (i32.const 1))))
                                 (array.get_u $bytes (local.get $s)
                                   (local.get $pos)))
                               (then
@@ -405,12 +405,12 @@
                                     (i32.const 1)))))))
                         (br $continue))
                       ;; SIMPLESTAR
-                      (local.set $arg
+                      (local.set $idx
                         (i32.shr_u (local.get $instr) (i32.const 8)))
                       (local.set $set
                         (ref.cast (ref $bytes)
                           (array.get $block (local.get $cpool)
-                            (i32.add (local.get $arg) (i32.const 1)))))
+                            (i32.add (local.get $idx) (i32.const 1)))))
                       (loop $loop
                         (if (i32.lt_u (local.get $pos) (local.get $len))
                           (then
@@ -426,12 +426,12 @@
                     ;; SIMPLEPLUS
                     (br_if $prefix_match
                       (i32.eq (local.get $pos) (local.get $len)))
-                    (local.set $arg
+                    (local.set $idx
                       (i32.shr_u (local.get $instr) (i32.const 8)))
                     (local.set $set
                       (ref.cast (ref $bytes)
                         (array.get $block (local.get $cpool)
-                          (i32.add (local.get $arg) (i32.const 1)))))
+                          (i32.add (local.get $idx) (i32.const 1)))))
                     (br_if $backtrack
                       (i32.eqz
                         (call $in_bitset (local.get $set)
@@ -460,21 +460,21 @@
                     (local.get $pos)))
                 (br $continue))
               ;; SETMARK
-              (local.set $arg (i32.shr_u (local.get $instr) (i32.const 8)))
+              (local.set $idx (i32.shr_u (local.get $instr) (i32.const 8)))
               (local.set $stack
                 (struct.new $undo (local.get $stack) (local.get $re_register)
-                  (local.get $arg)
+                  (local.get $idx)
                   (array.get $int_array (local.get $re_register)
-                    (local.get $arg))))
-              (array.set $int_array (local.get $re_register) (local.get $arg)
+                    (local.get $idx))))
+              (array.set $int_array (local.get $re_register) (local.get $idx)
                 (local.get $pos))
               (br $continue))
             ;; CHECKPROGRESS
-            (local.set $arg (i32.shr_u (local.get $instr) (i32.const 8)))
+            (local.set $idx (i32.shr_u (local.get $instr) (i32.const 8)))
             (br_if $backtrack
               (i32.eq (local.get $pos)
                 (array.get $int_array (local.get $re_register)
-                  (local.get $arg))))
+                  (local.get $idx))))
             (br $continue))
           ;; prefix_match
           (br_if $ACCEPT (local.get $accept_partial_match)))

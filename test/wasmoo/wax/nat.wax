@@ -139,12 +139,12 @@ fn serialize_nat(s: &eq, v: &eq) -> (i32, i32) {
 
 fn deserialize_nat(s: &eq) -> (&eq, i32) {
     let len = caml_deserialize_int_4(s);
-    let d: &digits = [0; len];
+    let dat: &digits = [0; len];
     let i: i32;
     while i <s len : (i += 1) {
-        d[i] = caml_deserialize_int_4(s);
+        dat[i] = caml_deserialize_int_4(s);
     }
-    { f: nat_ops, dat: d };
+    { f: nat_ops, dat };
     len * 4;
 }
 

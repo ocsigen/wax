@@ -1163,7 +1163,7 @@
       (i32.const 0))
 
     (func $readdir_helper (param $vdir (ref eq)) (result (ref eq))
-      (local $dir (ref $directory)) (local $entry_size i32) (local $left i32)
+      (local $dir (ref $directory)) (local $size i32) (local $left i32)
       (local $entry i32) (local $namelen i32) (local $buf i32)
       (local $buffer i32) (local $res i32) (local $available i32)
       (local.set $dir (ref.cast (ref $directory) (local.get $vdir)))
@@ -1192,12 +1192,11 @@
             (i32.add (struct.get $directory $buffer (local.get $dir))
               (struct.get $directory $pos (local.get $dir))))
           (local.set $namelen (i32.load $m offset=16 (local.get $entry)))
-          (local.set $entry_size
-            (i32.add (local.get $namelen) (i32.const 24)))
-          (br_if $refill (i32.lt_u (local.get $left) (local.get $entry_size)))
+          (local.set $size (i32.add (local.get $namelen) (i32.const 24)))
+          (br_if $refill (i32.lt_u (local.get $left) (local.get $size)))
           (struct.set $directory $pos (local.get $dir)
             (i32.add (struct.get $directory $pos (local.get $dir))
-              (local.get $entry_size)))
+              (local.get $size)))
           (struct.set $directory $cookie (local.get $dir)
             (i64.load $m (local.get $entry)))
           ;; skip a host-provided "." / ".." (already synthesized above)
@@ -1209,14 +1208,13 @@
         ;; refill
         (if
           (i32.lt_u (struct.get $directory $size (local.get $dir))
-            (local.get $entry_size))
+            (local.get $size))
           (then
             ;; the entry does not fit
-            (local.set $buf (call $checked_malloc (local.get $entry_size)))
+            (local.set $buf (call $checked_malloc (local.get $size)))
             (call $free (struct.get $directory $buffer (local.get $dir)))
             (struct.set $directory $buffer (local.get $dir) (local.get $buf))
-            (struct.set $directory $size (local.get $dir)
-              (local.get $entry_size))
+            (struct.set $directory $size (local.get $dir) (local.get $size))
             ;; discard the stale buffer contents: the grown buffer must be
             ;; refilled from $cookie, and a stale $available would otherwise
             ;; falsely trigger the short-read termination below

@@ -23,9 +23,6 @@
 (import "bigarray" "caml_ba_to_typed_array"
   (func $caml_ba_to_typed_array (param (ref eq)) (result (ref eq)))
 )
-(import "bigarray" "caml_ba_from_typed_array"
-  (func $caml_ba_from_typed_array (param (ref eq)) (result (ref eq)))
-)
 (import "bigarray" "caml_ba_char_of_typed_array"
   (func $caml_ba_char_of_typed_array (param (ref eq)) (result (ref eq)))
 )
@@ -104,11 +101,11 @@
         (local.set $i (i32.add (local.get $i) (i32.const 4)))
         (br $loop))))
   (local.set $w (i32.const 0))
-  (block $_0_bytes
-    (block $_1_byte
-      (block $_2_bytes
-        (block $_3_bytes
-          (br_table $_0_bytes $_1_byte $_2_bytes $_3_bytes
+  (block $zero_bytes
+    (block $one_byte
+      (block $two_bytes
+        (block $three_bytes
+          (br_table $zero_bytes $one_byte $two_bytes $three_bytes
             (i32.and (local.get $len) (i32.const 3))))
         (local.set $w
           (i32.shl

@@ -105,8 +105,8 @@
 )
 
 (func $caml_copy_int32 (export "caml_copy_int32")
-  (param $i i32) (result (ref eq))
-  (struct.new $int32 (global.get $int32_ops) (local.get $i))
+  (param $i32 i32) (result (ref eq))
+  (struct.new $int32 (global.get $int32_ops) (local.get $i32))
 )
 
 (export "Nativeint_val" (func $Int32_val))
@@ -165,8 +165,8 @@
 )
 
 (func $caml_copy_nativeint (export "caml_copy_nativeint")
-  (param $i i32) (result (ref eq))
-  (struct.new $int32 (global.get $nativeint_ops) (local.get $i))
+  (param $i32 i32) (result (ref eq))
+  (struct.new $int32 (global.get $nativeint_ops) (local.get $i32))
 )
 
 (@string $NATIVEINT_ERRMSG "Nativeint.of_string")

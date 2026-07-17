@@ -1,6 +1,4 @@
 (module
-   (import "fail" "caml_failwith"
-      (func $caml_failwith (param (ref eq))))
    (import "marshal" "caml_serialize_int_4"
       (func $caml_serialize_int_4 (param (ref eq)) (param i32)))
    (import "marshal" "caml_deserialize_int_4"
@@ -22,16 +20,24 @@
       (func $caml_ldexp_float (param f64) (param i32) (result f64)))
    (import "bigarray" "caml_ba_uint8_get32"
       (func $caml_ba_uint8_get32 (param (ref eq)) (param i32) (result i32)))
+   (import "bigarray" "caml_ba_uint8_get32u"
+      (func $caml_ba_uint8_get32u (param (ref eq)) (param i32) (result i32)))
    (import "bigarray" "caml_ba_uint8_set32"
       (func $caml_ba_uint8_set32 (param (ref eq)) (param i32) (param i32) (result (ref eq))))
+   (import "bigarray" "caml_ba_uint8_set32u"
+      (func $caml_ba_uint8_set32u (param (ref eq)) (param i32) (param i32) (result (ref eq))))
    (import "string" "caml_string_get32"
       (func $caml_string_get32 (param (ref eq)) (param i32) (result i32)))
+   (import "string" "caml_string_get32u"
+      (func $caml_string_get32u (param (ref eq)) (param i32) (result i32)))
    (import "string" "caml_bytes_get32"
       (func $caml_bytes_get32 (param (ref eq)) (param i32) (result i32)))
+   (import "string" "caml_bytes_get32u"
+      (func $caml_bytes_get32u (param (ref eq)) (param i32) (result i32)))
    (import "string" "caml_bytes_set32"
       (func $caml_bytes_set32 (param (ref eq)) (param i32) (param i32) (result (ref eq))))
-   (import "array" "caml_make_vect"
-      (func $caml_make_vect (param (ref eq)) (param (ref eq)) (result (ref eq))))
+   (import "string" "caml_bytes_set32u"
+      (func $caml_bytes_set32u (param (ref eq)) (param i32) (param i32) (result (ref eq))))
 
    (type $float (struct (field $f f64)))
 
@@ -78,8 +84,8 @@
    (type $float32
       (sub final $custom (struct (field (ref $custom_operations)) (field $f32 f32))))
 
-   (func $box_float32 (param $f f32) (result (ref eq))
-      (struct.new $float32 (global.get $float32_ops) (local.get $f)))
+   (func $box_float32 (param $f32 f32) (result (ref eq))
+      (struct.new $float32 (global.get $float32_ops) (local.get $f32)))
 
    (func $unbox_float32 (param $f (ref eq)) (result f32)
       (struct.get $float32 1 (ref.cast (ref $float32) (local.get $f))))
@@ -262,17 +268,24 @@
             (call $caml_float_of_float32 (local.get $y))
             (call $caml_float_of_float32 (local.get $z)))))
 
-   (global $zero (ref eq)
-      (struct.new $float32 (global.get $float32_ops) (f32.const 0)))
-
    (func (export "caml_ba_uint8_getf32")
       (param $a (ref eq)) (param $i i32) (result f32)
       (f32.reinterpret_i32
          (call $caml_ba_uint8_get32 (local.get $a) (local.get $i))))
 
+   (func (export "caml_ba_uint8_getf32u")
+      (param $a (ref eq)) (param $i i32) (result f32)
+      (f32.reinterpret_i32
+         (call $caml_ba_uint8_get32u (local.get $a) (local.get $i))))
+
    (func (export "caml_ba_uint8_setf32")
       (param $a (ref eq)) (param $i i32) (param $v f32) (result (ref eq))
       (call $caml_ba_uint8_set32 (local.get $a) (local.get $i)
+         (i32.reinterpret_f32 (local.get $v))))
+
+   (func (export "caml_ba_uint8_setf32u")
+      (param $a (ref eq)) (param $i i32) (param $v f32) (result (ref eq))
+      (call $caml_ba_uint8_set32u (local.get $a) (local.get $i)
          (i32.reinterpret_f32 (local.get $v))))
 
    (func (export "caml_string_getf32")
@@ -280,10 +293,20 @@
       (f32.reinterpret_i32
          (call $caml_string_get32 (local.get $a) (local.get $i))))
 
+   (func (export "caml_string_getf32u")
+      (param $a (ref eq)) (param $i i32) (result f32)
+      (f32.reinterpret_i32
+         (call $caml_string_get32u (local.get $a) (local.get $i))))
+
    (func (export "caml_bytes_getf32")
       (param $a (ref eq)) (param $i i32) (result f32)
       (f32.reinterpret_i32
          (call $caml_bytes_get32 (local.get $a) (local.get $i))))
+
+   (func (export "caml_bytes_getf32u")
+      (param $a (ref eq)) (param $i i32) (result f32)
+      (f32.reinterpret_i32
+         (call $caml_bytes_get32u (local.get $a) (local.get $i))))
 
    (func (export "caml_bytes_setf32")
       (param $a (ref eq)) (param $i i32) (param $v f32) (result (ref eq))
@@ -304,4 +327,9 @@
       (if (result f32) (f32.gt (local.get $x) (local.get $y))
          (then (local.get $x))
          (else (local.get $y))))
+
+   (func (export "caml_bytes_setf32u")
+      (param $a (ref eq)) (param $i i32) (param $v f32) (result (ref eq))
+      (call $caml_bytes_set32u (local.get $a) (local.get $i)
+         (i32.reinterpret_f32 (local.get $v))))
 )

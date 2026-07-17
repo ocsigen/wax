@@ -28,6 +28,7 @@ const empty_array: &eq = [block|0 as &i31];
 
 #[export]
 #[export = "caml_array_make"]
+#[export = "caml_uniform_array_make"]
 fn caml_make_vect(n: &eq, v: &eq) -> &eq {
     let sz = n as i32_s;
     if sz >=u 0xfffffff {

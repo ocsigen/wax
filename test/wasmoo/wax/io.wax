@@ -465,14 +465,14 @@ fn caml_ml_set_channel_name(&eq, &eq) -> &eq {
 #[else]
 {
     #[export]
-    fn caml_ml_set_channel_output(ch: &eq, f: &eq) -> &eq {
-        (ch as &channel).output = f;
+    fn caml_ml_set_channel_output(ch: &eq, output: &eq) -> &eq {
+        (ch as &channel).output = output;
         0 as &i31;
     }
 
     #[export]
-    fn caml_ml_set_channel_refill(ch: &eq, f: &eq) -> &eq {
-        (ch as &channel).refill = f;
+    fn caml_ml_set_channel_refill(ch: &eq, refill: &eq) -> &eq {
+        (ch as &channel).refill = refill;
         0 as &i31;
     }
 }
@@ -679,12 +679,12 @@ fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
         // no bytes are dropped (the JS runtime does the same), preserving the
         // bytes already buffered before $pos.
         if pos + str_len >u ch.size {
-            let new_size = pos + str_len;
-            let new_buffer = ta_new(new_size);
-            ta_set(new_buffer, ch.buffer, 0);
-            ch.buffer = new_buffer;
-            ch.buffer_view = dv_make(new_buffer);
-            ch.size = new_size;
+            let size = pos + str_len;
+            let buffer = ta_new(size);
+            ta_set(buffer, ch.buffer, 0);
+            ch.buffer = buffer;
+            ch.buffer_view = dv_make(buffer);
+            ch.size = size;
         }
         caml_blit_bytes_to_dataview(str, 0, ch.buffer_view, pos, str_len);
         // Advance the channel offset so that pos_in/pos_out stay consistent.
@@ -696,62 +696,62 @@ fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
 
 fn caml_refill(ch: &channel) -> i32 {
     let view = ch.buffer_view;
-    let n = caml_do_read_or_refill(ch, 0, ch.size);
-    if !n {
+    let max = caml_do_read_or_refill(ch, 0, ch.size);
+    if !max {
         caml_raise_end_of_file();
     }
-    ch.max = n;
+    ch.max = max;
     ch.curr = 1;
     return dv_get_ui8(view, 0);
 }
 
 #[export]
-fn caml_getblock(vch: &eq, s: &bytes, pos: i32, len: i32) -> i32 {
-    if !len {
+fn caml_getblock(vch: &eq, s: &bytes, pos: i32, curr: i32) -> i32 {
+    if !curr {
         return 0;
     }
     let ch = vch as &channel;
     let avail = ch.max - ch.curr;
     if avail {
-        if len >u avail {
-            len = avail;
+        if curr >u avail {
+            curr = avail;
         }
-        caml_blit_dataview_to_bytes(ch.buffer_view, ch.curr, s, pos, len);
-        ch.curr = ch.curr + len;
-        return len;
+        caml_blit_dataview_to_bytes(ch.buffer_view, ch.curr, s, pos, curr);
+        ch.curr = ch.curr + curr;
+        return curr;
     }
-    let nread = caml_do_read_or_refill(ch, 0, ch.size);
-    ch.max = nread;
-    if len >u nread {
-        len = nread;
+    let max = caml_do_read_or_refill(ch, 0, ch.size);
+    ch.max = max;
+    if curr >u max {
+        curr = max;
     }
-    caml_blit_dataview_to_bytes(ch.buffer_view, 0, s, pos, len);
-    ch.curr = len;
-    len;
+    caml_blit_dataview_to_bytes(ch.buffer_view, 0, s, pos, curr);
+    ch.curr = curr;
+    curr;
 }
 
-fn caml_getblock_typed_array(vch: &eq, d: &extern, pos: i32, len: i32) -> i32 {
-    if !len {
+fn caml_getblock_typed_array(vch: &eq, d: &extern, pos: i32, curr: i32) -> i32 {
+    if !curr {
         return 0;
     }
     let ch = vch as &channel;
     let avail = ch.max - ch.curr;
     if avail {
-        if len >u avail {
-            len = avail;
+        if curr >u avail {
+            curr = avail;
         }
-        ta_blit_from_buffer(ch.buffer, ch.curr, d, pos, len);
-        ch.curr = ch.curr + len;
-        return len;
+        ta_blit_from_buffer(ch.buffer, ch.curr, d, pos, curr);
+        ch.curr = ch.curr + curr;
+        return curr;
     }
-    let nread = caml_do_read_or_refill(ch, 0, ch.size);
-    ch.max = nread;
-    if len >u nread {
-        len = nread;
+    let max = caml_do_read_or_refill(ch, 0, ch.size);
+    ch.max = max;
+    if curr >u max {
+        curr = max;
     }
-    ta_blit_from_buffer(ch.buffer, 0, d, pos, len);
-    ch.curr = len;
-    len;
+    ta_blit_from_buffer(ch.buffer, 0, d, pos, curr);
+    ch.curr = curr;
+    curr;
 }
 
 #[export]
@@ -780,11 +780,11 @@ fn caml_ml_input(vch: &eq, vs: &eq, vpos: &eq, vlen: &eq) -> &eq {
         if avail >u 0 {
             len = avail;
         } else {
-            let nread = caml_do_read_or_refill(ch, 0, ch.size);
-            ch.max = nread;
+            let max = caml_do_read_or_refill(ch, 0, ch.size);
+            ch.max = max;
             curr = 0;
-            if len >u nread {
-                len = nread;
+            if len >u max {
+                len = max;
             }
         }
     }
@@ -1045,25 +1045,25 @@ fn caml_ml_flush(vch: &eq) -> &eq {
         let fd_offset: &fd_offset;
         let offset: i64;
         let tmp: &bytes;
-        let towrite = ch.curr;
-        if towrite >u 0 {
+        let curr = ch.curr;
+        if curr >u 0 {
             let buf = ch.buffer;
             let fd = ch.fd;
-            let written = write(fd, buf, 0, towrite);
-            if towrite >u written {
-                ta_copy(buf, 0, written, towrite);
+            let written = write(fd, buf, 0, curr);
+            if curr >u written {
+                ta_copy(buf, 0, written, curr);
             }
-            towrite -= written;
-            ch.curr = towrite;
+            curr -= written;
+            ch.curr = curr;
         }
-        !towrite;
+        !curr;
     }
 }
 #[else]
 {
     fn caml_flush_partial(ch: &channel) -> i32 {
-        let towrite = ch.curr;
-        if towrite >u 0 {
+        let curr = ch.curr;
+        if curr >u 0 {
             let buf = ch.buffer;
             if !ch.output {
                 let fd = ch.fd;
@@ -1081,9 +1081,9 @@ fn caml_ml_flush(vch: &eq) -> &eq {
                 try_legacy {
                     written =
                         if fd_offset.seeked {
-                            write(fd, buf, 0, towrite, offset);
+                            write(fd, buf, 0, curr, offset);
                         } else {
-                            write'(fd, buf, 0, towrite, null);
+                            write'(fd, buf, 0, curr, null);
                         };
                 } catch {
                     javascript_exception => {
@@ -1091,20 +1091,20 @@ fn caml_ml_flush(vch: &eq) -> &eq {
                     }
                 }
                 fd_offset.offset = offset + written as i64_u;
-                if towrite >u written {
-                    ta_copy(buf, 0, written, towrite);
+                if curr >u written {
+                    ta_copy(buf, 0, written, curr);
                 }
-                towrite -= written;
-                ch.curr = towrite;
+                curr -= written;
+                ch.curr = curr;
             } else {
-                let tmp: &bytes = [0; towrite];
-                caml_blit_dataview_to_bytes(ch.buffer_view, 0, tmp, 0, towrite);
+                let tmp: &bytes = [0; curr];
+                caml_blit_dataview_to_bytes(ch.buffer_view, 0, tmp, 0, curr);
                 _ = caml_js_fun_call(ch.output!, [block|0 as &i31, caml_jsbytes_of_string(tmp)]);
                 ch.curr = 0;
-                towrite = 0;
+                curr = 0;
             }
         }
-        !towrite;
+        !curr;
     }
 }
 

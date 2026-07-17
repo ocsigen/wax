@@ -1219,27 +1219,27 @@ fn caml_alloc_stat(
             }
         }
         'loop: loop {
-            let entry_size: i32;
+            let size: i32;
             'refill: do {
                 let left = dir.available - dir.pos;
                 br_if 'refill left <u 24;
                 let entry = dir.buffer + dir.pos;
                 let namelen = m.load32(entry, offset: 16);
-                entry_size = namelen + 24;
-                br_if 'refill left <u entry_size;
-                dir.pos = dir.pos + entry_size;
+                size = namelen + 24;
+                br_if 'refill left <u size;
+                dir.pos = dir.pos + size;
                 dir.cookie = m.load64(entry);
                 // skip a host-provided "." / ".." (already synthesized above)
                 br_if 'loop is_dot_entry(entry + 24, namelen);
                 become blit_memory_to_string(entry + 24, namelen);
             }
             // refill
-            if dir.size <u entry_size {
+            if dir.size <u size {
                 // the entry does not fit
-                let buf = checked_malloc(entry_size);
+                let buf = checked_malloc(size);
                 free(dir.buffer);
                 dir.buffer = buf;
-                dir.size = entry_size;
+                dir.size = size;
                 // discard the stale buffer contents: the grown buffer must be
                 // refilled from $cookie, and a stale $available would otherwise
                 // falsely trigger the short-read termination below

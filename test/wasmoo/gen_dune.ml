@@ -21,9 +21,8 @@ let () =
         printf "  (deps ../wasm-source/%s)\n" file;
         printf "  (action\n";
         printf
-          "   (run wax --validate -W all=error -W correctness=hidden -W \
-           redundant=hidden --input-format wat --format wat -o %%{target} \
-           ../wasm-source/%s)))\n"
+          "   (run wax --validate -W all=error --input-format wat --format wat \
+           -o %%{target} ../wasm-source/%s)))\n"
           file;
         printf " (rule\n";
         printf "  (package wax)\n";

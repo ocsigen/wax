@@ -239,12 +239,12 @@ type bytes = [mut i8];
         let a = va as &block;
         let l = a.length();
         let i = 1;
-        let o = new_obj();
+        let js = new_obj();
         while i <u l : (i += 1) {
             let p = a[i] as &block;
-            set(o, unwrap(caml_jsstring_of_bytes(p[1])), unwrap(p[2]));
+            set(js, unwrap(caml_jsstring_of_bytes(p[1])), unwrap(p[2]));
         }
-        { js: o };
+        { js };
     }
 
     #[export]

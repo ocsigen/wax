@@ -88,8 +88,8 @@ fn int32_dup(v: &eq) -> &eq {
 }
 
 #[export]
-fn caml_copy_int32(i: i32) -> &eq {
-    { ops: int32_ops, i32: i };
+fn caml_copy_int32(i32: i32) -> &eq {
+    { ops: int32_ops, i32 };
 }
 
 #[export]
@@ -148,8 +148,8 @@ fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
 }
 
 #[export]
-fn caml_copy_nativeint(i: i32) -> &eq {
-    { ops: nativeint_ops, i32: i };
+fn caml_copy_nativeint(i32: i32) -> &eq {
+    { ops: nativeint_ops, i32 };
 }
 
 const NATIVEINT_ERRMSG = "Nativeint.of_string";

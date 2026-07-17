@@ -26,10 +26,7 @@ import "bindings" {
     fn load_wasmo(&?any);
     fn register_fragments(&?any, &?any);
 }
-import "fail" {
-    fn caml_failwith(&eq);
-    tag javascript_exception(&?extern);
-}
+import "fail" tag javascript_exception(&?extern);
 import "stdlib" let link_info: &block;
 
 type block = [mut &eq];

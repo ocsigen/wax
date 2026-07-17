@@ -47,13 +47,25 @@
     (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
     (type $closure (;(field i32);)
       (sub (struct (field $func (ref $function_1)))))
-    (type $function_3
-      (func (param (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq))))
-    (type $closure_3
-      (sub $closure
-        (struct
-          (field $func (ref $function_1))
-          (field $direct (ref $function_3)))))
+    (@if (< $ocaml_version (5 6 0))
+      (@then
+        (type $function_3
+          (func
+            (param (ref eq) (ref eq) (ref eq) (ref eq))
+            (result (ref eq))))
+        (type $closure_3
+          (sub $closure
+            (struct
+              (field $func (ref $function_1))
+              (field $direct (ref $function_3))))))
+      (@else
+        (type $function_2
+          (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq))))
+        (type $closure_2
+          (sub $closure
+            (struct
+              (field $func (ref $function_1))
+              (field $direct (ref $function_2)))))))
 
     ;; Effect types
 
@@ -107,23 +119,20 @@
         (struct.get $func_closure 0
           (ref.cast (ref $func_closure) (local.get $f)))))
 
-    (func $unhandled_effect_wrapper (param $start (ref $thunk))
+    (func $unhandled_effect_wrapper (param $func (ref $thunk))
       (local $continuation (ref $continuation)) (local $f (ref eq))
-      (local $v (ref eq)) (local $resume_res_0 (ref eq))
-      (local $resume_res_1 (ref $continuation))
+      (local $v (ref eq))
       (local.set $continuation
         (cont.new $continuation (ref.func $wrapper_cont)))
-      (local.set $f (struct.new $func_closure (local.get $start)))
+      (local.set $f (struct.new $func_closure (local.get $func)))
       (local.set $v (ref.i31 (i32.const 0)))
       (loop $loop
         (block $handle_effect (result (ref eq) (ref $continuation))
           (resume $continuation (on $effect $handle_effect) (local.get $f)
             (local.get $v) (local.get $continuation))
           (return))
-        (local.set $resume_res_1)
-        (local.set $resume_res_0)
-        (local.set $continuation (local.get $resume_res_1))
-        (local.set $v (local.get $resume_res_0))
+        (local.set $continuation)
+        (local.set $v)
         (local.set $f (global.get $raise_unhandled_closure))
         (br $loop)))
 
@@ -140,7 +149,7 @@
       (param $vfiber (ref eq)) (param $f (ref eq)) (param $v (ref eq))
       (param $tail (ref eq)) (result (ref eq))
       (local $fiber (ref $fiber)) (local $res (ref eq)) (local $exn (ref eq))
-      (local $resume_res_0 (ref eq)) (local $resume_res_1 (ref $continuation))
+      (local $val (ref eq)) (local $continuation (ref $continuation))
       (if (ref.eq (local.get $vfiber) (ref.i31 (i32.const 0)))
         (then
           (call $caml_raise_constant
@@ -164,21 +173,30 @@
               (local.tee $f (struct.get $fiber $value (local.get $fiber)))
               (struct.get $closure 0
                 (ref.cast (ref $closure) (local.get $f)))))
-          (local.set $resume_res_1)
-          (local.set $resume_res_0)
+          (local.set $continuation)
+          (local.set $val)
           ;; handle effect
           (struct.set $fiber $continuation (local.get $fiber)
-            (local.get $resume_res_1))
-          (return_call_ref $function_3 (local.get $resume_res_0)
-            (array.new_fixed $block 3 (ref.i31 (global.get $cont_tag))
-              (local.get $fiber) (local.get $fiber))
-            (if (result (ref eq))
-              (ref.eq (local.get $tail) (ref.i31 (i32.const 0)))
-              (then (local.get $fiber))
-              (else (local.get $tail)))
-            (local.tee $f (struct.get $fiber $effect (local.get $fiber)))
-            (struct.get $closure_3 1
-              (ref.cast (ref $closure_3) (local.get $f))))))
+            (local.get $continuation))
+          (@if (< $ocaml_version (5 6 0))
+            (@then
+              (return_call_ref $function_3 (local.get $val)
+                (array.new_fixed $block 3 (ref.i31 (global.get $cont_tag))
+                  (local.get $fiber) (local.get $fiber))
+                (if (result (ref eq))
+                  (ref.eq (local.get $tail) (ref.i31 (i32.const 0)))
+                  (then (local.get $fiber))
+                  (else (local.get $tail)))
+                (local.tee $f (struct.get $fiber $effect (local.get $fiber)))
+                (struct.get $closure_3 1
+                  (ref.cast (ref $closure_3) (local.get $f)))))
+            (@else
+              (return_call_ref $function_2 (local.get $val)
+                (array.new_fixed $block 3 (ref.i31 (global.get $cont_tag))
+                  (local.get $fiber) (local.get $fiber))
+                (local.tee $f (struct.get $fiber $effect (local.get $fiber)))
+                (struct.get $closure_2 1
+                  (ref.cast (ref $closure_2) (local.get $f))))))))
       ;; handle exception
       (return_call_ref $function_1 (local.get $exn)
         (local.tee $f (struct.get $fiber $exn (local.get $fiber)))
@@ -186,18 +204,40 @@
 
     ;; Perform
 
-    (func (export "%reperform")
-      (param $eff (ref eq)) (param $continuation (ref eq))
-      (param $tail (ref eq)) (result (ref eq))
-      (local $res_0 (ref eq)) (local $res_1 (ref eq))
-      (suspend $effect (local.get $eff))
-      (local.set $res_1)
-      (local.set $res_0)
-      (return_call $resume_fiber
-        (ref.as_non_null
-          (array.get $block (ref.cast (ref $block) (local.get $continuation))
-            (i32.const 1))) (local.get $res_0) (local.get $res_1)
-        (local.get $tail)))
+    (@if (< $ocaml_version (5 6 0))
+      (@then
+        (func (export "%reperform")
+          (param $eff (ref eq)) (param $continuation (ref eq))
+          (param $tail (ref eq)) (result (ref eq))
+          (local $res_0 (ref eq)) (local $res_1 (ref eq))
+          (suspend $effect (local.get $eff))
+          (local.set $res_1)
+          (local.set $res_0)
+          (return_call $resume_fiber
+            (ref.as_non_null
+              (array.get $block
+                (ref.cast (ref $block) (local.get $continuation))
+                (i32.const 1))) (local.get $res_0) (local.get $res_1)
+            (local.get $tail))))
+      (@else
+        (func (export "%reperform")
+          (param $eff (ref eq)) (param $continuation (ref eq))
+          (param $_tail (ref eq)) (result (ref eq))
+          (local $tail (ref eq)) (local $res_0 (ref eq))
+          (local $res_1 (ref eq))
+          (local.set $tail
+            (array.get $block
+              (ref.cast (ref $block) (local.get $continuation))
+              (i32.const 2)))
+          (suspend $effect (local.get $eff))
+          (local.set $res_1)
+          (local.set $res_0)
+          (return_call $resume_fiber
+            (ref.as_non_null
+              (array.get $block
+                (ref.cast (ref $block) (local.get $continuation))
+                (i32.const 1))) (local.get $res_0) (local.get $res_1)
+            (local.get $tail)))))
 
     (func (export "%perform") (param $eff (ref eq)) (result (ref eq))
       (local $res_0 (ref eq)) (local $res_1 (ref eq))
@@ -219,25 +259,28 @@
         (struct.get $closure 0 (ref.cast (ref $closure) (local.get $f)))))
 
     (func (export "caml_alloc_stack")
-      (param $hv (ref eq)) (param $hx (ref eq)) (param $hf (ref eq))
+      (param $value (ref eq)) (param $exn (ref eq)) (param $effect (ref eq))
       (result (ref eq))
-      (struct.new $fiber (local.get $hv) (local.get $hx) (local.get $hf)
+      (struct.new $fiber (local.get $value) (local.get $exn)
+        (local.get $effect)
         (cont.new $continuation (ref.func $initial_cont))))
 
     (func (export "%with_stack")
-      (param $hv (ref eq)) (param $hx (ref eq)) (param $hf (ref eq))
+      (param $value (ref eq)) (param $exn (ref eq)) (param $effect (ref eq))
       (param $f (ref eq)) (param $v (ref eq)) (result (ref eq))
       (return_call $resume_fiber
-        (struct.new $fiber (local.get $hv) (local.get $hx) (local.get $hf)
+        (struct.new $fiber (local.get $value) (local.get $exn)
+          (local.get $effect)
           (cont.new $continuation (ref.func $initial_cont))) (local.get $f)
         (local.get $v) (ref.i31 (i32.const 0))))
 
     (func (export "%with_stack_bind")
-      (param $hv (ref eq)) (param $hx (ref eq)) (param $hf (ref eq))
+      (param $value (ref eq)) (param $exn (ref eq)) (param $effect (ref eq))
       (param $dyn (ref eq)) (param $bind (ref eq)) (param $f (ref eq))
       (param $v (ref eq)) (result (ref eq))
       (return_call $resume_fiber
-        (struct.new $fiber (local.get $hv) (local.get $hx) (local.get $hf)
+        (struct.new $fiber (local.get $value) (local.get $exn)
+          (local.get $effect)
           (cont.new $continuation (ref.func $initial_cont))) (local.get $f)
         (local.get $v) (ref.i31 (i32.const 0)))))
 )

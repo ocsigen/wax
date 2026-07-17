@@ -19,7 +19,6 @@ import "bindings" fn equals(&?any, &?any) -> i32;
 import "obj" {
     const forward_tag: i32;
     const object_tag: i32;
-    const double_array_tag: i32;
     fn caml_obj_tag(&eq) -> &eq;
     fn caml_is_closure(&eq) -> i32;
     #[import = "null"]
@@ -91,20 +90,20 @@ fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
 }
 
 fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32) -> &compare_stack {
-    let i = stack.pos + 1;
+    let pos = stack.pos + 1;
     let len = stack.v1.length();
-    if i >=u len {
+    if pos >=u len {
         let len' = len << 1;
-        let stack' = { pos: i, v1: [dummy_block; len'], v2: [dummy_block; len'], vpos: [0; len'] };
+        let stack' = { pos, v1: [dummy_block; len'], v2: [dummy_block; len'], vpos: [0; len'] };
         stack'.v1.copy(0, stack.v1, 0, len);
         stack'.v2.copy(0, stack.v2, 0, len);
         stack'.vpos.copy(0, stack.vpos, 0, len);
         stack = stack';
     }
-    stack.pos = i;
-    stack.v1[i] = v1;
-    stack.v2[i] = v2;
-    stack.vpos[i] = p;
+    stack.pos = pos;
+    stack.v1[pos] = v1;
+    stack.v2[pos] = v2;
+    stack.vpos[pos] = p;
     stack;
 }
 

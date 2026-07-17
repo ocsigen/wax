@@ -91,8 +91,8 @@ fn int64_dup(v: &eq) -> &eq {
 }
 
 #[export]
-fn caml_copy_int64(i: i64) -> &eq {
-    { ops: int64_ops, i64: i };
+fn caml_copy_int64(i64: i64) -> &eq {
+    { ops: int64_ops, i64 };
 }
 
 #[export]

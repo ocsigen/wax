@@ -30,7 +30,6 @@
 (import "bindings" "register_fragments"
   (func $register_fragments (param anyref anyref))
 )
-(import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (import "fail" "javascript_exception"
   (tag $javascript_exception (param externref))
 )

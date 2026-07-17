@@ -37,12 +37,16 @@ let caml_parser_trace = 0;
 
 const ERRCODE = 256;
 
-const START = 0;
-const TOKEN_READ = 1;
-const STACKS_GROWN_1 = 2;
-const STACKS_GROWN_2 = 3;
-const SEMANTIC_ACTION_COMPUTED = 4;
-const ERROR_DETECTED = 5;
+// Parser engine states, dispatched by value via the br_table below.
+// The first six are entered from the OCaml caller's saved state and only
+// appear as br_table labels, so they are documented here rather than
+// defined as (unused) globals:
+//   START = 0
+//   TOKEN_READ = 1
+//   STACKS_GROWN_1 = 2
+//   STACKS_GROWN_2 = 3
+//   SEMANTIC_ACTION_COMPUTED = 4
+//   ERROR_DETECTED = 5
 const loop_state = 6;
 const testshift = 7;
 const shift = 8;

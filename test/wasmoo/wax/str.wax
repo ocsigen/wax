@@ -99,7 +99,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                         pc += 1;
                         let s': &bytes;
                         let set: &bytes;
-                        let arg: i32;
+                        let idx: i32;
                         let l: i32;
                         dispatch (instr & 0xff) [
                             'CHAR, 'CHARNORM, 'STRING, 'STRINGNORM, 'CHARCLASS, 'BOL, 'EOL,
@@ -110,23 +110,23 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             'CHAR: {
                                 // CHAR
                                 br_if 'prefix_match pos == len;
-                                arg = instr >>u 8;
-                                br_if 'backtrack arg != s[pos] as i32_u;
+                                idx = instr >>u 8;
+                                br_if 'backtrack idx != s[pos] as i32_u;
                                 pos += 1;
                                 br 'continue;
                             }
                             'CHARNORM: {
                                 // CHARNORM
                                 br_if 'prefix_match pos == len;
-                                arg = instr >>u 8;
-                                br_if 'backtrack arg != normtable[s[pos] as i32_u] as i32_u;
+                                idx = instr >>u 8;
+                                br_if 'backtrack idx != normtable[s[pos] as i32_u] as i32_u;
                                 pos += 1;
                                 br 'continue;
                             }
                             'STRING: {
                                 // STRING
-                                arg = instr >>u 8;
-                                s' = cpool[arg + 1] as &bytes;
+                                idx = instr >>u 8;
+                                s' = cpool[idx + 1] as &bytes;
                                 i = 0;
                                 l = s'.length();
                                 while i <u l : (i += 1) {
@@ -138,8 +138,8 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'STRINGNORM: {
                                 // STRINGNORM
-                                arg = instr >>u 8;
-                                s' = cpool[arg + 1] as &bytes;
+                                idx = instr >>u 8;
+                                s' = cpool[idx + 1] as &bytes;
                                 i = 0;
                                 l = s'.length();
                                 while i <u l : (i += 1) {
@@ -153,9 +153,9 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             'CHARCLASS: {
                                 // CHARCLASS
                                 br_if 'prefix_match pos == len;
-                                arg = instr >>u 8;
+                                idx = instr >>u 8;
                                 br_if 'backtrack
-                                    !in_bitset(cpool[arg + 1] as &bytes, s[pos] as i32_u);
+                                    !in_bitset(cpool[idx + 1] as &bytes, s[pos] as i32_u);
                                 pos += 1;
                                 br 'continue;
                             }
@@ -191,35 +191,35 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'BEGGROUP: {
                                 // BEGGROUP
-                                arg = instr >>u 8;
+                                idx = instr >>u 8;
                                 stack =
                                     {
                                         undo_previous: stack,
                                         tbl: group_start,
-                                        idx: arg,
-                                        val: group_start[arg],
+                                        idx,
+                                        val: group_start[idx],
                                     };
-                                group_start[arg] = pos;
+                                group_start[idx] = pos;
                                 br 'continue;
                             }
                             'ENDGROUP: {
                                 // ENDGROUP
-                                arg = instr >>u 8;
+                                idx = instr >>u 8;
                                 stack =
                                     {
                                         undo_previous: stack,
                                         tbl: group_end,
-                                        idx: arg,
-                                        val: group_end[arg],
+                                        idx,
+                                        val: group_end[idx],
                                     };
-                                group_end[arg] = pos;
+                                group_end[idx] = pos;
                                 br 'continue;
                             }
                             'REFGROUP: {
                                 // REFGROUP
-                                arg = instr >>u 8;
-                                i = group_start[arg];
-                                j = group_end[arg];
+                                idx = instr >>u 8;
+                                i = group_start[idx];
+                                j = group_end[idx];
                                 br_if 'backtrack (i <s 0) | (j <s 0);
                                 while i <u j : (i += 1) {
                                     br_if 'prefix_match pos == len;
@@ -230,9 +230,9 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'SIMPLEOPT: {
                                 // SIMPLEOPT
-                                arg = instr >>u 8;
+                                idx = instr >>u 8;
                                 if pos <u len {
-                                    if in_bitset(cpool[arg + 1] as &bytes, s[pos] as i32_u) {
+                                    if in_bitset(cpool[idx + 1] as &bytes, s[pos] as i32_u) {
                                         pos += 1;
                                     }
                                 }
@@ -240,8 +240,8 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'SIMPLESTAR: {
                                 // SIMPLESTAR
-                                arg = instr >>u 8;
-                                set = cpool[arg + 1] as &bytes;
+                                idx = instr >>u 8;
+                                set = cpool[idx + 1] as &bytes;
                                 'loop: loop {
                                     if pos <u len {
                                         if in_bitset(set, s[pos] as i32_u) {
@@ -255,8 +255,8 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             'SIMPLEPLUS: {
                                 // SIMPLEPLUS
                                 br_if 'prefix_match pos == len;
-                                arg = instr >>u 8;
-                                set = cpool[arg + 1] as &bytes;
+                                idx = instr >>u 8;
+                                set = cpool[idx + 1] as &bytes;
                                 br_if 'backtrack !in_bitset(set, s[pos] as i32_u);
                                 'loop: loop {
                                     pos += 1;
@@ -278,21 +278,21 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'SETMARK: {
                                 // SETMARK
-                                arg = instr >>u 8;
+                                idx = instr >>u 8;
                                 stack =
                                     {
                                         undo_previous: stack,
                                         tbl: re_register,
-                                        idx: arg,
-                                        val: re_register[arg],
+                                        idx,
+                                        val: re_register[idx],
                                     };
-                                re_register[arg] = pos;
+                                re_register[idx] = pos;
                                 br 'continue;
                             }
                             'CHECKPROGRESS: {
                                 // CHECKPROGRESS
-                                arg = instr >>u 8;
-                                br_if 'backtrack pos == re_register[arg];
+                                idx = instr >>u 8;
+                                br_if 'backtrack pos == re_register[idx];
                                 br 'continue;
                             }
                         }

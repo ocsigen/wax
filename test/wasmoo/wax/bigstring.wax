@@ -23,7 +23,6 @@ import "jslib" {
 import "bigarray" {
     #[export = "bigstring_to_typed_array", if(not(wasi))]
     fn caml_ba_to_typed_array(&eq) -> &eq;
-    fn caml_ba_from_typed_array(&eq) -> &eq;
     fn caml_ba_char_of_typed_array(&eq) -> &eq;
     fn caml_ba_sub(&eq, &eq, &eq) -> &eq;
     fn caml_ba_fill(&eq, &eq) -> &eq;
@@ -69,18 +68,18 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
         h = caml_hash_mix_int(h, dv_get_i32_unaligned(view, i, 1));
     }
     let w = 0;
-    dispatch (len & 3) [ '_0_bytes, '_1_byte, '_2_bytes, else '_3_bytes ] {
-        '_3_bytes: {
+    dispatch (len & 3) [ 'zero_bytes, 'one_byte, 'two_bytes, else 'three_bytes ] {
+        'three_bytes: {
             w = dv_get_ui8(view, i + 2) << 16;
         }
-        '_2_bytes: {
+        'two_bytes: {
             w |= dv_get_ui8(view, i + 1) << 8;
         }
-        '_1_byte: {
+        'one_byte: {
             w |= dv_get_ui8(view, i);
             h = caml_hash_mix_int(h, w);
         }
-        '_0_bytes: {
+        'zero_bytes: {
             h ^ len;
         }
     }
