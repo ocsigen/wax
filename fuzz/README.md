@@ -18,6 +18,12 @@ The toolchain hands us oracles for free:
   catch wax accepting the invalid or rejecting the valid.
 * **The pipelines compose into round-trips.** A module decompiled to Wax and
   recompiled must still be a valid binary.
+* **The stages and representations must agree with each other**, needing no
+  external reference. If `check` accepts a text module, converting it to another
+  format must not then reject it (a typer too lenient for what lowering
+  requires); and the same program's Wax and WAT forms must raise the same lints
+  (the Wax typer and the Wasm validator mirror each other) — both direct tests of
+  "Wax typing mirrors Wasm validation".
 
 ## Requirements
 

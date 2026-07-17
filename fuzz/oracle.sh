@@ -24,6 +24,11 @@
 #                   decompile+recompile path's fidelity.
 #   6. Wax round-trip — for a wax input, wax -> wasm -> wax -> wasm must still
 #                   validate (the dual of 5: tests both directions compose).
+#   7. Under-reject — if `check` accepts a text module, converting it to another
+#                   format must not then reject it (a typer too lenient for what
+#                   lowering requires).
+#   8. Lint parity — the same program's wax and wat forms must raise the same set
+#                   of warnings (minus the intentionally one-sided lints).
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -306,6 +311,66 @@ if [ "$FMT" = wax ]; then
         "wax->wasm->wax->wasm is rejected by wasm-tools: $(head -1 "$WORK/rt2.wasm.err")" \
         "$(repro "${c1[@]}") && $(repro "${dc[@]}") && $(repro "${c2[@]}") && wasm-tools validate --features all $WORK/rt2.wasm"
     fi
+  fi
+fi
+
+# ---- 7. Cross-stage consistency: check-accepts => convert-accepts. ----
+# `check` (validation) and a cross-format conversion (which runs lowering) must
+# agree: once the typer/validator has accepted a text module, lowering it to a
+# different format must not then cleanly REJECT it. Such a rejection is an
+# under-rejection — the typer accepted something a later stage refuses, breaking
+# "Wax typing mirrors Wasm validation" (e.g. an unchecked intrinsic arity, or a
+# non-constant operand in a constant position, that only the lowering catches).
+# A CRASH in these conversions is already oracle 1's; and a wasm binary input is
+# trusted by the converter (not re-validated), so this applies to text input
+# only — where the typer is the thing under test. (Reached only with verdict=ok.)
+if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
+  for out in wat wax wasm; do
+    [ "$out" = "$FMT" ] && continue # same-format is a reprint, not a lowering
+    conv=(-i "$FMT" -f "$out" "$IN" -o "$WORK/conv.$out")
+    if [ "$(classify_wax "${conv[@]}")" = rejected ]; then
+      finding UNDER_REJECT REVIEW "$IN" \
+        "wax check accepts but ${FMT}->${out} rejects it (typer under-rejects): $(grep -m1 -i error "$ERRLOG" || true)" \
+        "$(repro "${check[@]}") && $(repro "${conv[@]}")"
+    fi
+  done
+fi
+
+# ---- 8. Lint parity: the same program lints the same as wax and as wat. ----
+# The typer (lib-wax) and the validator (lib-wasm) mirror most lints, so a
+# warning that fires on one text form but not the equivalent other is a parity
+# break (e.g. shift-count-overflow, a tautological comparison, a constant trap).
+# Compare the SET of warning codes — locations differ between the two forms —
+# minus the intentionally one-sided lints (precedence is wax-only; eager-select's
+# wasm side covers only folded selects; the naming lints fire only while
+# decompiling wasm->wax, never in a `check`).
+lint_codes() { # $1 = file (format from extension): its sorted-unique warn codes
+  timeout -k 5 "$TIMEOUT" "$WAX" check -W all=warning \
+    --error-format json "$1" 2>&1 >/dev/null \
+    | grep -oE '"warning":"[^"]+"' | sed 's/.*:"//; s/"$//' \
+    | grep -vxE 'precedence|eager-select|naming-conflict|reserved-word-rename|generated-name' \
+    | sort -u
+}
+# Obtain both text forms (converting as needed); skip if either conversion fails.
+waxf="$IN"
+watf="$IN"
+[ "$FMT" = wax ] || {
+  waxf="$WORK/parity.wax"
+  [ "$(classify_wax -i "$FMT" -f wax "$IN" -o "$waxf")" = ok ] || waxf=""
+}
+[ "$FMT" = wat ] || {
+  watf="$WORK/parity.wat"
+  [ "$(classify_wax -i "$FMT" -f wat "$IN" -o "$watf")" = ok ] || watf=""
+}
+if [ -n "$waxf" ] && [ -n "$watf" ]; then
+  cwax="$(lint_codes "$waxf")"
+  cwat="$(lint_codes "$watf")"
+  if [ "$cwax" != "$cwat" ]; then
+    only_wax="$(comm -23 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat") | paste -sd, -)"
+    only_wat="$(comm -13 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat") | paste -sd, -)"
+    finding LINT_PARITY REVIEW "$IN" \
+      "lint sets differ between the wax and wat form (wax-only: ${only_wax:-none}; wat-only: ${only_wat:-none})" \
+      "wax check -W all=warning $waxf; wax check -W all=warning $watf"
   fi
 fi
 

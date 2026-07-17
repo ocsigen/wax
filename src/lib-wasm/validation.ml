@@ -787,14 +787,17 @@ module Error = struct
     report context ~location ~severity:Warning ~warning ~universal:true ?hint
       ?related message
 
+  (* [count] is the shift count as an unsigned 64-bit value (an i32/i64 const
+     with the high bit set is a large positive count, not a negative one), so
+     print and reduce it unsigned — matching the Wax typer's [shift_overflow]. *)
   let shift_overflow context ~location ~width count =
     warn_lint context ~location Warning.Shift_overflow
       ~hint:
         ((text "Wasm masks the count modulo" ++ Message.int width)
         ^^ text "," ++ text "shifting by"
-           ++ Message.int64 (Int64.rem count (Int64.of_int width))
+           ++ Message.uint64 (Int64.unsigned_rem count (Int64.of_int width))
            ++ text "instead.")
-      (text "The shift count" ++ Message.int64 count
+      (text "The shift count" ++ Message.uint64 count
        ++ text "is at least the operand width ("
       ^^ Message.int width ^^ text " bits).")
 
@@ -4641,7 +4644,8 @@ let lint_body ctx instrs =
        operands to be tracked (so the whole expression is effect-free): a
        constant on one side plus a second entry ([_ :: _]) for the other. *)
     match (o, st) with
-    | (Shl | Shr _), LInt n :: _ when n >= 0L && n >= Int64.of_int width ->
+    | (Shl | Shr _), LInt n :: _
+      when Int64.unsigned_compare n (Int64.of_int width) >= 0 ->
         Error.shift_overflow diagnostics ~location:op.info ~width n
     | (Div _ | Rem _), LInt 0L :: _ ->
         Error.division_by_zero diagnostics ~location:op.info

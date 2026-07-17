@@ -57,6 +57,26 @@ negative) is caught and printed unsigned:
   4 │ 
   Hint: Wasm masks the count modulo 64, shifting by 63 instead.
 
+The Wasm validator mirrors the unsigned-count fix, so the same shift flagged in
+WAT form reads its count unsigned too (the fuzzer's lint-parity oracle relies on
+the two sides agreeing):
+
+  $ cat > shift.wat <<'WAT'
+  > (module (func (param i64) (result i64)
+  >   (i64.shl (local.get 0) (i64.const 0xFFFF_FFFF_FFFF_FFFF))))
+  > WAT
+
+  $ wax check -W shift-count-overflow=warning shift.wat
+  Warning:
+    The shift count 18446744073709551615 is at least the operand width (64
+    bits).
+   ──➤  shift.wat:2:4
+  1 │ (module (func (param i64) (result i64)
+  2 │   (i64.shl (local.get 0) (i64.const 0xFFFF_FFFF_FFFF_FFFF))))
+    ·    ^^^^^^^
+  3 │ 
+  Hint: Wasm masks the count modulo 64, shifting by 63 instead.
+
 An arity error on a memory access no longer drags in a bogus memarg diagnostic
 on the surplus argument (it used to read a non-literal extra as an immediate):
 
