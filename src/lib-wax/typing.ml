@@ -1369,10 +1369,12 @@ let subtype d ctx current { typ; supertype; final; descriptor; describes } :
         let+@ r = resolve_type_ref d ctx sup in
         (* A supertype must be declared before; a self-reference or a forward
            reference within the same rec group is treated as unbound, matching
-           the validator (rather than crashing). *)
-        if not (defined_before current r) then
+           the validator (rather than crashing). Drop the offending supertype so
+           the subtype chain stays acyclic and later subtype queries terminate. *)
+        if defined_before current r then Some r
+        else (
           Error.unbound_name d ~location:sup.info "type" sup;
-        Some r
+          None)
   in
   (* [descriptor]/[describes] may refer mutually within the rec group, so no
      declared-before restriction applies. *)
@@ -3999,12 +4001,33 @@ let rec check_hole_order_rec ctx i n =
                           StringMap.empty l
                       in
                       (* Reorder fields according to definition. Pinned fields
-                         ([None]) are [Get]s with no hole, so drop them. *)
-                      Array.map
-                        (fun field ->
-                          StringMap.find (fst field.desc).desc field_map)
-                        fields
-                      |> Array.to_list |> List.filter_map Fun.id
+                         ([None]) are [Get]s with no hole, so drop them. A field
+                         declared but absent from a recovered (erroneous) literal
+                         is missing from [field_map], so drop it too. *)
+                      let declared =
+                        Array.map
+                          (fun field ->
+                            Option.join
+                              (StringMap.find_opt (fst field.desc).desc
+                                 field_map))
+                          fields
+                        |> Array.to_list |> List.filter_map Fun.id
+                      in
+                      (* A source field absent from the definition (a recovered
+                         error) is typed last, in source order; traverse it here
+                         in that same order so its holes are counted. *)
+                      let extra =
+                        List.filter_map
+                          (fun (name, instr) ->
+                            if
+                              Array.exists
+                                (fun f -> (fst f.desc).desc = name.desc)
+                                fields
+                            then None
+                            else instr)
+                          l
+                      in
+                      declared @ extra
                   | None -> List.filter_map snd l)
               | _ -> List.filter_map snd l
             in
@@ -4023,11 +4046,29 @@ let rec check_hole_order_rec ctx i n =
                             StringMap.add name.desc instr acc)
                           StringMap.empty l
                       in
-                      Array.map
-                        (fun field ->
-                          StringMap.find (fst field.desc).desc field_map)
-                        fields
-                      |> Array.to_list |> List.filter_map Fun.id
+                      let declared =
+                        Array.map
+                          (fun field ->
+                            Option.join
+                              (StringMap.find_opt (fst field.desc).desc
+                                 field_map))
+                          fields
+                        |> Array.to_list |> List.filter_map Fun.id
+                      in
+                      (* Extra (recovered) source fields, in source order, as in
+                         the [Struct] arm. *)
+                      let extra =
+                        List.filter_map
+                          (fun (name, instr) ->
+                            if
+                              Array.exists
+                                (fun f -> (fst f.desc).desc = name.desc)
+                                fields
+                            then None
+                            else instr)
+                          l
+                      in
+                      declared @ extra
                   | None -> List.filter_map snd l)
               | _ -> List.filter_map snd l
             in
@@ -5041,11 +5082,13 @@ let rebuild_while ~stepped ~labelled typed_list =
    that arm's body; the innermost block holds the threaded test chain and the
    [escape] branch, and the [default] follows the [escape] block as trailing
    code. Descending from the [escape] block consumes the arms in reverse source
-   order. Returns the typed arm bodies (paired with the original patterns) and
-   the typed default. *)
+   order. Returns the typed arm bodies (paired with the original patterns), the
+   typed default, and the typed scrutinee (the innermost operand of the test
+   chain) — [None] when there are no arms, so the scrutinee never appears in the
+   lowering. *)
 let rebuild_match typed_list arms =
   match arms with
-  | [] -> ([], typed_list)
+  | [] -> ([], typed_list, None)
   | _ ->
       let block_body blk =
         match blk.desc with
@@ -5068,14 +5111,35 @@ let rebuild_match typed_list arms =
       let escape, default =
         match typed_list with x :: r -> (x, r) | [] -> assert false
       in
+      (* The innermost block's body is [drop chain; br escape]; the chain wraps
+         the scrutinee in one [br_on_cast]/[br_on_null] per arm, so descend that
+         many levels to recover the typed scrutinee. *)
+      let scrutinee_of_inner blk =
+        match block_body blk with
+        | { desc = Ast.Let (_, Some chain); _ } :: _ ->
+            let rec descend k c =
+              if k = 0 then c
+              else
+                match c.desc with
+                | Ast.Br_on_cast (_, _, operand) | Ast.Br_on_null (_, operand)
+                  ->
+                    descend (k - 1) operand
+                | _ -> c
+            in
+            descend (List.length arms) chain
+        | _ -> assert false
+      in
       let rec peel blk = function
-        | [] -> [] (* [blk] is the innermost block (test chain + escape). *)
+        | [] ->
+            (* [blk] is the innermost block (test chain + escape). *)
+            ([], scrutinee_of_inner blk)
         | (pat, orig) :: rest_rev ->
             let inner, arm_body = unwrap pat (block_body blk) in
-            (pat, { orig with desc = arm_body }) :: peel inner rest_rev
+            let rest, scrut = peel inner rest_rev in
+            ((pat, { orig with desc = arm_body }) :: rest, scrut)
       in
-      let arms_rev = peel escape (List.rev arms) in
-      (List.rev arms_rev, default)
+      let arms_rev, scrut = peel escape (List.rev arms) in
+      (List.rev arms_rev, default, Some scrut)
 
 (* Synthesise the block labels for a [match] lowering: one per arm, then the
    outer [escape] label ([n+1] in all). The [<…>] form is outside the source
@@ -7158,20 +7222,22 @@ and type_block_construct ctx i =
          blocks. The arm bodies must diverge (a block's result is supplied only
          on the matching-branch path); the lowered block check enforces this.
          Rebuild a typed [Match] for the formatter and the identical re-lowering
-         in [To_wasm]. *)
-      let* scrut' = instruction ctx scrutinee in
-      (* The chain's casts require a reference scrutinee; flag a non-reference
-         here (the failed cast in the lowered form reports at the same spot). *)
-      (match match_scrut_reftype ctx scrut' with
-      | Some _ -> ()
-      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
+         in [To_wasm]. The scrutinee is threaded into the lowering and typed
+         there (so a hole draws its type from the enclosing test); it is then
+         recovered from the typed form rather than typed a second time. *)
       let labels = match_labels i.info arms in
       let lowered =
         Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
           ~default
       in
       let typed = block ctx i.info None [||] [||] [||] lowered in
-      let arms', default' = rebuild_match typed arms in
+      let arms', default', scrut_opt = rebuild_match typed arms in
+      let scrut' = match_recover_scrutinee ctx scrutinee scrut_opt in
+      (* The chain's casts require a reference scrutinee; flag a non-reference
+         here (the failed cast in the lowered form reports at the same spot). *)
+      (match match_scrut_reftype ctx scrut' with
+      | Some _ -> ()
+      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
       return_statement i
         (Match
            {
@@ -8268,6 +8334,28 @@ and check_instruction ?(drop_supertype = false) ctx expected
                       return ((name, Option.map (fun _ -> checked) written) :: l))
                 (return []) field_types
             in
+            (* A source field with no counterpart in the declaration (a
+               field-count/name mismatch, already reported) is skipped by the
+               fold above; still type it for recovery, so its holes are consumed
+               (else the leftover trips [assert (args = [])]) and any error
+               inside it is reported. It is appended to the rebuilt node, after
+               the declared fields and in source order — the order in which its
+               holes were just consumed, which [check_hole_order] then follows. *)
+            let* fields' =
+              List.fold_left
+                (fun prev (name, written) ->
+                  let* l = prev in
+                  if
+                    Array.exists
+                      (fun f -> (fst f.desc).desc = name.desc)
+                      field_types
+                  then return l
+                  else (
+                    if written = None then record_pun ctx.pun_spans name.info;
+                    let* fi' = instruction ctx (field_value name written) in
+                    return ((name, Option.map (fun _ -> fi') written) :: l)))
+                (return fields') fields
+            in
             (* The fields alone pin this type (re-parse re-resolves to it via
                field inference, which takes precedence over the expected type),
                so a present name is redundant. *)
@@ -8371,6 +8459,24 @@ and check_instruction ?(drop_supertype = false) ctx expected
                       in
                       return ((name, Option.map (fun _ -> checked) written) :: l))
                 (return []) field_types
+            in
+            (* Append any source field absent from the declaration, typed for
+               recovery, after the declared fields and in source order (see the
+               [Struct] arm above). *)
+            let* fields' =
+              List.fold_left
+                (fun prev (name, written) ->
+                  let* l = prev in
+                  if
+                    Array.exists
+                      (fun f -> (fst f.desc).desc = name.desc)
+                      field_types
+                  then return l
+                  else (
+                    if written = None then record_pun ctx.pun_spans name.info;
+                    let* fi' = instruction ctx (field_value name written) in
+                    return ((name, Option.map (fun _ -> fi') written) :: l)))
+                (return fields') fields
             in
             let*! result = construction_result typ in
             return_expression i (StructDesc (d, List.rev fields')) result
@@ -9243,6 +9349,19 @@ and mem_call_arguments ctx l : _ -> _ * _ list =
           let* r' = mem_call_arguments ctx r in
           return (i' :: r'))
 
+(* Recover a [match]'s typed scrutinee. [rebuild_match] returns it when there is
+   at least one arm (the scrutinee is threaded into the lowering and typed
+   there). With no arms the lowering is the default alone and the scrutinee is
+   discarded, so type it in isolation, giving each hole an [Error] cell so a bare
+   hole scrutinee does not crash [pop_parameter]. *)
+and match_recover_scrutinee ctx scrutinee = function
+  | Some scrut' -> scrut'
+  | None ->
+      let holes =
+        List.init (count_holes scrutinee) (fun _ -> Cell.make Error)
+      in
+      snd (instruction ctx scrutinee holes)
+
 and toplevel_instruction ctx i : stack -> stack * 'b =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
@@ -9378,19 +9497,21 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
   | Match { scrutinee; arms; default } ->
       (* As a statement, type-check the lowering (see [Ast_utils.lower_match]) in
          the current stack, so the void escape block's fall-through (the no-match
-         path through the default) propagates. The scrutinee is block-like (no
-         outer holes), so it is type-checked on its own to flag a non-reference. *)
-      let _, scrut' = instruction ctx scrutinee [] in
-      (match match_scrut_reftype ctx scrut' with
-      | Some _ -> ()
-      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
+         path through the default) propagates. The scrutinee is threaded into the
+         lowering and typed there; it is then recovered from the typed form
+         rather than typed a second time (which reported every scrutinee error
+         twice and crashed on a bare hole scrutinee). *)
       let labels = match_labels i.info arms in
       let lowered =
         Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
           ~default
       in
       let* typed = block_contents ctx [||] lowered in
-      let arms', default' = rebuild_match typed arms in
+      let arms', default', scrut_opt = rebuild_match typed arms in
+      let scrut' = match_recover_scrutinee ctx scrutinee scrut_opt in
+      (match match_scrut_reftype ctx scrut' with
+      | Some _ -> ()
+      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
       return_statement i
         (Match
            {
