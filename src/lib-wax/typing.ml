@@ -1679,7 +1679,17 @@ type module_context = {
       (* Locals known to hold a value at the current point. A non-defaultable
          (non-nullable reference) local starts uninitialized and must be
          assigned before it is read. The set is captured by [{ ctx with ... }]
-         on block entry, so an assignment inside a block does not escape it. *)
+         on block entry, so an assignment inside a block does not escape it.
+         Within a straight-line operand sequence it only grows, which is what
+         lets a trailing operand typed out of emission order be reconciled by
+         [type_trailing_operand]. *)
+  mutable deferred_uninit : ident list ref list;
+      (* A stack of collectors for uninitialized-local reads deferred by a
+         trailing operand typed out of emission order (see
+         [type_trailing_operand]). While non-empty, an uninitialized read funnels
+         into the innermost (head) collector instead of erroring, to be re-checked
+         against the true state at the operand's emission slot. Empty outside such
+         an operand, so a read then reports immediately. *)
   read_locals : StringSet.t ref;
       (* Names of locals read so far in the current function. A [ref] (rather
          than a snapshot field) so reads inside a block propagate to the
@@ -3090,6 +3100,17 @@ let is_defaultable (ty : valtype) =
 let mark_initialized ctx name =
   ctx.initialized_locals <- StringSet.add name ctx.initialized_locals
 
+(* Report a read of the not-yet-initialized local [idx], or — while a trailing
+   operand is being typed out of emission order — defer it into the innermost
+   active collector, to be re-checked at that operand's emission slot (see
+   [type_trailing_operand]). Both the [Get] arm and a deferred read's re-check go
+   through here, so a re-check that still fails under an outer deferral re-defers
+   rather than reports. *)
+let report_uninitialized ctx idx =
+  match ctx.deferred_uninit with
+  | collector :: _ -> collector := idx :: !collector
+  | [] -> Error.uninitialized_local ctx.diagnostics ~location:idx.info idx
+
 (* Type-check one [let] binding against [result_ty] — the value it takes off the
    stack — and record the local. Returns the binding to emit: an annotation that
    [simplify] finds redundant (it equals what the value would infer to on its
@@ -4004,7 +4025,8 @@ let cast_is_transparent ctx ~cast ~operand =
    subexpression as an exact slice at every distribution point (see [with_slice]),
    so consumption no longer depends on the textual order the children are typed
    in — a sibling that errors, recovers or is typed out of order (a [StructDesc]
-   descriptor, a peeked call callee) cannot desynchronise the rest. [value_loc]
+   descriptor, a call callee — see [type_trailing_operand]) cannot desynchronise
+   the rest. [value_loc]
    and [reported] fold in the hole-order check: [value_loc] is the source location
    of the first value-producing operand emitted in the current distribution, so
    reaching a hole-bearing operand after it means a hole occurs after a value on
@@ -5583,6 +5605,44 @@ let hole_child ctx child node_of run st =
       let slice, rest = list_split n pending in
       let st', r = run { st with pending = slice; reported } in
       (bump_value_loc ctx { st' with pending = rest } (node_of r), r)
+
+(* Type a trailing operand out of emission order, for a construct whose type flow
+   runs backwards from it: [run ()] types the operand now — before the operands
+   that precede it in emission — so its type can direct their checking (a call
+   callee's parameters, a [StructDesc] descriptor's struct type).
+
+   The hole slices already make this sound for the stack; this makes it sound for
+   the initialized-locals analysis, which threads in emission order. Within a
+   straight-line operand sequence that set only grows, so the state [run] sees is
+   a SUBSET of the true state at the operand's emission slot: a read that succeeds
+   now is sound; a read that fails is DEFERRED (collected, not reported); and the
+   operand's own straight-line writes are captured and WITHHELD from
+   [initialized_locals] until the emission slot, so an earlier operand — which
+   runs first — cannot see them. Returns the typed operand and a [replay] thunk to
+   run at that slot: it re-checks each deferred read against the now-current state
+   (an earlier operand may have initialized the local), reporting or, under an
+   outer deferral, re-deferring the survivors, then applies the withheld writes. *)
+let type_trailing_operand ctx run =
+  let saved = ctx.initialized_locals in
+  let collector = ref [] in
+  ctx.deferred_uninit <- collector :: ctx.deferred_uninit;
+  let result =
+    Fun.protect
+      ~finally:(fun () -> ctx.deferred_uninit <- List.tl ctx.deferred_uninit)
+      run
+  in
+  let delta = ctx.initialized_locals in
+  ctx.initialized_locals <- saved;
+  let deferred = List.rev !collector in
+  let replay () =
+    List.iter
+      (fun idx ->
+        if not (StringSet.mem idx.desc ctx.initialized_locals) then
+          report_uninitialized ctx idx)
+      deferred;
+    ctx.initialized_locals <- StringSet.union ctx.initialized_locals delta
+  in
+  (result, replay)
 
 (* Fold one already-typed operand [node] (untyped form [child]) into the running
    hole-order state, as [hole_child] does inline, but for an operand typed out of
@@ -7377,7 +7437,7 @@ and type_variable_access ctx i =
         | Local ty ->
             ctx.read_locals := StringSet.add idx.desc !(ctx.read_locals);
             if not (StringSet.mem idx.desc ctx.initialized_locals) then
-              Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
+              report_uninitialized ctx idx;
             (* A poison local ([None]) reads as [Error] so its uses don't
                cascade. *)
             Cell.make (match ty with Some ity -> Valtype ity | None -> Error)
@@ -8967,12 +9027,15 @@ and check_instruction ?(drop_supertype = false) ctx expected
          the field values then the descriptor on top. But the descriptor's type
          [Y] (with [Y describes X]) fixes the struct type [X] the fields are
          checked against, so the descriptor must be typed FIRST — out of emission
-         order, which the explicit hole slices make sound, and as the original
-         code did, so the initialized-local analysis is unchanged. Split the
-         pending values: the fields take the front slice, the descriptor the tail;
-         type the descriptor against the tail with a fresh hole state, the fields
-         in emission order over the front slice, then fold the descriptor into the
-         hole-order check as the last operand. *)
+         order, which the explicit hole slices make sound for the stack and
+         [type_trailing_operand] makes sound for the initialized-local analysis
+         (the descriptor, emitted last, may read a local a field [local.tee]s, and
+         its own tees must not leak back into the fields). Split the pending
+         values: the fields take the front slice, the descriptor the tail; type
+         the descriptor against the tail with a fresh hole state, the fields in
+         emission order over the front slice, then fold the descriptor into the
+         hole-order check and replay its init-locals effects as the last
+         operand. *)
       fun st ->
         if ctx.suggest then
           List.iter
@@ -8984,9 +9047,13 @@ and check_instruction ?(drop_supertype = false) ctx expected
             0 fields
         in
         let front_pending, tail_pending = list_split front_holes st.pending in
-        let _, d =
-          instruction ctx d
-            { pending = tail_pending; value_loc = None; reported = false }
+        let d, replay =
+          type_trailing_operand ctx (fun () ->
+              let _, d =
+                instruction ctx d
+                  { pending = tail_pending; value_loc = None; reported = false }
+              in
+              d)
         in
         let target =
           descriptor_reftype ctx ~location:i.info ~nullable:false d
@@ -9064,6 +9131,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
         in
         let st1, node = type_body { st with pending = front_pending } in
         let st2 = fold_operand ctx d d { st1 with pending = [] } in
+        replay ();
         (st2, (node, true))
   | StructDefaultDesc d ->
       let* d, target =
@@ -9583,58 +9651,6 @@ and check_instruction ?(drop_supertype = false) ctx expected
 and check_toplevel ?(drop_supertype = false) ctx expected i =
   with_holes ctx i (fun () -> check_instruction ~drop_supertype ctx expected i)
 
-(* Peek the parameter types of a call's callee syntactically, when it is a name
-   referring to a function or a funcref-typed variable. This reads no stack and
-   reports nothing, so the evaluation order (arguments, then callee) is
-   unchanged; the callee is still typed normally afterwards. The result is used
-   only to check each argument against its parameter. Crucially it does not
-   {e type} the callee, so the initialized-local analysis (threaded in
-   execution order) still sees the callee — emitted last — after the arguments,
-   one of which may [local.tee] the very local the callee reads. *)
-and peek_call_params ctx callee =
-  (* The user heap-type name a hole-free callee resolves to, computed purely (no
-     typing, no stack effect): a function name, a funcref-typed variable, or a
-     chain of struct-field reads ending in a funcref field — e.g.
-     [cont.cont_func]. [None] for anything else. *)
-  let rec callee_heaptype c =
-    match c.desc with
-    | Get name -> (
-        match resolve_variable ctx name with
-        | Func_ref (_, ty', _) -> Some (Ast.no_loc ty')
-        | Local (Some { typ = Ref { typ = Type t | Exact t; _ }; _ })
-        | Global (_, Some { typ = Ref { typ = Type t | Exact t; _ }; _ }) ->
-            Some t
-        | Local _ | Global _ | Unbound -> None)
-    (* A cast target names the value's type directly; [from_wasm] inserts these
-       on a receiver before a field access (e.g. [(k as &cont_2).cont_func]). *)
-    | Cast (_, Valtype (Ref { typ = Type t | Exact t; _ })) -> Some t
-    | NonNull e -> callee_heaptype e
-    | StructGet (recv, field) -> (
-        match callee_heaptype recv with
-        | None -> None
-        | Some struct_name -> (
-            match Tbl.find_opt ctx.type_context.types struct_name with
-            | Some (_, { typ = Struct fields; _ }) ->
-                Array.find_map
-                  (fun f ->
-                    let nm, (ftyp : fieldtype) = f.desc in
-                    if nm.desc = field.desc then
-                      match ftyp.typ with
-                      | Value (Ref { typ = Type t | Exact t; _ }) -> Some t
-                      | Value _ | Packed _ -> None
-                    else None)
-                  fields
-            | _ -> None))
-    | _ -> None
-  in
-  match callee_heaptype callee with
-  | None -> None
-  | Some t -> (
-      match Tbl.find_opt ctx.type_context.types t with
-      | Some (_, { typ = Func ft; _ }) ->
-          array_map_opt (fun p -> internalize ctx (snd p.desc)) ft.params
-      | _ -> None)
-
 (* Type call arguments. When the callee's parameter types are known and the
    arity matches, check each argument against its parameter (so a struct/array
    literal argument can be inferred and have its name dropped); otherwise
@@ -9677,44 +9693,84 @@ and check_against ctx expected i =
       return i'
 
 and type_indirect_call ctx i i' l =
-  (* Arguments are pushed first, then the callee reference, then [call_ref]; type
-     them in that same (emission) order so the hole slices and the hole-order
-     check match [to_wasm], and so the initialized-local analysis sees the callee
-     (which may read a local an argument [local.tee]s) after those arguments. The
-     parameter types are peeked syntactically (no typing, no stack effect), so an
-     argument can still be checked against its parameter without typing the callee
-     early. *)
-  let param_types = peek_call_params ctx i' in
-  let* l' = typed_call_args ctx l param_types in
-  let* i' = typed ctx i' in
-  match Cell.get (expression_type ctx i') with
-  | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
-      let*! typ = lookup_func_type ctx ty in
-      (let>@ param_types =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-       in
-       if Array.length param_types <> List.length l' then
-         Error.value_count_mismatch ctx.diagnostics ~location:i.info
-           ~expected:(Array.length param_types) ~provided:(List.length l')
-       else
-         Array.iter2
-           (fun i ty -> check_type ctx i ty)
-           (Array.of_list l') param_types);
-      let*! returned_types = array_map_opt (internalize ctx) typ.results in
-      return_statement i (Call (i', l')) returned_types
-  | Error ->
-      (* The callee already failed to type (e.g. an unbound name); recover
-         silently rather than adding a spurious "expected function type". *)
-      return_statement i (Call (i', l')) [| Cell.make Error |]
-  | Unknown | UnknownRef ->
-      (* The callee's type is unknown (unreachable / branch code) or only a
-         reference (its function type cannot be resolved), so the call cannot be
-         compiled. *)
-      Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
-      return_statement i (Call (i', l')) [| Cell.make Error |]
-  | _ ->
-      Error.expected_func_type ctx.diagnostics ~location:(snd i'.info);
-      return_statement i (Call (i', l')) [| Cell.make Error |]
+ (* Arguments are pushed first, then the callee reference, then [call_ref]. The
+     callee's function type gives the parameter types the arguments are checked
+     against (so a struct/array literal argument can be inferred and drop its
+     name), so the callee is typed FIRST — out of emission order, made sound for
+     the stack by the explicit hole slices (front for the arguments, tail for the
+     callee) and for the initialized-local analysis by [type_trailing_operand]
+     (the callee, emitted last, may read a local an argument [local.tee]s, and its
+     own tees must not leak back into the arguments). Then the arguments are typed
+     in emission order over the front slice and the callee is folded in and its
+     init-locals effects replayed as the last operand, matching [to_wasm]. The
+     error arms still synthesize the arguments for recovery. *)
+ fun st ->
+  let front_holes = List.fold_left (fun acc a -> acc + count_holes a) 0 l in
+  let front_pending, tail_pending = list_split front_holes st.pending in
+  let i', replay =
+    type_trailing_operand ctx (fun () ->
+        let _, i' =
+          instruction ctx i'
+            { pending = tail_pending; value_loc = None; reported = false }
+        in
+        i')
+  in
+  let functype =
+    match Cell.get (expression_type ctx i') with
+    | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
+        lookup_func_type ctx ty
+    | _ -> None
+  in
+  let param_types =
+    Option.bind functype (fun typ ->
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params)
+  in
+  let type_body =
+    let* l' = typed_call_args ctx l param_types in
+    match Cell.get (expression_type ctx i') with
+    | Valtype { typ = Ref { typ = Type _ | Exact _; _ }; _ } -> (
+        match functype with
+        | None ->
+            (* [lookup_func_type] already reported "expected function type" (the
+               named type is not a function); recover with the [Unreachable]/
+               [Error] node the [let*!] on that lookup used to yield, so a
+               wrapping [become] treats it as a failed call rather than forming a
+               tail call with an [Error] result. *)
+            return
+              {
+                desc = Ast.Unreachable;
+                info = ([| Cell.make Error |], (Ast.no_loc ()).info);
+              }
+        | Some typ ->
+            (match param_types with
+            | Some param_types when Array.length param_types <> List.length l'
+              ->
+                Error.value_count_mismatch ctx.diagnostics ~location:i.info
+                  ~expected:(Array.length param_types)
+                  ~provided:(List.length l')
+            | _ -> ());
+            let*! returned_types =
+              array_map_opt (internalize ctx) typ.results
+            in
+            return_statement i (Call (i', l')) returned_types)
+    | Error ->
+        (* The callee already failed to type (e.g. an unbound name); recover
+             silently rather than adding a spurious "expected function type". *)
+        return_statement i (Call (i', l')) [| Cell.make Error |]
+    | Unknown | UnknownRef ->
+        (* The callee's type is unknown (unreachable / branch code) or only a
+             reference (its function type cannot be resolved), so the call cannot
+             be compiled. *)
+        Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
+        return_statement i (Call (i', l')) [| Cell.make Error |]
+    | _ ->
+        Error.expected_func_type ctx.diagnostics ~location:(snd i'.info);
+        return_statement i (Call (i', l')) [| Cell.make Error |]
+  in
+  let st1, node = type_body { st with pending = front_pending } in
+  let st2 = fold_operand ctx i' i' { st1 with pending = [] } in
+  replay ();
+  (st2, node)
 
 and call_instruction ctx i =
   (* Dispatches a [Call]: first the intrinsic method/free-function
@@ -11680,6 +11736,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       label_decls = [];
       assigned_locals = StringSet.empty;
       initialized_locals = StringSet.empty;
+      deferred_uninit = [];
       control_types = [];
       return_types = [||];
       cond;
