@@ -189,6 +189,22 @@ the Wax↔WebAssembly correspondence, examples, and the CLI reference. You can
 also build it locally with `mdbook build docs` (requires
 [mdBook](https://rust-lang.github.io/mdBook/)).
 
+## AI coding agents
+
+Wax has almost no presence in model training data, so the repository ships a
+[`wax` agent skill](skills/wax/) that gives a coding assistant the complete
+language reference and has it validate everything it writes with `wax check`.
+For agents that support the `SKILL.md` format (Claude Code, Antigravity,
+Copilot, Codex, ...), install it with the
+[`skills` CLI](https://github.com/vercel-labs/skills):
+
+```sh
+npx skills add ocsigen/wax
+```
+
+or copy [`skills/wax/`](skills/wax/) into the agent's skills directory
+(for Claude Code, `.claude/skills/`).
+
 ## Correctness
 
 Wax is built to be trusted with your binaries:

@@ -77,3 +77,21 @@ Ready-to-use configurations, each with a README, live under
 
 The server's flags and behaviour (document sync, position-encoding negotiation)
 are documented under [`wax lsp`](cli.md#language-server) in the CLI reference.
+
+## AI coding agents
+
+Coding assistants that support the `SKILL.md` agent-skill format (Claude Code,
+Antigravity, Copilot, Codex, ...) can be taught Wax with the
+[`wax` skill](https://github.com/ocsigen/wax/tree/main/skills/wax) shipped in
+the repository. Wax has almost no presence in model training data, so the
+skill bundles the complete language reference as a single context-loadable
+file and instructs the agent to validate everything it writes with
+`wax check`. Install it with the
+[`skills` CLI](https://github.com/vercel-labs/skills):
+
+```sh
+npx skills add ocsigen/wax
+```
+
+or copy `skills/wax/` into the agent's skills directory (for Claude Code,
+`.claude/skills/`).
