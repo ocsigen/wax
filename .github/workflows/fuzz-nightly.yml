@@ -34,6 +34,9 @@ on:
       diff_validate_count:
         description: "diff-validate.sh modules"
         default: "3000"
+      validate_fuzz_count:
+        description: "validate-fuzz.sh type-mutation modules"
+        default: "800"
 
 jobs:
   nightly:
@@ -97,6 +100,7 @@ jobs:
           MUTATE_WASM_STRUCT_COUNT: ${{ github.event.inputs.mutate_wasm_struct_count || '8000' }}
           EXEC_WAST_COUNT: ${{ github.event.inputs.exec_wast_count || '64' }}
           DIFF_VALIDATE_COUNT: ${{ github.event.inputs.diff_validate_count || '3000' }}
+          VALIDATE_FUZZ_COUNT: ${{ github.event.inputs.validate_fuzz_count || '800' }}
 
       # A campaign that found something saved its (re-verified) inputs here.
       - name: Upload findings

@@ -16,8 +16,9 @@
 # bloating corpus startup: SMITH_COUNT drives smith.sh, CORPUS_SMITH_COUNT drives
 # the extra smith-derived Wax/WAT seeds, the MUTATE_* counts drive the mutation
 # campaigns, EXEC_WAST_COUNT drives the behavioural slice (`exec.sh` over a
-# deterministic SEED-keyed subset of core .wast files), and DIFF_VALIDATE_COUNT
-# drives diff-validate.sh. COUNT and SMITH are still accepted as legacy coarse
+# deterministic SEED-keyed subset of core .wast files), DIFF_VALIDATE_COUNT
+# drives diff-validate.sh, and VALIDATE_FUZZ_COUNT drives validate-fuzz.sh.
+# COUNT and SMITH are still accepted as legacy coarse
 # overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools; node
 # and the reference interpreter (REF) unlock the execution oracles (campaigns
 # lacking their engine skip rather than fail).
@@ -38,6 +39,7 @@ mutate_wasm="${MUTATE_WASM_COUNT:-${legacy_count:-8000}}"
 mutate_wasm_struct="${MUTATE_WASM_STRUCT_COUNT:-${mutate_wasm}}"
 exec_wast="${EXEC_WAST_COUNT:-64}"
 diff_validate="${DIFF_VALIDATE_COUNT:-${legacy_count:-3000}}"
+validate_fuzz="${VALIDATE_FUZZ_COUNT:-${legacy_count:-800}}"
 if [ "${QUICK:-0}" = 1 ]; then
   smith=40
   corpus_smith=40
@@ -47,6 +49,7 @@ if [ "${QUICK:-0}" = 1 ]; then
   mutate_wasm_struct=100
   exec_wast=5
   diff_validate=100
+  validate_fuzz=100
 fi
 
 command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
@@ -55,7 +58,7 @@ command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
 }
 
 echo "nightly campaigns — SEED=$SEED  (replay this run with: SEED=$SEED fuzz/nightly.sh)" >&2
-echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate" >&2
+echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz" >&2
 
 fail=0 passed=0 skipped=0 failed_list=""
 
@@ -142,6 +145,11 @@ if [ "$exec_wast" -gt 0 ]; then
   fi
 fi
 run diff-validate.sh "$diff_validate"
+# Type-mutation oracle over the wasm corpus (built above): flips one valtype in
+# a valid module to exercise validation.ml's rejection arms, differentially
+# against wasm-tools. Corpus-dependent, so it runs here (nightly builds the
+# corpus) rather than in the per-PR check.sh, where it always skips.
+run "COUNT=$validate_fuzz" validate-fuzz.sh
 
 echo >&2
 echo "==================== fuzz/nightly.sh summary ====================" >&2
