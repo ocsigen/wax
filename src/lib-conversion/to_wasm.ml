@@ -1287,6 +1287,11 @@ and instruction_desc ret ctx i : location Text.instr list =
                  follows in the match below). *)
               | I32, Valtype (Ref { typ = Extern; _ }) ->
                   (folded loc RefI31 code, Ref { nullable = false; typ = I31 })
+              (* [i64 as &extern]: wrap to [i32] (as [i64 as &i31]), box as
+                 [i31]; [extern.convert_any] follows in the match below. *)
+              | I64, Valtype (Ref { typ = Extern; _ }) ->
+                  ( folded loc RefI31 (folded loc I32WrapI64 code),
+                    Ref { nullable = false; typ = I31 } )
               (* [extern as &T] for an [any]-hierarchy [T]: convert to [any]
                  first, then the match below does the [ref.cast] to [T]. A
                  non-null [&any] target from a *nullable* operand needs that

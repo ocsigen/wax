@@ -51,7 +51,8 @@ SOURCES=(
   "clz|| (0).clz()"
   "Float|| 0.0"
   "FloatExpr|| (0.0 + 0.0)"
-  "LargeInt|| 18446744073709551616"
+  "LargeInt|| 18446744073709551615"
+  "HugeIntFloat|| 18446744073709551616"
   "i32|p: i32| p"
   "i64|p: i64| p"
   "f32|p: f32| p"
@@ -61,6 +62,7 @@ SOURCES=(
   "i31|p: &?i31| p"
   "extern|p: &?extern| p"
   "reffunc|p: &?func| p"
+  "Null|| null"
   "Unknown|| { unreachable; _ }"
   "UnknownRef|| { unreachable; null! }"
 )
@@ -87,7 +89,7 @@ METHODS=(to_bits from_bits clz sqrt)
 # Second-level targets for the two-level chain: one representative of each
 # numeric family x signedness, plus the reference intermediates the fusion
 # patterns use, cover the distinct lowering cells without the quadratic blow-up.
-CHAIN_T2=(i32 i32_s i64 f32 f32_s f64 "&i31" "&any" "&fn(i32) -> i32")
+CHAIN_T2=(i32 i32_s i64 f32 f32_s f64 "&i31" "&any" "&extern" "&?extern" "&fn(i32) -> i32")
 
 # Build the combination list. Each element is "label<TAB>one-line function"; the
 # result is discarded with [_ = (..)] so the function type-checks for any target
@@ -160,6 +162,93 @@ done
 wait
 echo >&2
 
+# ---- The single-cast accept/reject matrix: golden + monotonicity ----
+#
+# The sweep above cannot see an *over-strict* cell: a clean rejection is always
+# a passing outcome (that blind spot hid the [null as i64_s] / [i64 as &extern]
+# asymmetries). Two relative oracles close it:
+#
+#   * a golden matrix — the full (source x target) accept/reject table is
+#     checked into cast-matrix.golden, so any typer change flips visible cells
+#     that a human must review (regenerate with REGEN_CAST_MATRIX=1);
+#   * monotonicity — laws of the form "every cast accepted for SUPER must be
+#     accepted for SUB", which need no intended table at all: a subtype value
+#     (null is a valid &?i31) or the flexible form of a committed type (a
+#     literal that could commit to i32) can only be *more* castable.
+
+GOLDEN="$(dirname "${BASH_SOURCE[0]}")/cast-matrix.golden"
+MATRIX="$RESULTS/matrix"
+
+matrix_worker() {
+  local first="$1" last="$2" i src slab param sexpr t v
+  local wax="$RESULTS/m$first.wax" a="$RESULTS/m$first.a"
+  ERRLOG="$RESULTS/m$first.err"
+  for ((i = first; i <= last; i++)); do
+    src="${SOURCES[$((i / ${#TARGETS[@]}))]}"
+    t="${TARGETS[$((i % ${#TARGETS[@]}))]}"
+    IFS='|' read -r slab param sexpr <<<"$src"
+    printf 'fn f(%s) { _ = ((%s) as %s); }\n' "$param" "$sexpr" "$t" >"$wax"
+    v="$(classify_wax -i wax -f wasm "$wax" -o "$a")"
+    case "$v" in crash:*) v=crash ;; esac
+    printf '%s\t%s\t%s\n' "$slab" "$t" "$v" >>"$MATRIX.$first"
+  done
+}
+
+M=$((${#SOURCES[@]} * ${#TARGETS[@]}))
+echo "computing the $M-cell accept/reject matrix..." >&2
+chunk=$(((M + JOBS - 1) / JOBS))
+for ((w = 0; w < JOBS; w++)); do
+  first=$((w * chunk))
+  [ "$first" -ge "$M" ] && break
+  last=$((first + chunk - 1))
+  [ "$last" -ge "$M" ] && last=$((M - 1))
+  matrix_worker "$first" "$last" &
+done
+wait
+sort "$MATRIX".* >"$MATRIX"
+
+matrix_failed=0
+if [ "${REGEN_CAST_MATRIX:-0}" = 1 ]; then
+  cp "$MATRIX" "$GOLDEN"
+  echo "cast-matrix.golden regenerated ($M cells) — review the diff." >&2
+elif [ -f "$GOLDEN" ]; then
+  if ! diff -u "$GOLDEN" "$MATRIX" >"$RESULTS/matrix.diff"; then
+    matrix_failed=1
+  fi
+else
+  echo "missing $GOLDEN — run with REGEN_CAST_MATRIX=1 to create it" >&2
+  matrix_failed=1
+fi
+
+# Monotonicity laws, "SUPER:SUB" = accept(SUPER as T) implies accept(SUB as T).
+#   Subsumption: null is a valid value of every nullable reference source;
+#   [&?i31] is a valid [&?any].
+#   Flexibility: a literal/expression that *could* commit to a concrete type
+#   accepts at least the casts the committed type does ([Int] vs [i32],
+#   [LargeInt] vs [i64], [Float] vs [f32]/[f64], [Number] vs [Int]/[Float]).
+#   Equivalence (both directions): [clz] is an [Int]-flavoured expression,
+#   [FloatExpr] a [Float]-flavoured one.
+MONO=(
+  "i31:Null" "refany:Null" "extern:Null" "reffunc:Null"
+  "refany:i31"
+  "i32:Int" "i64:LargeInt" "f32:Float" "f64:Float"
+  "Int:Number" "Float:Number"
+  "Int:clz" "clz:Int" "Float:FloatExpr" "FloatExpr:Float"
+  "Float:HugeIntFloat" "HugeIntFloat:Float"
+)
+declare -A CELL
+while IFS=$'\t' read -r s t v; do CELL["$s|$t"]="$v"; done <"$MATRIX"
+mono_failed=0
+for pair in "${MONO[@]}"; do
+  sup="${pair%%:*}" sub="${pair#*:}"
+  for t in "${TARGETS[@]}"; do
+    if [ "${CELL[$sup|$t]}" = ok ] && [ "${CELL[$sub|$t]}" != ok ]; then
+      echo "MONOTONICITY $sup as $t is accepted but $sub as $t is ${CELL[$sub|$t]}"
+      mono_failed=$((mono_failed + 1))
+    fi
+  done
+done
+
 REPORT="$RESULTS/report"
 cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
 n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
@@ -170,5 +259,11 @@ if [ "$n" -gt 0 ]; then
   echo
   cut -f2,3,4,5 "$REPORT" | sort -u | sed 's/^/  /'
 fi
-[ "$n" -gt 0 ] && exit 1
+echo "matrix cells: $M ($(grep -c $'\tok$' "$MATRIX") accepted)"
+if [ "$matrix_failed" -gt 0 ]; then
+  echo "matrix drift against cast-matrix.golden (REGEN_CAST_MATRIX=1 to accept):"
+  sed 's/^/  /' "$RESULTS/matrix.diff" 2>/dev/null | grep '^  [+-][^+-]'
+fi
+echo "monotonicity violations: $mono_failed"
+[ "$n" -gt 0 ] || [ "$matrix_failed" -gt 0 ] || [ "$mono_failed" -gt 0 ] && exit 1
 exit 0

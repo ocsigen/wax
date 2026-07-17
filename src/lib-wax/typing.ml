@@ -1940,8 +1940,9 @@ let cast ctx ty ty' =
   (* [ref.i31] takes an [i32]; the i64-sized literal wraps to [i32] first, exactly
      like [i64 as &i31] below ([to_wasm] re-emits [i32.wrap_i64] then [ref.i31]).
      This is the residue of [(big as i32) as &i31] after [simplify] fuses the
-     inner wrap into the [i31] cast. *)
-  | LargeInt, Ref { typ = I31; _ } ->
+     inner wrap into the [i31] cast. [&extern] is the same with
+     [extern.convert_any] appended, as [i64 as &extern] below. *)
+  | LargeInt, Ref { typ = I31 | Extern; _ } ->
       Cell.set ty (Valtype i64_valtype);
       true
   | LargeInt, _ -> false (* not v128 or another reference *)
@@ -1958,8 +1959,9 @@ let cast ctx ty ty' =
   | Valtype { internal = V128; _ }, V128
   (* [i32 as &i31] is [ref.i31]; [i64 as &i31] wraps to [i32] first. *)
   | Valtype { internal = I32 | I64; _ }, Ref { typ = I31; _ }
-  (* [i32 as &extern]: [ref.i31] then [extern.convert_any]. *)
-  | Valtype { internal = I32; _ }, Ref { typ = Extern; _ } ->
+  (* [i32 as &extern]: [ref.i31] then [extern.convert_any]; [i64 as &extern]
+     wraps to [i32] first, as [i64 as &i31] above. *)
+  | Valtype { internal = I32 | I64; _ }, Ref { typ = Extern; _ } ->
       true
   | Valtype { internal = Ref _ as ity; _ }, Ref { typ = ty'; _ } -> (
       let sub a b = Wax_wasm.Types.val_subtype (subtyping_info ctx) a b in
@@ -2018,7 +2020,11 @@ let signed_cast ctx ty ty' =
       (* [i31.get] extracts an [i32]; [&ref as i64_X] widens it further. *)
       Wax_wasm.Types.val_subtype (subtyping_info ctx) ity
         (Ref { nullable = true; typ = Any })
-  | Null, `I32 ->
+  | Null, (`I32 | `I64) ->
+      (* As for a concrete any-hierarchy reference above ([null] is a valid
+         [&?i31]): [ref.cast (ref i31)] + [i31.get], widened for [i64] — traps
+         at runtime, like the reference case. Pin the operand to [&?any] so
+         [to_wasm] takes that path. *)
       Cell.set ty
         (Valtype
            {
@@ -2063,6 +2069,9 @@ let signed_cast ctx ty ty' =
      for a float target — only [demote]/[promote] via a plain cast. *)
   | (Float | Valtype { internal = F32 | F64; _ }), (`F32 | `F64)
   | (Int8 | Int16), (`F32 | `F64)
+  (* An any-hierarchy reference (or [null]) to [i64] is accepted above
+     ([i31.get] + extend); to a float it is rejected — no reference-to-float
+     conversion exists. *)
   | ( ( Null
       | Valtype
           {
@@ -2075,7 +2084,7 @@ let signed_cast ctx ty ty' =
                 };
             _;
           } ),
-      (`I64 | `F32 | `F64) )
+      (`F32 | `F64) )
   | ( Valtype
         {
           internal =
