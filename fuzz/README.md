@@ -61,6 +61,7 @@ fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec re
 fuzz/type-fuzz.sh                # type-check GENERATED hand-written-style wax (fuzz_gen); COUNT=N
 fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast lattice
 fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness); GEN=N for generated conditions
+fuzz/cond-fromwasm-fuzz.sh       # from_wasm (wat->wax) of conditional modules: an entity referenced only inside (@if) must not be dropped
 
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
@@ -91,7 +92,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
-`validate-fuzz.sh` and `num-id-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`validate-fuzz.sh`, `num-id-fuzz.sh` and `cond-fromwasm-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -304,6 +305,24 @@ conditions. Both top-level and in-function conditionals are generated.
 `(@if …)` / `(@then)` / `(and`/`or`/`not`/prefix-comparison), exercising the
 lib-wasm WAT specializer that the Wax `#[if]` path never touches. So between the
 two the fuzzer now covers both formats and both conditional positions.
+
+`cond-fromwasm-fuzz.sh` covers a different direction the above never touches: the
+**from_wasm** (wat→wax) *conversion* of conditional modules. Decompiling a
+function body runs several walks over its instructions — to find the used
+locals, to reserve module-entity names, to collect element-segment and
+implicit-type references — and each must descend into instruction-level `(@if …)`
+bodies. An entity (a parameter, memory, global, data/element segment, …)
+referenced *only* inside a conditional that a walk skips is then dropped: the
+parameter is rendered anonymous so its `local.get` resolves to nothing, or the
+entity is not name-reserved so a generated local shadows it. These are
+over-rejections — `wax check` accepts every reachable configuration, yet
+`wax -i wat -f wax` fails — so the guard's oracle is that differential
+(`OVER_REJECT`), plus a per-`-D` round trip that must still validate wherever the
+specialised original does (`RT_INVALID`, catching a conversion that changed a
+reachable configuration). Each built-in seed references one entity from inside
+`(@if $D …)`, with the enclosing function's parameter left unnamed where a name
+collision is the risk. (Verified: reverting the walker fixes makes the parameter,
+memory-atomic, and element-drop seeds over-reject.)
 
 ## The folding pass
 
