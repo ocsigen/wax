@@ -51,6 +51,7 @@ dune build src/bin/main.exe src/bin/fuzz_gen.exe src/bin/fuzz_recover.exe 2>&1 |
 # Deterministic cross-cutting guards (self-contained).
 run cast-lattice.sh
 run drop-width.sh
+run num-id-fuzz.sh
 run stress.sh
 run "ITERS=$((count * 25))" "WORKERS=2" recover-fuzz.sh
 run wat-cast-chain.sh

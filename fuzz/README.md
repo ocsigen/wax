@@ -66,6 +66,7 @@ fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_e
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
 fuzz/mutate-wat.sh [count]  # text-mutate the wat seeds (edge literals) + check them
 fuzz/validate-fuzz.sh       # type-flip valid wat + differential vs the reference (validator rejection arms); COUNT=N
+fuzz/num-id-fuzz.sh         # metamorphic: flipping a type ref name<->number must decompile identically (from_wasm ref resolution); COUNT=N corpus breadth
 fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two-cast chains
 fuzz/wat-cast-const.sh      # deterministic round-trip of each conversion on edge-value consts (catches over-rejection)
 
@@ -89,8 +90,8 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
-`comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh` and
-`validate-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
+`validate-fuzz.sh` and `num-id-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -370,6 +371,23 @@ remain: a base is used only if wax and the reference already agree it is valid
 the reference rejects) or `OVER_REJECT` split is a REVIEW finding and a crash is
 HIGH. Clean on the corpus; the guard makes it precise (it fired only on
 pre-existing base divergences before the agreement precondition was added).
+
+`num-id-fuzz.sh` targets a third seam of the same subsystem from the *decompile*
+side: how `from_wasm` resolves a type referenced by its numeric index versus by
+its `$name`. A `(type N)` / `(ref N)` and the `(type $name)` / `(ref $name)`
+that names index N are the same type, so flipping one reference from name to
+number is semantics-preserving — from_wasm must decompile the mutant to
+byte-identical Wax. `wat-numid-mutate.js` flips ONE reference at a time (a whole
+module flip is as consistent as the original and papers the bug over; the trigger
+is a *mixed* module — one type referenced both ways), and the driver enumerates
+every single-reference flip of every base, asserting `wax(base) == wax(flip)`.
+A mismatch means from_wasm treated the two forms differently — the class of the
+`heaptype_eq` bug, where an inline signature referencing a declared type by
+number was not recognised as a duplicate of the same type named symbolically, so
+a spurious implicit type was minted and later numeric `(type N)` references
+shifted. Built-in mixed-reference seeds guarantee the shape; a corpus, when
+present, adds breadth. (Verified: reverting the `heaptype_eq` fix makes the
+duplicate-inline-signature seed's flips mismatch — `fn g(&s)` vs `fn g(f64)`.)
 
 `wat-cast-chain.sh` is the WAT-side counterpart of `cast-lattice.sh`: where the
 latter drives cast *lowering* from Wax source, this drives cast *decompilation
