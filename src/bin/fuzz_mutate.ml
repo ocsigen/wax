@@ -118,32 +118,70 @@ let site () =
   incr counter;
   c = !target
 
+(* Perturb a struct literal's field list to reach the type checker's field-
+   mismatch recovery (drop a declared field, add an extra one by duplicating or
+   renaming, or plant a hole in a value). These are the shapes behind the
+   [check_hole_order]/hole-order recovery crashes: a missing field, an extra
+   field, and a hole in either. [loc] is a fabricated ident's info. *)
+let mutate_fields loc (fields : (ident * location instr option) list) =
+  let a = Array.of_list fields in
+  let n = Array.length a in
+  if n = 0 then fields
+  else
+    let d = next () mod n in
+    match next () mod 4 with
+    | 0 -> List.filteri (fun k _ -> k <> d) fields (* drop a field *)
+    | 1 ->
+        (* duplicate a field (an extra, count-mismatching field) *)
+        List.concat_map (fun e -> if e == a.(d) then [ e; e ] else [ e ]) fields
+    | 2 ->
+        (* rename a field to a name the type does not declare *)
+        List.mapi
+          (fun k (nm, v) ->
+            if k = d then ({ nm with desc = nm.desc ^ "_x" }, v) else (nm, v))
+          fields
+    | _ ->
+        (* replace a field's value with a hole *)
+        List.mapi
+          (fun k (nm, v) ->
+            if k = d then (nm, Some { desc = Hole; info = loc }) else (nm, v))
+          fields
+
 let mutate_node (i : location instr) : location instr =
+  (* Replacing a value with a hole [_] feeds the type checker's hole handling in
+     any position the walk reaches (a struct field, a match scrutinee, a call
+     argument, …) — a recovery path the valid-only corpus never exercises. *)
   let desc =
-    match i.desc with
-    | BinOp (op, a, b) -> (
-        match next () mod 3 with
-        | 0 -> BinOp ({ op with desc = swap_binop op.desc }, a, b)
-        | 1 -> BinOp (op, b, a)
-        | _ -> graft ())
-    | UnOp (op, e) ->
-        if next () mod 2 = 0 then UnOp ({ op with desc = swap_unop op.desc }, e)
-        else graft ()
-    | Int _ -> if next () mod 2 = 0 then Int (pick int_pool) else graft ()
-    | Float _ -> if next () mod 2 = 0 then Float (pick float_pool) else graft ()
-    | Cast (e, Valtype _) ->
-        if next () mod 2 = 0 then Cast (e, Valtype (pick valtype_pool))
-        else graft ()
-    (* Perturb a compound assignment [x op= e]: swap the operator or drop it to a
-       plain [x = e]. Promote a plain assignment to a variable into a compound
-       one. Either may become ill-typed — an expected rejection, not a crash. *)
-    | Set (id, Some op, e) ->
-        if next () mod 2 = 0 then
-          Set (id, Some { op with desc = swap_binop op.desc }, e)
-        else Set (id, None, e)
-    | Set (id, None, e) when next () mod 2 = 0 ->
-        Set (id, Some { desc = pick compound_binops; info = e.info }, e)
-    | _ -> graft ()
+    if next () mod 6 = 0 then Hole
+    else
+      match i.desc with
+      | BinOp (op, a, b) -> (
+          match next () mod 3 with
+          | 0 -> BinOp ({ op with desc = swap_binop op.desc }, a, b)
+          | 1 -> BinOp (op, b, a)
+          | _ -> graft ())
+      | UnOp (op, e) ->
+          if next () mod 2 = 0 then
+            UnOp ({ op with desc = swap_unop op.desc }, e)
+          else graft ()
+      | Int _ -> if next () mod 2 = 0 then Int (pick int_pool) else graft ()
+      | Float _ ->
+          if next () mod 2 = 0 then Float (pick float_pool) else graft ()
+      | Cast (e, Valtype _) ->
+          if next () mod 2 = 0 then Cast (e, Valtype (pick valtype_pool))
+          else graft ()
+      | Struct (name, fields) -> Struct (name, mutate_fields i.info fields)
+      | StructDesc (d, fields) -> StructDesc (d, mutate_fields i.info fields)
+      (* Perturb a compound assignment [x op= e]: swap the operator or drop it to
+         a plain [x = e]. Promote a plain assignment to a variable into a compound
+         one. Either may become ill-typed — an expected rejection, not a crash. *)
+      | Set (id, Some op, e) ->
+          if next () mod 2 = 0 then
+            Set (id, Some { op with desc = swap_binop op.desc }, e)
+          else Set (id, None, e)
+      | Set (id, None, e) when next () mod 2 = 0 ->
+          Set (id, Some { desc = pick compound_binops; info = e.info }, e)
+      | _ -> graft ()
   in
   { i with desc }
 
@@ -210,6 +248,56 @@ and rebuild : location instr_desc -> location instr_desc = function
         }
   | TryTable r ->
       TryTable { r with block = { r.block with desc = go_list r.block.desc } }
+  (* Recurse into the constructs that carry scrutinees, arm bodies and field
+     values, so a mutation (a hole, a graft, a field edit) can land there and
+     reach the type checker's recovery paths — not just top-level statements. *)
+  | Match r ->
+      Match
+        {
+          scrutinee = go r.scrutinee;
+          arms =
+            List.map
+              (fun (p, b) -> (p, { b with desc = go_list b.desc }))
+              r.arms;
+          default = { r.default with desc = go_list r.default.desc };
+        }
+  | Dispatch r ->
+      Dispatch
+        {
+          r with
+          index = go r.index;
+          arms =
+            List.map
+              (fun (l, b) -> (l, { b with desc = go_list b.desc }))
+              r.arms;
+        }
+  | On (e, clauses) -> On (go e, clauses)
+  | Struct (name, fields) ->
+      Struct (name, List.map (fun (n, v) -> (n, Option.map go v)) fields)
+  | StructDesc (d, fields) ->
+      StructDesc (go d, List.map (fun (n, v) -> (n, Option.map go v)) fields)
+  | StructDefaultDesc d -> StructDefaultDesc (go d)
+  | Array (t, a, b) -> Array (t, go a, go b)
+  | ArrayDefault (t, e) -> ArrayDefault (t, go e)
+  | ArrayFixed (t, l) -> ArrayFixed (t, go_list l)
+  | ArraySegment (t, seg, a, b) -> ArraySegment (t, seg, go a, go b)
+  | ThrowRef e -> ThrowRef (go e)
+  | Throw (t, l) -> Throw (t, List.map go l)
+  | ContNew (t, e) -> ContNew (t, go e)
+  | ContBind (s, d, l) -> ContBind (s, d, List.map go l)
+  | Suspend (t, l) -> Suspend (t, List.map go l)
+  | Resume (t, h, l) -> Resume (t, h, List.map go l)
+  | ResumeThrow (t, tag, h, l) -> ResumeThrow (t, tag, h, List.map go l)
+  | ResumeThrowRef (t, h, l) -> ResumeThrowRef (t, h, List.map go l)
+  | Switch (t, tag, l) -> Switch (t, tag, List.map go l)
+  | Br_on_null (l, e) -> Br_on_null (l, go e)
+  | Br_on_non_null (l, e) -> Br_on_non_null (l, go e)
+  | Br_on_cast (l, t, e) -> Br_on_cast (l, t, go e)
+  | Br_on_cast_fail (l, t, e) -> Br_on_cast_fail (l, t, go e)
+  | Br_on_cast_desc_eq (l, n, a, b) -> Br_on_cast_desc_eq (l, n, go a, go b)
+  | Br_on_cast_desc_eq_fail (l, n, a, b) ->
+      Br_on_cast_desc_eq_fail (l, n, go a, go b)
+  | GetDescriptor e -> GetDescriptor (go e)
   | Sequence l -> Sequence (go_list l)
   | Set (id, op, e) -> Set (id, op, go e)
   | Tee (id, e) -> Tee (id, go e)
@@ -237,6 +325,24 @@ and go_list l =
   let l = List.map go l in
   if l <> [] && site () then mutate_list l else l
 
+(* Point one member's supertype at an in-group name — its own (a self cycle) or a
+   sibling — the forward/self reference that must be rejected (as unbound) rather
+   than hang the subtype walk. A rec group's later members are in scope here too,
+   so a plain sequence of type definitions can be made cyclic. *)
+let mutate_rectype (rt : rectype) : rectype =
+  let n = Array.length rt in
+  if n = 0 then rt
+  else
+    let k = next () mod n in
+    let sup = fst rt.(next () mod n).desc in
+    Array.mapi
+      (fun i e ->
+        if i = k then
+          let name, (sub : subtype) = e.desc in
+          { e with desc = (name, { sub with supertype = Some sup }) }
+        else e)
+      rt
+
 let go_field (fld : (location modulefield, location) annotated) =
   let desc =
     match fld.desc with
@@ -244,6 +350,8 @@ let go_field (fld : (location modulefield, location) annotated) =
         let label, body = r.body in
         Func { r with body = (label, go_list body) }
     | Global r -> Global { r with def = go r.def }
+    (* A type definition is itself a mutable site (its supertype). *)
+    | Type rt -> if site () then Type (mutate_rectype rt) else Type rt
     | _ -> fld.desc
   in
   { fld with desc }
