@@ -204,10 +204,7 @@ the compact encoding the decoder sees):
   (@feature "compact-import-section")
   (type (func (param i32)))
   (type (func))
-  (import "env"
-    (item "a" (func $a (param i32)))
-    (item "b" (func $b (param i32)))
-  )
+  (import "env" (item $a "a") (item $b "b") (func (param i32)))
   (func $main
     i32.const 1
     call $a

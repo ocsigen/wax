@@ -1,0 +1,4 @@
+#![feature = "compact-import-section"]
+import "env" {
+    fn a(i32);
+}

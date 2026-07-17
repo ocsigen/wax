@@ -2056,6 +2056,17 @@ let guarded_export_fields ~loc ~kind ~field_name attributes =
       | _ -> None)
     attributes
 
+(* The standalone [(export …)] fields for a field's unguarded exports. A field
+   normally carries these inline (in its [exports] list); a compact import group
+   has no inline-export slot, so its items' unguarded exports are emitted as
+   sibling fields instead, exactly as [guarded_export_fields] does for guarded
+   ones. [field_name] indexes the exported entity, [kind] its export sort. *)
+let inline_export_fields ~loc ~kind ~field_name attributes =
+  List.map
+    (fun name ->
+      with_loc loc (Text.Export { name; kind; index = index field_name }))
+    (exports ~name:field_name attributes)
+
 (* The [(start $f)] field for a function's [#[start]] attribute: inline when
    unguarded, wrapped in [(@if <cond> …)] when guarded, like a guarded export. *)
 let start_fields ~loc ~field_name attributes =
@@ -2076,6 +2087,48 @@ let start_fields ~loc ~field_name attributes =
                   }))
       | _ -> None)
     attributes
+
+(* compact-import-section: normalise a lowered [Text.importdesc] for the Group2
+   homogeneity test — rebuild it with every source location flattened to a dummy,
+   keeping all names (param names, type ids). Two descs are compatible (can share
+   one type in a name-only [Import_group2]) exactly when their normal forms are
+   [( = )]-equal, so sharing a type never silently drops a name; anything else
+   stays a per-item [Import_group1]. *)
+let norm_idx (i : Text.idx) : Text.idx = Ast.no_loc i.desc
+
+let norm_heaptype (h : Text.heaptype) : Text.heaptype =
+  match h with
+  | Type i -> Type (norm_idx i)
+  | Exact i -> Exact (norm_idx i)
+  | h -> h
+
+let norm_reftype (r : Text.reftype) : Text.reftype =
+  { r with typ = norm_heaptype r.typ }
+
+let norm_valtype (v : Text.valtype) : Text.valtype =
+  match v with Ref r -> Ref (norm_reftype r) | v -> v
+
+let norm_functype (ft : Text.functype) : Text.functype =
+  {
+    params =
+      Array.map
+        (fun p -> Ast.no_loc (fst p.Ast.desc, norm_valtype (snd p.Ast.desc)))
+        ft.params;
+    results = Array.map norm_valtype ft.results;
+  }
+
+let norm_typeuse ((idx, ft) : Text.typeuse) : Text.typeuse =
+  (Option.map norm_idx idx, Option.map norm_functype ft)
+
+let norm_importdesc (d : Text.importdesc) : Text.importdesc =
+  match d with
+  | Func { exact; typ } -> Func { exact; typ = norm_typeuse typ }
+  | Global { mut; typ } -> Global { mut; typ = norm_valtype typ }
+  | Tag t -> Tag (norm_typeuse t)
+  | Memory l -> Memory (Ast.no_loc l.Ast.desc)
+  | Table { limits; reftype } ->
+      Table
+        { limits = Ast.no_loc limits.Ast.desc; reftype = norm_reftype reftype }
 
 (* The module name carried by a [#![module = "name"]] inner attribute, if any.
    Lowered into the binary's module-name subsection (the WAT [(module $name)]),
@@ -2342,7 +2395,8 @@ let reorder_imports lst =
     in
     rebuild partitioned
 
-let module_ diagnostics types fields =
+let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
+    =
   Wax_utils.Debug.timed "convert" @@ fun () ->
   let func_refs_in_func = Hashtbl.create 16 in
   let func_refs_outside_func = Hashtbl.create 16 in
@@ -2473,12 +2527,16 @@ let module_ diagnostics types fields =
   (* Now that the top-level types are recorded, install the synthesized-type
      remapping used by [index] while converting. *)
   type_remap := make_type_remap ctx;
-  (* Lower one entry of an [import "module" { ... }] block to a [Text.Import]. *)
-  let lower_import module_ (d : (import_decl, location) annotated) =
-    let decl = d.desc in
-    let name = decl.id in
-    let import_name = Wax_lang.Ast_utils.import_name decl in
-    let exports = exports ~name decl.attributes in
+  (* With compact-import-section enabled, an [import "m" { … }] block of ≥2 items
+     lowers to one compact group entry; otherwise (and always without the
+     feature) each item lowers to an individual [Text.Import]. *)
+  let compact_imports =
+    Wax_utils.Feature.is_enabled features
+      Wax_utils.Feature.Compact_import_section
+  in
+  (* The lowered [Text.importdesc] and export sort of one import declaration. *)
+  let import_desc_and_kind (decl : import_decl) :
+      Text.importdesc * Text.exportable =
     let import_limits limits address_type ~shared ~page_size_log2 : Ast.limits =
       let mi, ma =
         match limits with
@@ -2515,17 +2573,76 @@ let module_ diagnostics types fields =
       | Import_memory _ -> Memory
       | Import_table _ -> Table
     in
+    (desc, export_kind)
+  in
+  (* The sibling fields an import's attributes require, emitted after the import
+     itself: its [#[start]] (function imports only) and its guarded exports. *)
+  let import_sibling_fields ~loc ~kind ~field_name attributes =
+    start_fields ~loc ~field_name attributes
+    @ guarded_export_fields ~loc ~kind ~field_name attributes
+  in
+  (* Lower one entry of an [import "module" { ... }] block to a [Text.Import]
+     (carrying its inline unguarded exports) plus its sibling fields. *)
+  let lower_import module_ (d : (import_decl, location) annotated) =
+    let decl = d.desc in
+    let name = decl.id in
+    let import_name = Wax_lang.Ast_utils.import_name decl in
+    let exports = exports ~name decl.attributes in
+    let desc, export_kind = import_desc_and_kind decl in
     ( {
         desc =
           Text.Import
             { module_; name = import_name; id = Some name; desc; exports };
         info = d.info;
       },
-      (* A [#[start]] imported function emits a standalone [(start $f)] field,
-         like a defined start function; only function imports can carry it. *)
-      start_fields ~loc:d.info ~field_name:name decl.attributes
-      @ guarded_export_fields ~loc:d.info ~kind:export_kind ~field_name:name
-          decl.attributes )
+      import_sibling_fields ~loc:d.info ~kind:export_kind ~field_name:name
+        decl.attributes )
+  in
+  (* Lower an [import "m" { … }] block (≥2 items) to one compact group entry.
+     A group carries no inline [exports] slot, so an item's unguarded exports
+     become standalone [(export …)] fields (by the item's id) alongside its other
+     sibling fields, all emitted after the group so it stays one entry. The group
+     is a name-only [Import_group2] sharing one type when every item's lowered
+     [importdesc] is structurally equal ignoring locations (so no name is lost by
+     sharing), else a per-item [Import_group1]. *)
+  let lower_import_group module_ loc decls =
+    let items =
+      List.map
+        (fun (d : (import_decl, location) annotated) ->
+          let decl = d.desc in
+          let name = decl.id in
+          let import_name = Wax_lang.Ast_utils.import_name decl in
+          let desc, export_kind = import_desc_and_kind decl in
+          let siblings =
+            inline_export_fields ~loc:d.info ~kind:export_kind ~field_name:name
+              decl.attributes
+            @ import_sibling_fields ~loc:d.info ~kind:export_kind
+                ~field_name:name decl.attributes
+          in
+          (import_name, Some name, desc, siblings))
+        decls
+    in
+    let homogeneous =
+      match items with
+      | (_, _, d0, _) :: rest ->
+          let n0 = norm_importdesc d0 in
+          List.for_all (fun (_, _, d, _) -> norm_importdesc d = n0) rest
+      | [] -> false
+    in
+    let group : _ Text.modulefield =
+      if homogeneous then
+        let _, _, shared, _ = List.hd items in
+        Import_group2
+          {
+            module_;
+            desc = shared;
+            items = List.map (fun (n, id, _, _) -> (n, id)) items;
+          }
+      else
+        Import_group1
+          { module_; items = List.map (fun (n, id, d, _) -> (n, id, d)) items }
+    in
+    with_loc loc group :: List.concat_map (fun (_, _, _, s) -> s) items
   in
   let rec convert_fields fields =
     List.concat_map
@@ -2535,11 +2652,15 @@ let module_ diagnostics types fields =
             let import, guarded = lower_import module_ decl in
             import :: guarded
         | Import_group { module_; decls } ->
-            (* Emit every import of the group before any of their guarded
-               standalone exports, so the run of same-module imports stays
-               contiguous and re-groups on the way back. *)
-            let imports = List.map (lower_import module_) decls in
-            List.map fst imports @ List.concat_map snd imports
+            if compact_imports && List.length decls >= 2 then
+              lower_import_group module_ field.info decls
+            else
+              (* Feature off, or a singleton block (which cannot round-trip as a
+                 compact group — [group_imports] only forms blocks from ≥2):
+                 flatten to individual imports. Emit every import before any
+                 sibling field so the run stays contiguous and re-groups back. *)
+              let imports = List.map (lower_import module_) decls in
+              List.map fst imports @ List.concat_map snd imports
         (* The module name is lowered separately into the name section; the
            annotation itself produces no module field. *)
         | Module_annotation _ -> []

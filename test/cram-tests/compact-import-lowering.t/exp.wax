@@ -1,0 +1,8 @@
+#![feature = "compact-import-section"]
+import "env" {
+    #[export]
+    fn a(i32);
+    fn b(i32);
+    #[export = "cc"]
+    fn c(i32);
+}

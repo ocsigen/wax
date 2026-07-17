@@ -30,7 +30,7 @@ Off by default; turn one on with `-X NAME` (see the [CLI reference](./cli.md)):
 | Feature | What it adds |
 |---------|--------------|
 | `custom-descriptors` | exact reference types, descriptor structs, and the descriptor instructions (`descriptor` / `describes`) |
-| `compact-import-section` | coalesces consecutive same-module imports into one group when emitting the binary. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag; the flag only gates *deriving* groups from plain imports |
+| `compact-import-section` | writes same-module imports under one module name in the binary import section. From a text input it lowers a `import "m" { … }` block / `(import "m" (item …) …)` group to a compact entry (a shared-type group when the items' types match, else one type per item; a one-item block flattens; separate imports are never merged). From a binary input it coalesces runs of consecutive same-module plain imports. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag |
 
 ## Not supported
 

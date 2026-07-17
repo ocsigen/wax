@@ -204,7 +204,7 @@ Off by default; turn one on with `-X NAME` (see the [CLI reference](./cli.md)):
 | Feature | What it adds |
 |---------|--------------|
 | `custom-descriptors` | exact reference types, descriptor structs, and the descriptor instructions (`descriptor` / `describes`) |
-| `compact-import-section` | coalesces consecutive same-module imports into one group when emitting the binary. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag; the flag only gates *deriving* groups from plain imports |
+| `compact-import-section` | writes same-module imports under one module name in the binary import section. From a text input it lowers a `import "m" { … }` block / `(import "m" (item …) …)` group to a compact entry (a shared-type group when the items' types match, else one type per item; a one-item block flattens; separate imports are never merged). From a binary input it coalesces runs of consecutive same-module plain imports. Groups written explicitly (in WAT, or already present in a binary) round-trip regardless of the flag |
 
 ## Not supported
 
@@ -4452,12 +4452,19 @@ server](#language-server)).
         - `custom-descriptors`: exact reference types (`&!t`), `descriptor`/`describes`
           struct clauses, and the descriptor instructions. Without it these
           constructs are rejected during validation.
-        - `compact-import-section`: coalesce a module's consecutive same-module
-          imports under one module name in the binary import section. The flag
-          gates only this *deriving* of groups from plain imports on output.
-          Groups written explicitly — in WAT via `(import "m" (item …) …)`, or
-          already present in a binary — are preserved through WAT↔WAT and
-          WASM↔WASM round-trips on their own, no flag needed.
+        - `compact-import-section`: write same-module imports under one module
+          name in the binary import section. What the flag enables depends on the
+          input, because the text form is authoritative for import layout. From a
+          text input (Wax or WAT), a `import "m" { … }` block / `(import "m"
+          (item …) …)` group is lowered to a compact entry — a name-only group
+          sharing one type when the items' types all match, else one type per
+          item; a Wax block of one item flattens to a plain import, and imports
+          the source left *separate* are never merged. From a WASM binary — which
+          has no authorial text layout — the flag instead coalesces runs of
+          consecutive same-module plain imports (the "compress this binary"
+          mode). Groups written explicitly, or already present in a binary, are
+          preserved through WAT↔WAT and WASM↔WASM round-trips on their own, no
+          flag needed.
     - A module can also declare the features it uses itself, with a
       `#![feature = "NAME"]` inner attribute (WAT: a module-level
       `(@feature "NAME")` annotation); see

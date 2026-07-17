@@ -1,0 +1,6 @@
+#![feature = "compact-import-section"]
+import "env" {
+    fn a();
+    fn b(i32);
+    const c: i32;
+}

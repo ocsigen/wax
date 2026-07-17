@@ -263,13 +263,20 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
       text
   in
   let ast = specialize_wax ~ctx ~color ~text defines ast in
+  (* Share one feature set between typing, which enables the features the module
+     declares with [#![feature]] attributes, and the conversion, whose
+     compact-import-section lowering (import blocks to compact groups) is gated
+     on it. *)
+  let features = Wax_utils.Feature.default () in
   let types, ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-      ~source:(Some text) (fun d -> Wax_lang.Typing.f ~warn_unused d ast)
+      ~source:(Some text) (fun d ->
+        Wax_lang.Typing.f ~warn_unused ~features d ast)
   in
   let wasm_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-      ~source:(Some text) (fun d -> Wax_conversion.To_wasm.module_ d types ast)
+      ~source:(Some text) (fun d ->
+        Wax_conversion.To_wasm.module_ ~features d types ast)
   in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
@@ -331,7 +338,8 @@ let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
   in
   let wasm_ast_text =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-      ~source:(Some text) (fun d -> Wax_conversion.To_wasm.module_ d types ast)
+      ~source:(Some text) (fun d ->
+        Wax_conversion.To_wasm.module_ ~features d types ast)
   in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
@@ -378,7 +386,11 @@ let wasm_to_wasm ~input_file ~output_file ~text ~oc ~validate:_validate
     ~source_map =
   let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wax_wasm.Validation.f ast; *)
-  Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map ast
+  (* A binary input carries no authorial text layout for its import section, so
+     this is the one path that may compress it: with compact-import-section
+     enabled, coalesce runs of same-module imports. *)
+  Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
+    ~coalesce_imports:true ast
 
 let wasm_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode ~defines:_ ~desugar:_ ~source_map:_ =

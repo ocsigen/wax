@@ -1,0 +1,4 @@
+import "env" {
+    fn a(i32);
+    fn b(i32);
+}

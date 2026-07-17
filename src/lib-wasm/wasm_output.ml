@@ -1326,11 +1326,15 @@ let coalesce_singles entries =
    item list — the marker sits where an externtype kind byte would, and neither
    is a valid kind, so a plain import (kind byte next) stays unambiguous. Groups
    present in the AST are emitted verbatim (preserving a compact input); the
-   feature only drives coalescing of ungrouped [Single] imports above. *)
-let output_import_section ~features out_channel imports =
+   feature only drives coalescing of ungrouped [Single] imports above, and only
+   when [coalesce_imports] is set — the binary-input ("compress this binary")
+   path. Text-origin modules (wax/wat) carry authorial import layout, so their
+   groups are lowered upstream and their singles are left untouched here. *)
+let output_import_section ~features ~coalesce_imports out_channel imports =
   let compact =
-    Wax_utils.Feature.is_enabled features
-      Wax_utils.Feature.Compact_import_section
+    coalesce_imports
+    && Wax_utils.Feature.is_enabled features
+         Wax_utils.Feature.Compact_import_section
   in
   let write_named_desc b name desc =
     Encoder.name b name;
@@ -1382,7 +1386,8 @@ let output_branch_hint_section out_channel
 (*** The module writer ***)
 
 let module_ ~out_channel ?output_file ?(source_map = false)
-    ?(features = Wax_utils.Feature.default ()) (m : Ast.location module_) =
+    ?(coalesce_imports = false) ?(features = Wax_utils.Feature.default ())
+    (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
@@ -1420,7 +1425,8 @@ let module_ ~out_channel ?output_file ?(source_map = false)
 
   (* 2. Import Section *)
   if m.imports <> [] then
-    bump (output_import_section ~features out_channel m.imports);
+    bump
+      (output_import_section ~features ~coalesce_imports out_channel m.imports);
 
   (* 3. Function Section *)
   if m.functions <> [] then section 3 (Encoder.vec Encoder.sint) m.functions;
