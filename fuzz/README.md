@@ -490,12 +490,18 @@ unchanged. A difference is a *miscompilation* — the bug class the validity/cra
 oracles cannot see. All three are differential (compare a baseline run of the
 original against a run after wax recompiled the modules) so any runner limitation
 cancels out, and all take `MODE=codec` (wasm→wasm, default) or `MODE=wax`
-(wasm→wax→wasm). A module the runner cannot instantiate (unsupported proposal) or
+(wasm→wax→wasm). `exec-ref.sh` additionally accepts `MODE=wax-text`
+(wat→wax→wasm, feeding each module's *text* to wax): the binary modes assemble
+the module through wasm-tools first, so they exercise wax's *binary* reader and
+never see what a binary normalizes away — symbolic-vs-numeric references,
+unsanitizable identifiers, width re-inference — whereas `wax-text` drives
+`from_wasm`'s WAT reader, making those text-only miscompiles behaviourally
+observable. A module the runner cannot instantiate (unsupported proposal) or
 wax cannot recompile is skipped and counted, not failed.
 
 | Script            | Runner | Reach |
 |-------------------|--------|-------|
-| `exec-ref.sh`     | WebAssembly reference interpreter | Widest — GC, SIMD, exceptions, multi-memory (not stack switching). Runs `.wast` directly via `wast-rewrite.js`. |
+| `exec-ref.sh`     | WebAssembly reference interpreter | Widest — GC, SIMD, exceptions, multi-memory (not stack switching). Runs `.wast` directly via `wast-rewrite.js`. `MODE=wax-text` also covers the WAT-text input pipeline. |
 | `exec-interp.sh`  | wabt `spectest-interp` | SIMD/v128, GC, memory64; but `wast2json` crashes on ~100 core files. |
 | `exec.sh`         | Node (`exec-run.js`) | MVP + common proposals; no v128. |
 

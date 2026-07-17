@@ -7,8 +7,10 @@
 //
 //   node wast-rewrite.js <file.wast>     (writes the rewritten script to stdout)
 //
-// Env: WAX (wax binary), MODE (codec = wasm->wasm, wax = wasm->wax->wasm),
-//      WASM_TOOLS (to assemble the original module text to a reference binary).
+// Env: WAX (wax binary), MODE (codec = wasm->wasm, wax = wasm->wax->wasm,
+//      wax-text = wat->wax->wasm straight from the module's TEXT — the input
+//      pipeline a wasm binary cannot exercise), WASM_TOOLS (to assemble the
+//      original module text to a reference binary; unused by wax-text).
 
 const fs = require("fs");
 const os = require("os");
@@ -44,6 +46,18 @@ function waxCompile(ref, out) {
   if (MODE === "codec") return run(WAX, ["-i", "wasm", "-f", "wasm", ref, "-o", out]);
   const mid = ref + ".wax";
   return run(WAX, ["-i", "wasm", "-f", "wax", ref, "-o", mid]) &&
+         run(WAX, ["-i", "wax", "-f", "wasm", mid, "-o", out]);
+}
+
+// Text-input round trip: wat -> wax -> wasm, straight from the module's WAT
+// source [watFile]. Unlike waxCompile (which reads a wasm-tools-assembled
+// binary), this drives from_wasm's *text* reader and the Wax surface
+// printer/parser, where symbolic-vs-numeric references, unsanitizable
+// identifiers, and width re-inference live — all of which a binary has already
+// normalized away. False if either leg fails.
+function waxCompileText(watFile, out) {
+  const mid = out + ".wax";
+  return run(WAX, ["-i", "wat", "-f", "wax", watFile, "-o", mid]) &&
          run(WAX, ["-i", "wax", "-f", "wasm", mid, "-o", out]);
 }
 
@@ -104,13 +118,24 @@ function rewriteModule(group) {
   // types exactly, so there a flipped assert_unlinkable IS a real bug — keep it.
   // (Only on the wax recompile path; a semantics-preserving mutation keeps
   // linkability, so in mutate mode every assertion is kept.)
-  if (!MUTATE_SEED && MODE === "wax" && /^\(\s*assert_unlinkable\b/.test(group)) return "";
+  if (!MUTATE_SEED && (MODE === "wax" || MODE === "wax-text") &&
+      /^\(\s*assert_unlinkable\b/.test(group)) return "";
   // Skip the binary/quote forms and module-less groups; transform plain text.
   const m = group.match(/^\(\s*module\b\s*(\$[^\s()]+)?\s*([a-z]*)/);
   if (!m || m[2] === "binary" || m[2] === "quote") return group; // not a text module
   const name = m[1] ? " " + m[1] : "";
   const wat = path.join(tmp, "m.wat"), ref = path.join(tmp, "m.wasm"), out = path.join(tmp, "m.out.wasm");
   fs.writeFileSync(wat, group);
+  // Text-input path: feed the module's WAT source straight to wax, bypassing the
+  // wasm-tools assembly the binary modes need.
+  if (MODE === "wax-text") {
+    if (waxCompileText(wat, out)) {
+      recompiled++;
+      return "(module" + name + " binary " + escape(fs.readFileSync(out)) + ")";
+    }
+    failed++;
+    return group;
+  }
   if (run(WT, ["parse", wat, "-o", ref]) && transformModule(ref, out)) {
     recompiled++;
     return "(module" + name + " binary " + escape(fs.readFileSync(out)) + ")";

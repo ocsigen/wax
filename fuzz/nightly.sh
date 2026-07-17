@@ -128,6 +128,11 @@ if [ "$exec_wast" -gt 0 ]; then
     # engine, so a machine with neither REF nor node loses only coverage.
     run exec.sh "${exec_wasts[@]}"
     run "MODE=wax" exec-ref.sh "${exec_wasts[@]}"
+    # wax-text feeds each module's TEXT to wax (wat->wax->wasm), behaviourally
+    # covering from_wasm's WAT reader — the input pipeline the binary modes
+    # above cannot reach (text-only miscompiles: symbolic-vs-numeric refs,
+    # unsanitizable identifiers, width re-inference).
+    run "MODE=wax-text" exec-ref.sh "${exec_wasts[@]}"
     run exec-mutate.sh "${exec_wasts[@]}"
   fi
 fi

@@ -14,7 +14,11 @@
 # this interpreter does not implement) is skipped. A file that passes the
 # baseline but fails after wax recompiled its modules is a wax miscompilation.
 #
-# MODE: codec (wasm->wasm, default) or wax (wasm->wax->wasm).
+# MODE: codec (wasm->wasm, default), wax (wasm->wax->wasm), or wax-text
+#       (wat->wax->wasm, feeding each module's TEXT to wax — the input pipeline a
+#       wasm binary cannot exercise: it drives from_wasm's WAT reader, so
+#       text-only miscompiles like symbolic-vs-numeric references and
+#       unsanitizable identifiers become behaviourally observable).
 # REF:  path to the reference interpreter (default ~/sources/Wasm/interpreter/wasm).
 # With no arguments, runs the whole core suite. Exits non-zero on any regression.
 
