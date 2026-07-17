@@ -3653,6 +3653,11 @@ let rec module_has_conditional fields =
       | _ -> false)
     fields
 
+(* A compact import group ([Import_group1]/[Import_group2]) can hold several
+   memory/table imports, so expand it into individual imports before counting —
+   as every other module walk does. Miscounting leaves [forbid_numeric_memory]/
+   [forbid_numeric_table] off under conditionals, degrading a later numeric-
+   reference diagnostic. *)
 let rec count_memories fields =
   List.fold_left
     (fun n (f : (_ Src.modulefield, _) Ast.annotated) ->
@@ -3666,7 +3671,8 @@ let rec count_memories fields =
                  ~some:(fun e -> count_memories e.Ast.desc)
                  else_fields)
       | _ -> n)
-    0 fields
+    0
+    (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
 let rec count_tables fields =
   List.fold_left
@@ -3681,7 +3687,8 @@ let rec count_tables fields =
                  ~some:(fun e -> count_tables e.Ast.desc)
                  else_fields)
       | _ -> n)
-    0 fields
+    0
+    (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
 (* The [type <name> = fn(..)] declarations for implicit function types that were
    named because a ref-type referenced them ([type_ref_name]). Converting a

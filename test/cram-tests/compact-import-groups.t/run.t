@@ -16,3 +16,27 @@ survives a binary round-trip (no feature flag needed to preserve it):
   (type (func (param i32)))
   (import "env" (item "a" (func (result i32))) (item "b" (global i32)))
   (import "env" (item "x") (item "y") (func (param i32)))
+
+Memories (and tables) imported via a compact group are counted like individual
+imports, so in a module with conditionals a numeric memory reference is rejected
+with the same clean diagnostic (before, the group was uncounted, the guard
+stayed off, and the numeric reference slipped through):
+
+  $ cat > cond-mem.wat <<'WAT'
+  > (module
+  >   (import "env" (item "a" (memory $a 1)) (item "b" (memory $b 1)))
+  >   (@if $D (@then (func $cond)))
+  >   (func (drop (memory.size))))
+  > WAT
+
+  $ wax -i wat -f wax cond-mem.wat
+  Error:
+    Numeric references to module fields are not supported in a module with
+    conditional annotations; use a symbolic $name.
+   ──➤  cond-mem.wat:4:27
+  2 │   (import "env" (item "a" (memory $a 1)) (item "b" (memory $b 1)))
+  3 │   (@if $D (@then (func $cond)))
+  4 │   (func (drop (memory.size))))
+    ·                           ^
+  5 │ 
+  [128]
