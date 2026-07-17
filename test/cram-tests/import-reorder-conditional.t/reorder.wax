@@ -1,0 +1,8 @@
+#[export]
+fn f() { g(); }
+import "env" { fn g(); }
+#[if(FOO)]
+{
+    #[export]
+    fn h() {}
+}

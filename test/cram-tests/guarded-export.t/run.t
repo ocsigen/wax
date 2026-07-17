@@ -23,15 +23,15 @@ The guard lowers back to a standalone conditional export, so the round-trip is
 faithful:
 
   $ wax reexport.wat -f wax | wax -i wax -f wat
-  (func $fmt32 (export "fmt32") (param $v (ref eq)) (result (ref eq))
-    (local.get $v)
-  )
-  (@if (not $portable) (@then (export "fmt" (func $fmt32))))
   (@if $portable
     (@then
       (func $fmt64 (export "fmt") (import "m" "fmt64")
         (param (ref eq)) (result (ref eq))))
   )
+  (func $fmt32 (export "fmt32") (param $v (ref eq)) (result (ref eq))
+    (local.get $v)
+  )
+  (@if (not $portable) (@then (export "fmt" (func $fmt32))))
 
 The guard is simplified against the conditionals the target already sits inside,
 so a redundant conjunct is dropped rather than re-accumulated on each round-trip:

@@ -60,12 +60,13 @@ Conversion to WAT produces `(@if …)` module-field annotations.
       (func $debug_log (param $msg i32)))
   )
 
-When a module has conditionals, conversion preserves the surrounding field order
-instead of pulling later imports earlier.
+Even when a module has conditionals, imports are hoisted before definitions so
+the output validates in every configuration. A conditional definition keeps its
+`(@if …)` guard while an unconditional import moves ahead of it.
 
   $ wax import-order.wax -o import-order.wat && cat import-order.wat
-  (@if $debug (@then (func $f)))
   (import "m" "g" (func $g))
+  (@if $debug (@then (func $f)))
 
 A name (here a function) declared with a different signature in each branch is
 type-checked per configuration, so each branch's calls are checked against that

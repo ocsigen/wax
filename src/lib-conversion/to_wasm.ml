@@ -2153,39 +2153,127 @@ let module_has_conditional fields =
     false
   with Found -> true
 
+(* Whether a leaf field introduces an index-consuming definition that imports
+   must precede. Types, exports, [start] and elem/data segments do not.
+   [Module_if_annotation] nodes are dissolved during flattening, so they never
+   reach this classifier. *)
+let reorder_defines (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
+  match f.desc with
+  | Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _ -> true
+  | Import _ | Import_group1 _ | Import_group2 _ | Types _ | Export _ | Start _
+  | Elem _ | Data _ | Feature_annotation _ | Module_if_annotation _ ->
+      false
+
+let reorder_is_import (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
+  match f.desc with
+  | Ast.Text.Import _ | Import_group1 _ | Import_group2 _ -> true
+  | _ -> false
+
+(* Hoist imports before definitions so the output validates ([import_after_
+   definition] in [Validation]). This is guard-aware: nested
+   [#[if]]/[Module_if_annotation] blocks are flattened into a sequence of
+   [(guard, leaf)] pairs, where a guard is the path of frames — each a
+   condition, the branch taken, and the source locations — accumulated while
+   descending. Import-like leaves are stably moved to the front carrying their
+   guards; every other leaf keeps its relative order. The sequence is then
+   rebuilt, merging consecutive entries with an identical guard path back into
+   (nested) blocks. For every assignment of the condition variables this yields
+   the same module as hoisting the specialized fields directly. *)
 let reorder_imports lst =
-  (* Whether a field introduces an index-consuming definition that imports must
-     precede. Types, exports, [start] and elem/data segments do not.
-     Conditional modules skip reordering entirely so their field order stays as
-     written. *)
-  let rec defines (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
-    match f.desc with
-    | Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _ -> true
-    | Module_if_annotation { then_fields; else_fields; _ } ->
-        List.exists defines then_fields.desc
-        || Option.fold ~none:false
-             ~some:(fun e -> List.exists defines e.Ast.desc)
-             else_fields
-    | Import _ | Import_group1 _ | Import_group2 _ | Types _ | Export _
-    | Start _ | Elem _ | Data _ | Feature_annotation _ ->
-        false
+  let flatten fields =
+    let rec go guard acc
+        (fields : (_ Ast.Text.modulefield, _) Ast.annotated list) =
+      List.fold_left
+        (fun acc (f : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+          match f.desc with
+          | Ast.Text.Module_if_annotation { cond; then_fields; else_fields } ->
+              let acc =
+                go
+                  (guard @ [ (cond, `Then, f.info, then_fields.Ast.info) ])
+                  acc then_fields.Ast.desc
+              in
+              Option.fold ~none:acc
+                ~some:(fun e ->
+                  go
+                    (guard @ [ (cond, `Else, f.info, e.Ast.info) ])
+                    acc e.Ast.desc)
+                else_fields
+          | _ -> (guard, f) :: acc)
+        acc fields
+    in
+    List.rev (go [] [] fields)
   in
-  let rec traverse acc (cur : (_ Ast.Text.modulefield, _) Ast.annotated list) =
-    match cur with
-    | [] -> lst (* Nothing to do *)
-    | f :: rem when not (defines f) -> traverse (f :: acc) rem
-    | _ :: _ ->
-        let imports, others =
-          List.partition
-            (fun f ->
-              match f.desc with
-              | Ast.Text.Import _ | Import_group1 _ | Import_group2 _ -> true
-              | _ -> false)
-            cur
-        in
-        List.rev_append acc (imports @ others)
+  let flat = flatten lst in
+  (* Two guard paths are mutually exclusive when they enter a shared branch
+     point on opposite branches: comparing frames in lockstep from the root, if
+     the conditions are structurally equal but the branches differ the leaves
+     never coexist. (Once the conditions differ the leaves are in unrelated
+     subtrees, so no deeper frame can be shared.) This is not condition-value
+     satisfiability — [debug] and [not(debug)] are treated as independent — but
+     it does keep a then-branch definition from counting as preceding an
+     else-branch import of the same [#[if]]. *)
+  let rec mutually_exclusive g1 g2 =
+    match (g1, g2) with
+    | (c1, b1, _, _) :: r1, (c2, b2, _, _) :: r2 ->
+        if c1 = c2 then if b1 <> b2 then true else mutually_exclusive r1 r2
+        else false
+    | _ -> false
   in
-  traverse [] lst
+  (* No-op unless some import-like leaf follows a non-mutually-exclusive
+     defining leaf; this keeps currently-working modules byte-identical. *)
+  let rec needs_reorder def_guards = function
+    | [] -> false
+    | (g, f) :: rem ->
+        if reorder_is_import f then
+          List.exists (fun dg -> not (mutually_exclusive dg g)) def_guards
+          || needs_reorder def_guards rem
+        else
+          let def_guards =
+            if reorder_defines f then g :: def_guards else def_guards
+          in
+          needs_reorder def_guards rem
+  in
+  if not (needs_reorder [] flat) then lst
+  else
+    let imports, others =
+      List.partition (fun (_, f) -> reorder_is_import f) flat
+    in
+    let partitioned = imports @ others in
+    (* Wrap [fields] in the nested [Module_if_annotation] blocks named by
+       [guard], reusing the original locations. *)
+    let rec wrap guard fields =
+      match guard with
+      | [] -> fields
+      | (cond, branch, node_loc, branch_loc) :: rest ->
+          let inner = { Ast.desc = wrap rest fields; info = branch_loc } in
+          let desc =
+            match branch with
+            | `Then ->
+                Ast.Text.Module_if_annotation
+                  { cond; then_fields = inner; else_fields = None }
+            | `Else ->
+                Ast.Text.Module_if_annotation
+                  {
+                    cond;
+                    then_fields = { Ast.desc = []; info = Ast.dummy_loc };
+                    else_fields = Some inner;
+                  }
+          in
+          [ { Ast.desc; info = node_loc } ]
+    in
+    let rec span guard = function
+      | (g, f) :: rem when g = guard ->
+          let same, rest = span guard rem in
+          (f :: same, rest)
+      | l -> ([], l)
+    in
+    let rec rebuild = function
+      | [] -> []
+      | (guard, _) :: _ as l ->
+          let same, rest = span guard l in
+          wrap guard same @ rebuild rest
+    in
+    rebuild partitioned
 
 let module_ diagnostics types fields =
   Wax_utils.Debug.timed "convert" @@ fun () ->
@@ -2694,9 +2782,7 @@ let module_ diagnostics types fields =
       ]
   in
   let wasm_fields = wasm_fields @ extra_types @ elem_declare in
-  let wasm_fields =
-    if has_conditional then wasm_fields else reorder_imports wasm_fields
-  in
+  let wasm_fields = reorder_imports wasm_fields in
   (* Each [#![feature = "name"]] inner attribute becomes a leading
      [(@feature "name")] annotation, so the emitted module stays
      self-describing. *)
