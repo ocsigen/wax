@@ -2713,6 +2713,7 @@ let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   | LoadS (m, _, _, _, _)
   | Store (m, _, _)
   | StoreS (m, _, _, _)
+  | Atomic (m, _, _)
   | MemorySize m
   | MemoryGrow m
   | MemoryFill m
@@ -2761,6 +2762,11 @@ let rec collect_elem_refs ctx acc (i : _ Src.instr) =
   | If { if_block; else_block; _ } ->
       collect_elem_refs_instrs ctx acc if_block.desc;
       collect_elem_refs_instrs ctx acc else_block.desc
+  | If_annotation { then_body; else_body; _ } ->
+      collect_elem_refs_instrs ctx acc then_body.desc;
+      Option.iter
+        (fun b -> collect_elem_refs_instrs ctx acc b.Ast.desc)
+        else_body
   | Try { block; catches; catch_all; _ } ->
       collect_elem_refs_instrs ctx acc block.desc;
       List.iter
@@ -2791,6 +2797,9 @@ let rec collect_local_refs acc (i : _ Src.instr) =
   | If { if_block; else_block; _ } ->
       collect_local_refs_instrs acc if_block.desc;
       collect_local_refs_instrs acc else_block.desc
+  | If_annotation { then_body; else_body; _ } ->
+      collect_local_refs_instrs acc then_body.desc;
+      Option.iter (fun b -> collect_local_refs_instrs acc b.Ast.desc) else_body
   | Try { block; catches; catch_all; _ } ->
       collect_local_refs_instrs acc block.desc;
       List.iter (fun (_, b) -> collect_local_refs_instrs acc b.Ast.desc) catches;
@@ -3416,6 +3425,9 @@ let elaborate_implicit_types ctx fields =
         instrs block.desc;
         List.iter (fun (_, b) -> instrs b.Ast.desc) catches;
         Option.iter (fun b -> instrs b.Ast.desc) catch_all
+    | If_annotation { then_body; else_body; _ } ->
+        instrs then_body.desc;
+        Option.iter (fun b -> instrs b.Ast.desc) else_body
     | Folded (i, l) ->
         instr i;
         instrs l
