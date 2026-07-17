@@ -427,13 +427,26 @@ struct
         in
         match tok0 with Some tok -> step tok | None -> step (supplier ())
       in
+      (* [MI.acceptable] answers "can this token make progress?" by driving the
+         automaton forward ([shifts] follows reductions via [resume]), so it runs
+         the semantic actions of any reduction it passes through — and one of
+         those can raise [Syntax_error] (Wax's [process_stmts], a WAT
+         pagesize/alignment check). Every use here is a speculative probe during
+         recovery, so a raising reduction just means "this token does not lead
+         anywhere clean": treat it as not acceptable ([false]) rather than letting
+         the raise escape the whole recovery. The error is not recorded — the
+         probe was hypothetical; the reduction the user actually reached is
+         recorded where it is really performed (in [run] / the outer backstop). *)
+      let acceptable checkpoint token pos =
+        try MI.acceptable checkpoint token pos with Syntax_error _ -> false
+      in
       (* Pop the parser stack to the closest state that could shift [tok] and
          return that env, {e without} offering [tok]. Group-drop uses it to climb
          out of a broken inner group — the state reached is the enclosing context,
          past the group's opener, from which the {e next} boundary (not this
          closer) is resynchronized. [None] if no stacked state accepts [tok]. *)
       let rec pop_to env tok (startp : Lexing.position) =
-        if MI.acceptable (MI.input_needed env) tok startp then Some env
+        if acceptable (MI.input_needed env) tok startp then Some env
         else
           match MI.pop env with
           | Some env' -> pop_to env' tok startp
@@ -483,7 +496,7 @@ struct
                acceptable and, once the held token is offered on top, leaves the
                parser wanting more input or accepting (the validation check). *)
             let attempt (tok, message, move_pos) =
-              if not (MI.acceptable cp tok startp) then None
+              if not (acceptable cp tok startp) then None
               else
                 match settle (MI.offer cp (tok, startp, startp)) with
                 | MI.InputNeeded _ as after_insert -> (
@@ -544,9 +557,7 @@ struct
             | Some _ as r -> r
             | None -> (
                 match
-                  List.find_opt
-                    (fun c -> MI.acceptable checkpoint c pos)
-                    closers
+                  List.find_opt (fun c -> acceptable checkpoint c pos) closers
                 with
                 | Some c ->
                     loop
@@ -557,7 +568,7 @@ struct
                     else
                       match
                         List.find_opt
-                          (fun (tok, _, _) -> MI.acceptable checkpoint tok pos)
+                          (fun (tok, _, _) -> acceptable checkpoint tok pos)
                           insert
                       with
                       | Some (tok, _, _) ->
@@ -576,8 +587,7 @@ struct
                | Open | Leader | Skip -> false ->
             insert_to_goal ~with_insert:true pos (MI.input_needed env)
               ~goal:(fun cp ->
-                if MI.acceptable cp t pos then
-                  Some (settle (MI.offer cp target))
+                if acceptable cp t pos then Some (settle (MI.offer cp target))
                 else None)
         | _ -> None
       in
@@ -623,7 +633,7 @@ struct
                 | _ -> None)
             | tok :: rest -> (
                 match cp with
-                | MI.InputNeeded _ when MI.acceptable cp tok pos ->
+                | MI.InputNeeded _ when acceptable cp tok pos ->
                     go (settle (MI.offer cp (tok, pos, pos))) rest
                 | _ -> None)
           in
@@ -660,28 +670,105 @@ struct
          token offered just before it, which [try_barrier] consults to tell a
          field keyword genuinely written [( keyword] from one typed bare as an
          instruction. *)
+      (* Run a speculative repair ([try_insert]/[close_pending]/[try_barrier]/
+         [place_field]) and treat a [Syntax_error] it raises as the repair simply
+         failing ([None]). Those helpers drive the automaton through [settle],
+         whose reductions can re-raise the same check that fires in [run] (e.g.
+         when a repair closes a construct); such a raise means only that this
+         candidate is not viable, exactly like an unacceptable token. The error is
+         NOT recorded: the repair was hypothetical, so flagging a construct the
+         user never wrote would be a phantom. A raise from a [run] call is a
+         reduction on committed input and is left to [run]'s own catch. *)
+      let abandon_on_raise f = try f () with Syntax_error _ -> None in
       let rec run checkpoint prev last =
         match checkpoint with
         | MI.InputNeeded _ ->
             let tok = supplier () in
             run (MI.offer checkpoint tok) last (Some tok)
-        | MI.Shifting _ | MI.AboutToReduce _ ->
-            run (MI.resume checkpoint) prev last
+        | MI.Shifting _ -> run (MI.resume checkpoint) prev last
+        | MI.AboutToReduce (env, _) -> (
+            (* A grammar semantic action can raise [Syntax_error] as it reduces
+               (Wax's [process_stmts] rejecting a dangling [#[else]]; a WAT
+               pagesize/alignment/annotation check): the vanilla engine has no
+               [error]-production hook, so the raise would otherwise escape [run]
+               to the outer backstop and abandon the rest of the file, losing
+               every later error. Catch it here and route into the same panic
+               machinery a [HandlingError] uses — as if a plain syntax error had
+               occurred at the reduction point, except the message comes from the
+               exception rather than the parser-messages table.
+
+               Termination hinges on not re-running the reduction that just
+               raised. The reduce did not complete, so [env] still carries the
+               production's operands and its pending reduce action; recovery
+               driving the automaton forward from it (offering a token, then
+               reducing) reaches that reduction again and re-raises, which without
+               care loops or duplicates the error. So before recovering we
+               [defuse] [env]: [last] is the lookahead that triggered the reduce,
+               and we pop operand cells off the stack until offering [last] no
+               longer reaches the failing reduction, i.e. it can never re-fire.
+               [skip] then resynchronizes from that state and consumes further
+               input from the supplier. Popping strictly shrinks a finite stack
+               and [skip] advances toward end-of-input, so recovery terminates.
+               When [last] is itself end-of-input — the start symbol's final
+               reduction, the class the outer backstop used to own — there is
+               nothing after it to recover: record and stop. *)
+            (* Would offering [held] to [env] still reach the failing reduction?
+               [MI.acceptable] cannot answer this — it only checks that [held]
+               can be shifted and stops at that shift, never driving on to the
+               reduction that follows (which is what raises). So drive by hand:
+               offer [held] and follow the checkpoints. A reduction that raises
+               ([AboutToReduce] resumes into the semantic action) means the
+               production is still live. A [Shifting] means [held] would be
+               shifted back into an operand slot and could re-complete the
+               production, so that too counts as still poisoned. Only when [held]
+               is rejected outright ([HandlingError]/[Rejected]) or consumed
+               cleanly ([InputNeeded]/[Accepted]) is the production out of
+               reach. *)
+            let poisoned env (tok, sp, ep) =
+              let rec drive cp =
+                match cp with
+                | MI.Shifting _ -> true
+                | MI.AboutToReduce _ -> drive (MI.resume cp)
+                | MI.InputNeeded _ | MI.Accepted _ | MI.HandlingError _
+                | MI.Rejected ->
+                    false
+              in
+              try drive (MI.offer (MI.input_needed env) (tok, sp, ep))
+              with Syntax_error _ -> true
+            in
+            let rec defuse env held =
+              if poisoned env held then
+                match MI.pop env with
+                | Some env' -> defuse env' held
+                | None -> env
+              else env
+            in
+            match MI.resume checkpoint with
+            | exception Syntax_error ((loc_start, loc_end), message) -> (
+                record_error { Wax_utils.Ast.loc_start; loc_end } message;
+                match last with
+                | Some ((t, _, _) as held)
+                  when match sync t with Terminal -> false | _ -> true ->
+                    skip (defuse env held) last
+                | _ -> None)
+            | checkpoint -> run checkpoint prev last)
         | MI.HandlingError env -> recover checkpoint env prev last
         | MI.Accepted v -> Some v
         | MI.Rejected -> None
       and recover checkpoint env prev last =
-        match try_insert env last with
+        match abandon_on_raise (fun () -> try_insert env last) with
         | Some checkpoint -> run checkpoint None None
         | None -> (
             (* Insertion did not apply: record the standard error, then either
                auto-close an inner construct still open in front of the boundary
                or skip to a boundary. *)
             record checkpoint;
-            match close_pending env last with
+            match abandon_on_raise (fun () -> close_pending env last) with
             | Some checkpoint -> run checkpoint None None
             | None -> (
-                match try_barrier env prev last with
+                match
+                  abandon_on_raise (fun () -> try_barrier env prev last)
+                with
                 | Some checkpoint -> run checkpoint None None
                 | None -> skip env last))
       and skip env last =
@@ -717,7 +804,7 @@ struct
               barrier <> None
               && (match sync tok with Close -> true | _ -> false)
               && enclosing_depth > 0
-              && not (MI.acceptable (MI.input_needed env) tok startp)
+              && not (acceptable (MI.input_needed env) tok startp)
             then group_drop env tok startp sync_tok
             else offer_sync env sync_tok
       and group_drop env tok startp sync_tok =
@@ -736,7 +823,7 @@ struct
         (* A new field starts here: place the barrier tokens, closing the
            enclosing construct as needed. A false barrier makes [place_field]
            fail; drop it and scan on. *)
-        match place_field env toks pos with
+        match abandon_on_raise (fun () -> place_field env toks pos) with
         | Some checkpoint -> run checkpoint None None
         | None -> skip env None
       and offer_sync env ((tok, _, _) as sync_tok) =
