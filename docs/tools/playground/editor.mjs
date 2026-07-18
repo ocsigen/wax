@@ -689,6 +689,7 @@ export function createWaxEditor(opts) {
     makeHover(provider),
     makeCompletion(provider),
     sigHelpField(provider),
+    changeListener,
     keymap.of([
       indentWithTab,
       ...defaultKeymap,
@@ -723,6 +724,11 @@ export function createWaxEditor(opts) {
       });
     },
     focus: () => view.focus(),
+    getCursor: () => view.state.selection.main.head,
+    setCursor(pos) {
+      const p = Math.max(0, Math.min(pos, view.state.doc.length));
+      view.dispatch({ selection: { anchor: p }, scrollIntoView: true });
+    },
     selectRange(startLine, startChar, endLine, endChar) {
       const from = lcToPos(view.state, startLine, startChar);
       const to = lcToPos(view.state, endLine, endChar);

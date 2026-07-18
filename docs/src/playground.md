@@ -203,7 +203,11 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
   line-height: var(--wp-line);
   white-space: pre;
   tab-size: 4;
+  transition: opacity 0.15s;
 }
+/* While the current source does not convert, the pane keeps the last good
+   output but dims it to show it is stale. */
+.wp-output.wp-stale { opacity: 0.4; }
 
 .wp-status {
   margin-top: 0.6em;
@@ -249,6 +253,7 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     share: document.getElementById("wp-share"),
     host: document.getElementById("wp-editor-host"),
     output: document.getElementById("wp-output").querySelector("code"),
+    outputBox: document.getElementById("wp-output"),
     srcTitle: document.getElementById("wp-src-title"),
     outTitle: document.getElementById("wp-out-title"),
     status: document.getElementById("wp-status"),
@@ -389,6 +394,34 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
 
   function currentSourceIsWat() {
     return els.direction.value === "wat";
+  }
+
+  // ---- Cursor preservation across a reformat. Formatting only reflows
+  // whitespace, so we map the cursor by its position among the non-whitespace
+  // characters: "just after the Nth non-blank character" is the same token
+  // before and after, whatever the indentation does.
+
+  function nonWsBefore(text, pos) {
+    var k = 0;
+    for (var i = 0; i < pos && i < text.length; i++) {
+      if (!/\s/.test(text[i])) k++;
+    }
+    return k;
+  }
+
+  function offsetAfterNonWs(text, k) {
+    var count = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (!/\s/.test(text[i])) {
+        count++;
+        if (count === k) return i + 1;
+      }
+    }
+    // k === 0 (cursor before any content) or past the end: first/last position.
+    if (k <= 0) {
+      for (var j = 0; j < text.length; j++) if (!/\s/.test(text[j])) return j;
+    }
+    return text.length;
   }
 
   // ---- Output highlighting: colour the read-only output with the same
@@ -532,6 +565,8 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
         getDoc: cm.getDoc,
         setDoc: cm.setDoc,
         focus: cm.focus,
+        getCursor: cm.getCursor,
+        setCursor: cm.setCursor,
         selectRange: cm.selectRange,
         destroy: cm.destroy,
       };
@@ -550,6 +585,8 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
         getDoc: function () { return ta.value; },
         setDoc: function (t) { ta.value = t; },
         focus: function () { ta.focus(); },
+        getCursor: function () { return ta.selectionStart; },
+        setCursor: function (p) { ta.setSelectionRange(p, p); },
         selectRange: function (sl, sc, el2, ec) {
           var s = offsetOf(ta.value, sl, sc);
           var e = offsetOf(ta.value, el2, ec);
@@ -574,11 +611,16 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     else if (els.mode.value === "wax") result = wax.format(src);
     else result = wax.toWat(src);
 
-    // On a conversion error the output is left blank: the diagnostics (inline
-    // squiggles and the list below) already report what is wrong, so echoing
-    // the error text in the output pane is just noise.
-    if (result.ok) showOutput(result.text || "");
-    else els.output.textContent = "";
+    // The output refreshes live as you type. On a conversion error we keep the
+    // last successful output but dim it, rather than blanking or echoing the
+    // error text (the diagnostics already report what is wrong): the pane stays
+    // useful and it is clear it is stale, not current.
+    if (result.ok) {
+      els.outputBox.classList.remove("wp-stale");
+      showOutput(result.text || "");
+    } else {
+      els.outputBox.classList.add("wp-stale");
+    }
 
     if (!editor.isCM) {
       onDiagnostics(srcIsWat ? wax.checkWat(src) : wax.check(src, []));
@@ -633,7 +675,10 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
       var src = editor.getDoc();
       var result = currentSourceIsWat() ? wax.formatWat(src) : wax.format(src);
       if (result.ok && result.text != null) {
+        var k = nonWsBefore(src, editor.getCursor());
         editor.setDoc(result.text);
+        editor.setCursor(offsetAfterNonWs(result.text, k));
+        editor.focus();
         run();
       } else {
         setStatus(result.error || "cannot format invalid source", true);
