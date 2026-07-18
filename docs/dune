@@ -6,3 +6,11 @@
 (executable
  (name gen_llms)
  (modules gen_llms))
+
+; Extracts the Wax snippets from docs/src/examples.md into a JSON array for the
+; browser playground's "Examples" dropdown (see gen_examples.ml and
+; PLAYGROUND.md). Not installed; run at docs-deploy time.
+
+(executable
+ (name gen_examples)
+ (modules gen_examples))

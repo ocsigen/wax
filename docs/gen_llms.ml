@@ -10,7 +10,8 @@
 
    Usage: [gen_llms SRC_DIR], writing the reference to stdout. SRC_DIR is the
    docs/src directory. The file list below mirrors docs/src/SUMMARY.md; keep the
-   two in sync when a page is added or removed. *)
+   two in sync when a page is added or removed. (Exception: playground.md is a
+   raw-HTML UI page, not language reference, so it is deliberately excluded.) *)
 
 let preamble =
   {|# Wax language reference

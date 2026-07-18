@@ -21,7 +21,9 @@ fn add(x: i32, y: i32) -> i32 {
 }
 ```
 
-Both compile to identical WebAssembly bytecode.
+Both compile to identical WebAssembly bytecode. You can try it in your browser
+on the [Playground](./playground.md): type Wax, see the WAT and diagnostics
+live, with no install.
 
 ## Installation
 

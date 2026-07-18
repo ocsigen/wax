@@ -26,6 +26,33 @@ jobs:
         with:
           node-version: '20'
 
+      # The browser playground (docs/src/playground.md) runs the toolchain
+      # itself as WebAssembly. Build that bundle here, from the same commit as
+      # the docs, so the playground stays in lockstep with the language.
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      - name: Install dependencies
+        run: opam install . --deps-only
+
+      - name: Build the playground wasm bundle
+        run: opam exec -- dune build --profile release src/editor/wax_format_js.bc.wasm.js
+
+      - name: Assemble the playground assets
+        run: |
+          set -euo pipefail
+          dest=docs/src/playground
+          src=_build/default/src/editor
+          mkdir -p "$dest/wax_format_js.bc.wasm.assets"
+          cp "$src/wax_format_js.bc.wasm.js" "$dest/"
+          cp "$src"/wax_format_js.bc.wasm.assets/*.wasm "$dest/wax_format_js.bc.wasm.assets/"
+          opam exec -- dune exec docs/gen_examples.exe -- docs/src > "$dest/examples.json"
+
+      - name: Smoke-test the playground bundle
+        run: node docs/tools/playground/smoke.js
+
       - name: Install docs preprocessor deps
         run: npm ci --prefix docs/tools/wax-highlight
 
