@@ -1,0 +1,19 @@
+fn with_else(c: i32) {
+    if c {
+    } else {
+        nop;
+    }
+}
+
+fn standalone(c: i32) {
+    if c {}
+}
+
+tag e();
+
+fn with_catch() {
+    try {
+    } catch {
+        e => {}
+    }
+}

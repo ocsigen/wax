@@ -1480,7 +1480,9 @@ and block_contents pp (l : _ instr list) =
   (* A non-empty block always breaks across lines (rustfmt never keeps a block
      body on one line), so every separator here is a hard [newline]; the
      enclosing box then lays the body out vertically. An empty block stays
-     [{}]. *)
+     [{}] on its own, but emits a zero-width [cut] so that when the enclosing
+     box breaks anyway (e.g. an empty [if] body beside a multi-line [else]) the
+     [}] falls to the next line instead of the head's [{] wrapping oddly. *)
   if l <> [] then (
     indent pp indent_level (fun () ->
         List.iter
@@ -1489,6 +1491,7 @@ and block_contents pp (l : _ instr list) =
             deliminated_instr pp i)
           l);
     newline pp ())
+  else cut pp ()
 
 (* Print the contents of a brace-delimited block, looking the block's own
    location up so a comment opening the clause attaches here rather than to the
@@ -1509,7 +1512,13 @@ and located_block_contents pp (b : (_ instr list, location) annotated) =
             deliminated_instr pp i)
           b.desc;
         print_trivia pp assoc.within);
-    newline pp ());
+    newline pp ())
+  else
+    (* An empty body stays [{}] on its own, but the zero-width [cut] lets the
+        [}] drop to the next line when the enclosing box breaks anyway (e.g. an
+        empty [if]/[try] body beside a multi-line [else]/[catch]) rather than the
+        head's opening [{] wrapping to its own line. *)
+    cut pp ();
   assoc.after
 
 (* Emit a block's closing [}] followed by the trailing comments [located_block_contents]
