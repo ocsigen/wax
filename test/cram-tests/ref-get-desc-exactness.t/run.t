@@ -8,7 +8,10 @@ type.
 
   $ wax -X custom-descriptors -i wat -f wax rgd.wat
   #![feature = "custom-descriptors"]
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   // exact operand -> exact descriptor
   #[export]
   fn exact(x: &!a) -> &!b {

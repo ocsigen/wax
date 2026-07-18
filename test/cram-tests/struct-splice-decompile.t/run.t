@@ -18,7 +18,10 @@ explicit.
   > WAT
   type base = open { a: i32 };
   type ext: base = open { .., b: i64 };
-  rec { type c = open { x: i32 }; type d: c = open { .., y: i32 }; }
+  rec {
+      type c = open { x: i32 };
+      type d: c = open { .., y: i32 };
+  }
   type e = open { x: i32 };
   type chain: d = open { .., z: i32 };
   type renamed: base = open { other: i32, z: i32 };

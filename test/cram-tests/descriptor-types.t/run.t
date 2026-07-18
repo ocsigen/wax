@@ -14,7 +14,10 @@ The clauses survive a binary round-trip.
   $ wax -X custom-descriptors desc.wax -f wasm -o desc.wasm
   $ wax -X custom-descriptors desc.wasm -f wax
   #![feature = "custom-descriptors"]
-  rec { type obj = descriptor obj_desc { x: i32 }; type obj_desc = describes obj { }; }
+  rec {
+      type obj = descriptor obj_desc { x: i32 };
+      type obj_desc = describes obj { };
+  }
 
 A descriptor and its described type must refer to each other.
 

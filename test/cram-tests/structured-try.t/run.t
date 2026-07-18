@@ -127,7 +127,9 @@ and trailing-diverging shapes alike — and re-compilation is a fixed point.
   fn v(k: i32) {
       try {
           _ = find(k);
-      } catch { timeout => {} }
+      } catch {
+          timeout => {}
+      }
   }
   fn e(k: i32) -> i32 {
       (try {

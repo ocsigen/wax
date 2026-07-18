@@ -81,7 +81,10 @@ A WebAssembly module using resume handlers (both `on $tag -> 'label` and
       k.switch(tag: e);
   }
   // resume with an on-switch handler
-  rec { type sft = fn(&?sct) -> i32; type sct = cont sft; }
+  rec {
+      type sft = fn(&?sct) -> i32;
+      type sct = cont sft;
+  }
   tag swap() -> i32;
   fn f: sft (&?sct) -> i32 {
       0;

@@ -84,13 +84,19 @@ WAT → Wax turns it back into the attribute:
   $ wax desc.wax -f wat -o desc.wat
   $ wax desc.wat -f wax
   #![feature = "custom-descriptors"]
-  rec { type obj = descriptor obj_desc { x: i32 }; type obj_desc = describes obj { }; }
+  rec {
+      type obj = descriptor obj_desc { x: i32 };
+      type obj_desc = describes obj { };
+  }
 
 `format` never validates; the attribute is simply preserved:
 
   $ wax format desc.wax
   #![feature = "custom-descriptors"]
-  rec { type obj = descriptor obj_desc { x: i32 }; type obj_desc = describes obj { }; }
+  rec {
+      type obj = descriptor obj_desc { x: i32 };
+      type obj_desc = describes obj { };
+  }
   $ wax format desc.wat
   (@feature "custom-descriptors")
   (rec

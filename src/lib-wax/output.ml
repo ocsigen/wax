@@ -314,15 +314,23 @@ let rectype pp t =
   match Array.to_list t with
   | [ t ] -> subtype pp t
   | l ->
+      (* A non-empty [rec { … }] always breaks across lines, like a block body
+         (see [block_contents]): every separator is a hard [newline], so the
+         enclosing box lays the members out vertically even when they would fit
+         on one line. An empty group stays [rec {}]. *)
       hvbox pp (fun () ->
           box pp (fun () ->
               keyword pp "rec";
               space pp ();
               punctuation pp "{");
-          indent pp indent_level (fun () ->
-              space pp ();
-              list ~sep:space subtype pp l);
-          space pp ();
+          if l <> [] then (
+            indent pp indent_level (fun () ->
+                List.iter
+                  (fun t ->
+                    newline pp ();
+                    subtype pp t)
+                  l);
+            newline pp ());
           punctuation pp "}")
 
 (*** Operators and precedence ***)
@@ -865,29 +873,34 @@ let rec instr prec pp (i : _ instr) =
                   keyword pp "catch";
                   space pp ();
                   punctuation pp "{");
-              indent pp indent_level (fun () ->
-                  List.iter
-                    (fun arm ->
-                      space pp ();
-                      hvbox pp (fun () ->
-                          box pp (fun () ->
-                              (match arm.arm_tag with
-                              | Some tag -> identifier pp tag.desc
-                              | None -> operator pp "_");
-                              space pp ();
-                              if arm.arm_ref then (
-                                operator pp "&";
-                                space pp ());
-                              punctuation pp "=>";
-                              space pp ();
-                              punctuation pp "{");
-                          let after = located_block_contents pp arm.arm_body in
-                          close_block pp after))
-                    arms);
-              (* The break before the closing [}] must sit outside the [indent]
-                 above so it lands at the catch block's own column, not the
-                 arms' deeper indent. *)
-              space pp ();
+              (* Like a block body, a non-empty [catch] always lays its arms out
+                 vertically with hard [newline]s (matching [match]/[dispatch]);
+                 an empty [catch] stays [{}]. *)
+              if arms <> [] then (
+                indent pp indent_level (fun () ->
+                    List.iter
+                      (fun arm ->
+                        newline pp ();
+                        hvbox pp (fun () ->
+                            box pp (fun () ->
+                                (match arm.arm_tag with
+                                | Some tag -> identifier pp tag.desc
+                                | None -> operator pp "_");
+                                space pp ();
+                                if arm.arm_ref then (
+                                  operator pp "&";
+                                  space pp ());
+                                punctuation pp "=>";
+                                space pp ();
+                                punctuation pp "{");
+                            let after =
+                              located_block_contents pp arm.arm_body
+                            in
+                            close_block pp after))
+                      arms);
+                (* The break before the closing [}] sits outside the [indent]
+                   above so it lands at the catch block's own column. *)
+                newline pp ());
               punctuation pp "}"))
   | Try { label; typ; block = l; catches; catch_all } ->
       hvbox pp (fun () ->
@@ -908,37 +921,40 @@ let rec instr prec pp (i : _ instr) =
                   keyword pp "catch";
                   space pp ();
                   punctuation pp "{");
-              indent pp indent_level (fun () ->
-                  List.iter
-                    (fun (tag, block) ->
-                      space pp ();
-                      hvbox pp (fun () ->
-                          box pp (fun () ->
-                              identifier pp tag.desc;
-                              space pp ();
-                              punctuation pp "=>";
-                              space pp ();
-                              punctuation pp "{");
-                          let after = located_block_contents pp block in
-                          close_block pp after))
-                    catches;
-                  Option.iter
-                    (fun block ->
-                      space pp ();
-                      hvbox pp (fun () ->
-                          box pp (fun () ->
-                              operator pp "_";
-                              space pp ();
-                              punctuation pp "=>";
-                              space pp ();
-                              punctuation pp "{");
-                          let after = located_block_contents pp block in
-                          close_block pp after))
-                    catch_all);
-              (* The break before the closing [}] must sit outside the [indent]
-                 above so it lands at the catch block's own column, not the
-                 handlers' deeper indent. *)
-              space pp ();
+              (* Like a block body, a non-empty legacy [catch] always breaks its
+                 handlers across lines with hard [newline]s (matching
+                 [match]/[dispatch]); an empty one stays [{}]. *)
+              if catches <> [] || catch_all <> None then (
+                indent pp indent_level (fun () ->
+                    List.iter
+                      (fun (tag, block) ->
+                        newline pp ();
+                        hvbox pp (fun () ->
+                            box pp (fun () ->
+                                identifier pp tag.desc;
+                                space pp ();
+                                punctuation pp "=>";
+                                space pp ();
+                                punctuation pp "{");
+                            let after = located_block_contents pp block in
+                            close_block pp after))
+                      catches;
+                    Option.iter
+                      (fun block ->
+                        newline pp ();
+                        hvbox pp (fun () ->
+                            box pp (fun () ->
+                                operator pp "_";
+                                space pp ();
+                                punctuation pp "=>";
+                                space pp ();
+                                punctuation pp "{");
+                            let after = located_block_contents pp block in
+                            close_block pp after))
+                      catch_all);
+                (* The break before the closing [}] sits outside the [indent]
+                   above so it lands at the catch block's own column. *)
+                newline pp ());
               punctuation pp "}"))
   | TryTable { label; typ = bt; block = l; catches } ->
       hvbox pp (fun () ->

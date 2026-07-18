@@ -65,7 +65,10 @@ Wax type-checking should have failed (type mismatch):
 from wasm: (func (result f64) (f64.convert_i64_u (i32.const 0)))
 ==== core/custom-descriptors/br_on_cast_desc_eq.wast ====
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f(x: &?any, x_2: &b) -> &?any 'l: {
       br_on_cast 'l descriptor(x_2) x;
   }
@@ -75,7 +78,10 @@ from wasm:
     (br_on_cast_desc_eq 0 anyref (ref (exact $a)) (local.get 0) (local.get 1))
   )
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f(x: &?any) -> &?any 'l: {
       br_on_cast 'l descriptor(null as &?b) x;
   }
@@ -105,7 +111,10 @@ from wasm:
     (br_on_cast_desc_eq 0 anyref (ref (exact $a)) (local.get 0) (local.get 1))
   )
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f() -> &?any 'l: {
       unreachable;
       br_on_cast 'l descriptor(_ as &?b) _;
@@ -154,7 +163,10 @@ from wasm:
     (br_on_cast_desc_eq 0 (ref $c) (ref $a) (local.get 0) (local.get 1))
   )
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f() -> &a 'l: {
       do () -> (i32, &a) {
           unreachable;
@@ -171,7 +183,10 @@ from wasm:
   )
 ==== core/custom-descriptors/br_on_cast_desc_eq_fail.wast ====
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f(x: &?any, x_2: &b) -> &?any 'l: {
       br_on_cast_fail 'l descriptor(x_2) x;
   }
@@ -182,7 +197,10 @@ from wasm:
       (local.get 1))
   )
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f(x: &?any) -> &?any 'l: {
       br_on_cast_fail 'l descriptor(null as &?b) x;
   }
@@ -214,7 +232,10 @@ from wasm:
       (local.get 1))
   )
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f() -> &?any 'l: {
       unreachable;
       br_on_cast_fail 'l descriptor(_ as &?b) _;
@@ -299,7 +320,10 @@ from wasm:
   )
 ==== core/custom-descriptors/ref_cast_desc_eq.wast ====
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f(x: &?any, x_2: &b) -> &?any {
       x as descriptor(x_2);
   }
@@ -309,7 +333,10 @@ from wasm:
     (ref.cast_desc_eq (ref (exact $a)) (local.get 0) (local.get 1))
   )
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { };
+      type b = describes a { };
+  }
   fn f(x: &?any) -> &?any {
       x as descriptor(null as &?b);
   }
@@ -419,7 +446,11 @@ from wasm:
   (func (param (ref $c)) (result (ref $d)) (ref.get_desc $a (local.get 0)))
 ==== core/custom-descriptors/struct_new_desc.wast ====
 Wax type-checking should have failed (type without descriptor requires non-descriptor allocation):
-  rec { type struct_2 = { f: i32 }; type a = descriptor b { f: i32 }; type b = describes a { }; }
+  rec {
+      type struct_2 = { f: i32 };
+      type a = descriptor b { f: i32 };
+      type b = describes a { };
+  }
   fn f() -> &?any {
       { descriptor({b| })| f: 0 as i32 };
   }
@@ -431,7 +462,11 @@ from wasm:
   )
   (func (result anyref) (struct.new_desc $struct (i32.const 0) (struct.new $b)))
 Wax type-checking should have failed (type without descriptor requires non-descriptor allocation):
-  rec { type struct_2 = { f: i32 }; type a = descriptor b { f: i32 }; type b = describes a { }; }
+  rec {
+      type struct_2 = { f: i32 };
+      type a = descriptor b { f: i32 };
+      type b = describes a { };
+  }
   fn f() -> &?any {
       { descriptor({b| })| .. };
   }
@@ -443,7 +478,10 @@ from wasm:
   )
   (func (result anyref) (struct.new_default_desc $struct (struct.new $b)))
 Wax type-checking should have failed (type mismatch):
-  rec { type a = descriptor b { f: i32 }; type b = describes a { }; }
+  rec {
+      type a = descriptor b { f: i32 };
+      type b = describes a { };
+  }
   fn f(x: &b) -> &?any {
       { descriptor(x)| f: 0 as i32 };
   }
