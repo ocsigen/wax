@@ -112,29 +112,252 @@ function buildProvider(wax, language) {
   };
 }
 
-// ---- semantic-token highlighting --------------------------------------------
+// ---- syntax highlighting ----------------------------------------------------
+//
+// Two sources are merged: the toolchain's semantic tokens, which classify
+// identifiers (wax.semanticTokens), and a small hand lexer below for everything
+// else — keywords, primitive types, numbers, strings, comments. The semantic
+// classification always wins where the two overlap, so a local variable named
+// like a type (e.g. `i64`) is coloured as a variable, not the type: any lexer
+// span overlapping a semantic span is dropped.
+//
+// The keyword set is not hardcoded: it is extracted from lib-wax/lexer.ml at
+// build time (docs/gen_keywords.ml) and passed in, so it cannot drift from the
+// compiler.
 
-function buildTokens(state, provider) {
-  const toks = provider.semanticTokens(state.doc.toString());
-  const n = state.doc.length;
-  const ranges = [];
-  for (const t of toks) {
-    const from = lcToPos(state, t.line, t.character);
-    const to = Math.min(n, from + t.length);
-    if (to > from) ranges.push(Decoration.mark({ class: "cm-wt-" + t.kind }).range(from, to));
+function semanticOffsets(text, tokens) {
+  const starts = lineStarts(text);
+  const out = [];
+  for (const t of tokens || []) {
+    if (t.line >= starts.length) continue;
+    const from = starts[t.line] + t.character;
+    const to = Math.min(text.length, from + t.length);
+    if (to > from) out.push([from, to, t.kind]);
   }
-  ranges.sort((a, b) => a.from - b.from || a.to - b.to);
-  return Decoration.set(ranges);
+  return out;
 }
 
-function highlightPlugin(provider) {
+// Merge lexer spans with semantic spans, dropping any lexer span that overlaps a
+// semantic one (semantic wins). Inputs and output are [from, to, kind]; the
+// result is sorted and pairwise-disjoint.
+function mergeSpans(lex, sem) {
+  const s = sem.slice().sort((a, b) => a[0] - b[0]);
+  const overlaps = (from, to) => {
+    for (const [sf, st] of s) {
+      if (sf >= to) break; // sorted: no later span can overlap either
+      if (st > from) return true;
+    }
+    return false;
+  };
+  const kept = lex.filter(([from, to]) => !overlaps(from, to));
+  return kept.concat(s).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}
+
+function buildHighlight(text, language, semTokens, keywords) {
+  const lex = language === "wat" ? lexWat(text) : lexWax(text, keywords);
+  return mergeSpans(lex, semanticOffsets(text, semTokens));
+}
+
+function highlightPlugin(language, provider, keywords) {
+  const build = (state) => {
+    const text = state.doc.toString();
+    const spans = buildHighlight(text, language, provider.semanticTokens(text), keywords);
+    return Decoration.set(
+      spans.map(([from, to, kind]) =>
+        Decoration.mark({ class: "cm-wt-" + kind }).range(from, to)
+      )
+    );
+  };
   return ViewPlugin.fromClass(
     class {
       constructor(view) {
-        this.decorations = buildTokens(view.state, provider);
+        this.decorations = build(view.state);
       }
       update(u) {
-        if (u.docChanged) this.decorations = buildTokens(u.view.state, provider);
+        if (u.docChanged) this.decorations = build(u.view.state);
+      }
+    },
+    { decorations: (v) => v.decorations }
+  );
+}
+
+// ---- the hand lexer (keywords, types, literals, comments) -------------------
+
+// Numeric value types — the fixed WebAssembly value types, never used as
+// identifiers, so safe to colour lexically. Abstract/named types come through
+// the semantic layer instead.
+const WAX_TYPES = new Set("i8 i16 i32 i64 f32 f64 v128".split(" "));
+
+const isWord = (c) => c !== undefined && /[A-Za-z0-9_]/.test(c);
+
+// Each lexer returns [from, to, kind] spans, kind being a cm-wt-* suffix.
+// [keywords] is a Set of the language's keyword strings.
+function lexWax(text, keywords) {
+  const out = [];
+  const n = text.length;
+  let i = 0;
+  while (i < n) {
+    const c = text[i];
+    if (c === "/" && text[i + 1] === "/") {
+      let j = i + 2;
+      while (j < n && text[j] !== "\n") j++;
+      out.push([i, j, "comment"]);
+      i = j;
+    } else if (c === "/" && text[i + 1] === "*") {
+      let j = i + 2;
+      while (j < n && !(text[j] === "*" && text[j + 1] === "/")) j++;
+      j = Math.min(n, j + 2);
+      out.push([i, j, "comment"]);
+      i = j;
+    } else if (c === '"') {
+      let j = i + 1;
+      while (j < n && text[j] !== '"' && text[j] !== "\n") {
+        if (text[j] === "\\") j++;
+        j++;
+      }
+      j = Math.min(n, j + 1);
+      out.push([i, j, "string"]);
+      i = j;
+    } else if (c === "'") {
+      // A char literal is one code point (or an escape) between quotes; a label
+      // is a bare `'name` with no closing quote.
+      let end = -1;
+      if (text[i + 1] === "\\") {
+        let j = i + 2;
+        while (j < n && text[j] !== "'" && text[j] !== "\n") j++;
+        if (text[j] === "'") end = j + 1;
+      } else {
+        const hi = text.charCodeAt(i + 1);
+        const after = hi >= 0xd800 && hi <= 0xdbff ? i + 3 : i + 2;
+        if (text[after] === "'") end = after + 1;
+      }
+      if (end >= 0) {
+        out.push([i, end, "string"]);
+        i = end;
+      } else {
+        let k = i + 1;
+        while (k < n && isWord(text[k])) k++; // a label: left uncoloured
+        i = Math.max(k, i + 1);
+      }
+    } else if (/[0-9]/.test(c) || (c === "." && /[0-9]/.test(text[i + 1] || ""))) {
+      let j = i + 1;
+      while (j < n && /[0-9a-fA-FxXoObB._]/.test(text[j])) j++;
+      out.push([i, j, "number"]);
+      i = j;
+    } else if (/[A-Za-z_]/.test(c)) {
+      let j = i + 1;
+      while (j < n && isWord(text[j])) j++;
+      const w = text.slice(i, j);
+      if (keywords.has(w)) out.push([i, j, "keyword"]);
+      else if (WAX_TYPES.has(w)) out.push([i, j, "type"]);
+      // else an identifier: left to the semantic layer.
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return out;
+}
+
+// WAT is keyword-heavy: every bare word (not `$name`, not a number/string) is a
+// keyword, type or instruction, so colour them all; `$` names go to the
+// semantic layer. Comments are `;; …` and nesting `(; … ;)`.
+function lexWat(text) {
+  const out = [];
+  const n = text.length;
+  let i = 0;
+  while (i < n) {
+    const c = text[i];
+    if (c === ";" && text[i + 1] === ";") {
+      let j = i + 2;
+      while (j < n && text[j] !== "\n") j++;
+      out.push([i, j, "comment"]);
+      i = j;
+    } else if (c === "(" && text[i + 1] === ";") {
+      let j = i + 2;
+      let depth = 1;
+      while (j < n && depth > 0) {
+        if (text[j] === "(" && text[j + 1] === ";") {
+          depth++;
+          j += 2;
+        } else if (text[j] === ";" && text[j + 1] === ")") {
+          depth--;
+          j += 2;
+        } else j++;
+      }
+      out.push([i, j, "comment"]);
+      i = j;
+    } else if (c === '"') {
+      let j = i + 1;
+      while (j < n && text[j] !== '"' && text[j] !== "\n") {
+        if (text[j] === "\\") j++;
+        j++;
+      }
+      j = Math.min(n, j + 1);
+      out.push([i, j, "string"]);
+      i = j;
+    } else if (c === "$") {
+      let j = i + 1;
+      while (j < n && !/[\s()";]/.test(text[j])) j++;
+      i = j; // a name: left to the semantic layer
+    } else if (/[0-9]/.test(c) || ((c === "+" || c === "-" || c === ".") && /[0-9]/.test(text[i + 1] || ""))) {
+      let j = i + 1;
+      while (j < n && /[0-9a-fA-FxX._+\-pP]/.test(text[j])) j++;
+      out.push([i, j, "number"]);
+      i = j;
+    } else if (/[A-Za-z_]/.test(c)) {
+      let j = i + 1;
+      while (j < n && !/[\s()";]/.test(text[j])) j++;
+      out.push([i, j, "keyword"]);
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return out;
+}
+
+function lineStarts(text) {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) starts.push(i + 1);
+  return starts;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Static highlighting for the read-only output pane: the same merged lexer +
+// semantic spans as the editor, rendered to HTML with the same cm-wt-* classes
+// so both panes look identical. Exported for the page.
+export function highlightToHtml(text, language, wax, keywords) {
+  const wat = language === "wat";
+  const kw = keywords instanceof Set ? keywords : new Set(keywords || []);
+  let sem = [];
+  try {
+    sem = (wat ? wax.semanticTokensWat(text) : wax.semanticTokens(text)) || [];
+  } catch (_e) {
+    sem = [];
+  }
+  const spans = buildHighlight(text, language, sem, kw); // sorted, disjoint
+  let html = "";
+  let pos = 0;
+  for (const [from, to, kind] of spans) {
+    html += escapeHtml(text.slice(pos, from));
+    html += '<span class="cm-wt-' + kind + '">' + escapeHtml(text.slice(from, to)) + "</span>";
+    pos = to;
+  }
+  return html + escapeHtml(text.slice(pos));
+}
+
+function lexPlugin(language, keywords) {
+  return ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.decorations = buildLex(view.state, language, keywords);
+      }
+      update(u) {
+        if (u.docChanged) this.decorations = buildLex(u.view.state, language, keywords);
       }
     },
     { decorations: (v) => v.decorations }
@@ -443,6 +666,7 @@ function waxTheme(dark) {
 export function createWaxEditor(opts) {
   const { parent, doc, language, wax, onDocChange, onDiagnostics, dark } = opts;
   const provider = buildProvider(wax, language);
+  const keywords = new Set(opts.keywords || []);
 
   const changeListener = EditorView.updateListener.of((u) => {
     if (u.docChanged && onDocChange) onDocChange(u.state.doc.toString());
@@ -457,7 +681,7 @@ export function createWaxEditor(opts) {
     codeFolding(),
     foldGutter(),
     makeFoldService(provider),
-    highlightPlugin(provider),
+    highlightPlugin(language, provider, keywords),
     inlayPlugin(provider),
     refHighlightPlugin(provider),
     makeLinter(provider, onDiagnostics),

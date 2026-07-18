@@ -88,6 +88,14 @@ async function main() {
         fail("examples.json is empty or not an array");
     }
 
+    // The keyword list, when present, must be a non-empty array of strings.
+    const keywordsPath = path.join(dir, "keywords.json");
+    if (fs.existsSync(keywordsPath)) {
+      const kws = JSON.parse(fs.readFileSync(keywordsPath, "utf8"));
+      if (!Array.isArray(kws) || kws.length === 0 || !kws.every((k) => typeof k === "string"))
+        fail("keywords.json is empty or not an array of strings");
+    }
+
     // The CodeMirror editor bundle, when present, must evaluate and install
     // WaxCM.createWaxEditor. (It needs a DOM to construct an editor, so this
     // only checks that the bundle loads and exposes its entry point.)

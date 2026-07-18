@@ -31,9 +31,12 @@
     Example
     <select id="wp-example"><option value="">Load an example…</option></select>
   </label>
+  <!-- Format acts on the source (left) pane, so it lives with the left-hand
+       controls rather than out on the right. -->
+  <button type="button" id="wp-format" class="wp-button">Format source</button>
   <span class="wp-spacer"></span>
-  <button type="button" id="wp-format" class="wp-button">Format</button>
-  <button type="button" id="wp-share" class="wp-button">Copy share link</button>
+  <button type="button" id="wp-share" class="wp-button"
+          title="Copies a URL that reopens this playground with your current code. The code is encoded in the link itself and never sent to a server.">Copy link to this code</button>
 </div>
 
 <div class="wp-panes">
@@ -159,11 +162,19 @@
 .cm-wt-function  { color: #4078f2; }
 .cm-wt-property  { color: #0184bc; }
 .cm-wt-parameter { color: #986801; }
+.cm-wt-keyword   { color: #a626a4; }
+.cm-wt-string    { color: #50a14f; }
+.cm-wt-number    { color: #986801; }
+.cm-wt-comment   { color: #a0a1a7; font-style: italic; }
 html.coal .cm-wt-namespace, html.navy .cm-wt-namespace, html.ayu .cm-wt-namespace { color: #c678dd; }
 html.coal .cm-wt-type, html.navy .cm-wt-type, html.ayu .cm-wt-type { color: #e5c07b; }
 html.coal .cm-wt-function, html.navy .cm-wt-function, html.ayu .cm-wt-function { color: #61afef; }
 html.coal .cm-wt-property, html.navy .cm-wt-property, html.ayu .cm-wt-property { color: #56b6c2; }
 html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-parameter { color: #d19a66; }
+html.coal .cm-wt-keyword, html.navy .cm-wt-keyword, html.ayu .cm-wt-keyword { color: #c678dd; }
+html.coal .cm-wt-string, html.navy .cm-wt-string, html.ayu .cm-wt-string { color: #98c379; }
+html.coal .cm-wt-number, html.navy .cm-wt-number, html.ayu .cm-wt-number { color: #d19a66; }
+html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { color: #7f848e; }
 
 /* Inlay hints (inferred `let` types), document highlight, and the feature
    tooltips (hover type, signature help). */
@@ -252,6 +263,7 @@ html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-paramete
 
   var wax = null;
   var editor = null; // the source editor (CodeMirror, or a textarea fallback)
+  var waxKeywords = []; // Wax keyword list, from playground/keywords.json
 
   // ---- The wasm loader (mirrors editors/vscode/src/wax-runtime.ts, web branch).
   // The loader fetches its own .wasm; we serve the bytes from memory via a fetch
@@ -415,10 +427,19 @@ html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-paramete
   }
 
   function showOutput(text) {
+    var lang = outputLanguageIsWat() ? "wat" : "wax";
+    // Prefer the editor bundle's highlighter, so the output is coloured exactly
+    // like the source pane (keywords/types/literals/comments + semantic tokens).
+    if (globalThis.WaxCM && globalThis.WaxCM.highlightToHtml) {
+      try {
+        els.output.innerHTML = globalThis.WaxCM.highlightToHtml(text, lang, wax, waxKeywords);
+        return;
+      } catch (e) {
+        /* fall through to the semantic-only path */
+      }
+    }
     try {
-      var toks = outputLanguageIsWat()
-        ? wax.semanticTokensWat(text)
-        : wax.semanticTokens(text);
+      var toks = lang === "wat" ? wax.semanticTokensWat(text) : wax.semanticTokens(text);
       els.output.innerHTML = highlightToHtml(text, toks || []);
     } catch (e) {
       els.output.textContent = text;
@@ -502,6 +523,7 @@ html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-paramete
         language: language,
         wax: wax,
         dark: isDarkTheme(),
+        keywords: waxKeywords,
         onDocChange: scheduleRun,
         onDiagnostics: onDiagnostics,
       });
@@ -627,12 +649,12 @@ html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-paramete
         var link = location.href;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(link);
-          setStatus("Share link copied to clipboard.", false);
+          setStatus("Link copied — open it to reload this code.", false);
         } else {
-          setStatus("Share link is in the address bar.", false);
+          setStatus("Link ready in the address bar — copy it to share this code.", false);
         }
       } catch (e) {
-        setStatus("Could not build a share link: " + e.message, true);
+        setStatus("Could not build a link: " + e.message, true);
       }
     });
   }
@@ -651,9 +673,19 @@ html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-paramete
     }
   }
 
+  async function loadKeywords() {
+    try {
+      var kws = await (await fetch(ASSET_DIR + "keywords.json")).json();
+      if (Array.isArray(kws)) waxKeywords = kws;
+    } catch (e) {
+      /* Keyword colouring is a nicety; a missing file just leaves them plain. */
+    }
+  }
+
   async function boot() {
     wire();
     populateExamples();
+    await loadKeywords();
 
     // Restore a shared snippet, else the default.
     var initial = DEFAULT_SRC;

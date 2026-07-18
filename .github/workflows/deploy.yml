@@ -55,6 +55,7 @@ jobs:
           cp "$src"/wax_format_js.bc.wasm.assets/*.wasm "$dest/wax_format_js.bc.wasm.assets/"
           cp docs/tools/playground/wax-editor.bundle.js "$dest/"
           opam exec -- dune exec docs/gen_examples.exe -- docs/src > "$dest/examples.json"
+          opam exec -- dune exec docs/gen_keywords.exe -- src/lib-wax/lexer.ml > "$dest/keywords.json"
 
       - name: Smoke-test the playground bundle
         run: node docs/tools/playground/smoke.js

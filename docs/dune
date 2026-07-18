@@ -14,3 +14,11 @@
 (executable
  (name gen_examples)
  (modules gen_examples))
+
+; Extracts the Wax keyword list from src/lib-wax/lexer.ml into a JSON array for
+; the browser playground's lexical highlighter (see gen_keywords.ml). Not
+; installed; run at docs-deploy time.
+
+(executable
+ (name gen_keywords)
+ (modules gen_keywords))

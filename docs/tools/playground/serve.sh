@@ -30,6 +30,7 @@ cp "$src/wax_format_js.bc.wasm.js" "$dest/"
 cp "$src"/wax_format_js.bc.wasm.assets/*.wasm "$dest/wax_format_js.bc.wasm.assets/"
 cp "$here/wax-editor.bundle.js" "$dest/"
 dune exec docs/gen_examples.exe -- docs/src >"$dest/examples.json"
+dune exec docs/gen_keywords.exe -- src/lib-wax/lexer.ml >"$dest/keywords.json"
 
 echo "==> Smoke test"
 node docs/tools/playground/smoke.js

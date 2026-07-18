@@ -9,4 +9,5 @@ docs/tools/playground/wax-editor.bundle.js
 docs/src/playground/wax_format_js.bc.wasm.js
 docs/src/playground/wax_format_js.bc.wasm.assets/
 docs/src/playground/examples.json
+docs/src/playground/keywords.json
 docs/src/playground/wax-editor.bundle.js
