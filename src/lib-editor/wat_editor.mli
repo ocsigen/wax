@@ -139,3 +139,9 @@ val semantic_tokens_string :
 (* Convert the buffer to Wax (decompile Wasm text to Wax), for the side-by-side
    preview, or [Error message]. *)
 val to_wax_string : string -> (string, string) result
+
+(* Decode a Wasm binary ([bytes] holds the raw bytes, not text) and render it as
+   Wasm text / Wax, or [Error message] on a malformed binary. Used by the
+   playground's upload button. *)
+val binary_to_wat_string : string -> (string, string) result
+val binary_to_wax_string : string -> (string, string) result

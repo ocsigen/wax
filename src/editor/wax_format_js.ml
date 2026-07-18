@@ -45,7 +45,10 @@
      { startLine; …; endChar }: the spans a conditional-compilation configuration
      makes unreachable (Wax [#[if]] / WAT [(@if)] branches ruled out).
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
-     languages, for the side-by-side preview commands. *)
+     languages, for the side-by-side preview commands.
+   - [wasmToWat bytes] / [wasmToWax bytes] -> { ok; text; error }: decode a Wasm
+     binary (bytes packed one-per-char, read with [Js.to_bytestring]) to Wasm
+     text / Wax, for the playground's upload button. *)
 
 open Js_of_ocaml
 open Editor_common
@@ -148,6 +151,17 @@ let result ~ok ~text ~error =
 let format_result format_fn src =
   try
     match format_fn (Js.to_string src) with
+    | Ok text -> result ~ok:true ~text:(Some text) ~error:None
+    | Error message -> result ~ok:false ~text:None ~error:(Some message)
+  with exn ->
+    result ~ok:false ~text:None ~error:(Some (Printexc.to_string exn))
+
+(* As [format_result] but for a Wasm *binary* input: the JS side packs the bytes
+   into a string (each char code one byte), so decode with [Js.to_bytestring],
+   which preserves them, rather than [Js.to_string] (which would UTF-decode). *)
+let format_result_bytes format_fn bytes =
+  try
+    match format_fn (Js.to_bytestring bytes) with
     | Ok text -> result ~ok:true ~text:(Some text) ~error:None
     | Error message -> result ~ok:false ~text:None ~error:(Some message)
   with exn ->
@@ -421,6 +435,13 @@ let () =
       method symbolsWat src = symbols_result Wat_editor.symbols_string src
       method toWat src = format_result to_wat_string src
       method toWax src = format_result Wat_editor.to_wax_string src
+
+      (* Wasm binary input (bytes packed one-per-char), for the upload button. *)
+      method wasmToWat bytes =
+        format_result_bytes Wat_editor.binary_to_wat_string bytes
+
+      method wasmToWax bytes =
+        format_result_bytes Wat_editor.binary_to_wax_string bytes
 
       method hoverWat src line ch =
         hover_result Wat_editor.hover_string src line ch

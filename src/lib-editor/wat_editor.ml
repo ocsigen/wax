@@ -518,6 +518,56 @@ let to_wax_string src =
           Ok (Buffer.contents buf)
       with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
 
+(* Decode a Wasm binary ([bytes] holds the raw bytes) and render it as WAT / Wax.
+   A binary carries no authorial layout, so no trivia is threaded; the decoder
+   records the gated features it exercises and {!Wax_wasm.Binary_to_text} emits a
+   [(@feature)] annotation for each, so the text is self-describing. Malformed
+   input aborts through the diagnostics collector, caught here as an [Error]. *)
+let binary_to_wat_string bytes =
+  let d = Wax_utils.Diagnostic.collector () in
+  try
+    let features = Wax_utils.Feature.default () in
+    let binary_ast = Wax_wasm.Wasm_parser.module_ d ~features bytes in
+    if has_errors d then Error (errors_string d)
+    else
+      let text_ast = Wax_wasm.Binary_to_text.module_ ~features binary_ast in
+      let buf = Buffer.create (String.length bytes) in
+      let fmt = Format.formatter_of_buffer buf in
+      let print_wat f m =
+        Wax_utils.Printer.run f (fun p ->
+            Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p
+              ~trivia:(Wax_utils.Trivia.empty ())
+              m)
+      in
+      Format.fprintf fmt "%a@." print_wat text_ast;
+      Ok (Buffer.contents buf)
+  with Wax_utils.Diagnostic.Aborted -> Error (errors_string d)
+
+let binary_to_wax_string bytes =
+  let d = Wax_utils.Diagnostic.collector () in
+  try
+    let features = Wax_utils.Feature.default () in
+    let binary_ast = Wax_wasm.Wasm_parser.module_ d ~features bytes in
+    if has_errors d then Error (errors_string d)
+    else
+      let text_ast = Wax_wasm.Binary_to_text.module_ ~features binary_ast in
+      let wax_ast = Wax_conversion.From_wasm.module_ d text_ast in
+      if has_errors d then Error (errors_string d)
+      else
+        let wax_ast =
+          Wax_lang.Typing.f ~simplify:true d wax_ast
+          |> snd |> Wax_lang.Typing.erase_types
+        in
+        let buf = Buffer.create (String.length bytes) in
+        let fmt = Format.formatter_of_buffer buf in
+        let print_wax f m =
+          Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+              Wax_lang.Output.module_ p ~trivia:(Wax_utils.Trivia.empty ()) m)
+        in
+        Format.fprintf fmt "%a@." print_wax wax_ast;
+        Ok (Buffer.contents buf)
+  with Wax_utils.Diagnostic.Aborted -> Error (errors_string d)
+
 (* Iterate [f] over every WAT module field, descending into the branches of an
    [(@if …)] conditional annotation (whose bodies hold nested fields), so a field
    guarded by a condition is walked like any other. *)

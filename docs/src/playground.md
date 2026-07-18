@@ -20,19 +20,15 @@
       <option value="wat">WAT → Wax</option>
     </select>
   </label>
-  <label class="wp-field" id="wp-mode-field">
-    Output
-    <select id="wp-mode">
-      <option value="wat" selected>WAT</option>
-      <option value="wax">Wax (formatted)</option>
-    </select>
-  </label>
   <label class="wp-field">
     Example
     <select id="wp-example"><option value="">Load an example…</option></select>
   </label>
-  <!-- Format acts on the source (left) pane, so it lives with the left-hand
-       controls rather than out on the right. -->
+  <!-- Upload and Format both act on the source (left) pane, so they live with
+       the left-hand controls rather than out on the right. -->
+  <button type="button" id="wp-upload" class="wp-button"
+          title="Load a .wasm, .wat or .wax file into the source pane, converting it to the current source language.">Upload…</button>
+  <input type="file" id="wp-upload-input" accept=".wasm,.wat,.wax" hidden>
   <button type="button" id="wp-format" class="wp-button">Format source</button>
   <span class="wp-spacer"></span>
   <button type="button" id="wp-share" class="wp-button"
@@ -246,9 +242,9 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
 
   var els = {
     direction: document.getElementById("wp-direction"),
-    modeField: document.getElementById("wp-mode-field"),
-    mode: document.getElementById("wp-mode"),
     example: document.getElementById("wp-example"),
+    upload: document.getElementById("wp-upload"),
+    uploadInput: document.getElementById("wp-upload-input"),
     format: document.getElementById("wp-format"),
     share: document.getElementById("wp-share"),
     host: document.getElementById("wp-editor-host"),
@@ -266,9 +262,19 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     "    x + y;\n" +
     "}\n";
 
+  var DEFAULT_WAT =
+    '(func $add (export "add") (param $x i32) (param $y i32) (result i32)\n' +
+    "  local.get $x\n" +
+    "  local.get $y\n" +
+    "  i32.add)\n";
+
   var wax = null;
   var editor = null; // the source editor (CodeMirror, or a textarea fallback)
   var waxKeywords = []; // Wax keyword list, from playground/keywords.json
+  // Each direction keeps its own source, so switching restores what you had
+  // (the languages differ, so the other direction's text would not be valid).
+  var savedDocs = { wax: DEFAULT_SRC, wat: DEFAULT_WAT };
+  var lastDirection = null; // the direction currently loaded in the editor
 
   // ---- The wasm loader (mirrors editors/vscode/src/wax-runtime.ts, web branch).
   // The loader fetches its own .wasm; we serve the bytes from memory via a fetch
@@ -454,9 +460,10 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     return html + escapeHtml(text.slice(pos));
   }
 
-  // The output language is whatever the current conversion produces.
+  // The output language is the other format: WAT for a Wax source, Wax for a
+  // WAT source.
   function outputLanguageIsWat() {
-    return !currentSourceIsWat() && els.mode.value !== "wax";
+    return !currentSourceIsWat();
   }
 
   function showOutput(text) {
@@ -606,10 +613,7 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     var src = editor.getDoc();
     var srcIsWat = currentSourceIsWat();
 
-    var result;
-    if (srcIsWat) result = wax.toWax(src);
-    else if (els.mode.value === "wax") result = wax.format(src);
-    else result = wax.toWat(src);
+    var result = srcIsWat ? wax.toWax(src) : wax.toWat(src);
 
     // The output refreshes live as you type. On a conversion error we keep the
     // last successful output but dim it, rather than blanking or echoing the
@@ -638,9 +642,62 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
   function updateLabels() {
     var srcIsWat = currentSourceIsWat();
     els.srcTitle.textContent = srcIsWat ? "WAT source" : "Wax source";
-    els.modeField.style.display = srcIsWat ? "none" : "";
-    if (srcIsWat) els.outTitle.textContent = "Wax output";
-    else els.outTitle.textContent = els.mode.value === "wax" ? "Wax (formatted) output" : "WAT output";
+    els.outTitle.textContent = srcIsWat ? "Wax output" : "WAT output";
+  }
+
+  // ---- Upload: load a .wasm / .wat / .wax file into the source pane, converting
+  // it to the current source language. Wasm is detected by extension or its
+  // magic bytes; text is read as WAT or Wax by extension, else sniffed (a
+  // leading "(" means WAT).
+
+  function bytesToBinaryString(bytes) {
+    var out = "";
+    var CHUNK = 0x8000;
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return out;
+  }
+
+  async function handleUpload(file) {
+    if (!file || !wax || !editor) return;
+    var srcIsWat = currentSourceIsWat();
+    var name = file.name.toLowerCase();
+    try {
+      var bytes = new Uint8Array(await file.arrayBuffer());
+      var isWasm =
+        name.endsWith(".wasm") ||
+        (bytes.length >= 4 &&
+          bytes[0] === 0x00 && bytes[1] === 0x61 &&
+          bytes[2] === 0x73 && bytes[3] === 0x6d);
+      var result;
+      if (isWasm) {
+        var bin = bytesToBinaryString(bytes);
+        result = srcIsWat ? wax.wasmToWat(bin) : wax.wasmToWax(bin);
+      } else {
+        var text = new TextDecoder().decode(bytes);
+        var fmt = name.endsWith(".wat")
+          ? "wat"
+          : name.endsWith(".wax")
+          ? "wax"
+          : /^\s*\(/.test(text)
+          ? "wat"
+          : "wax";
+        if (fmt === (srcIsWat ? "wat" : "wax")) result = { ok: true, text: text };
+        else if (fmt === "wax") result = wax.toWat(text); // wax -> wat
+        else result = wax.toWax(text); // wat -> wax
+      }
+      if (!result.ok || result.text == null) {
+        setStatus("Could not load " + file.name + ": " + (result.error || ""), true);
+        return;
+      }
+      editor.setDoc(result.text);
+      editor.focus();
+      run();
+      setStatus("Loaded " + file.name + ".", false);
+    } catch (e) {
+      setStatus("Could not load " + file.name + ": " + e.message, true);
+    }
   }
 
   // ---- Wiring.
@@ -649,25 +706,41 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     // Switching direction changes the source language, so the editor is rebuilt
     // (its analysis is wired per language) around the current text.
     els.direction.addEventListener("change", function () {
-      var doc = editor ? editor.getDoc() : DEFAULT_SRC;
+      var newDir = els.direction.value;
+      // Stash the outgoing source under its direction, restore the incoming one.
+      if (editor && lastDirection) savedDocs[lastDirection] = editor.getDoc();
+      lastDirection = newDir;
       updateLabels();
-      buildEditor(doc);
-      run();
-    });
-    els.mode.addEventListener("change", function () {
-      updateLabels();
+      buildEditor(savedDocs[newDir]);
       run();
     });
 
     els.example.addEventListener("change", function () {
+      // The option value is the example's Wax source. Load it into the current
+      // direction — translated to WAT when that is the source language, so the
+      // examples work as both Wax and WAT (decompiler) inputs.
       var code = els.example.value;
-      if (!code) return;
-      var wasWat = currentSourceIsWat();
-      els.direction.value = "wax";
-      updateLabels();
-      if (wasWat) buildEditor(code); // language changed: rebuild
-      else editor.setDoc(code);
+      if (!code || !editor) return;
+      els.example.value = ""; // reset to the placeholder so re-picking works
+      if (currentSourceIsWat()) {
+        var r = wax.toWat(code);
+        if (!r.ok || r.text == null) {
+          setStatus("Could not load that example as WAT: " + (r.error || ""), true);
+          return;
+        }
+        code = r.text;
+      }
+      editor.setDoc(code);
       run();
+    });
+
+    els.upload.addEventListener("click", function () {
+      els.uploadInput.click();
+    });
+    els.uploadInput.addEventListener("change", function () {
+      var file = els.uploadInput.files && els.uploadInput.files[0];
+      els.uploadInput.value = ""; // allow re-uploading the same file
+      handleUpload(file);
     });
 
     els.format.addEventListener("click", function () {
@@ -733,16 +806,24 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     await loadKeywords();
 
     // Restore a shared snippet, else the default.
-    var initial = DEFAULT_SRC;
     var frag = readFragment();
+    var initial;
     if (frag.code) {
+      // A shared link fully determines the direction (Wax unless dir=wat).
+      els.direction.value = frag.dir === "wat" ? "wat" : "wax";
       try {
         initial = await inflate(frag.code);
-        if (frag.dir === "wat") els.direction.value = "wat";
       } catch (e) {
-        initial = DEFAULT_SRC;
+        initial = savedDocs[els.direction.value];
       }
+    } else {
+      // No shared link: honour the current direction — a browser restores the
+      // <select> across a reload — and load that direction's default source,
+      // not always the Wax one.
+      initial = savedDocs[els.direction.value];
     }
+    savedDocs[els.direction.value] = initial;
+    lastDirection = els.direction.value;
     updateLabels();
 
     try {
