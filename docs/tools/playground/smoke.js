@@ -80,6 +80,15 @@ async function main() {
     const diags = wax.check(src, []);
     if (!Array.isArray(diags)) fail("check did not return an array");
 
+    // The binary-input path is the subtlest marshalling: bytes packed
+    // one-per-char through a JS string into Js.to_bytestring. Feed it the 8-byte
+    // empty module (\0asm + version 1) and assert it decodes.
+    const emptyModule = "\x00asm\x01\x00\x00\x00";
+    const wat = wax.wasmToWat(emptyModule);
+    if (!wat.ok) fail("wasmToWat on the empty module failed: " + (wat.error || ""));
+    const wax2 = wax.wasmToWax(emptyModule);
+    if (!wax2.ok) fail("wasmToWax on the empty module failed: " + (wax2.error || ""));
+
     // The examples file, when present, must be a non-empty array.
     const examplesPath = path.join(dir, "examples.json");
     if (fs.existsSync(examplesPath)) {

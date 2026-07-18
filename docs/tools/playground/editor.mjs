@@ -11,7 +11,7 @@
 // Positions: wax uses zero-based (line, character) in UTF-16 code units, which
 // is exactly CodeMirror's native offset model, so the mapping is arithmetic.
 
-import { EditorState, StateField } from "@codemirror/state";
+import { EditorState, StateField, Compartment } from "@codemirror/state";
 import {
   EditorView,
   Decoration,
@@ -350,19 +350,6 @@ export function highlightToHtml(text, language, wax, keywords) {
   return html + escapeHtml(text.slice(pos));
 }
 
-function lexPlugin(language, keywords) {
-  return ViewPlugin.fromClass(
-    class {
-      constructor(view) {
-        this.decorations = buildLex(view.state, language, keywords);
-      }
-      update(u) {
-        if (u.docChanged) this.decorations = buildLex(u.view.state, language, keywords);
-      }
-    },
-    { decorations: (v) => v.decorations }
-  );
-}
 
 // ---- inlay hints (inferred let types) ---------------------------------------
 
@@ -466,13 +453,25 @@ function makeLinter(provider, onDiagnostics) {
         };
         if (d.hint) cm.message += "\n" + d.hint;
         if (d.edit) {
+          // The edit's span is not always the diagnostic's own span (e.g. an
+          // unused-local fix inserts `_` at the name start, a zero-width point
+          // inside the name), so anchor it by its offset *relative* to the
+          // diagnostic's start. CodeMirror hands apply() the diagnostic's `from`
+          // remapped through any edits made since lint time, so rebuilding from
+          // that keeps the fix correct even if the user typed above it first.
           const e = d.edit;
+          const ef = lcToPos(view.state, e.startLine, e.startChar);
+          const et = lcToPos(view.state, e.endLine, e.endChar);
+          const relFrom = ef - from;
+          const relTo = Math.max(ef, et) - from;
+          const insert = e.newText;
           cm.actions = [
             {
               name: "Fix",
-              apply(v) {
-                const { from: ef, to: et } = rangeToPos(v.state, e);
-                v.dispatch({ changes: { from: ef, to: et, insert: e.newText } });
+              apply(v, anchor) {
+                v.dispatch({
+                  changes: { from: anchor + relFrom, to: anchor + relTo, insert },
+                });
               },
             },
           ];
@@ -672,6 +671,11 @@ export function createWaxEditor(opts) {
     if (u.docChanged && onDocChange) onDocChange(u.state.doc.toString());
   });
 
+  // The theme lives in a compartment so a light/dark flip can be swapped in
+  // place (see setDark) without rebuilding the editor and losing undo history,
+  // cursor and scroll position.
+  const themeCompartment = new Compartment();
+
   const extensions = [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -698,7 +702,7 @@ export function createWaxEditor(opts) {
       ...lintKeymap,
       ...foldKeymap,
     ]),
-    waxTheme(dark),
+    themeCompartment.of(waxTheme(dark)),
     EditorState.tabSize.of(4),
   ];
 
@@ -724,6 +728,9 @@ export function createWaxEditor(opts) {
       });
     },
     focus: () => view.focus(),
+    setDark(isDark) {
+      view.dispatch({ effects: themeCompartment.reconfigure(waxTheme(isDark)) });
+    },
     getCursor: () => view.state.selection.main.head,
     setCursor(pos) {
       const p = Math.max(0, Math.min(pos, view.state.doc.length));

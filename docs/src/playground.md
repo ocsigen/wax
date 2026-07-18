@@ -239,6 +239,9 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
 
   var root = document.getElementById("wax-playground");
   if (!root) return;
+  // mdbook's print view concatenates every chapter (raw HTML included) into one
+  // page; don't boot a second copy of the toolchain into the printout.
+  if (location.pathname.endsWith("print.html")) return;
 
   var els = {
     direction: document.getElementById("wp-direction"),
@@ -572,6 +575,7 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
         getDoc: cm.getDoc,
         setDoc: cm.setDoc,
         focus: cm.focus,
+        setDark: cm.setDark,
         getCursor: cm.getCursor,
         setCursor: cm.setCursor,
         selectRange: cm.selectRange,
@@ -680,7 +684,7 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
           ? "wat"
           : name.endsWith(".wax")
           ? "wax"
-          : /^\s*\(/.test(text)
+          : /^\s*(\(|;;)/.test(text) // a leading "(" or ";;" comment reads as WAT
           ? "wat"
           : "wax";
         if (fmt === (srcIsWat ? "wat" : "wax")) result = { ok: true, text: text };
@@ -827,26 +831,29 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
     updateLabels();
 
     try {
-      wax = await loadWax();
+      // Load the wasm toolchain and the editor bundle concurrently: the 1.5 MB
+      // wasm instantiation overlaps with the editor-bundle fetch. loadEditorBundle
+      // never rejects (it falls back to a textarea), so only loadWax can reject.
+      var loaded = await Promise.all([loadWax(), loadEditorBundle()]);
+      wax = loaded[0];
     } catch (e) {
       root.classList.add("wp-unsupported");
       setStatus(root.getAttribute("data-unsupported") + " (" + e.message + ")", true);
       return;
     }
 
-    await loadEditorBundle(); // best-effort; falls back to a textarea
     buildEditor(initial);
     run();
 
-    // mdbook switches theme in place (no reload); rebuild the editor when its
-    // light/dark-ness flips so the CodeMirror colours follow.
+    // mdbook switches theme in place (no reload); swap the editor's theme when
+    // its light/dark-ness flips so the CodeMirror colours follow — in place, so
+    // undo history, cursor and scroll are kept.
     var lastDark = isDarkTheme();
     new MutationObserver(function () {
       var d = isDarkTheme();
       if (d !== lastDark && editor && editor.isCM) {
         lastDark = d;
-        buildEditor(editor.getDoc());
-        run();
+        editor.setDark(d);
       }
     }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
   }
