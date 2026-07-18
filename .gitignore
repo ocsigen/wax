@@ -1,9 +1,12 @@
 _build
 docs/book
 docs/tools/wax-highlight/node_modules
+docs/tools/playground/node_modules
+docs/tools/playground/wax-editor.bundle.js
 
 # Playground assets (the wasm bundle + generated examples) are built and copied
 # into docs/src/playground/ at deploy time, not committed. See PLAYGROUND.md.
 docs/src/playground/wax_format_js.bc.wasm.js
 docs/src/playground/wax_format_js.bc.wasm.assets/
 docs/src/playground/examples.json
+docs/src/playground/wax-editor.bundle.js

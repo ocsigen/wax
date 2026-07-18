@@ -19,10 +19,16 @@ src=_build/default/src/editor
 echo "==> Building the playground wasm bundle"
 dune build --profile release src/editor/wax_format_js.bc.wasm.js
 
+echo "==> Building the CodeMirror editor bundle"
+here=docs/tools/playground
+[ -d "$here/node_modules" ] || npm ci --prefix "$here"
+npm run build --prefix "$here"
+
 echo "==> Assembling assets in $dest"
 mkdir -p "$dest/wax_format_js.bc.wasm.assets"
 cp "$src/wax_format_js.bc.wasm.js" "$dest/"
 cp "$src"/wax_format_js.bc.wasm.assets/*.wasm "$dest/wax_format_js.bc.wasm.assets/"
+cp "$here/wax-editor.bundle.js" "$dest/"
 dune exec docs/gen_examples.exe -- docs/src >"$dest/examples.json"
 
 echo "==> Smoke test"

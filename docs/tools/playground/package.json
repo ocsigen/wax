@@ -1,0 +1,23 @@
+{
+  "name": "wax-playground-editor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CodeMirror 6 editor bundle for the Wax docs playground (PLAYGROUND.md phase 2). Bundled with esbuild into a self-hosted IIFE (globalThis.WaxCM); no CDN at page load. editor.mjs is ESM by extension, so no package \"type\" is needed (and smoke.js stays CommonJS).",
+  "scripts": {
+    "build": "esbuild editor.mjs --bundle --format=iife --global-name=WaxCM --outfile=wax-editor.bundle.js --minify --legal-comments=none"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.18.0",
+    "@codemirror/commands": "^6.7.0",
+    "@codemirror/language": "^6.10.0",
+    "@codemirror/lint": "^6.8.0",
+    "@codemirror/state": "^6.4.0",
+    "@codemirror/view": "^6.34.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  },
+  "allowScripts": {
+    "esbuild@0.24.2": true
+  }
+}

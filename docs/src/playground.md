@@ -39,12 +39,7 @@
 <div class="wp-panes">
   <div class="wp-pane">
     <div class="wp-pane-title" id="wp-src-title">Wax source</div>
-    <div class="wp-editor">
-      <div class="wp-highlights" id="wp-highlights" aria-hidden="true"></div>
-      <textarea id="wp-input" class="wp-input" spellcheck="false"
-                autocapitalize="off" autocomplete="off" autocorrect="off"
-                wrap="off"></textarea>
-    </div>
+    <div class="wp-editor" id="wp-editor-host"></div>
   </div>
   <div class="wp-pane">
     <div class="wp-pane-title" id="wp-out-title">WAT output</div>
@@ -131,12 +126,21 @@
   border-radius: 4px;
   overflow: hidden;
 }
-.wp-input, .wp-highlights {
+/* CodeMirror fills the editor container and manages its own scrolling. */
+.wp-editor .cm-editor { height: 100%; }
+.wp-editor .cm-scroller { font-family: var(--wp-font); }
+
+/* Plain-textarea fallback, used only if the CodeMirror bundle fails to load. */
+.wp-input {
   position: absolute;
   inset: 0;
   margin: 0;
   padding: var(--wp-pad);
   border: 0;
+  resize: none;
+  background: transparent;
+  color: var(--fg, inherit);
+  caret-color: var(--fg, currentColor);
   font-family: var(--wp-font);
   font-size: var(--wp-size);
   line-height: var(--wp-line);
@@ -144,25 +148,35 @@
   overflow: auto;
   tab-size: 4;
 }
-.wp-input {
-  resize: none;
-  background: transparent;
-  color: var(--fg, inherit);
-  caret-color: var(--fg, currentColor);
-  z-index: 1;
-}
 .wp-input:focus { outline: none; }
-.wp-highlights {
-  z-index: 0;
-  color: transparent;
-  pointer-events: none;
+
+/* Semantic-token colours. These come from the toolchain (wax.semanticTokens),
+   not a grammar, so highlighting always agrees with the type checker. A
+   One-Light-ish palette by default, One-Dark-ish on mdbook's dark themes, so
+   tokens stay legible whichever theme the reader picked. */
+.cm-wt-namespace { color: #a626a4; }
+.cm-wt-type      { color: #b76a2f; }
+.cm-wt-function  { color: #4078f2; }
+.cm-wt-property  { color: #0184bc; }
+.cm-wt-parameter { color: #986801; }
+html.coal .cm-wt-namespace, html.navy .cm-wt-namespace, html.ayu .cm-wt-namespace { color: #c678dd; }
+html.coal .cm-wt-type, html.navy .cm-wt-type, html.ayu .cm-wt-type { color: #e5c07b; }
+html.coal .cm-wt-function, html.navy .cm-wt-function, html.ayu .cm-wt-function { color: #61afef; }
+html.coal .cm-wt-property, html.navy .cm-wt-property, html.ayu .cm-wt-property { color: #56b6c2; }
+html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-parameter { color: #d19a66; }
+
+/* Inlay hints (inferred `let` types), document highlight, and the feature
+   tooltips (hover type, signature help). */
+.cm-wt-inlay { opacity: 0.55; font-style: italic; font-size: 0.9em; padding: 0 0.15em; }
+.cm-wt-refhl { background: rgba(128, 128, 128, 0.22); border-radius: 2px; }
+.cm-wt-hover, .cm-wt-sig {
+  font-family: var(--wp-font);
+  font-size: 0.95em;
+  white-space: pre-wrap;
 }
-.wp-highlights .wp-sq-error {
-  background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='6'%20height='3'%3E%3Cpath%20d='M0%203%20L1.5%201%20L3%203%20L4.5%201%20L6%203'%20fill='none'%20stroke='%23e45649'%20stroke-width='0.8'/%3E%3C/svg%3E") repeat-x left bottom;
-}
-.wp-highlights .wp-sq-warning {
-  background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='6'%20height='3'%3E%3Cpath%20d='M0%203%20L1.5%201%20L3%203%20L4.5%201%20L6%203'%20fill='none'%20stroke='%23d19a2a'%20stroke-width='0.8'/%3E%3C/svg%3E") repeat-x left bottom;
-}
+.cm-wt-sig-active { font-weight: bold; }
+/* Tooltip/caret/selection colours live in the CodeMirror theme (editor.mjs), so
+   they outrank CodeMirror's runtime-injected base theme. */
 
 .wp-output {
   flex: 1 1 auto;
@@ -179,7 +193,6 @@
   white-space: pre;
   tab-size: 4;
 }
-.wp-output.wp-error code { color: #e45649; }
 
 .wp-status {
   margin-top: 0.6em;
@@ -223,10 +236,8 @@
     example: document.getElementById("wp-example"),
     format: document.getElementById("wp-format"),
     share: document.getElementById("wp-share"),
-    input: document.getElementById("wp-input"),
-    highlights: document.getElementById("wp-highlights"),
+    host: document.getElementById("wp-editor-host"),
     output: document.getElementById("wp-output").querySelector("code"),
-    outputBox: document.getElementById("wp-output"),
     srcTitle: document.getElementById("wp-src-title"),
     outTitle: document.getElementById("wp-out-title"),
     status: document.getElementById("wp-status"),
@@ -240,6 +251,7 @@
     "}\n";
 
   var wax = null;
+  var editor = null; // the source editor (CodeMirror, or a textarea fallback)
 
   // ---- The wasm loader (mirrors editors/vscode/src/wax-runtime.ts, web branch).
   // The loader fetches its own .wasm; we serve the bytes from memory via a fetch
@@ -298,6 +310,21 @@
     }
   }
 
+  // ---- The CodeMirror editor bundle (docs/tools/playground, built by esbuild).
+  // Self-hosted beside the page; installs globalThis.WaxCM. Best-effort: if it
+  // fails to load, the page falls back to a plain textarea.
+
+  function loadEditorBundle() {
+    if (globalThis.WaxCM) return Promise.resolve(true);
+    return new Promise(function (resolve) {
+      var s = document.createElement("script");
+      s.src = ASSET_DIR + "wax-editor.bundle.js";
+      s.onload = function () { resolve(!!globalThis.WaxCM); };
+      s.onerror = function () { resolve(false); };
+      document.head.appendChild(s);
+    });
+  }
+
   // ---- Share links: source deflated into the URL fragment (never sent to a
   // server). CompressionStream keeps long snippets compact.
 
@@ -336,7 +363,8 @@
     return { code: m ? m[1] : null, dir: dir ? dir[1] : null };
   }
 
-  // ---- Editor: line/char <-> offset, and the diagnostic-highlight mirror.
+  // ---- line/char <-> offset (only the textarea fallback needs this; the
+  // CodeMirror backend maps positions with its own document API).
 
   function offsetOf(text, line, ch) {
     var off = 0, l = 0;
@@ -347,48 +375,61 @@
     return off + ch;
   }
 
+  function currentSourceIsWat() {
+    return els.direction.value === "wat";
+  }
+
+  // ---- Output highlighting: colour the read-only output with the same
+  // semantic tokens the editor uses, so both panes agree with the toolchain.
+
   function escapeHtml(s) {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  // Build the mirror behind the textarea, wrapping each diagnostic span in a
-  // squiggle. Overlaps resolve to the worst severity per character.
-  function renderHighlights(text, diags) {
-    var n = text.length;
-    var sev = new Array(n).fill(0); // 0 none, 1 warning/suggestion, 2 error
-    for (var d = 0; d < diags.length; d++) {
-      var diag = diags[d];
-      var start = offsetOf(text, diag.startLine, diag.startChar);
-      var end = offsetOf(text, diag.endLine, diag.endChar);
-      if (end <= start) end = start + 1;
-      var s = diag.severity === "error" ? 2 : 1;
-      for (var i = start; i < end && i < n; i++) if (s > sev[i]) sev[i] = s;
+  function highlightToHtml(text, tokens) {
+    var starts = [0];
+    for (var i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) === 10) starts.push(i + 1);
     }
-    var html = "", i2 = 0;
-    while (i2 < n) {
-      var cur = sev[i2], j = i2 + 1;
-      while (j < n && sev[j] === cur) j++;
-      var chunk = escapeHtml(text.slice(i2, j));
-      if (cur === 2) html += '<span class="wp-sq-error">' + chunk + "</span>";
-      else if (cur === 1) html += '<span class="wp-sq-warning">' + chunk + "</span>";
-      else html += chunk;
-      i2 = j;
+    var marks = [];
+    tokens.forEach(function (t) {
+      if (t.line >= starts.length) return;
+      var from = starts[t.line] + t.character;
+      var to = Math.min(text.length, from + t.length);
+      if (to > from) marks.push([from, to, t.kind]);
+    });
+    marks.sort(function (a, b) { return a[0] - b[0]; });
+    var html = "", pos = 0;
+    marks.forEach(function (m) {
+      if (m[0] < pos) return; // skip overlaps
+      html += escapeHtml(text.slice(pos, m[0]));
+      html += '<span class="cm-wt-' + m[2] + '">' + escapeHtml(text.slice(m[0], m[1])) + "</span>";
+      pos = m[1];
+    });
+    return html + escapeHtml(text.slice(pos));
+  }
+
+  // The output language is whatever the current conversion produces.
+  function outputLanguageIsWat() {
+    return !currentSourceIsWat() && els.mode.value !== "wax";
+  }
+
+  function showOutput(text) {
+    try {
+      var toks = outputLanguageIsWat()
+        ? wax.semanticTokensWat(text)
+        : wax.semanticTokens(text);
+      els.output.innerHTML = highlightToHtml(text, toks || []);
+    } catch (e) {
+      els.output.textContent = text;
     }
-    // A trailing newline needs a spacer so the mirror's scroll height matches.
-    els.highlights.innerHTML = html + "​";
   }
 
-  function syncScroll() {
-    els.highlights.scrollTop = els.input.scrollTop;
-    els.highlights.scrollLeft = els.input.scrollLeft;
-  }
+  // ---- Diagnostics list (both editor backends). CodeMirror also shows inline
+  // squiggles, a lint gutter, and hover messages; this list adds a persistent,
+  // click-to-jump view with related spans, and drives the status summary.
 
-  // ---- Diagnostics list.
-
-  function renderDiagnostics(text, diags) {
+  function renderDiagnostics(diags) {
     els.diagnostics.textContent = "";
     diags.forEach(function (d) {
       var li = document.createElement("li");
@@ -413,48 +454,13 @@
         li.appendChild(rel);
       });
       li.addEventListener("click", function () {
-        var start = offsetOf(text, d.startLine, d.startChar);
-        var end = offsetOf(text, d.endLine, d.endChar);
-        els.input.focus();
-        els.input.setSelectionRange(start, Math.max(end, start));
+        if (editor) editor.selectRange(d.startLine, d.startChar, d.endLine, d.endChar);
       });
       els.diagnostics.appendChild(li);
     });
   }
 
-  // ---- The live conversion + diagnostics pass.
-
-  function currentSourceIsWat() {
-    return els.direction.value === "wat";
-  }
-
-  function run() {
-    if (!wax) return;
-    var src = els.input.value;
-    var srcIsWat = currentSourceIsWat();
-
-    var diags = srcIsWat ? wax.checkWat(src) : wax.check(src, []);
-    renderHighlights(src, diags);
-    syncScroll();
-    renderDiagnostics(src, diags);
-
-    var result;
-    if (srcIsWat) {
-      result = wax.toWax(src);
-    } else if (els.mode.value === "wax") {
-      result = wax.format(src);
-    } else {
-      result = wax.toWat(src);
-    }
-
-    if (result.ok) {
-      els.outputBox.classList.remove("wp-error");
-      els.output.textContent = result.text || "";
-    } else {
-      els.outputBox.classList.add("wp-error");
-      els.output.textContent = result.error || "conversion failed";
-    }
-
+  function updateStatus(diags) {
     var errors = diags.filter(function (d) { return d.severity === "error"; }).length;
     var warns = diags.filter(function (d) { return d.severity === "warning"; }).length;
     var parts = [];
@@ -463,15 +469,104 @@
     setStatus(parts.length ? parts.join(", ") : "No problems.", errors > 0);
   }
 
-  var debounceTimer = null;
-  function scheduleRun() {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(run, 150);
+  // Diagnostics arrive from CodeMirror's linter (or, in the fallback, from
+  // run()); either way they are the raw wax `check` results.
+  function onDiagnostics(diags) {
+    renderDiagnostics(diags);
+    updateStatus(diags);
   }
 
   function setStatus(msg, isError) {
     els.status.textContent = msg;
     els.status.classList.toggle("wp-status-error", !!isError);
+  }
+
+  // ---- The editor backend: CodeMirror when the bundle loaded, else a plain
+  // textarea. Both expose the same tiny interface used below.
+
+  // mdbook puts the active theme's name on <html> (light, rust, coal, navy,
+  // ayu); coal/navy/ayu are the dark ones.
+  function isDarkTheme() {
+    return /(?:^|\s)(coal|navy|ayu)(?:\s|$)/.test(document.documentElement.className);
+  }
+
+  function buildEditor(doc) {
+    if (editor) editor.destroy();
+    els.host.textContent = "";
+    var language = currentSourceIsWat() ? "wat" : "wax";
+
+    if (globalThis.WaxCM && wax) {
+      var cm = globalThis.WaxCM.createWaxEditor({
+        parent: els.host,
+        doc: doc,
+        language: language,
+        wax: wax,
+        dark: isDarkTheme(),
+        onDocChange: scheduleRun,
+        onDiagnostics: onDiagnostics,
+      });
+      editor = {
+        isCM: true,
+        getDoc: cm.getDoc,
+        setDoc: cm.setDoc,
+        focus: cm.focus,
+        selectRange: cm.selectRange,
+        destroy: cm.destroy,
+      };
+    } else {
+      var ta = document.createElement("textarea");
+      ta.className = "wp-input";
+      ta.spellcheck = false;
+      ta.setAttribute("autocapitalize", "off");
+      ta.setAttribute("autocomplete", "off");
+      ta.setAttribute("autocorrect", "off");
+      ta.value = doc;
+      ta.addEventListener("input", scheduleRun);
+      els.host.appendChild(ta);
+      editor = {
+        isCM: false,
+        getDoc: function () { return ta.value; },
+        setDoc: function (t) { ta.value = t; },
+        focus: function () { ta.focus(); },
+        selectRange: function (sl, sc, el2, ec) {
+          var s = offsetOf(ta.value, sl, sc);
+          var e = offsetOf(ta.value, el2, ec);
+          ta.focus();
+          ta.setSelectionRange(s, Math.max(s, e));
+        },
+        destroy: function () { ta.remove(); },
+      };
+    }
+  }
+
+  // ---- The live conversion pass (output pane). Diagnostics are handled by the
+  // CodeMirror linter; the textarea fallback computes them here instead.
+
+  function run() {
+    if (!wax || !editor) return;
+    var src = editor.getDoc();
+    var srcIsWat = currentSourceIsWat();
+
+    var result;
+    if (srcIsWat) result = wax.toWax(src);
+    else if (els.mode.value === "wax") result = wax.format(src);
+    else result = wax.toWat(src);
+
+    // On a conversion error the output is left blank: the diagnostics (inline
+    // squiggles and the list below) already report what is wrong, so echoing
+    // the error text in the output pane is just noise.
+    if (result.ok) showOutput(result.text || "");
+    else els.output.textContent = "";
+
+    if (!editor.isCM) {
+      onDiagnostics(srcIsWat ? wax.checkWat(src) : wax.check(src, []));
+    }
+  }
+
+  var debounceTimer = null;
+  function scheduleRun() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(run, 150);
   }
 
   // ---- Pane labels track the direction / output mode.
@@ -487,11 +582,12 @@
   // ---- Wiring.
 
   function wire() {
-    els.input.addEventListener("input", scheduleRun);
-    els.input.addEventListener("scroll", syncScroll);
-
+    // Switching direction changes the source language, so the editor is rebuilt
+    // (its analysis is wired per language) around the current text.
     els.direction.addEventListener("change", function () {
+      var doc = editor ? editor.getDoc() : DEFAULT_SRC;
       updateLabels();
+      buildEditor(doc);
       run();
     });
     els.mode.addEventListener("change", function () {
@@ -502,18 +598,20 @@
     els.example.addEventListener("change", function () {
       var code = els.example.value;
       if (!code) return;
+      var wasWat = currentSourceIsWat();
       els.direction.value = "wax";
-      els.input.value = code;
       updateLabels();
+      if (wasWat) buildEditor(code); // language changed: rebuild
+      else editor.setDoc(code);
       run();
     });
 
     els.format.addEventListener("click", function () {
-      if (!wax) return;
-      var src = els.input.value;
+      if (!wax || !editor) return;
+      var src = editor.getDoc();
       var result = currentSourceIsWat() ? wax.formatWat(src) : wax.format(src);
       if (result.ok && result.text != null) {
-        els.input.value = result.text;
+        editor.setDoc(result.text);
         run();
       } else {
         setStatus(result.error || "cannot format invalid source", true);
@@ -521,8 +619,9 @@
     });
 
     els.share.addEventListener("click", async function () {
+      if (!editor) return;
       try {
-        var encoded = await deflate(els.input.value);
+        var encoded = await deflate(editor.getDoc());
         var hash = "#code=" + encoded + (currentSourceIsWat() ? "&dir=wat" : "");
         history.replaceState(null, "", location.pathname + location.search + hash);
         var link = location.href;
@@ -557,16 +656,15 @@
     populateExamples();
 
     // Restore a shared snippet, else the default.
+    var initial = DEFAULT_SRC;
     var frag = readFragment();
     if (frag.code) {
       try {
-        els.input.value = await inflate(frag.code);
+        initial = await inflate(frag.code);
         if (frag.dir === "wat") els.direction.value = "wat";
       } catch (e) {
-        els.input.value = DEFAULT_SRC;
+        initial = DEFAULT_SRC;
       }
-    } else {
-      els.input.value = DEFAULT_SRC;
     }
     updateLabels();
 
@@ -577,7 +675,22 @@
       setStatus(root.getAttribute("data-unsupported") + " (" + e.message + ")", true);
       return;
     }
+
+    await loadEditorBundle(); // best-effort; falls back to a textarea
+    buildEditor(initial);
     run();
+
+    // mdbook switches theme in place (no reload); rebuild the editor when its
+    // light/dark-ness flips so the CodeMirror colours follow.
+    var lastDark = isDarkTheme();
+    new MutationObserver(function () {
+      var d = isDarkTheme();
+      if (d !== lastDark && editor && editor.isCM) {
+        lastDark = d;
+        buildEditor(editor.getDoc());
+        run();
+      }
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
   }
 
   boot();

@@ -3041,6 +3041,8 @@ cast on descriptor equality (a leading `?` makes the result nullable).
 ### Wax
 
 ```wax
+#![feature = "custom-descriptors"]
+
 rec {
     type obj = descriptor obj_desc { x: i32 };
     type obj_desc = describes obj { kind: i32 };

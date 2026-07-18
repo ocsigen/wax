@@ -11,6 +11,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const dir = process.argv[2] || path.join("docs", "src", "playground");
 const loaderPath = path.join(dir, "wax_format_js.bc.wasm.js");
@@ -85,6 +86,18 @@ async function main() {
       const examples = JSON.parse(fs.readFileSync(examplesPath, "utf8"));
       if (!Array.isArray(examples) || examples.length === 0)
         fail("examples.json is empty or not an array");
+    }
+
+    // The CodeMirror editor bundle, when present, must evaluate and install
+    // WaxCM.createWaxEditor. (It needs a DOM to construct an editor, so this
+    // only checks that the bundle loads and exposes its entry point.)
+    const editorPath = path.join(dir, "wax-editor.bundle.js");
+    if (fs.existsSync(editorPath)) {
+      const sandbox = { globalThis: {} };
+      sandbox.globalThis = sandbox;
+      vm.runInNewContext(fs.readFileSync(editorPath, "utf8"), sandbox);
+      if (typeof (sandbox.WaxCM && sandbox.WaxCM.createWaxEditor) !== "function")
+        fail("wax-editor.bundle.js did not install WaxCM.createWaxEditor");
     }
 
     console.log("smoke: OK (" + result.text.split("\n").length + " lines of WAT)");
