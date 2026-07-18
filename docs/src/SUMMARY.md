@@ -1,11 +1,11 @@
 # Summary
 
 - [Introduction](./introduction.md)
+- [Playground](./playground.md)
 - [Feature Support](./features.md)
 - [Language Guide](./language.md)
 - [Cheat Sheet](./cheatsheet.md)
 - [Examples](./examples.md)
-- [Playground](./playground.md)
 
 - [Correspondence](./correspondence/intro.md)
     - [Types](./correspondence/types.md)

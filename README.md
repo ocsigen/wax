@@ -30,12 +30,13 @@ fn add(x: i32, y: i32) -> i32 {
 }
 ```
 
-Both compile to identical bytecode, and the payoff grows with the program.
-You can [try it in your browser](https://ocsigen.org/wax/playground.html): type
+Both compile to identical bytecode.
+
+**[Try it in your browser](https://ocsigen.org/wax/playground.html)**: type
 Wax, see the WAT and diagnostics live, with no install.
 
-Struct types, nullable references, casts, and loops stay readable where the
-equivalent WAT sprawls:
+The payoff grows with the program: struct types, nullable references, casts,
+and loops stay readable where the equivalent WAT sprawls:
 
 ```rust
 type list = { value: i32, next: &?list };
