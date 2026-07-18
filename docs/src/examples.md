@@ -2,57 +2,6 @@
 
 Complete examples demonstrating Wax features and their WebAssembly equivalents.
 
-## Named Module
-
-A `#![module = "..."]` inner attribute names the module.
-
-### Wax
-
-```wax
-#![module = "calculator"]
-
-#[export = "square"]
-fn square(x: i32) -> i32 {
-    x * x;
-}
-```
-
-### Equivalent WAT
-
-```wat,check
-(module $calculator
-  (func $square (export "square") (param $x i32) (result i32)
-    local.get $x
-    local.get $x
-    i32.mul))
-```
-
-## Feature Declaration
-
-A `#![feature = "..."]` inner attribute declares an optional proposal the
-module uses, so it compiles and validates with no `-X` flag.
-
-### Wax
-
-```wax
-#![feature = "custom-descriptors"]
-
-rec {
-    type obj = descriptor obj_desc { x: i32 };
-    type obj_desc = describes obj { };
-}
-```
-
-### Equivalent WAT
-
-```wat,check
-(module
-  (@feature "custom-descriptors")
-  (rec
-    (type $obj (descriptor $obj_desc) (struct (field $x i32)))
-    (type $obj_desc (describes $obj) (struct))))
-```
-
 ## Arithmetic Functions
 
 ### Wax
@@ -527,6 +476,31 @@ fn sum_list(head: &?list) -> i32 {
 }
 ```
 
+## Named Module
+
+A `#![module = "..."]` inner attribute names the module.
+
+### Wax
+
+```wax
+#![module = "calculator"]
+
+#[export = "square"]
+fn square(x: i32) -> i32 {
+    x * x;
+}
+```
+
+### Equivalent WAT
+
+```wat,check
+(module $calculator
+  (func $square (export "square") (param $x i32) (result i32)
+    local.get $x
+    local.get $x
+    i32.mul))
+```
+
 ## Imports and Exports
 
 ### Wax
@@ -692,6 +666,46 @@ fn checksum(a: i32, b: i32) -> i32 {
   i32.add)
 ```
 
+## Linear Memory
+
+A `memory` declaration reserves linear memory. `load`/`store` methods on it read
+and write, with the access width in the method name; a narrow (`load8`/`load16`)
+load returns raw bits, so it needs an explicit sign/zero-extending cast.
+
+### Wax
+
+```wax
+memory mem: i32 [1];
+
+#[export = "sum_bytes"]
+fn sum_bytes(start: i32, end: i32) -> i32 {
+    let total: i32 = 0;
+    let p: i32 = start;
+    while p <u end {
+        total += mem.load8(p) as i32_u;   // byte load, zero-extended
+        p += 1;
+    }
+    total;
+}
+```
+
+## Data Segments with Numeric Values
+
+A data segment's contents can mix string literals with typed numeric runs —
+`[type: values]`, packed little-endian — instead of hand-escaping every byte.
+
+### Wax
+
+```wax
+memory mem: i32 [1];
+
+// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.
+data header @ mem[0] =
+    "GIF89a"
+    ++ [f32: 1.0, 0.5, 0.25, 0.0]
+    ++ [i16: 640, 480];
+```
+
 ## Wide Arithmetic
 
 128-bit integer arithmetic uses the `i64::` intrinsics, which take and return
@@ -712,6 +726,32 @@ fn add_u128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> (i64, i64) {
 fn mul_u64_to_u128(a: i64, b: i64) -> (i64, i64) {
     i64::mul_wide_u(a, b);
 }
+```
+
+## Feature Declaration
+
+A `#![feature = "..."]` inner attribute declares an optional proposal the
+module uses, so it compiles and validates with no `-X` flag.
+
+### Wax
+
+```wax
+#![feature = "custom-descriptors"]
+
+rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { };
+}
+```
+
+### Equivalent WAT
+
+```wat,check
+(module
+  (@feature "custom-descriptors")
+  (rec
+    (type $obj (descriptor $obj_desc) (struct (field $x i32)))
+    (type $obj_desc (describes $obj) (struct))))
 ```
 
 ## Custom Descriptors
@@ -775,46 +815,6 @@ fn drain(n: i32) {
         #[unlikely] br_if 'l n;
     }
 }
-```
-
-## Linear Memory
-
-A `memory` declaration reserves linear memory. `load`/`store` methods on it read
-and write, with the access width in the method name; a narrow (`load8`/`load16`)
-load returns raw bits, so it needs an explicit sign/zero-extending cast.
-
-### Wax
-
-```wax
-memory mem: i32 [1];
-
-#[export = "sum_bytes"]
-fn sum_bytes(start: i32, end: i32) -> i32 {
-    let total: i32 = 0;
-    let p: i32 = start;
-    while p <u end {
-        total += mem.load8(p) as i32_u;   // byte load, zero-extended
-        p += 1;
-    }
-    total;
-}
-```
-
-## Data Segments with Numeric Values
-
-A data segment's contents can mix string literals with typed numeric runs —
-`[type: values]`, packed little-endian — instead of hand-escaping every byte.
-
-### Wax
-
-```wax
-memory mem: i32 [1];
-
-// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.
-data header @ mem[0] =
-    "GIF89a"
-    ++ [f32: 1.0, 0.5, 0.25, 0.0]
-    ++ [i16: 640, 480];
 ```
 
 ## SIMD
