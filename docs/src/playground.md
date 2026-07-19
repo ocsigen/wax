@@ -227,6 +227,13 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
 .wp-diagnostics .wp-d-loc { opacity: 0.6; margin-right: 0.5em; font-variant-numeric: tabular-nums; }
 .wp-diagnostics .wp-d-hint { display: block; opacity: 0.75; margin-top: 0.15em; font-style: italic; }
 .wp-diagnostics .wp-d-related { display: block; opacity: 0.65; margin-top: 0.15em; padding-left: 1em; }
+.wp-diagnostics .wp-d-fix {
+  margin-left: 0.6em;
+  padding: 0 0.4em;
+  font-size: 0.9em;
+  cursor: pointer;
+  vertical-align: baseline;
+}
 
 #wax-playground.wp-unsupported .wp-panes,
 #wax-playground.wp-unsupported .wp-toolbar,
@@ -517,6 +524,23 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
         rel.textContent = (r.startLine + 1) + ":" + (r.startChar + 1) + " " + r.message;
         li.appendChild(rel);
       });
+      // A quick-fix button, for diagnostics that carry an edit. The editor's
+      // lint tooltip offers the same fix, but it is fiddly to reach with the
+      // mouse (it dismisses if the cursor strays); this button is always here.
+      if (d.edit) {
+        var fix = document.createElement("button");
+        fix.type = "button";
+        fix.className = "wp-d-fix";
+        fix.textContent = "Fix";
+        fix.addEventListener("click", function (ev) {
+          ev.stopPropagation(); // don't also trigger the row's jump-to
+          if (!editor) return;
+          editor.applyEdit(d.edit);
+          editor.focus();
+          run();
+        });
+        li.appendChild(fix);
+      }
       li.addEventListener("click", function () {
         if (editor) editor.selectRange(d.startLine, d.startChar, d.endLine, d.endChar);
       });
@@ -579,6 +603,7 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
         getCursor: cm.getCursor,
         setCursor: cm.setCursor,
         selectRange: cm.selectRange,
+        applyEdit: cm.applyEdit,
         destroy: cm.destroy,
       };
     } else {
@@ -603,6 +628,11 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
           var e = offsetOf(ta.value, el2, ec);
           ta.focus();
           ta.setSelectionRange(s, Math.max(s, e));
+        },
+        applyEdit: function (edit) {
+          var s = offsetOf(ta.value, edit.startLine, edit.startChar);
+          var e = Math.max(s, offsetOf(ta.value, edit.endLine, edit.endChar));
+          ta.value = ta.value.slice(0, s) + edit.newText + ta.value.slice(e);
         },
         destroy: function () { ta.remove(); },
       };

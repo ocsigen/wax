@@ -19,6 +19,7 @@ import {
   ViewPlugin,
   hoverTooltip,
   showTooltip,
+  tooltips,
   keymap,
   lineNumbers,
   highlightActiveLine,
@@ -693,6 +694,11 @@ export function createWaxEditor(opts) {
     makeHover(provider),
     makeCompletion(provider),
     sigHelpField(provider),
+    // Render tooltips under <body>, not inside the editor: the editor container
+    // has overflow:hidden, which would clip a hover/completion/signature tooltip
+    // near the top edge. CodeMirror gives the reparented container the editor's
+    // theme classes, so the styling still applies.
+    tooltips({ parent: document.body }),
     changeListener,
     keymap.of([
       indentWithTab,
@@ -744,6 +750,13 @@ export function createWaxEditor(opts) {
         scrollIntoView: true,
       });
       view.focus();
+    },
+    // Apply a diagnostic's edit ({startLine, startChar, endLine, endChar,
+    // newText}), for the diagnostics-list quick-fix button.
+    applyEdit(edit) {
+      const from = lcToPos(view.state, edit.startLine, edit.startChar);
+      const to = Math.max(from, lcToPos(view.state, edit.endLine, edit.endChar));
+      view.dispatch({ changes: { from, to, insert: edit.newText } });
     },
     destroy: () => view.destroy(),
   };
