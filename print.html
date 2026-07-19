@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6819a765.js";
+            window.path_to_searchindex_js = "searchindex-d642891a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7b4055a9.js"></script>
@@ -3927,6 +3927,9 @@ skipped.</li>
 <ul>
 <li>How diagnostics are rendered.</li>
 <li>Values: <code>human</code> (source snippets, the default), <code>json</code>, or <code>short</code>.</li>
+<li>With <code>human</code>, a named warning’s <code>-W</code> name is appended to the header as
+<code>[name]</code> (e.g. <code>Warning [unused-local]:</code>), so at a glance you can tell
+which warning fired and which <code>-W</code> name silences or promotes it.</li>
 <li>With <code>json</code>, every diagnostic — errors, warnings, and syntax errors — is
 written to stderr as one JSON object per line (JSON Lines), for an editor,
 CI job, or AI assistant to parse. Each object has <code>severity</code>, <code>file</code>,
