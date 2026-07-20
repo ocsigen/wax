@@ -2776,12 +2776,23 @@ let float_literal_value s =
     Some Float.nan
   else float_of_string_opt (String.concat "" (String.split_on_char '_' s))
 
-(* The float value of a constant operand, looking through a leading sign. *)
+(* Round an [f64] to the nearest representable [f32] (the demote the runtime
+   applies), via the single-precision bit layout. *)
+let round_to_f32 f = Int32.float_of_bits (Int32.bits_of_float f)
+
+(* The float value of a constant operand, looking through a leading sign and a
+   demote/promote to a float type. The latter matters because a constant [f32]
+   has no literal suffix, so the decompiler prints it as [<lit> as f32] — a
+   trapping conversion's constant operand ([<big> as f32 as i32_u_strict]) then
+   hides behind that [as f32]. Round through the demote so the folded value is
+   the one the conversion actually sees. *)
 let rec float_operand_value i =
   match i.desc with
   | Ast.Float s -> float_literal_value s
   | UnOp ({ desc = Neg; _ }, e) -> Option.map Float.neg (float_operand_value e)
   | UnOp ({ desc = Pos; _ }, e) -> float_operand_value e
+  | Cast (e, Valtype F32) -> Option.map round_to_f32 (float_operand_value e)
+  | Cast (e, Valtype F64) -> float_operand_value e
   | _ -> None
 
 (* Whether a trapping (toward-zero) float-to-integer conversion of [f] to the

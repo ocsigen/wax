@@ -1,0 +1,5 @@
+#[export = "trap_f32"]
+fn trap_f32() -> i32 { 1e30 as f32 as i32_u_strict; }
+
+#[export = "ok_f32"]
+fn ok_f32() -> i32 { 100.0 as f32 as i32_u_strict; }
