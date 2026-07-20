@@ -30,6 +30,9 @@
 #   7. Under-reject — if `check` accepts a text module, converting it to another
 #                   format must not then reject it (a typer too lenient for what
 #                   lowering requires).
+#   7b. Binary validation parity — the binary and text validators must agree: a
+#                   binary `check` accepts must not be rejected when re-validated
+#                   as its own WAT rendering (a binary validator too lenient).
 #   8. Lint parity — the same program's wax and wat forms must raise the same set
 #                   of warnings (minus the intentionally one-sided lints).
 
@@ -370,6 +373,29 @@ if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
         "$(repro "${check[@]}") && $(repro "${conv[@]}")"
     fi
   done
+fi
+
+# ---- 7b. Binary validation parity: the binary and text validators must agree. --
+# The dual of oracle 7 for a *binary* input. wax validates a binary via one AST
+# path (decode -> [Binary_to_text] -> [Validation.f]); rendering the same module
+# to WAT and validating that goes parse -> [Validation.f] — the SAME validator on
+# an AST built the other way. Since wax already ACCEPTED this binary (verdict=ok,
+# guarded above), a WAT rendering that `check` then REJECTS means the binary
+# path is too lenient: an under-rejection (it accepted a malformed binary the text
+# form catches — e.g. an out-of-bounds index whose synthesized no-location name
+# was mistaken for a recovery placeholder). The decompile trusts the binary, so it
+# runs even on a malformed one. Ground-truth-free: wax vs itself across
+# representations. Only WAT (not WAX): WAT re-validates through the same
+# [Validation.f], whereas WAX would route through the typer + simplify pass, whose
+# legitimate differences would be false positives here.
+if [ "$FMT" = wasm ]; then
+  vparity="$WORK/parity_val.wat"
+  if [ "$(classify_wax -i wasm -f wat "$IN" -o "$vparity")" = ok ] \
+     && [ "$(classify_wax check "$vparity")" = rejected ]; then
+    finding VALIDATION_PARITY HIGH "$IN" \
+      "wax accepts the binary but rejects its wat rendering (binary validator too lenient): $(grep -m1 -i error "$ERRLOG" || true)" \
+      "$(repro "${check[@]}") && $WAX -i wasm -f wat $IN -o $vparity && $WAX check $vparity"
+  fi
 fi
 
 # ---- 8. Lint parity: the same program lints the same as wax and as wat. ----
