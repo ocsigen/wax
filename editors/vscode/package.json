@@ -55,7 +55,7 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@types/node": "^18.19.0",
+    "@types/node": "^26.1.1",
     "@types/vscode": "^1.60.0",
     "@vscode/test-web": "^0.0.81",
     "@vscode/vsce": "^3.2.0",
