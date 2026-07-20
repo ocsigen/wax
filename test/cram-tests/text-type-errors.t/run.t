@@ -344,11 +344,11 @@ An exception handler names the tag's payload from its declared type:
   Error:
     Type mismatch: this exception handler provides type '(ref $t)' but type
     'i32' was expected.
-   ──➤  catch_handler.wat:6:8
+   ──➤  catch_handler.wat:6:25
   4 │   (func
   5 │     (block $b (result i32)
   6 │       (try_table (catch $e $b))
-    ·        ^^^^^^^^^^^^^^^^^^^^^^^
+    ·                         ^^
   7 │       (return))
   8 │     (drop)))
   [128]

@@ -36,11 +36,11 @@ An exception handler whose tag payload does not match the branch target:
   Error:
     Type mismatch: this exception handler provides type 'i32' but type 'f64' was
     expected.
-   ──➤  catch_type.wat:5:8
+   ──➤  catch_type.wat:5:25
   3 │   (func $f
   4 │     (block $b (result f64)
   5 │       (try_table (catch $e $b))
-    ·        ^^^^^^^^^^^^^^^^^^^^^^^
+    ·                         ^^
   6 │       (return))
   7 │     (drop)))
   [128]
@@ -51,11 +51,11 @@ A bare catch_all transfers no value, so the branch target must take none:
   Error:
     Type mismatch: this exception handler provides type '[]' but type '[i32]'
     was expected.
-   ──➤  catch_all_arity.wat:5:8
+   ──➤  catch_all_arity.wat:5:29
   3 │   (func $f
   4 │     (block $b (result i32)
   5 │       (try_table (catch_all $b))
-    ·        ^^^^^^^^^^^^^^^^^^^^^^^^
+    ·                             ^^
   6 │       (return))
   7 │     (drop)))
   [128]

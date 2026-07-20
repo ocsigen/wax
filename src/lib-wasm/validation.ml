@@ -2570,7 +2570,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           | Catch (tag, label) ->
               let*? args, arg_source = lookup_tag_type ctx tag in
               let*? params, param_source = branch_target ctx label in
-              compare_types ctx.modul ~location:loc
+              compare_types ctx.modul ~location:tag.info
                 ~descr:"this exception handler" ~provided_source:arg_source
                 ~expected_source:param_source ~provided:args ~expected:params ()
           | CatchRef (tag, label) ->
@@ -2583,13 +2583,13 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
                 Array.append arg_source
                   [| Plain (Ref { nullable = false; typ = Exn }) |]
               in
-              compare_types ctx.modul ~location:loc
+              compare_types ctx.modul ~location:tag.info
                 ~descr:"this exception handler" ~provided_source
                 ~expected_source:param_source ~provided ~expected:params ()
           | CatchAll label ->
               Option.iter
                 (fun (params, param_source) ->
-                  compare_types ctx.modul ~location:loc
+                  compare_types ctx.modul ~location:label.info
                     ~descr:"this exception handler" ~provided_source:[||]
                     ~expected_source:param_source ~provided:[||]
                     ~expected:params ())
@@ -2597,7 +2597,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           | CatchAllRef label ->
               Option.iter
                 (fun (params, param_source) ->
-                  compare_types ctx.modul ~location:loc
+                  compare_types ctx.modul ~location:label.info
                     ~descr:"this exception handler"
                     ~provided_source:
                       [| Plain (Ref { nullable = false; typ = Exn }) |]
