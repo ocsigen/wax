@@ -48,7 +48,7 @@ jobs:
         # Required by wasm_of_ocaml (wasm-opt/wasm-merge); same action and
         # version js_of_ocaml's own CI uses. `token` avoids GitHub API rate
         # limits when fetching the Binaryen release.
-        uses: Aandreba/setup-binaryen@v1
+        uses: Aandreba/setup-binaryen@v1.0.0
         with:
           token: ${{ github.token }}
 

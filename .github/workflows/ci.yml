@@ -84,7 +84,7 @@ jobs:
       - name: Set up Binaryen
         # wasm_of_ocaml needs Binaryen (wasm-opt/wasm-merge) to build the wasm
         # runtime; same action and version as the npm-package workflow.
-        uses: Aandreba/setup-binaryen@v1
+        uses: Aandreba/setup-binaryen@v1.0.0
         with:
           token: ${{ github.token }}
 
