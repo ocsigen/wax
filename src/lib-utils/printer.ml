@@ -46,6 +46,27 @@ module Doc = struct
      per-worklist-item [(indent, mode)] pair. *)
   type eframe = { findent : int; fmode : mode }
 
+  (* The outcome of a fit scan. Nullary (so returning it never allocates): the
+     scan parks its resumable state in [scan_state], not a boxed payload. *)
+  type sres = Fits | Nofit | Susp
+
+  (* A front decision whose fit scan ran out of buffered input and suspended,
+     resumed on the next [feed] so each buffered token is scanned once. One
+     record, mutated in place — no per-suspend allocation. [active] flags a live
+     suspension; [ghv] distinguishes a [GHv] open (uses [base]) from a [Fill]
+     break (uses [str]); the rest are the parked [scan_go] loop variables. *)
+  type scan_state = {
+    mutable active : bool;
+    mutable ghv : bool;
+    mutable base : int;
+    mutable str : break_strength;
+    mutable avail : int;
+    mutable sstack : mode list;
+    mutable fr : eframe list;
+    mutable ib : int;
+    mutable i : int;
+  }
+
   (* A stateful token consumer with bounded lookahead. A decision that needs to
      look ahead ([GHv] open, [Fill] break) waits until enough tokens are buffered
      in [queue] to resolve it; because [scan] short-circuits once the available
@@ -98,10 +119,20 @@ module Doc = struct
     (* >0 while dropping the content of an [if_broken] whose enclosing group is
        not broken (the trailing comma of a flat list). *)
     let skip_depth = ref 0 in
-    (* The front decision whose scan is suspended waiting for more input, with
-       the scan state to resume from — so each buffered token is scanned once,
-       not re-scanned on every [feed]. Set by [advance]. *)
-    let pending = ref None in
+    (* The suspended-scan state (see [scan_state]). *)
+    let sc =
+      {
+        active = false;
+        ghv = false;
+        base = 0;
+        str = Space;
+        avail = 0;
+        sstack = [];
+        fr = [];
+        ib = 0;
+        i = 0;
+      }
+    in
     let scan_at_end = ref false in
     let flush () =
       (match !pend_line with
@@ -153,9 +184,17 @@ module Doc = struct
        line-ending break); [Error] with the state to resume from when the buffer
        runs out before deciding (unless [!scan_at_end]). *)
     let rec scan_go avail sstack fr ib i =
-      if avail < 0 then Ok false
+      if avail < 0 then Nofit
       else if i >= !qn then
-        if !scan_at_end then Ok true else Error (avail, sstack, fr, ib, i)
+        if !scan_at_end then Fits
+        else (
+          (* out of buffered input: park the loop state for the next [feed] *)
+          sc.avail <- avail;
+          sc.sstack <- sstack;
+          sc.fr <- fr;
+          sc.ib <- ib;
+          sc.i <- i;
+          Susp)
       else
         let tok = qget i in
         if ib > 0 then
@@ -186,7 +225,7 @@ module Doc = struct
               | [] -> (
                   match fr with
                   | _ :: (_ :: _ as ftl) -> scan_go avail [] ftl ib (i + 1)
-                  | _ -> Ok true (* popped past outermost frame = [] *)))
+                  | _ -> Fits (* popped past outermost frame = [] *)))
           | TBreak b -> (
               let m =
                 match sstack with
@@ -194,24 +233,23 @@ module Doc = struct
                 | [] -> ( match fr with f :: _ -> f.fmode | [] -> Brkm)
               in
               match m with
-              | Brkm | Fill -> Ok true
+              | Brkm | Fill -> Fits
               | Flat -> (
                   match b with
-                  | Newline | Blank_line -> Ok false
+                  | Newline | Blank_line -> Nofit
                   | Space -> scan_go (avail - 1) sstack fr ib (i + 1)
                   | Cut -> scan_go avail sstack fr ib (i + 1)))
     in
-    (* Resolve the [Ok] of a decision's scan: commit the group's mode / the fill
-       break, and pop the front token. *)
-    let resolve_decision tag fit =
-      pending := None;
+    (* Commit a resolved decision ([fit]: does it fit flat?) and pop its front
+       token. *)
+    let resolve_decision fit =
+      sc.active <- false;
       ignore (qpop ());
-      match tag with
-      | `Ghv base ->
-          frames :=
-            { findent = base; fmode = (if fit then Flat else Brkm) } :: !frames
-      | `Fill str ->
-          if fit then flat_sep str else break_line (cur ()).findent false
+      if sc.ghv then
+        frames :=
+          { findent = sc.base; fmode = (if fit then Flat else Brkm) } :: !frames
+      else if fit then flat_sep sc.str
+      else break_line (cur ()).findent false
     in
     (* Lay out a token that needs no lookahead, updating the print state exactly
        as the old tree renderer did for the corresponding [doc] node. *)
@@ -271,38 +309,45 @@ module Doc = struct
             | TEnd -> decr skip_depth
             | _ -> ()
         else if !qn = 0 then go_on := false
+        else if sc.active then
+          (* resume the suspended front decision from its parked state *)
+          match scan_go sc.avail sc.sstack sc.fr sc.ib sc.i with
+          | Susp -> go_on := false
+          | Fits -> resolve_decision true
+          | Nofit -> resolve_decision false
         else
-          match !pending with
-          | Some (tag, (avail, sstack, fr, ib, i)) -> (
-              match scan_go avail sstack fr ib i with
-              | Error st ->
-                  pending := Some (tag, st);
+          match qget 0 with
+          | TBegin GHv -> (
+              let base = eff_col () in
+              (* [sc.ghv]/[sc.base] are read by [resolve_decision] on resolve —
+                 set them before the scan so the immediate case sees them too. *)
+              sc.ghv <- true;
+              sc.base <- base;
+              match scan_go (width - base) [ Flat ] !frames 0 1 with
+              | Susp ->
+                  sc.active <- true;
                   go_on := false
-              | Ok fit -> resolve_decision tag fit)
-          | None -> (
-              match qget 0 with
-              | TBegin GHv -> (
-                  let base = eff_col () in
-                  match scan_go (width - base) [ Flat ] !frames 0 1 with
-                  | Error st ->
-                      pending := Some (`Ghv base, st);
-                      go_on := false
-                  | Ok fit -> resolve_decision (`Ghv base) fit)
-              | TBreak ((Cut | Space) as str) when (cur ()).fmode = Fill -> (
-                  (* If kept flat this separator itself occupies a column, so what
-                     follows starts one column further right; account for it. *)
-                  let sep = match str with Space -> 1 | _ -> 0 in
-                  match scan_go (width - eff_col () - sep) [] !frames 0 1 with
-                  | Error st ->
-                      pending := Some (`Fill str, st);
-                      go_on := false
-                  | Ok fit -> resolve_decision (`Fill str) fit)
-              | TIfBroken when (cur ()).fmode <> Brkm ->
-                  ignore (qpop ());
-                  skip_depth := 1
-              | tok ->
-                  ignore (qpop ());
-                  process tok)
+              | Fits -> resolve_decision true
+              | Nofit -> resolve_decision false)
+          | TBreak ((Cut | Space) as str) when (cur ()).fmode = Fill -> (
+              (* If kept flat this separator itself occupies a column, so what
+                 follows starts one column further right; account for it. *)
+              let sep = match str with Space -> 1 | _ -> 0 in
+              (* [sc.ghv]/[sc.str] are read by [resolve_decision] on resolve. *)
+              sc.ghv <- false;
+              sc.str <- str;
+              match scan_go (width - eff_col () - sep) [] !frames 0 1 with
+              | Susp ->
+                  sc.active <- true;
+                  go_on := false
+              | Fits -> resolve_decision true
+              | Nofit -> resolve_decision false)
+          | TIfBroken when (cur ()).fmode <> Brkm ->
+              ignore (qpop ());
+              skip_depth := 1
+          | tok ->
+              ignore (qpop ());
+              process tok
       done
     in
     let feed tok =
