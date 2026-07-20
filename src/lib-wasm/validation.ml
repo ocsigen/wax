@@ -3925,6 +3925,10 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
 and check_constant_instructions ctx l =
   List.iter (fun i -> check_constant_instruction ctx i) l
 
+(* Forward reference to [lint_body] (defined below), so [constant_expression] can
+   lint a constant expression with the same walk used for function bodies. *)
+let lint_constant_expr = ref (fun _ _ -> ())
+
 let constant_expression ctx ~location ~expected_source ty expr =
   check_constant_instructions ctx expr;
   with_empty_stack ctx location
@@ -3941,6 +3945,11 @@ let constant_expression ctx ~location ~expected_source ty expr =
        }
      in
      let* () = instructions ctx expr in
+     (* Lint the constant expression too (a data/elem offset, a global or field
+        initializer): the Wax typer lints these, so without this the wat/wasm
+        side misses a redundant [0 + 42] offset the Wax side reports. Via a
+        forward reference, as [lint_body] is defined below. *)
+     if ctx.modul.warn_unused then !lint_constant_expr ctx expr;
      pop ctx location ~expected_source ty)
 
 (*** Type registration and the module environment ***)
@@ -4945,6 +4954,9 @@ let lint_body ctx instrs =
   in
   walk instrs;
   List.iter sel_walk instrs
+
+(* Wire the forward reference used by [constant_expression] above. *)
+let () = lint_constant_expr := lint_body
 
 let functions ?(warn_unused = true) ctx fields =
   List.iter
