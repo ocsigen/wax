@@ -28,8 +28,10 @@ where an unconditional branch drops the rest of the stack), so the width survive
       return 9;
   }
 
-And it round-trips back to an `i64.div_u`, not a narrowed `i32.div_u`:
+And it round-trips through the binary encoder back to an `i64.div_u`, not a
+narrowed `i32.div_u` (decoding the `.wasm` with `wax` itself, so the test needs
+no external tooling):
 
   $ wax -i wat -f wax m.wat -o m.wax && wax -i wax -f wasm m.wax -o out.wasm
-  $ wasm-tools print out.wasm | grep -o 'i64.div_u'
+  $ wax -i wasm -f wat out.wasm | grep -o 'i64.div_u'
   i64.div_u
