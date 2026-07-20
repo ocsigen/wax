@@ -18,6 +18,14 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      npm:
+      # Bundle low-risk updates into one PR; majors get their own PR each.
+      npm-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # engines.vscode pins the minimum supported API, so bumping the
+      # @types/vscode floor is intentional, not a Dependabot chore.
+      - dependency-name: "@types/vscode"
