@@ -152,7 +152,6 @@ let output_wat ?(tail = []) ~oc ~color ~trivia ast =
 
 (* A formatter that discards everything, for the dry pass that records which
    locations the printer looks up. *)
-let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
 
 (* Build the trivia for printing [ast], restricting the association to the
    locations the printer actually emits (collected by a dry pass). This keeps a
@@ -160,7 +159,7 @@ let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
    [retarget], when given, rewrites the comment delimiters between formats. *)
 let wat_trivia ?retarget ctx ast =
   let used = Wax_utils.Trivia.create_locations () in
-  Wax_utils.Printer.run (null_formatter ()) (fun p ->
+  Wax_utils.Printer.run_discard (fun p ->
       Wax_wasm.Output.module_ p
         ~trivia:(Wax_utils.Trivia.empty ())
         ~collect:used ast);
@@ -173,7 +172,7 @@ let wax_trivia ?retarget ctx ast =
   let used = Wax_utils.Trivia.create_locations () in
   (* Width is irrelevant to the dry pass: it only records which locations the
      printer looks up, and the traversal is the same at any width. *)
-  Wax_utils.Printer.run (null_formatter ()) (fun p ->
+  Wax_utils.Printer.run_discard (fun p ->
       Wax_lang.Output.module_ p
         ~trivia:(Wax_utils.Trivia.empty ())
         ~collect:used ast);

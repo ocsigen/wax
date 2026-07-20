@@ -27,7 +27,9 @@ module Loc = struct
      final xor-shift folds the high bits down into the bucket bits. *)
   let hash (a : t) =
     let s = a.loc_start.Lexing.pos_cnum and e = a.loc_end.Lexing.pos_cnum in
-    let h = (s * 0x9E3779B1) lxor (e * 0x85EBCA77) in
+    (* multipliers < 2^30 so the literals fit the 31-bit ints of the wasm build;
+       the products wrap, which is fine for a hash. *)
+    let h = s * 0x27D4EB2F lxor (e * 0x165667B1) in
     h lxor (h lsr 16)
 end
 

@@ -12,7 +12,6 @@ let () = Wax_wasm.Validation.validate_refs := false
 
 (* A formatter that discards everything, for the dry pass that records which
    source locations the printer looks up (as in bin/main.ml). *)
-let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
 
 (* Comments and blank-line trivia keyed by source location, restricted to the
    locations [print] (the caller's module printer, [collect]ing the visited
@@ -24,7 +23,7 @@ let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
    [wat_trivia] in bin/main.ml. *)
 let collect_trivia ~print ?retarget ctx =
   let used = Wax_utils.Trivia.create_locations () in
-  Wax_utils.Printer.run (null_formatter ()) (fun p -> print p ~collect:used);
+  Wax_utils.Printer.run_discard (fun p -> print p ~collect:used);
   let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
   match retarget with
   | None -> (trivia, tail)

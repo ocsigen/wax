@@ -556,3 +556,12 @@ let run_channel ?(width = 78) oc f =
   let c = Doc.create ~feed ~finish_stream in
   f c;
   Doc.finalize c
+
+let run_discard f =
+  (* A printer that produces no output: tokens are dropped, nothing is laid out.
+     For the dry pass that only needs the side effects of running the printer —
+     recording which source locations get looked up, via [Trivia]'s [collect] —
+     so it avoids building and laying out the whole document just to discard it. *)
+  let c = Doc.create ~feed:(fun _ -> ()) ~finish_stream:(fun () -> ()) in
+  f c;
+  Doc.finalize c

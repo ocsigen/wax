@@ -91,3 +91,9 @@ val run : ?width:int -> Format.formatter -> (t -> unit) -> unit
 val run_channel : ?width:int -> out_channel -> (t -> unit) -> unit
 (** Like {!run}, but lays the document out straight into the channel — no
     intermediate string and no [Format] buffering. The hot output path. *)
+
+val run_discard : (t -> unit) -> unit
+(** Run [f] with a printer that produces no output and does no layout — for a
+    dry pass run only for its side effects (recording looked-up locations via
+    {!Wax_utils.Trivia} [collect]). Avoids building and laying out the whole
+    document only to throw it away. *)

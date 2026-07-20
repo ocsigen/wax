@@ -61,10 +61,6 @@ type rename_outcome =
    position functions and the [?encoding] arguments default to [UTF16]. *)
 type position_encoding = UTF8 | UTF16
 
-(* A formatter that discards everything, for the dry pass that records which
-   source locations the printer looks up. *)
-val null_formatter : unit -> Format.formatter
-
 (* Comments and blank-line trivia keyed by source location, restricted to the
    locations [print] visits (it prints the module through the given printer,
    passing its [collect] table on to the language's [Output.module_]).
