@@ -1,14 +1,16 @@
-(* A document-IR pretty-printer. The imperative builder API (string, space,
-   box, …) records a tree of text and breaks; [run] then renders it with our
-   own layout algorithm, which gives genuine hard breaks, column awareness and
-   break coalescing we control — unlike a thin layer over OCaml's [Format]. *)
+(* A streaming pretty-printer. The imperative builder API (string, space, box, …)
+   emits a flat token stream straight into a layout engine; nothing is ever
+   materialized as a document tree. The engine gives genuine hard breaks, column
+   awareness and break coalescing we control — unlike a thin layer over OCaml's
+   [Format] — with bounded memory (the engine buffers only the ~[width] of
+   lookahead a break/group decision needs). *)
 
 type break_strength = Cut | Space | Newline | Blank_line
 
 let strength = function Cut -> 0 | Space -> 1 | Newline -> 2 | Blank_line -> 3
 
 (* ===================================================================== *)
-(* Document IR + imperative builder + renderer                           *)
+(* Token stream + layout engine + imperative builder                     *)
 (* ===================================================================== *)
 
 module Doc = struct
@@ -19,198 +21,88 @@ module Doc = struct
     | GV (* every soft break wraps *)
     | GH (* soft breaks never wrap (hard/blank still break) *)
 
-  (* A break carries one [break_strength]: Cut/Space are soft (flatten in a
+  (* --- token stream (the builder's output, the engine's input) --- *)
+
+  (* The document is streamed as a flat token sequence. A group / nest /
+     if-broken opens with its own token and closes with a matching [TEnd]. A
+     [TBreak] carries one [break_strength]: Cut/Space are soft (flatten in a
      fitting group); Newline/Blank_line always break. *)
-  type doc =
-    | Empty
-    | Text of int * string (* display width, payload *)
-    | Brk of break_strength
-    | Cat of doc * doc
-    | Nest of int * doc
-    | Group of gkind * doc
-    | If_broken of doc
-  (* Emit [doc] only when the enclosing group is laid out broken (not flat): a
-     trailing comma after the last element of a list that wraps. It never counts
-     toward the fit decision (a flat list has no trailing comma). *)
+  type token =
+    | TText of int * string (* display width, payload *)
+    | TBreak of break_strength
+    | TBegin of gkind
+    | TNest of int
+    | TIfBroken
+      (* Content emitted only when the enclosing group is laid out broken (a
+           trailing comma after the last element of a list that wraps). It never
+           counts toward the fit decision. *)
+    | TEnd
 
-  type frame = { wrap : doc -> doc; mutable items : doc list (* reversed *) }
-
-  type state = {
-    fmt : Format.formatter;
-    width : int;
-    mutable stack : frame list;
-    mutable has_emitted : bool; (* content since last forced end-of-line *)
-    mutable pending_eol : (unit -> unit) option;
-    mutable holding_eol : bool;
-  }
-
-  let create fmt ~width =
-    {
-      fmt;
-      width;
-      stack = [ { wrap = (fun d -> d); items = [] } ];
-      has_emitted = false;
-      pending_eol = None;
-      holding_eol = false;
-    }
-
-  let top st = List.hd st.stack
-
-  (* Append, coalescing a break that immediately follows another break (within
-     this frame) into the stronger of the two — the analogue of the Format
-     engine's [register_break]. Cross-frame coalescing is the renderer's job. *)
-  let append st d =
-    let fr = top st in
-    match (d, fr.items) with
-    | Brk s2, Brk s1 :: tl ->
-        fr.items <- Brk (if strength s2 >= strength s1 then s2 else s1) :: tl
-    | _ -> fr.items <- d :: fr.items
-
-  let push st wrap = st.stack <- { wrap; items = [] } :: st.stack
-
-  let pop st =
-    match st.stack with
-    | fr :: rest ->
-        (* items are most-recent-first; fold_left rebuilds source order. *)
-        let body = List.fold_left (fun acc d -> Cat (d, acc)) Empty fr.items in
-        st.stack <- rest;
-        append st (fr.wrap body)
-    | [] -> assert false
-
-  (* Drop a trailing break at this frame's head, so a deferred end-of-line
-     comment hugs the preceding token instead of being pushed past a break. *)
-  let drop_trailing_break st =
-    let fr = top st in
-    match fr.items with
-    | Brk s :: tl ->
-        fr.items <- tl;
-        Some s
-    | _ -> None
-
-  let force_eol st =
-    match st.pending_eol with
-    | None -> ()
-    | Some emit ->
-        st.pending_eol <- None;
-        let dropped = drop_trailing_break st in
-        emit ();
-        let next_brk =
-          match dropped with Some Blank_line -> Blank_line | _ -> Newline
-        in
-        append st (Brk next_brk);
-        st.has_emitted <- false
-
-  let defer_eol st emit =
-    force_eol st;
-    st.pending_eol <- Some emit
-
-  let with_held_eol st f =
-    let prev = st.holding_eol in
-    st.holding_eol <- true;
-    f ();
-    st.holding_eol <- prev
-
-  let has_pending_eol st = st.pending_eol <> None
-
-  let text st len s =
-    if not st.holding_eol then force_eol st;
-    st.has_emitted <- true;
-    append st (Text (len, s))
-
-  let string st s = text st (String.length s) s
-  let string_as st len s = text st len s
-  let space st = if st.has_emitted then append st (Brk Space)
-  let cut st = append st (Brk Cut)
-  let newline st = append st (Brk Newline)
-  let blank_line st = append st (Brk Blank_line)
-
-  let indent st n f =
-    push st (fun d -> Nest (n, d));
-    f ();
-    pop st
-
-  let if_broken st f =
-    push st (fun d -> If_broken d);
-    f ();
-    pop st
-
-  let group_wrap kind indent d =
-    Group (kind, if indent = 0 then d else Nest (indent, d))
-
-  let scoped st kind ~skip_space ~indent f =
-    if not st.holding_eol then force_eol st;
-    (if skip_space then
-       let fr = top st in
-       match fr.items with Brk (Cut | Space) :: tl -> fr.items <- tl | _ -> ());
-    push st (group_wrap kind indent);
-    f ();
-    pop st
-
-  let box st ~skip_space ~indent f = scoped st GBox ~skip_space ~indent f
-  let hvbox st ~skip_space ~indent f = scoped st GHv ~skip_space ~indent f
-  let hovbox st ~skip_space ~indent f = scoped st GHov ~skip_space ~indent f
-  let vbox st ~skip_space ~indent f = scoped st GV ~skip_space ~indent f
-  let hbox st ~skip_space f = scoped st GH ~skip_space ~indent:0 f
-
-  (* --- renderer --- *)
+  (* --- layout engine --- *)
 
   type mode = Flat | Brkm | Fill
 
-  (* Does the upcoming content fit in [avail] columns up to the next line break?
-     Trailing context is included (the worklist [rest] beyond the immediate
-     item), so a group is laid flat only when what follows it on the line also
-     fits — matching Format, not a local "does this group alone fit" check.
+  (* A live layout frame — the streaming analogue of the old tree renderer's
+     per-worklist-item [(indent, mode)] pair. *)
+  type eframe = { findent : int; fmode : mode }
 
-     A break decides line-end based on the carried mode: a break in a breaking
-     context ([Brkm]/[Fill]) ends the line, so we have fit so far ([true]); a
-     break in [Flat] is the flat-spacing of a unit being measured. Groups are
-     always entered [Flat] — measured as atomic units — so a group that cannot
-     be flat (a hard break inside) forces the preceding break to break. *)
-  let rec fits avail items =
-    if avail < 0 then false
-    else
-      match items with
-      | [] -> true
-      | (i, m, d) :: rest -> (
-          match d with
-          | Empty -> fits avail rest
-          | Text (w, _) -> fits (avail - w) rest
-          | Cat (a, b) -> fits avail ((i, m, a) :: (i, m, b) :: rest)
-          | Nest (n, d) -> fits avail ((i + n, m, d) :: rest)
-          | Group (_, d) -> fits avail ((i, Flat, d) :: rest)
-          | If_broken _ -> fits avail rest
-          (* A trailing comma never counts toward the fit: a flat list omits it
-             outright, and when measured inside an already-broken list a break
-             has ended the line before reaching it. *)
-          | Brk b -> (
-              match m with
-              | Brkm | Fill -> true
-              | Flat -> (
-                  match b with
-                  | Newline | Blank_line -> false
-                  | Space -> fits (avail - 1) rest
-                  | Cut -> fits avail rest)))
-
-  (* Lay [doc] out, emitting the result through [add_string]/[add_char] rather
-     than into a fixed buffer, so the same layout algorithm can either build a
-     string (for [finish], which relays it to a formatter) or write straight to
-     an output channel (the hot path, skipping the intermediate string). *)
-  let render ~width ~add_string ~add_char ~add_substring doc =
+  (* A stateful token consumer with bounded lookahead. A decision that needs to
+     look ahead ([GHv] open, [Fill] break) waits until enough tokens are buffered
+     in [queue] to resolve it; because [scan] short-circuits once the available
+     column is exhausted, the FIFO stays bounded by ~[width]. Everything else is
+     laid out immediately. Returns [(feed, finish)]: [feed] pushes one token,
+     [finish] signals end of input (and drains the tail). *)
+  let make_engine ~width ~add_string ~add_char ~add_substring =
     let col = ref 0 in
     let emitted = ref false in
-    (* Cap how far breaks indent, so deeply nested code does not march off to
-       the right margin (the analogue of Format's [max_indent]); deeper levels
-       then pile up at the cap rather than each pushing further right. *)
+    (* Cap how far breaks indent, so deeply nested code does not march off to the
+       right margin (the analogue of Format's [max_indent]). *)
     let max_indent = max 0 (width - 10) in
     (* A break's indentation is always [<= max_indent] (see [break_line]), so one
-       string of that many spaces covers every indent: emit a slice of it rather
-       than allocating a fresh [String.make ind ' '] per line. *)
+       string of that many spaces covers every indent: emit a slice of it. *)
     let spaces = String.make max_indent ' ' in
-    (* A pending line break (indent + blank?) and/or a pending flat separator.
-       Deferred until the next text and coalesced — across group boundaries —
-       by max strength; a line break supersedes a flat separator. *)
+    (* A pending line break (indent + blank?) and/or a pending flat separator,
+       deferred until the next text and coalesced — across group boundaries — by
+       max strength; a line break supersedes a flat separator. *)
     let pend_line = ref None in
     let pend_flat = ref None in
+    let frames = ref [ { findent = 0; fmode = Brkm } ] in
+    let cur () = List.hd !frames in
+    (* The pending-token FIFO: a growable ring buffer, so [scan] can index the
+       lookahead without allocating (a [Queue]+[Seq] scan allocated a node per
+       token scanned, on every re-scan). [qn] tokens live at [qhd .. qhd+qn) mod
+       capacity. *)
+    let qbuf = ref (Array.make 32 TEnd) in
+    let qhd = ref 0 in
+    let qn = ref 0 in
+    let qcap () = Array.length !qbuf in
+    let qget i = !qbuf.((!qhd + i) mod qcap ()) in
+    let qpush x =
+      if !qn = qcap () then (
+        let ncap = 2 * qcap () in
+        let nb = Array.make ncap TEnd in
+        for i = 0 to !qn - 1 do
+          nb.(i) <- qget i
+        done;
+        qbuf := nb;
+        qhd := 0);
+      !qbuf.((!qhd + !qn) mod qcap ()) <- x;
+      incr qn
+    in
+    let qpop () =
+      let x = !qbuf.(!qhd) in
+      qhd := (!qhd + 1) mod qcap ();
+      decr qn;
+      x
+    in
+    (* >0 while dropping the content of an [if_broken] whose enclosing group is
+       not broken (the trailing comma of a flat list). *)
+    let skip_depth = ref 0 in
+    (* The front decision whose scan is suspended waiting for more input, with
+       the scan state to resume from — so each buffered token is scanned once,
+       not re-scanned on every [feed]. Set by [advance]. *)
+    let pending = ref None in
+    let scan_at_end = ref false in
     let flush () =
       (match !pend_line with
       | Some (ind, blank) ->
@@ -249,92 +141,304 @@ module Doc = struct
       | Some (ind, _) -> ind
       | None -> !col + if !pend_flat <> None then 1 else 0
     in
-    let rec go = function
-      | [] -> () (* drop any trailing pending break: no trailing whitespace *)
-      | (i, m, d) :: rest -> (
-          match d with
-          | Empty -> go rest
-          | Text (w, s) ->
-              flush ();
-              add_string s;
-              emitted := true;
-              col := !col + w;
-              go rest
-          | Cat (a, c) -> go ((i, m, a) :: (i, m, c) :: rest)
-          | Nest (n, d) -> go ((i + n, m, d) :: rest)
-          | Group (k, d) ->
-              (* A box's break-indentation is measured from the column where the
-                 box opens (Format semantics), not from the inherited nesting —
-                 they differ when a box starts mid-line (e.g. a WAT s-expression
-                 after its [(]). Rebase the group's indent to the open column. *)
-              let base = eff_col () in
-              let m' =
-                match k with
-                | GV -> Brkm
-                | GH -> Flat
-                | GHv ->
-                    if fits (width - base) ((base, Flat, d) :: rest) then Flat
-                    else Brkm
-                | GBox | GHov -> Fill
+    (* Does the content fit in [avail] columns up to the next line-ending break?
+       Trailing context beyond the immediate group is included (matching the old
+       tree renderer's [fits], not a local "does this group alone fit" check).
+       [sstack] is the mode stack of groups entered during the scan (innermost
+       first), all [Flat]; beneath them [fr] is the enclosing frame stack, read
+       directly (no copy). The current mode is the head of [sstack], else the
+       innermost [fr]; a break there ends the line iff that mode is breaking
+       ([Brkm]/[Fill]). [i] indexes the lookahead in the ring buffer. Returns
+       [Ok] once decided ([false] when [avail] is exhausted, [true] at the first
+       line-ending break); [Error] with the state to resume from when the buffer
+       runs out before deciding (unless [!scan_at_end]). *)
+    let rec scan_go avail sstack fr ib i =
+      if avail < 0 then Ok false
+      else if i >= !qn then
+        if !scan_at_end then Ok true else Error (avail, sstack, fr, ib, i)
+      else
+        let tok = qget i in
+        if ib > 0 then
+          (* dropping if_broken content: measure nothing *)
+          let ib =
+            match tok with
+            | TBegin _ | TNest _ | TIfBroken -> ib + 1
+            | TEnd -> ib - 1
+            | _ -> ib
+          in
+          scan_go avail sstack fr ib (i + 1)
+        else
+          match tok with
+          | TText (w, _) -> scan_go (avail - w) sstack fr ib (i + 1)
+          | TBegin _ -> scan_go avail (Flat :: sstack) fr ib (i + 1)
+          | TNest _ ->
+              (* the current mode (head of [sstack], else innermost [fr]) *)
+              let m =
+                match sstack with
+                | m :: _ -> m
+                | [] -> ( match fr with f :: _ -> f.fmode | [] -> Brkm)
               in
-              go ((base, m', d) :: rest)
-          | If_broken d ->
-              (* Shown only when the surrounding all-or-nothing box broke
-                 ([Brkm]); a one-line ([Flat]) or greedily-packed ([Fill]) list
-                 has no trailing comma. *)
-              go (match m with Brkm -> (i, m, d) :: rest | _ -> rest)
-          | Brk str ->
-              (match (str, m) with
-              | Newline, _ -> break_line i false
-              | Blank_line, _ -> break_line i true
-              | (Cut | Space), Flat -> flat_sep str
-              | (Cut | Space), Brkm -> break_line i false
-              | (Cut | Space), Fill ->
-                  (* If kept flat this separator itself occupies a column, so
-                     the following content starts one column further right;
-                     account for it or a unit that just fits would overflow. *)
-                  let sep = match str with Space -> 1 | _ -> 0 in
-                  if fits (width - eff_col () - sep) rest then flat_sep str
-                  else break_line i false);
-              go rest)
+              scan_go avail (m :: sstack) fr ib (i + 1)
+          | TIfBroken -> scan_go avail sstack fr 1 (i + 1)
+          | TEnd -> (
+              match sstack with
+              | _ :: tl -> scan_go avail tl fr ib (i + 1)
+              | [] -> (
+                  match fr with
+                  | _ :: (_ :: _ as ftl) -> scan_go avail [] ftl ib (i + 1)
+                  | _ -> Ok true (* popped past outermost frame = [] *)))
+          | TBreak b -> (
+              let m =
+                match sstack with
+                | m :: _ -> m
+                | [] -> ( match fr with f :: _ -> f.fmode | [] -> Brkm)
+              in
+              match m with
+              | Brkm | Fill -> Ok true
+              | Flat -> (
+                  match b with
+                  | Newline | Blank_line -> Ok false
+                  | Space -> scan_go (avail - 1) sstack fr ib (i + 1)
+                  | Cut -> scan_go avail sstack fr ib (i + 1)))
     in
-    go [ (0, Brkm, doc) ]
+    (* Resolve the [Ok] of a decision's scan: commit the group's mode / the fill
+       break, and pop the front token. *)
+    let resolve_decision tag fit =
+      pending := None;
+      ignore (qpop ());
+      match tag with
+      | `Ghv base ->
+          frames :=
+            { findent = base; fmode = (if fit then Flat else Brkm) } :: !frames
+      | `Fill str ->
+          if fit then flat_sep str else break_line (cur ()).findent false
+    in
+    (* Lay out a token that needs no lookahead, updating the print state exactly
+       as the old tree renderer did for the corresponding [doc] node. *)
+    let process tok =
+      match tok with
+      | TText (w, s) ->
+          flush ();
+          add_string s;
+          emitted := true;
+          col := !col + w
+      | TNest n ->
+          let c = cur () in
+          frames := { findent = c.findent + n; fmode = c.fmode } :: !frames
+      | TBegin k ->
+          (* A box's break-indentation is measured from the column where the box
+             opens (Format semantics), not from the inherited nesting — they
+             differ when a box starts mid-line (e.g. a WAT s-expression after its
+             [(]). Rebase the group's indent to the open column. *)
+          let base = eff_col () in
+          let m =
+            match k with
+            | GV -> Brkm
+            | GH -> Flat
+            | GBox | GHov -> Fill
+            | GHv -> assert false (* resolved with lookahead in [advance] *)
+          in
+          frames := { findent = base; fmode = m } :: !frames
+      | TIfBroken ->
+          (* only reached when the enclosing group is broken; the flat case is
+             skipped in [advance] *)
+          let c = cur () in
+          frames := { findent = c.findent; fmode = c.fmode } :: !frames
+      | TEnd -> (
+          match !frames with _ :: (_ :: _ as tl) -> frames := tl | _ -> ())
+      | TBreak str -> (
+          let c = cur () in
+          match (str, c.fmode) with
+          | Newline, _ -> break_line c.findent false
+          | Blank_line, _ -> break_line c.findent true
+          | (Cut | Space), Flat -> flat_sep str
+          | (Cut | Space), Brkm -> break_line c.findent false
+          | (Cut | Space), Fill -> assert false (* resolved in [advance] *))
+    in
+    (* Drain the queue front while each front token is resolvable. A decision
+       ([GHv] open, [Fill] break) scans the lookahead from index 1 (past the
+       front token); if it cannot yet decide it is left [pending] and resumed on
+       the next [feed]. *)
+    let advance ~at_end () =
+      scan_at_end := at_end;
+      let go_on = ref true in
+      while !go_on do
+        if !skip_depth > 0 then
+          if !qn = 0 then go_on := false
+          else
+            match qpop () with
+            | TBegin _ | TNest _ | TIfBroken -> incr skip_depth
+            | TEnd -> decr skip_depth
+            | _ -> ()
+        else if !qn = 0 then go_on := false
+        else
+          match !pending with
+          | Some (tag, (avail, sstack, fr, ib, i)) -> (
+              match scan_go avail sstack fr ib i with
+              | Error st ->
+                  pending := Some (tag, st);
+                  go_on := false
+              | Ok fit -> resolve_decision tag fit)
+          | None -> (
+              match qget 0 with
+              | TBegin GHv -> (
+                  let base = eff_col () in
+                  match scan_go (width - base) [ Flat ] !frames 0 1 with
+                  | Error st ->
+                      pending := Some (`Ghv base, st);
+                      go_on := false
+                  | Ok fit -> resolve_decision (`Ghv base) fit)
+              | TBreak ((Cut | Space) as str) when (cur ()).fmode = Fill -> (
+                  (* If kept flat this separator itself occupies a column, so what
+                     follows starts one column further right; account for it. *)
+                  let sep = match str with Space -> 1 | _ -> 0 in
+                  match scan_go (width - eff_col () - sep) [] !frames 0 1 with
+                  | Error st ->
+                      pending := Some (`Fill str, st);
+                      go_on := false
+                  | Ok fit -> resolve_decision (`Fill str) fit)
+              | TIfBroken when (cur ()).fmode <> Brkm ->
+                  ignore (qpop ());
+                  skip_depth := 1
+              | tok ->
+                  ignore (qpop ());
+                  process tok)
+      done
+    in
+    let feed tok =
+      qpush tok;
+      advance ~at_end:false ()
+    in
+    let finish_stream () = advance ~at_end:true () in
+    (feed, finish_stream)
 
-  (* Fold the builder's recorded items into one document. *)
-  let body st =
+  (* --- imperative builder (streams tokens into an engine) --- *)
+
+  type state = {
+    feed : token -> unit;
+    finish_stream : unit -> unit;
+    mutable pending_break : break_strength option;
+        (* The most recent break not yet emitted, held so a following break can
+           coalesce with it (by max strength) and so [force_eol]/[skip_space] can
+           drop it — the streaming analogue of the old frame-head lookback. *)
+    mutable has_emitted : bool; (* content since last forced end-of-line *)
+    mutable pending_eol : (unit -> unit) option;
+    mutable holding_eol : bool;
+  }
+
+  let create ~feed ~finish_stream =
+    {
+      feed;
+      finish_stream;
+      pending_break = None;
+      has_emitted = false;
+      pending_eol = None;
+      holding_eol = false;
+    }
+
+  (* Emit a non-break token, first flushing any pending break so a break always
+     precedes the following text/group and follows the preceding group's content
+     (the token order the old tree fold produced). *)
+  let emit st tok =
+    (match st.pending_break with
+    | Some s ->
+        st.pending_break <- None;
+        st.feed (TBreak s)
+    | None -> ());
+    st.feed tok
+
+  (* Record a break, coalescing with a pending one into the stronger of the two —
+     the analogue of the old [append]'s break-after-break merge and of the Format
+     engine's [register_break]. *)
+  let push_break st s =
+    st.pending_break <-
+      Some
+        (match st.pending_break with
+        | Some s0 -> if strength s >= strength s0 then s else s0
+        | None -> s)
+
+  (* Drop a pending break, so a deferred end-of-line comment hugs the preceding
+     token instead of being pushed past a break. *)
+  let drop_trailing_break st =
+    match st.pending_break with
+    | Some s ->
+        st.pending_break <- None;
+        Some s
+    | None -> None
+
+  let force_eol st =
+    match st.pending_eol with
+    | None -> ()
+    | Some emit_comment ->
+        st.pending_eol <- None;
+        let dropped = drop_trailing_break st in
+        emit_comment ();
+        let next_brk =
+          match dropped with Some Blank_line -> Blank_line | _ -> Newline
+        in
+        push_break st next_brk;
+        st.has_emitted <- false
+
+  let defer_eol st emit_comment =
     force_eol st;
-    List.fold_left (fun acc d -> Cat (d, acc)) Empty (top st).items
+    st.pending_eol <- Some emit_comment
 
-  (* Lay the recorded document out into a fresh string (for [finish], which then
-     relays it to a formatter). *)
-  let render_string st =
-    let b = Buffer.create 4096 in
-    render ~width:st.width ~add_string:(Buffer.add_string b)
-      ~add_char:(Buffer.add_char b) ~add_substring:(Buffer.add_substring b)
-      (body st);
-    Buffer.contents b
+  let with_held_eol st f =
+    let prev = st.holding_eol in
+    st.holding_eol <- true;
+    f ();
+    st.holding_eol <- prev
 
-  (* Lay the recorded document out straight into [oc] — no intermediate string. *)
-  let render_channel st oc =
-    render ~width:st.width ~add_string:(output_string oc)
-      ~add_char:(output_char oc) ~add_substring:(output_substring oc) (body st)
+  let has_pending_eol st = st.pending_eol <> None
 
-  let finish st =
-    let s = render_string st in
-    (* Emit line by line through the formatter's own newline, so that when [run]
-       is called inside an enclosing Format box (e.g. an [@[<2>…@]] wrapping the
-       snippet), every line — not just the first — picks up that box's
-       indentation. A bare [pp_print_string] of the multi-line string would
-       leave the embedded newlines at column 0. *)
-    match String.split_on_char '\n' s with
-    | [] -> ()
-    | first :: rest ->
-        Format.pp_print_string st.fmt first;
-        List.iter
-          (fun line ->
-            Format.pp_force_newline st.fmt ();
-            Format.pp_print_string st.fmt line)
-          rest
+  let text st len s =
+    if not st.holding_eol then force_eol st;
+    st.has_emitted <- true;
+    emit st (TText (len, s))
+
+  let string st s = text st (String.length s) s
+  let string_as st len s = text st len s
+  let space st = if st.has_emitted then push_break st Space
+  let cut st = push_break st Cut
+  let newline st = push_break st Newline
+  let blank_line st = push_break st Blank_line
+
+  let indent st n f =
+    emit st (TNest n);
+    f ();
+    emit st TEnd
+
+  let if_broken st f =
+    emit st TIfBroken;
+    f ();
+    emit st TEnd
+
+  let scoped st kind ~skip_space ~indent f =
+    if not st.holding_eol then force_eol st;
+    (if skip_space then
+       match st.pending_break with
+       | Some (Cut | Space) -> st.pending_break <- None
+       | _ -> ());
+    emit st (TBegin kind);
+    (* The group's own indent is a nest wrapping its whole body, so every break
+       in the body indents from [base + indent] (see the old [group_wrap]). *)
+    if indent <> 0 then emit st (TNest indent);
+    f ();
+    if indent <> 0 then emit st TEnd;
+    emit st TEnd
+
+  let box st ~skip_space ~indent f = scoped st GBox ~skip_space ~indent f
+  let hvbox st ~skip_space ~indent f = scoped st GHv ~skip_space ~indent f
+  let hovbox st ~skip_space ~indent f = scoped st GHov ~skip_space ~indent f
+  let vbox st ~skip_space ~indent f = scoped st GV ~skip_space ~indent f
+  let hbox st ~skip_space f = scoped st GH ~skip_space ~indent:0 f
+
+  (* Flush a trailing deferred end-of-line comment, then drain the engine. A
+     trailing break is left pending and never fed, so it is dropped (no trailing
+     whitespace). *)
+  let finalize st =
+    force_eol st;
+    st.finish_stream ()
 end
 
 (* ===================================================================== *)
@@ -370,16 +474,36 @@ let vbox t ?(skip_space = false) ?(indent = 0) f =
   Doc.vbox t ~skip_space ~indent f
 
 let run ?(width = 78) fmt f =
-  let c = Doc.create fmt ~width in
+  (* Lay out into a buffer, then relay line by line through the formatter's own
+     newline, so that when [run] is called inside an enclosing Format box (e.g.
+     an [@[<2>…@]] wrapping a snippet), every line — not just the first — picks
+     up that box's indentation. A bare [pp_print_string] of the multi-line string
+     would leave the embedded newlines at column 0. *)
+  let b = Buffer.create 256 in
+  let feed, finish_stream =
+    Doc.make_engine ~width ~add_string:(Buffer.add_string b)
+      ~add_char:(Buffer.add_char b) ~add_substring:(Buffer.add_substring b)
+  in
+  let c = Doc.create ~feed ~finish_stream in
   f c;
-  Doc.finish c
-
-(* A dummy sink: [run_channel] renders straight to its channel and never writes
-   to the state's formatter (only [finish] does), so a shared no-op one avoids
-   allocating a formatter per call. *)
-let null_fmt = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
+  Doc.finalize c;
+  match String.split_on_char '\n' (Buffer.contents b) with
+  | [] -> ()
+  | first :: rest ->
+      Format.pp_print_string fmt first;
+      List.iter
+        (fun line ->
+          Format.pp_force_newline fmt ();
+          Format.pp_print_string fmt line)
+        rest
 
 let run_channel ?(width = 78) oc f =
-  let c = Doc.create null_fmt ~width in
+  (* Lay out straight into the channel — no intermediate string, no Format
+     buffering. The hot output path. *)
+  let feed, finish_stream =
+    Doc.make_engine ~width ~add_string:(output_string oc)
+      ~add_char:(output_char oc) ~add_substring:(output_substring oc)
+  in
+  let c = Doc.create ~feed ~finish_stream in
   f c;
-  Doc.render_channel c oc
+  Doc.finalize c
