@@ -2972,6 +2972,12 @@ let rec is_effectless (e : _ Ast.instr) =
      memory accesses use the [mem.] path, not [v128::]. *)
   | Call ({ desc = Path ({ desc = "v128"; _ }, _); _ }, args) ->
       List.for_all is_effectless args
+  (* [memory.size] / [table.size] ([m.size()]) reads the current size: pure and
+     non-trapping, unlike the effectful grow/fill/copy/init on the same path. *)
+  | Call
+      ({ desc = StructGet ({ desc = Get _; _ }, { desc = "size"; _ }); _ }, [])
+    ->
+      true
   (* A typed null [null as &?t] is [ref.null] (a constant), not a trapping ref
      cast, so it is effect-free like a bare [null]. *)
   | Cast ({ desc = Null; _ }, Valtype (Ref { nullable = true; _ })) -> true
@@ -3928,7 +3934,15 @@ let rec lint_source ctx (i : _ Ast.instr) =
       lint_source ctx t;
       lint_source ctx e
   | Br_if (_, c) ->
-      lint_condition ctx c;
+      (* A br_if that carries a value has operand [Sequence [values…; cond]], so
+         the condition is the last element; a bare br_if's operand is the
+         condition itself. *)
+      let cond =
+        match c.desc with
+        | Sequence (_ :: _ as seq) -> List.nth seq (List.length seq - 1)
+        | _ -> c
+      in
+      lint_condition ctx cond;
       lint_source ctx c
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       list block.desc

@@ -1,0 +1,6 @@
+memory m: i32 [1];
+
+#[export = "f"]
+fn f() {
+    _ = m.size();
+}
