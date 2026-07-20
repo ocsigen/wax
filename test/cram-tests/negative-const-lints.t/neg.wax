@@ -1,0 +1,5 @@
+#[export = "shift"]
+fn shift(x: i32) -> i32 { x << -1073741824; }
+
+#[export = "cond"]
+fn cond() -> i32 { if -117775691 { 1; } else { 2; } }

@@ -2712,6 +2712,17 @@ let int_literal_value_is n (e : _ Ast.instr) =
 (* Whether [e] is the integer literal zero. *)
 let int_literal_value_is_zero e = int_literal_value_is 0L e
 
+(* The [int64] value of a constant integer operand, looking through a leading
+   sign. A negative literal is [UnOp (Neg, Int …)], not a bare [Int], so the
+   constant-condition and shift lints below miss it unless they look through the
+   [Neg] — the Wasm validator sees the folded [i32.const] directly. *)
+let rec int_operand_value (e : _ Ast.instr) =
+  match e.desc with
+  | Ast.Int s -> int_literal_value s
+  | UnOp ({ desc = Neg; _ }, a) -> Option.map Int64.neg (int_operand_value a)
+  | UnOp ({ desc = Pos; _ }, a) -> int_operand_value a
+  | _ -> None
+
 (* [x << n] / [x >> n] with a constant [n] at least the operand's bit width:
    Wasm masks [n] modulo the width, so the shift is almost certainly not what
    was meant. The operand width comes from the result cell: a concrete i32/i64,
@@ -2721,35 +2732,36 @@ let int_literal_value_is_zero e = int_literal_value_is 0L e
    concrete here — [1 << 40] typed [i64] is fine, typed [i32] is not — and only a
    genuinely unconstrained operand falls back to a default. *)
 let lint_shift ctx op result rhs =
+  (* Parse a constant shift count unsigned: a hex literal past [2^63] wraps to a
+     negative [int64] under a signed parse, so compare unsigned. Look through a
+     leading sign, as [lint_condition] does — a negative count (masked modulo the
+     width, so still surprising) is [UnOp (Neg, Int …)], not a bare [Int]. A
+     literal exceeding [u64] ([None]) is left alone (astronomically large, and
+     beyond what the message can render). *)
+  let rec shift_count (e : _ Ast.instr) =
+    match e.desc with
+    | Ast.Int s ->
+        let bits = String.concat "" (String.split_on_char '_' s) in
+        if String.starts_with ~prefix:"0x" bits then Int64.of_string_opt bits
+        else Int64.of_string_opt ("0u" ^ bits)
+    | UnOp ({ desc = Neg; _ }, a) -> Option.map Int64.neg (shift_count a)
+    | UnOp ({ desc = Pos; _ }, a) -> shift_count a
+    | _ -> None
+  in
   match op.desc with
   | Shl | Shr _ -> (
-      match rhs.desc with
-      | Ast.Int s -> (
-          match
-            match Cell.get result with
-            | Valtype { internal = I32; _ } | Number | Int -> Some 32
-            | Valtype { internal = I64; _ } | LargeInt -> Some 64
-            | _ -> None
-          with
-          | None -> ()
-          | Some width -> (
-              (* Parse the count unsigned: a hex literal past [2^63] wraps to a
-                 negative [int64] under a signed parse, so compare unsigned. A
-                 literal exceeding [u64] ([None]) is left alone (astronomically
-                 large, and beyond what the message can render). *)
-              let bits = String.concat "" (String.split_on_char '_' s) in
-              let count =
-                if String.starts_with ~prefix:"0x" bits then
-                  Int64.of_string_opt bits
-                else Int64.of_string_opt ("0u" ^ bits)
-              in
-              match count with
-              | Some n when Int64.unsigned_compare n (Int64.of_int width) >= 0
-                ->
-                  Error.shift_overflow ctx.diagnostics ~location:op.info ~width
-                    n
-              | _ -> ()))
-      | _ -> ())
+      match
+        match Cell.get result with
+        | Valtype { internal = I32; _ } | Number | Int -> Some 32
+        | Valtype { internal = I64; _ } | LargeInt -> Some 64
+        | _ -> None
+      with
+      | None -> ()
+      | Some width -> (
+          match shift_count rhs with
+          | Some n when Int64.unsigned_compare n (Int64.of_int width) >= 0 ->
+              Error.shift_overflow ctx.diagnostics ~location:op.info ~width n
+          | _ -> ()))
   | _ -> ()
 
 (* Run and clear the lints deferred until their result cells were pinned (see
@@ -2893,15 +2905,12 @@ let lint_redundant ctx op l r =
    always takes the same path. [is_while] excludes the idiomatic infinite loop
    [while <nonzero>] (only [while 0], a loop that never runs, is flagged). *)
 let lint_condition ctx ?(is_while = false) (cond : _ Ast.instr) =
-  match cond.desc with
-  | Ast.Int s -> (
-      match int_literal_value s with
-      | Some n ->
-          let value = n <> 0L in
-          if not (is_while && value) then
-            Error.constant_condition ctx.diagnostics ~location:cond.info ~value
-      | None -> ())
-  | _ -> ()
+  match int_operand_value cond with
+  | Some n ->
+      let value = n <> 0L in
+      if not (is_while && value) then
+        Error.constant_condition ctx.diagnostics ~location:cond.info ~value
+  | None -> ()
 
 (* Whether evaluating [e] has no side effect and cannot trap, so computing it
    only to discard the result is pointless. Conservative: reads of locals/
