@@ -11,7 +11,7 @@ parenthesized, so both explicit groupings below stay silent, as does a mix
 within one class (`x + y * 2`):
 
   $ wax check -W precedence=warning prec.wax
-  Warning: Operator precedence here is easy to misread.
+  Warning [precedence]: Operator precedence here is easy to misread.
    ──➤  prec.wax:2:39
   1 │ #[export = "shift_arith"]
   2 │ fn shift_arith(nbits: i32) -> i32 { 1 << nbits - 1; }
@@ -20,7 +20,7 @@ within one class (`x + y * 2`):
   3 │ 
   4 │ #[export = "cmp_bitwise"]
   Hint: Add parentheses to make the grouping explicit.
-  Warning: Operator precedence here is easy to misread.
+  Warning [precedence]: Operator precedence here is easy to misread.
    ──➤  prec.wax:5:47
   3 │ 
   4 │ #[export = "cmp_bitwise"]

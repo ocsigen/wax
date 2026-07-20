@@ -50,7 +50,7 @@ raises [Not_found] in the hole-order pass:
   2 │ fn f() { 1; let p: &point = {point| x: _}; }
     ·                             ^^^^^^^^^^^^^
   3 │ 
-  Warning: The local variable 'p' is never used.
+  Warning [unused-local]: The local variable 'p' is never used.
    ──➤  missing-field-hole.wax:2:17
   1 │ type point = { x: i32, y: i32 };
   2 │ fn f() { 1; let p: &point = {point| x: _}; }
@@ -82,7 +82,7 @@ unconsumed, hence the second error.)
   2 │ fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }
     ·                 ^
   3 │ 
-  Warning: The local variable 'p' is never used.
+  Warning [unused-local]: The local variable 'p' is never used.
    ──➤  match-hole.wax:2:30
   1 │ type t = { x: i32 };
   2 │ fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }

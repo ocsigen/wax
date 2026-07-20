@@ -17,7 +17,8 @@ lint-parity fuzz oracle (wax vs wat) flagged the one-sided `cast-always-fails`.
   > data d = "\x00\x11\x22\x33";
   > WAX
   $ wax check -W cast-always-fails=warning m.wax
-  Warning: This cast always traps: the value can never have this type.
+  Warning [cast-always-fails]:
+    This cast always traps: the value can never have this type.
    ──➤  m.wax:4:5
   2 │ #[export]
   3 │ fn f() -> i32 {

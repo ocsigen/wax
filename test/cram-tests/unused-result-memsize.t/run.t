@@ -5,7 +5,7 @@ discarding its result is flagged by `unused-result`, matching the Wasm validator
 The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
 
   $ wax check -W correctness=warning mem.wax
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
    ──➤  mem.wax:5:9
   3 │ #[export = "f"]

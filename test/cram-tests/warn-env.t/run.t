@@ -10,7 +10,8 @@ An inline value overrides the directory's; here it promotes the lint to an error
 (non-zero exit):
 
   $ WAX_WARN=shift-count-overflow=error wax check f.wax
-  Error: The shift count 40 is at least the operand width (32 bits).
+  Error [shift-count-overflow]:
+    The shift count 40 is at least the operand width (32 bits).
    ──➤  f.wax:3:7
   1 │ #[export = "f"]
   2 │ fn f(x: i32) -> i32 {
@@ -26,7 +27,8 @@ Unlike cmdliner's built-in environment fallback, `WAX_WARN` still applies when
 an error but `-W` relaxes this one lint back to a warning (exit zero):
 
   $ WAX_WARN=shift-count-overflow=error wax check -W shift-count-overflow=warning f.wax
-  Warning: The shift count 40 is at least the operand width (32 bits).
+  Warning [shift-count-overflow]:
+    The shift count 40 is at least the operand width (32 bits).
    ──➤  f.wax:3:7
   1 │ #[export = "f"]
   2 │ fn f(x: i32) -> i32 {
@@ -41,7 +43,8 @@ aborting the run (the remaining default policy still shows the lint):
 
   $ WAX_WARN=bogus=error wax check f.wax
   wax: WAX_WARN: Unknown warning or group 'bogus'. Known names: unused-local, unused-field, unused-import, unused-label, shift-count-overflow, constant-trap, tautological-comparison, constant-condition, unused-result, dead-code, cast-always-fails, eager-select, precedence, redundant-operation, truncated-coverage, naming-conflict, reserved-word-rename, generated-name, compound-assignment, field-punning, redundant-annotation, unused, correctness, redundant, naming, suggestion, all.
-  Warning: The shift count 40 is at least the operand width (32 bits).
+  Warning [shift-count-overflow]:
+    The shift count 40 is at least the operand width (32 bits).
    ──➤  f.wax:3:7
   1 │ #[export = "f"]
   2 │ fn f(x: i32) -> i32 {

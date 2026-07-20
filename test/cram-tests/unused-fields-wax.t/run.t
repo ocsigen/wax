@@ -9,14 +9,14 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the `unused`
 group explicitly:
 
   $ wax check -W unused=warning unused.wax
-  Warning: The global 'unused' is never used.
+  Warning [unused-field]: The global 'unused' is never used.
    ──➤  unused.wax:2:5
   1 │ let used: i32 = 1;
   2 │ let unused: i32 = 2;
     ·     ^^^^^^
   3 │ let _ignored: i32 = 3;
   4 │ #[export = "g"]
-  Warning: The function 'unused_fn' is never used.
+  Warning [unused-field]: The function 'unused_fn' is never used.
     ──➤  unused.wax:8:4
    6 │ 
    7 │ fn helper() -> i32 { used; }

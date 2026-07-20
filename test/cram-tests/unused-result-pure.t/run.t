@@ -11,7 +11,7 @@ pure too (the trapping SIMD accesses use the `mem.` path).
 The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
 
   $ wax check -W correctness=warning pure.wax
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
    ──➤  pure.wax:5:9
   3 │ #[export = "f"]
@@ -20,7 +20,7 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
     ·         ^^^^^^^^^^
   6 │     _ = (2).rotl(3);
   7 │     _ = 100.0 as f32 as i32_s;
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
    ──➤  pure.wax:6:9
   4 │ fn f(arr: &a) {
@@ -29,7 +29,7 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
     ·         ^^^^^^^^^^^
   7 │     _ = 100.0 as f32 as i32_s;
   8 │     _ = arr.length();
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
    ──➤  pure.wax:7:9
   5 │     _ = (-1).abs();
@@ -38,7 +38,7 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
     ·         ^^^^^^^^^^^^^^^^^^^^^
   8 │     _ = arr.length();
   9 │     _ = arr[0];
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
     ──➤  pure.wax:14:9
   12 │ #[export = "g"]
@@ -47,7 +47,7 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
      ·         ^^^^^^^^^^^
   15 │     _ = v128::i32x4(1, 2, 3, 4);
   16 │ }
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
     ──➤  pure.wax:15:9
   13 │ fn g() {

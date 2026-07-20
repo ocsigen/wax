@@ -4619,6 +4619,9 @@ server](#language-server)).
 - **`--error-format`** *FORMAT*
     - How diagnostics are rendered.
     - Values: `human` (source snippets, the default), `json`, or `short`.
+    - With `human`, a named warning's `-W` name is appended to the header as
+      `[name]` (e.g. `Warning [unused-local]:`), so at a glance you can tell
+      which warning fired and which `-W` name silences or promotes it.
     - With `json`, every diagnostic — errors, warnings, and syntax errors — is
       written to stderr as one JSON object per line (JSON Lines), for an editor,
       CI job, or AI assistant to parse. Each object has `severity`, `file`,

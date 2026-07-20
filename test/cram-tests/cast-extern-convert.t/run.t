@@ -7,7 +7,8 @@ operand and target sit in different reference hierarchies — only a genuine
 The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
 
   $ wax check -W correctness=warning convert.wax
-  Warning: This cast always traps: the value can never have this type.
+  Warning [cast-always-fails]:
+    This cast always traps: the value can never have this type.
    ──➤  convert.wax:7:36
   5 │ 
   6 │ #[export = "always_fails"]

@@ -6,7 +6,7 @@ matching the Wasm validator.
 The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
 
   $ wax check -W correctness=warning simd.wax
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
    ──➤  simd.wax:3:9
   1 │ #[export = "f"]
@@ -15,7 +15,7 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
     ·         ^^^^^^^^^^^^^
   4 │     _ = v.add_i32x4(v);
   5 │ }
-  Warning:
+  Warning [unused-result]:
     The result of this expression is discarded, and computing it has no effect.
    ──➤  simd.wax:4:9
   2 │ fn f(v: v128) {

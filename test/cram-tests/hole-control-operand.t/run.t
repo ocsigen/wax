@@ -38,7 +38,7 @@ A scrutinee that is a real value (rather than a hole) is of course fine:
   > WAX
 
   $ wax check scrut-ok.wax
-  Warning: The local variable 'p' is never used.
+  Warning [unused-local]: The local variable 'p' is never used.
    ──➤  scrut-ok.wax:2:27
   1 │ type t = { x: i32 };
   2 │ fn f(a: &any) { match a { p: &t => {} _ => {} } }

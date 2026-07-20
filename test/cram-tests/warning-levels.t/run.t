@@ -5,7 +5,7 @@ group (e.g. `unused`), or `all`; LEVEL is `hidden`, `warning`, or `error`.
 By default an unused local is reported as a warning:
 
   $ wax --validate unused.wax -f wat
-  Warning: The local variable 'dead' is never used.
+  Warning [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
   1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
@@ -39,7 +39,7 @@ The `unused` group silences it too:
 `-W unused-local=error` promotes it to an error (and exits non-zero):
 
   $ wax --validate -W unused-local=error unused.wax -f wat
-  Error: The local variable 'dead' is never used.
+  Error [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
   1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
@@ -51,7 +51,7 @@ The `unused` group silences it too:
 `-W all=error` makes every warning fatal:
 
   $ wax --validate -W all=error unused.wax -f wat
-  Error: The local variable 'dead' is never used.
+  Error [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
   1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
@@ -64,7 +64,7 @@ Later settings override earlier ones: everything fatal except unused locals,
 which stay warnings:
 
   $ wax --validate -W all=error -W unused-local=warning unused.wax -f wat
-  Warning: The local variable 'dead' is never used.
+  Warning [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
   1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
@@ -81,7 +81,7 @@ The `check` subcommand normally lets an unused local pass (exit status 0), but
 promoting it to an error makes the check fail:
 
   $ wax check unused.wax
-  Warning: The local variable 'dead' is never used.
+  Warning [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
   1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
@@ -90,7 +90,7 @@ promoting it to an error makes the check fail:
   4 │ }
 
   $ wax check -W unused-local=error unused.wax
-  Error: The local variable 'dead' is never used.
+  Error [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
   1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
@@ -139,7 +139,7 @@ The `naming` group enables both, each pointing at the renamed identifier and
 showing the name before and after:
 
   $ wax -i wat -f wax -W naming=warning rename.wat
-  Warning:
+  Warning [naming-conflict]:
     The name 'foo' is already in use; renaming this occurrence to 'foo_2'.
    ──➤  rename.wat:3:9
   1 │ (module
@@ -149,7 +149,8 @@ showing the name before and after:
     ·         ^^^^
   4 │   (func $if (result i32) (i32.const 2)))
   5 │ 
-  Warning: 'if' is a reserved word; renaming this identifier to 'if_2'.
+  Warning [reserved-word-rename]:
+    'if' is a reserved word; renaming this identifier to 'if_2'.
    ──➤  rename.wat:4:9
   2 │   (global $foo i32 (i32.const 1))
   3 │   (func $foo (result i32) (i32.const 0))
@@ -167,7 +168,8 @@ showing the name before and after:
 They can be enabled individually, and promoted to an error like any warning:
 
   $ wax -i wat -f wax -W reserved-word-rename=error rename.wat
-  Error: 'if' is a reserved word; renaming this identifier to 'if_2'.
+  Error [reserved-word-rename]:
+    'if' is a reserved word; renaming this identifier to 'if_2'.
    ──➤  rename.wat:4:9
   2 │   (global $foo i32 (i32.const 1))
   3 │   (func $foo (result i32) (i32.const 0))
@@ -186,7 +188,8 @@ group, hidden by default) reports this, pointing at the parameter:
   }
 
   $ wax -i wat -f wax -W generated-name=warning genname.wat
-  Warning: An unnamed parameter is used; generating the name 'x' for it.
+  Warning [generated-name]:
+    An unnamed parameter is used; generating the name 'x' for it.
    ──➤  genname.wat:2:16
   1 │ (module
   2 │   (func (param i32) (result i32)
@@ -202,14 +205,16 @@ reserved word or a duplicate is disambiguated, so the type still re-parses,
 and the `naming` warnings report it:
 
   $ wax -i wat -f wax -W naming=warning sigparam.wat
-  Warning: 'if' is a reserved word; renaming this identifier to 'if_2'.
+  Warning [reserved-word-rename]:
+    'if' is a reserved word; renaming this identifier to 'if_2'.
    ──➤  sigparam.wat:3:18
   1 │ (module
   2 │   (type $t
   3 │     (func (param $if i32) (param $x i32) (param $x i32) (result i32))))
     ·                  ^^^
   4 │ 
-  Warning: The name 'x' is already in use; renaming this occurrence to 'x_2'.
+  Warning [naming-conflict]:
+    The name 'x' is already in use; renaming this occurrence to 'x_2'.
    ──➤  sigparam.wat:3:49
   1 │ (module
   2 │   (type $t
@@ -224,7 +229,8 @@ named block keeps its label even when no branch targets it, so both the outer
 (unused) and inner labels are shown:
 
   $ wax -i wat -f wax -W naming=warning label.wat
-  Warning: The name 'x' is already in use; renaming this occurrence to 'x_2'.
+  Warning [naming-conflict]:
+    The name 'x' is already in use; renaming this occurrence to 'x_2'.
    ──➤  label.wat:4:14
   1 │ (module
   2 │   (func $f (result i32)

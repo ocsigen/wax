@@ -19,7 +19,7 @@ A genuinely unparenthesised confusing mix still warns:
   > WAX
 
   $ wax check -W precedence=warning precedence-bad.wax
-  Warning: Operator precedence here is easy to misread.
+  Warning [precedence]: Operator precedence here is easy to misread.
    ──➤  precedence-bad.wax:1:25
   1 │ fn f(n: i32) -> i32 { 1 << n - 1; }
     ·                         ^^
@@ -39,14 +39,15 @@ negative) is caught and printed unsigned:
   > WAX
 
   $ wax check -W shift-count-overflow=warning shift.wax
-  Warning: The shift count 40 is at least the operand width (32 bits).
+  Warning [shift-count-overflow]:
+    The shift count 40 is at least the operand width (32 bits).
    ──➤  shift.wax:1:24
   1 │ fn i32ctx() -> i32 { 1 << 40; }
     ·                        ^^
   2 │ fn i64ctx() -> i64 { 1 << 40; }
   3 │ fn hex(x: i64) -> i64 { x << 0xFFFF_FFFF_FFFF_FFFF; }
   Hint: Wasm masks the count modulo 32, shifting by 8 instead.
-  Warning:
+  Warning [shift-count-overflow]:
     The shift count 18446744073709551615 is at least the operand width (64
     bits).
    ──➤  shift.wax:3:27
@@ -67,7 +68,7 @@ the two sides agreeing):
   > WAT
 
   $ wax check -W shift-count-overflow=warning shift.wat
-  Warning:
+  Warning [shift-count-overflow]:
     The shift count 18446744073709551615 is at least the operand width (64
     bits).
    ──➤  shift.wat:2:4
@@ -151,7 +152,7 @@ call, itself a hazard), so a resume in a `?:` branch is flagged:
   > WAX
 
   $ wax check -W eager-select=warning eager.wax
-  Warning:
+  Warning [eager-select]:
     This operation is evaluated even when the condition selects the other
     branch.
    ──➤  eager.wax:3:50

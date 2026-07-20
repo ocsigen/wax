@@ -25,7 +25,7 @@ assignment, a construction type name the fields already pin, and a field that ca
 be punned.
 
   $ wax check -W suggestion=warning m.wax
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
    ──➤  m.wax:4:12
   2 │ 
@@ -34,7 +34,8 @@ be punned.
     ·            ^^^
   5 │     a = a + 1;
   6 │     a;
-  Suggestion: This assignment can use the compound form 'a += …'.
+  Suggestion [compound-assignment]:
+    This assignment can use the compound form 'a += …'.
    ──➤  m.wax:5:5
   3 │ fn f(x: i32) -> i32 {
   4 │     let a: i32 = x;
@@ -42,7 +43,7 @@ be punned.
     ·     ^^^^^^^^^
   6 │     a;
   7 │ }
-  Suggestion: This field can use the punning shorthand 'x'.
+  Suggestion [field-punning]: This field can use the punning shorthand 'x'.
     ──➤  m.wax:10:13
    8 │ 
    9 │ fn g(x: i32) -> &point {
@@ -50,7 +51,8 @@ be punned.
      ·             ^
   11 │ }
   12 │ 
-  Suggestion: This type name is redundant; it is inferred here.
+  Suggestion [redundant-annotation]:
+    This type name is redundant; it is inferred here.
     ──➤  m.wax:10:6
    8 │ 
    9 │ fn g(x: i32) -> &point {
@@ -62,7 +64,7 @@ be punned.
 A single suggestion can be enabled on its own:
 
   $ wax check -W field-punning=warning m.wax
-  Suggestion: This field can use the punning shorthand 'x'.
+  Suggestion [field-punning]: This field can use the punning shorthand 'x'.
     ──➤  m.wax:10:13
    8 │ 
    9 │ fn g(x: i32) -> &point {
@@ -89,7 +91,7 @@ too:
   > }
   > WAX
   $ wax check -W redundant-annotation=warning b.wax
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
    ──➤  b.wax:7:8
   5 │ 
@@ -98,7 +100,7 @@ too:
     ·        ^^^
   8 │     let (p: i32, q: i32) = divmod(17, 5);
   9 │     let r: i32 = do i32 { n + 1; };
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
     ──➤  b.wax:8:13
    6 │ fn h(n: i32) -> i32 {
@@ -107,7 +109,7 @@ too:
      ·             ^^^
    9 │     let r: i32 = do i32 { n + 1; };
   10 │     p + q + r;
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
     ──➤  b.wax:8:21
    6 │ fn h(n: i32) -> i32 {
@@ -116,7 +118,8 @@ too:
      ·                     ^^^
    9 │     let r: i32 = do i32 { n + 1; };
   10 │     p + q + r;
-  Suggestion: This result type is redundant; it is inferred from the context.
+  Suggestion [redundant-annotation]:
+    This result type is redundant; it is inferred from the context.
     ──➤  b.wax:9:21
    7 │     _: i32 = 5;
    8 │     let (p: i32, q: i32) = divmod(17, 5);
@@ -124,7 +127,7 @@ too:
      ·                     ^^^
   10 │     p + q + r;
   11 │ }
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
     ──➤  b.wax:9:12
    7 │     _: i32 = 5;
@@ -143,7 +146,8 @@ A redundant cast is a `redundant-operation` warning that also carries a fix:
   > }
   > WAX
   $ wax check -W redundant-operation=warning c.wax
-  Warning: This cast is redundant: the value already has this type.
+  Warning [redundant-operation]:
+    This cast is redundant: the value already has this type.
    ──➤  c.wax:3:5
   1 │ type point = { x: i32 };
   2 │ fn k(p: &point) -> &point {
@@ -162,7 +166,7 @@ containing a ':' does not fool it: the suggestion still points at the real type.
   > }
   > WAX
   $ wax check -W redundant-annotation=warning d.wax
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
    ──➤  d.wax:2:19
   1 │ fn f(n: i32) -> i32 {
@@ -180,14 +184,14 @@ for both a mutable `let` global and an immutable `const`:
   > fn use() -> f64 { counter; PI; }
   > WAX
   $ wax check -W redundant-annotation=warning g.wax
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
    ──➤  g.wax:1:14
   1 │ let counter: i32 = 0;
     ·              ^^^
   2 │ const PI: f64 = 3.14159;
   3 │ fn use() -> f64 { counter; PI; }
-  Suggestion:
+  Suggestion [redundant-annotation]:
     This type annotation is redundant; the initializer's type is inferred.
    ──➤  g.wax:2:11
   1 │ let counter: i32 = 0;
@@ -213,7 +217,8 @@ suggestion's edit deletes the whole `=> t`:
   > }
   > WAX
   $ wax check -W redundant-annotation=warning i.wax
-  Suggestion: This result type is redundant; it is inferred from the context.
+  Suggestion [redundant-annotation]:
+    This result type is redundant; it is inferred from the context.
    ──➤  i.wax:2:13
   1 │ fn f(c: i32) -> i32 {
   2 │     if c => i32 { 1; } else { 2; };

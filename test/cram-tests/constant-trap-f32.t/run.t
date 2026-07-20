@@ -7,7 +7,7 @@ Wasm validator, which sees the folded `f32.const` directly.
 The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
 
   $ wax check -W correctness=warning trap.wax
-  Warning:
+  Warning [constant-trap]:
     This conversion always traps: the constant is out of the target type's
     range.
    ──➤  trap.wax:2:24

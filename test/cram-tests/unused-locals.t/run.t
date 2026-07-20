@@ -3,7 +3,7 @@ Wat `(local …)` that is never the target of a `local.get`) is flagged; prefixi
 the name with `_` marks it intentionally unused. Parameters are never reported.
 
   $ wax --validate unused.wax -f wat
-  Warning: The local variable 'dead' is never used.
+  Warning [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:3:9
   1 │ fn f(n: i32) -> i32 {
   2 │     let used = n;
@@ -34,7 +34,7 @@ For Wat input the check runs under `--validate`. Both named and unnamed locals
 are reported; a name starting with `_` is intentionally unused:
 
   $ wax --validate unused.wat -f wat
-  Warning: The local variable '$dead' is never used.
+  Warning [unused-local]: The local variable '$dead' is never used.
    ──➤  unused.wat:3:30
   1 │ (module
   2 │   (func $f (param $n i32) (result i32)
@@ -42,7 +42,7 @@ are reported; a name starting with `_` is intentionally unused:
     ·                              ^^^^^
   4 │     (local.set $used (local.get $n))
   5 │     (local.get $used)))
-  Warning: This local is never used.
+  Warning [unused-local]: This local is never used.
    ──➤  unused.wat:3:41
   1 │ (module
   2 │   (func $f (param $n i32) (result i32)
@@ -63,7 +63,7 @@ configuration leaves it unread; `$never_used` is read in no branch, so it is
 reported (with no "reachable when" qualifier, as it holds unconditionally):
 
   $ wax --validate cond.wat -f wat
-  Warning: The local variable '$never_used' is never used.
+  Warning [unused-local]: The local variable '$never_used' is never used.
    ──➤  cond.wat:3:40
   1 │ (module
   2 │   (func $f (param $n i32) (result i32)
@@ -82,7 +82,7 @@ read only in the `wasi` branch but is still not flagged, while `never_used` is
 reported once, unconditionally.
 
   $ wax --validate cond.wax -f wax
-  Warning: The local variable 'never_used' is never used.
+  Warning [unused-local]: The local variable 'never_used' is never used.
    ──➤  cond.wax:3:9
   1 │ fn f(n: i32) -> i32 {
   2 │     let used_when_wasi: i32 = n;
@@ -107,7 +107,7 @@ The `check` subcommand reports the warning too, but an unused local alone does
 not make it fail (exit status stays 0):
 
   $ wax check unused.wax
-  Warning: The local variable 'dead' is never used.
+  Warning [unused-local]: The local variable 'dead' is never used.
    ──➤  unused.wax:3:9
   1 │ fn f(n: i32) -> i32 {
   2 │     let used = n;

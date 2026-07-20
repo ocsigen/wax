@@ -7,7 +7,7 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`; `redundant-operation` is i
 the (off-by-default) `redundant` group, so enable it explicitly:
 
   $ wax check -W redundant=warning offset.wat
-  Warning: This operation has no effect on its result.
+  Warning [redundant-operation]: This operation has no effect on its result.
    ──➤  offset.wat:4:18
   2 │   (memory 1)
   3 │   (global $g (mut i32) (i32.const 0))

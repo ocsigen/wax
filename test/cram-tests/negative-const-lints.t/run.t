@@ -8,7 +8,7 @@ at least the width; a non-zero condition is always true whatever its sign.
 The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
 
   $ wax check -W correctness=warning neg.wax
-  Warning:
+  Warning [shift-count-overflow]:
     The shift count 18446744072635809792 is at least the operand width (32
     bits).
    ──➤  neg.wax:2:29
@@ -18,7 +18,7 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
   3 │ 
   4 │ #[export = "cond"]
   Hint: Wasm masks the count modulo 32, shifting by 0 instead.
-  Warning: This condition is always true.
+  Warning [constant-condition]: This condition is always true.
    ──➤  neg.wax:5:23
   3 │ 
   4 │ #[export = "cond"]

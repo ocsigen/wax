@@ -212,9 +212,17 @@ let print_fix ?(output = Format.err_formatter) ~theme ~severity ?warning edit =
         () action
   | _ -> ()
 
-let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity ~hint
-    msg =
-  Format.fprintf output "@[<2>%a:@ %t@]@."
+let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity
+    ?warning ~hint msg =
+  (* A named warning's name is appended to the header as [ [name]], as in the
+     "short" format and as clang/eslint do — including a warning promoted to
+     [Error] severity by [-W name=error], which still carries its [warning]. *)
+  let name_suffix =
+    match warning with
+    | Some w -> Printf.sprintf " [%s]" (Warning.name w)
+    | None -> ""
+  in
+  Format.fprintf output "@[<2>%a%s:@ %t@]@."
     (match severity with
     | Error ->
         with_style theme.error_header (fun f () -> Format.fprintf f "Error")
@@ -222,12 +230,12 @@ let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity ~hint
         with_style theme.warning_header (fun f () -> Format.fprintf f "Warning")
     | Suggestion ->
         with_style theme.hint_header (fun f () -> Format.fprintf f "Suggestion"))
-    ()
+    () name_suffix
     (fun f -> render_body ~theme f msg);
   print_hint ~output ~theme hint
 
 let output_error_no_source ?(output = Format.err_formatter) ~theme
-    ~location:{ Ast.loc_start; loc_end } ~severity ?hint msg =
+    ~location:{ Ast.loc_start; loc_end } ~severity ?warning ?hint msg =
   let start_line = loc_start.Lexing.pos_lnum in
   let end_line = loc_end.Lexing.pos_lnum in
   let filename = loc_start.Lexing.pos_fname in
@@ -244,7 +252,7 @@ let output_error_no_source ?(output = Format.err_formatter) ~theme
     Format.fprintf output
       "File \"%s\", line %d, character %d to line %d, character %d:@." filename
       start_line start_col end_line end_col;
-  output_error_no_loc ~output ~theme ~severity ~hint msg
+  output_error_no_loc ~output ~theme ~severity ?warning ~hint msg
 
 type annotation = {
   start_line : int;
@@ -340,7 +348,7 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
         location.Ast.loc_start.Lexing.pos_cnum
         - location.Ast.loc_start.Lexing.pos_bol
       in
-      output_error_no_loc ~output ~theme ~severity ~hint:None msg;
+      output_error_no_loc ~output ~theme ~severity ?warning ~hint:None msg;
       if modern then
         Format.fprintf output "%a %a@."
           (with_style theme.line_numbers (fun f () ->
@@ -472,11 +480,12 @@ let output_error ?(output = Format.err_formatter) ~theme ~source ~location
   | Short -> output_error_short ~output ~location ~severity ?warning msg
   | Human -> (
       if location.Ast.loc_start = Lexing.dummy_pos then
-        output_error_no_loc ~output ~theme ~severity ~hint msg
+        output_error_no_loc ~output ~theme ~severity ?warning ~hint msg
       else
         match source with
         | None ->
-            output_error_no_source ~output ~theme ~location ~severity ?hint msg
+            output_error_no_source ~output ~theme ~location ~severity ?warning
+              ?hint msg
         | Some source ->
             output_error_with_source ~output ~theme ~source ~location ~severity
               ?warning ?hint ?edit ~related msg)

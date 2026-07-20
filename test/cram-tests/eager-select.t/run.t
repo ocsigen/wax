@@ -9,7 +9,7 @@ On Wax source, the type checker flags each hazardous branch and points at the
 inner division here, not the outer arm):
 
   $ wax check -W eager-select=warning eager.wax
-  Warning:
+  Warning [eager-select]:
     This operation is evaluated even when the condition selects the other
     branch.
    ──➤  eager.wax:4:37
@@ -21,7 +21,7 @@ inner division here, not the outer arm):
   5 │ 
   6 │ #[export = "call"]
   Hint: Use an 'if' expression to evaluate only the chosen branch.
-  Warning:
+  Warning [eager-select]:
     This operation is evaluated even when the condition selects the other
     branch.
    ──➤  eager.wax:7:30
@@ -33,7 +33,7 @@ inner division here, not the outer arm):
   8 │ 
   9 │ #[export = "pure"]
   Hint: Use an 'if' expression to evaluate only the chosen branch.
-  Warning:
+  Warning [eager-select]:
     This operation is evaluated even when the condition selects the other
     branch.
     ──➤  eager.wax:13:45
@@ -45,7 +45,7 @@ inner division here, not the outer arm):
   14 │ 
   15 │ #[export = "nested"]
   Hint: Use an 'if' expression to evaluate only the chosen branch.
-  Warning:
+  Warning [eager-select]:
     This operation is evaluated even when the condition selects the other
     branch.
     ──➤  eager.wax:16:53
@@ -62,7 +62,7 @@ is a distinct subtree). An unfolded `select` leaves its operands on the flat
 instruction stream, out of the checker's reach, so it is not flagged:
 
   $ wax check -W eager-select=warning eager.wat
-  Warning:
+  Warning [eager-select]:
     This operation is evaluated even when the condition selects the other
     operand.
    ──➤  eager.wat:3:14

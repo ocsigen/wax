@@ -6,7 +6,7 @@ not at the whole operand.
 The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the group:
 
   $ wax check -W correctness=warning brif.wax
-  Warning: This condition is always true.
+  Warning [constant-condition]: This condition is always true.
    ──➤  brif.wax:4:26
   2 │ fn f() -> i32 {
   3 │     'l: do {
