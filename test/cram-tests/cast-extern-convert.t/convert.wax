@@ -1,0 +1,7 @@
+type s = { };
+
+#[export = "to_extern"]
+fn to_extern() -> &extern { { } as &extern; }
+
+#[export = "always_fails"]
+fn always_fails(a: &s) -> &array { a as &array; }

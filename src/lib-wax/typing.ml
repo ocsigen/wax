@@ -4479,11 +4479,24 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
   | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
       Valtype { internal = Ref tgt; _ } )
     when not (is_bottom_heaptype op_src) ->
+      (* [any] <-> [extern] across hierarchies is the lossless
+         [extern.convert_any] / [any.convert_extern] conversion (the surface
+         spells it [as &extern] / [as &any]), not a [ref.cast]: it never traps
+         and, since it changes hierarchy, is never redundant. Don't lint it —
+         reporting it as an always-trapping (or redundant) cast is a false
+         positive. *)
+      let bridged =
+        let open Wax_wasm.Types in
+        let in_hier h top = heap_subtype info h top in
+        (in_hier op.typ Internal.Any && in_hier tgt.typ Internal.Extern)
+        || (in_hier op.typ Internal.Extern && in_hier tgt.typ Internal.Any)
+      in
       let related =
         Wax_wasm.Types.heap_subtype info op.typ tgt.typ
         || Wax_wasm.Types.heap_subtype info tgt.typ op.typ
       in
-      if (not related) && not (op.nullable && tgt.nullable) then
+      if bridged then ()
+      else if (not related) && not (op.nullable && tgt.nullable) then
         Error.cast_always_fails ctx.diagnostics ~location ~is_test
       else if Wax_wasm.Types.ref_subtype info op tgt then
         let edit =
