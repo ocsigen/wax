@@ -7,7 +7,11 @@ type mapping = {
   original_column : int;
 }
 
-val create : unit -> t
+val create : enabled:bool -> t
+(** [create ~enabled:false] returns a sink whose recording functions are no-ops,
+    so a module writer that never serializes a map does not pay for accumulating
+    one entry per instruction. *)
+
 val register_file : t -> string -> int
 
 val add_mapping :

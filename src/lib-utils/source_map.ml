@@ -1,4 +1,10 @@
 type t = {
+  enabled : bool;
+      (* When false, recording is a no-op: [mappings] stays empty, so the whole
+         module writer runs without accumulating (and later shifting) one entry
+         per instruction — dead work whenever no source map was requested, and a
+         stack overflow on a large binary before [shift_since] was made
+         tail-recursive. *)
   files : (string, int) Hashtbl.t;
   mutable next_file_idx : int;
   mutable mappings : entry list;
@@ -18,7 +24,9 @@ and mapping = {
   original_column : int;
 }
 
-let create () = { files = Hashtbl.create 10; next_file_idx = 0; mappings = [] }
+let create ~enabled =
+  { enabled; files = Hashtbl.create 10; next_file_idx = 0; mappings = [] }
+
 let entry_offset = function Mapped m -> m.generated_offset | Unmapped o -> o
 
 let register_file t filename =
@@ -31,17 +39,36 @@ let register_file t filename =
       idx
 
 let add_mapping_at t ~generated_offset ~(position : Lexing.position) =
-  let file_idx = register_file t position.Lexing.pos_fname in
-  let new_mapping =
-    {
-      generated_offset;
-      original_file_idx = file_idx;
-      original_line = position.Lexing.pos_lnum - 1 (* 0-indexed *);
-      original_column =
-        position.Lexing.pos_cnum - position.Lexing.pos_bol (* 0-indexed *);
-    }
-  in
-  t.mappings <- Mapped new_mapping :: t.mappings
+  if t.enabled then
+    let file_idx = register_file t position.Lexing.pos_fname in
+    let line =
+      position.Lexing.pos_lnum - 1
+      (* 0-indexed *)
+    in
+    let column =
+      position.Lexing.pos_cnum - position.Lexing.pos_bol
+      (* 0-indexed *)
+    in
+    match t.mappings with
+    (* A mapping is sticky too: a run of consecutive instructions at the same
+       source position needs only its first segment — the rest re-state a
+       position that already holds. Skip them, as for [Unmapped] below; offsets
+       are monotonic in record order, so this drops exactly the redundant
+       segments and shrinks the map without changing what it resolves to. *)
+    | Mapped m :: _
+      when m.original_file_idx = file_idx
+           && m.original_line = line && m.original_column = column ->
+        ()
+    | _ ->
+        let new_mapping =
+          {
+            generated_offset;
+            original_file_idx = file_idx;
+            original_line = line;
+            original_column = column;
+          }
+        in
+        t.mappings <- Mapped new_mapping :: t.mappings
 
 let add_mapping t ~generated_offset ~original_location =
   add_mapping_at t ~generated_offset ~position:original_location.Ast.loc_start
@@ -49,7 +76,18 @@ let add_mapping t ~generated_offset ~original_location =
 (* Record that the code at [generated_offset] has no original location, so the
    previous mapping does not bleed into it. *)
 let add_absent_mapping t ~generated_offset =
-  t.mappings <- Unmapped generated_offset :: t.mappings
+  if t.enabled then
+    match t.mappings with
+    (* A gap marker is sticky, so a run of consecutive [Unmapped] entries carries
+       no more information than its first: [to_json] drops the rest anyway. Skip
+       recording them instead — a binary input has no source locations, so every
+       instruction would otherwise add one, and the accumulated (then shifted)
+       list is what overflowed the stack. Offsets are monotonic in record order,
+       so the entry kept here is the same one [to_json]'s dedup would keep, and
+       the emitted map is unchanged. Skipping a prepend leaves existing cells
+       untouched, so checkpoints stay physical suffixes of [mappings]. *)
+    | Unmapped _ :: _ -> ()
+    | _ -> t.mappings <- Unmapped generated_offset :: t.mappings
 
 type checkpoint = entry list
 
@@ -61,17 +99,23 @@ let checkpoint t = t.mappings
 
 let shift_since t (cp : checkpoint) ~delta =
   if delta <> 0 then begin
-    let rec loop l =
-      if l == cp then l
+    (* Rebuild the cells newer than [cp] with their offsets shifted, sharing the
+       [cp] suffix unchanged. Tail-recursive (accumulate then [rev_append]) so a
+       module with a great many mappings — one per instruction, hundreds of
+       thousands in a large binary — does not overflow the stack. *)
+    let rec loop acc l =
+      if l == cp then List.rev_append acc l
       else
         match l with
-        | [] -> []
+        | [] -> List.rev acc
         | Mapped m :: rest ->
-            Mapped { m with generated_offset = m.generated_offset + delta }
-            :: loop rest
-        | Unmapped o :: rest -> Unmapped (o + delta) :: loop rest
+            loop
+              (Mapped { m with generated_offset = m.generated_offset + delta }
+              :: acc)
+              rest
+        | Unmapped o :: rest -> loop (Unmapped (o + delta) :: acc) rest
     in
-    t.mappings <- loop t.mappings
+    t.mappings <- loop [] t.mappings
   end
 
 (* Base64 VLQ encoding for source maps: each 5-bit group is emitted low bits

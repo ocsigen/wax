@@ -1391,7 +1391,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
-  let source_map_t = Wax_utils.Source_map.create () in
+  let source_map_t = Wax_utils.Source_map.create ~enabled:source_map in
 
   (* A source map records each instruction's byte offset relative to the start of
      the whole binary, so we track the running file position as sections are
