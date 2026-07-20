@@ -487,13 +487,18 @@ let split_string s =
     let is_utf8 =
       String.is_valid_utf_8 s && not (Wax_utils.Unicode.has_hex_escape s)
     in
-    if is_utf8 then (
-      let chunks = ref [] in
-      let b = Buffer.create 60 in
-      let width = ref 0 in
-      let rec loop i =
-        if i >= String.length s then (
-          if Buffer.length b > 0 then chunks := Buffer.contents b :: !chunks)
+    if is_utf8 then
+      let len = String.length s in
+      (* [start] is the byte offset of the current chunk, [width] its escaped
+         display width. When a chunk overflows we prefer to break at
+         [last_break] — the offset just past the last space seen (of width
+         [width_at_break]) — so words are kept whole; failing that (no space, or
+         one so early the chunk would be under 60 columns, leaving too ragged a
+         line) we break the word at the current character. *)
+      let rec loop acc start i width last_break width_at_break =
+        if i >= len then
+          List.rev
+            (if i > start then String.sub s start (i - start) :: acc else acc)
         else
           let dec = String.get_utf_8_uchar s i in
           let u = Uchar.utf_decode_uchar dec in
@@ -501,20 +506,29 @@ let split_string s =
           let c = Uchar.to_int u in
           let esc_len =
             if c >= 32 && c <> 127 && c <> 34 && c <> 92 then
-              Wax_utils.Unicode.char_width !width u
+              Wax_utils.Unicode.char_width width u
             else if c = 9 || c = 10 || c = 13 || c = 34 || c = 92 then 2
             else 3
           in
-          if !width > 0 && !width + esc_len > 60 then (
-            chunks := Buffer.contents b :: !chunks;
-            Buffer.clear b;
-            width := 0);
-          Buffer.add_substring b s i l;
-          width := !width + esc_len;
-          loop (i + l)
+          if width > 0 && width + esc_len > 75 then
+            let break_at, width_before =
+              match last_break with
+              | Some b when b > start && width_at_break > 60 ->
+                  (b, width_at_break)
+              | _ -> (i, width)
+            in
+            loop
+              (String.sub s start (break_at - start) :: acc)
+              break_at break_at (width - width_before) None 0
+          else
+            let width = width + esc_len in
+            let last_break, width_at_break =
+              if c = 32 (* space *) then (Some (i + l), width)
+              else (last_break, width_at_break)
+            in
+            loop acc start (i + l) width last_break width_at_break
       in
-      loop 0;
-      List.rev !chunks)
+      loop [] 0 0 0 None 0
     else
       let chunks = ref [] in
       let rec loop i =
