@@ -260,10 +260,13 @@ fi
 # [(@if …)], so this only fires on genuinely invalid emitted text.
 demit=(--desugar -i "$FMT" -f wat "$IN" -o "$WORK/cand.wat")
 if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
-   && ! grep -q "likely-confusing unicode" "$WORK/cand.wat.err"; then
-  # The [likely-confusing unicode] rejection is a wasm-tools *text* lint (an RTL
-  # override etc. in an export name) — the module is spec-valid and its binary
-  # validates, so wax emitting the name verbatim is correct, not a bug.
+   && ! grep -qE "likely-confusing unicode|expected at least one module field" \
+        "$WORK/cand.wat.err"; then
+  # Two wasm-tools rejections are stricter than the spec (the reference
+  # interpreter accepts both), so they are not wax bugs: [likely-confusing
+  # unicode] (an RTL override etc. in an export name), and [expected at least one
+  # module field] (the empty-module text an unnamed field-less module prints to —
+  # a content-dropping bug would instead surface in the round-trip oracles).
   finding FALSE_ACCEPT HIGH "$IN" \
     "wax accepted the module but emitted WAT text wasm-tools rejects: $(head -1 "$WORK/cand.wat.err")" \
     "$(repro "${demit[@]}") && wasm-tools validate --features all $WORK/cand.wat"
