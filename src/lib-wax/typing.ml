@@ -2920,12 +2920,54 @@ let lint_condition ctx ?(is_while = false) (cond : _ Ast.instr) =
    null / out of bounds), casts, [array.new_data]/[array.new_elem] (trap out of
    bounds), and trapping arithmetic ([/]/[%]). Mirrors the Wasm validator's
    purity classification (see [lint_body] in [Validation]). *)
+(* The no-argument and one-argument numeric instruction methods ([x.abs()],
+   [x.min(y)]) parse as [Call (StructGet (recv, m), args)] (see [is_unary_method]
+   / the method registries). They are pure and total, so discarding one is
+   pointless — except [length] ([array.length] traps on a null array), left
+   impure. Mirrors the Wasm validator's [classify] purity table. *)
+let is_pure_unary_method = function
+  | "clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s" | "abs" | "ceil"
+  | "floor" | "trunc" | "nearest" | "sqrt" | "to_bits" | "from_bits" ->
+      true
+  | _ -> false
+
+let is_pure_binary_method = function
+  | "rotl" | "rotr" | "min" | "max" | "copysign" -> true
+  | _ -> false
+
+(* Whether a cast is total (never traps), so discarding its result is pointless.
+   A [strict] float-to-int conversion lowers to [trunc] (traps out of range); its
+   saturating form and every numeric widen/narrow/convert is total. A reference
+   cast ([as &T]) may trap and is conservatively treated as non-total (the
+   never-trapping [extern.convert_any] is spelled the same way but not
+   distinguished here). Mirrors the Wasm validator's [classify]. *)
+let cast_is_total = function
+  | Ast.Signedtype { typ; strict; _ } -> (
+      match typ with `F32 | `F64 -> true | `I32 | `I64 -> not strict)
+  | Valtype (I32 | I64 | F32 | F64) -> true
+  | Valtype (V128 | Ref _) | Functype _ -> false
+
 let rec is_effectless (e : _ Ast.instr) =
   (* A field value; the punning shorthand [{x}] reads a local/global. *)
   let field (_, v) = match v with Some e -> is_effectless e | None -> true in
   match e.desc with
   | Get _ | Int _ | Float _ | Char _ | String _ | Null | StructDefault _ -> true
   | UnOp (_, a) -> is_effectless a
+  | Call ({ desc = StructGet (recv, m); _ }, [])
+    when is_pure_unary_method m.desc ->
+      is_effectless recv
+  | Call ({ desc = StructGet (recv, m); _ }, [ a ])
+    when is_pure_binary_method m.desc ->
+      is_effectless recv && is_effectless a
+  (* A [v128::…] SIMD constructor or vector op ([v128::i8x16(…)], a lane build)
+     is effect-free and non-trapping when its operands are — the trapping SIMD
+     memory accesses use the [mem.] path, not [v128::]. *)
+  | Call ({ desc = Path ({ desc = "v128"; _ }, _); _ }, args) ->
+      List.for_all is_effectless args
+  (* A typed null [null as &?t] is [ref.null] (a constant), not a trapping ref
+     cast, so it is effect-free like a bare [null]. *)
+  | Cast ({ desc = Null; _ }, Valtype (Ref { nullable = true; _ })) -> true
+  | Cast (a, ct) when cast_is_total ct -> is_effectless a
   | BinOp ({ desc = Div _ | Rem _; _ }, _, _) -> false
   | BinOp (_, a, b) -> is_effectless a && is_effectless b
   | Select (a, b, c) -> is_effectless a && is_effectless b && is_effectless c
