@@ -384,16 +384,22 @@ lint_codes() { # $1 = file (format from extension): its sorted-unique warn codes
     | grep -vxE 'precedence|eager-select|naming-conflict|reserved-word-rename|generated-name' \
     | sort -u
 }
-# Obtain both text forms (converting as needed); skip if either conversion fails.
+# The wax form of the program (decompiled + simplified for wat/wasm input; the
+# input itself for wax); skip if the conversion fails.
 waxf="$IN"
-watf="$IN"
 [ "$FMT" = wax ] || {
   waxf="$WORK/parity.wax"
   [ "$(classify_wax -i "$FMT" -f wax "$IN" -o "$waxf")" = ok ] || waxf=""
 }
-[ "$FMT" = wat ] || {
+# Derive the wat form FROM the wax form so both lint identical content: this
+# isolates the two linters from the wasm->wax simplify vs literal wasm->wat
+# decompiler difference (which strips redundant casts on the wax side only, a
+# by-design decompiler property, not a lint bug). A wax input needs no decompile,
+# so its wat rendering is already a faithful reprint.
+watf=""
+[ -n "$waxf" ] && {
   watf="$WORK/parity.wat"
-  [ "$(classify_wax -i "$FMT" -f wat "$IN" -o "$watf")" = ok ] || watf=""
+  [ "$(classify_wax -i wax -f wat "$waxf" -o "$watf")" = ok ] || watf=""
 }
 if [ -n "$waxf" ] && [ -n "$watf" ]; then
   cwax="$(lint_codes "$waxf")"
