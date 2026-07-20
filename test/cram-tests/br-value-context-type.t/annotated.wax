@@ -1,0 +1,6 @@
+#[export = "g"]
+fn g() -> i32 {
+    'l: do i32 {
+        br 'l (0 as i64);
+    }
+}

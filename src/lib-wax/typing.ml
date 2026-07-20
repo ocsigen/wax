@@ -7956,12 +7956,15 @@ and check_against ctx expected i =
   match expected with
   | [| ty |] when is_inferring ty ->
       (* The block's result type is being inferred: synthesize the branched
-         value and record it instead of checking it against the not-yet-known
-         result (a plain [check_instruction] would discard it, as [has_expectation] is false
-         for a [Collecting] cell). *)
+         value and record it (a plain [check_instruction] would discard it, as
+         [has_expectation] is false for a [Collecting] cell). When the cell
+         carries a declared result (an annotation under test, or the type the
+         surrounding context pins), [subtype] validates the value against it
+         per-delivery, so [check_subtype] reports a [br]/catch carrying the wrong
+         type precisely at its site; a fully-inferred cell ([declared = None])
+         records without constraint, so this never fires spuriously. *)
       let* i' = instruction ctx i in
-      ignore
-        (subtype ~location:(snd i'.info) ctx (expression_type ctx i') ty : bool);
+      check_subtype ctx ~location:(snd i'.info) (expression_type ctx i') ty;
       return i'
   | [| ty |] ->
       let* i', _ = check_instruction ctx ty i in
