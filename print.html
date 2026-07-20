@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d642891a.js";
+            window.path_to_searchindex_js = "searchindex-052ca919.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-7b4055a9.js"></script>
+        <script src="toc-e20ab12e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,7 +193,9 @@
     x + y;
 }</span></pre>
 
-<p>Both compile to identical WebAssembly bytecode.</p>
+<p>Both compile to identical WebAssembly bytecode. You can try it in your browser
+on the <a href="#playground">Playground</a>: type Wax, see the WAT and diagnostics
+live, with no install.</p>
 <h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
 <h3 id="npm"><a class="header" href="#npm">npm</a></h3>
 <p>The easiest way to get <code>wax</code> is from npm; it ships a single cross-platform
@@ -290,6 +292,906 @@ unused locals.</p>
 <li><a href="#introduction-1">Correspondence</a>: How Wax maps to WebAssembly</li>
 <li><a href="#cli-reference">CLI Reference</a>: Complete command-line options</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- The browser playground (PLAYGROUND.md, Phase 1). Runs the Wax toolchain
+     itself as WebAssembly — the same wax_format_js bundle the VS Code web
+     extension ships — so conversion and diagnostics happen entirely in the
+     visitor's browser, with no server.
+
+     This is a raw-HTML mdbook page: it inherits the site theme, nav and dark
+     mode. All playground styling is scoped under #wax-playground. The wasm
+     loader + module and examples.json are copied into src/playground/ at
+     deploy time (see .github/workflows/deploy.yml); they are not committed. -->
+<h1 id="playground"><a class="header" href="#playground">Playground</a></h1>
+<div id="wax-playground" data-unsupported="Your browser cannot run the Wax toolchain: it needs WebAssembly GC support (any current Chrome, Firefox, Safari or Edge).">
+<div class="wp-toolbar">
+  <label class="wp-field">
+    Direction
+    <select id="wp-direction">
+      <option value="wax" selected="">Wax → WAT</option>
+      <option value="wat">WAT → Wax</option>
+    </select>
+  </label>
+  <label class="wp-field">
+    Example
+    <select id="wp-example"><option value="">Load an example…</option></select>
+  </label>
+  <!-- Upload and Format both act on the source (left) pane, so they live with
+       the left-hand controls rather than out on the right. -->
+  <button type="button" id="wp-upload" class="wp-button" title="Load a .wasm, .wat or .wax file into the source pane, converting it to the current source language.">Upload…</button>
+  <input type="file" id="wp-upload-input" accept=".wasm,.wat,.wax" hidden="">
+  <button type="button" id="wp-format" class="wp-button">Format source</button>
+  <span class="wp-spacer"></span>
+  <button type="button" id="wp-share" class="wp-button" title="Copies a URL that reopens this playground with your current code. The code is encoded in the link itself and never sent to a server.">Copy link to this code</button>
+</div>
+
+<div class="wp-panes">
+  
+<div class="wp-pane">
+    
+<div class="wp-pane-title" id="wp-src-title">Wax source</div>
+
+    
+<div class="wp-editor" id="wp-editor-host"></div>
+
+  </div>
+
+  
+<div class="wp-pane">
+    
+<div class="wp-pane-title" id="wp-out-title">WAT output</div>
+
+    
+<pre class="wp-output" id="wp-output"><code></code></pre>
+
+  </div>
+
+</div>
+
+<div class="wp-status" id="wp-status">Loading the Wax toolchain…</div>
+
+<ul class="wp-diagnostics" id="wp-diagnostics"></ul>
+
+</div>
+
+<style>
+#wax-playground {
+  /* Break out of mdbook's narrow content column into a wide two-pane layout. */
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92vw;
+  max-width: 1200px;
+  box-sizing: border-box;
+}
+#wax-playground * { box-sizing: border-box; }
+
+/* mdbook sets `html { font-size: 62.5% }` (1rem = 10px), so all sizes here are
+   in em, relative to the body's readable base the page inherits. */
+.wp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75em;
+  margin-bottom: 0.75em;
+}
+.wp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  font-size: 0.8em;
+  opacity: 0.85;
+}
+.wp-field select {
+  font-size: 1.1em;
+  padding: 0.3em 0.4em;
+}
+.wp-spacer { flex: 1 1 auto; }
+.wp-button {
+  padding: 0.4em 0.8em;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+.wp-button:disabled { opacity: 0.5; cursor: default; }
+
+.wp-panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1em;
+}
+@media (max-width: 760px) {
+  .wp-panes { grid-template-columns: 1fr; }
+}
+.wp-pane { display: flex; flex-direction: column; min-width: 0; }
+.wp-pane-title {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  margin-bottom: 0.4em;
+}
+
+/* Shared metrics so the textarea and its highlight mirror line up exactly.
+   The font size is the book's own code size, so the panes match the code
+   blocks on every other page. */
+.wp-editor, .wp-output {
+  --wp-font: var(--mono-font, "Source Code Pro", Consolas, monospace);
+  --wp-size: var(--code-font-size, 0.875em);
+  --wp-line: 1.5;
+  --wp-pad: 0.6em;
+}
+.wp-editor {
+  position: relative;
+  height: 60vh;
+  min-height: 300px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+/* CodeMirror fills the editor container and manages its own scrolling. */
+.wp-editor .cm-editor { height: 100%; }
+.wp-editor .cm-scroller { font-family: var(--wp-font); }
+
+/* Plain-textarea fallback, used only if the CodeMirror bundle fails to load. */
+.wp-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: var(--wp-pad);
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: var(--fg, inherit);
+  caret-color: var(--fg, currentColor);
+  font-family: var(--wp-font);
+  font-size: var(--wp-size);
+  line-height: var(--wp-line);
+  white-space: pre;
+  overflow: auto;
+  tab-size: 4;
+}
+.wp-input:focus { outline: none; }
+
+/* Semantic-token colours. These come from the toolchain (wax.semanticTokens),
+   not a grammar, so highlighting always agrees with the type checker. A
+   One-Light-ish palette by default, One-Dark-ish on mdbook's dark themes, so
+   tokens stay legible whichever theme the reader picked. */
+.cm-wt-namespace { color: #a626a4; }
+.cm-wt-type      { color: #b76a2f; }
+.cm-wt-function  { color: #4078f2; }
+.cm-wt-property  { color: #0184bc; }
+.cm-wt-parameter { color: #986801; }
+.cm-wt-keyword   { color: #a626a4; }
+.cm-wt-string    { color: #50a14f; }
+.cm-wt-number    { color: #986801; }
+.cm-wt-comment   { color: #a0a1a7; font-style: italic; }
+html.coal .cm-wt-namespace, html.navy .cm-wt-namespace, html.ayu .cm-wt-namespace { color: #c678dd; }
+html.coal .cm-wt-type, html.navy .cm-wt-type, html.ayu .cm-wt-type { color: #e5c07b; }
+html.coal .cm-wt-function, html.navy .cm-wt-function, html.ayu .cm-wt-function { color: #61afef; }
+html.coal .cm-wt-property, html.navy .cm-wt-property, html.ayu .cm-wt-property { color: #56b6c2; }
+html.coal .cm-wt-parameter, html.navy .cm-wt-parameter, html.ayu .cm-wt-parameter { color: #d19a66; }
+html.coal .cm-wt-keyword, html.navy .cm-wt-keyword, html.ayu .cm-wt-keyword { color: #c678dd; }
+html.coal .cm-wt-string, html.navy .cm-wt-string, html.ayu .cm-wt-string { color: #98c379; }
+html.coal .cm-wt-number, html.navy .cm-wt-number, html.ayu .cm-wt-number { color: #d19a66; }
+html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { color: #7f848e; }
+
+/* Inlay hints (inferred `let` types), document highlight, and the feature
+   tooltips (hover type, signature help). */
+.cm-wt-inlay { opacity: 0.55; font-style: italic; font-size: 0.9em; padding: 0 0.15em; }
+.cm-wt-refhl { background: rgba(128, 128, 128, 0.22); border-radius: 2px; }
+.cm-wt-hover, .cm-wt-sig {
+  font-family: var(--wp-font);
+  font-size: 0.95em;
+  white-space: pre-wrap;
+}
+.cm-wt-sig-active { font-weight: bold; }
+/* Tooltip/caret/selection colours live in the CodeMirror theme (editor.mjs), so
+   they outrank CodeMirror's runtime-injected base theme. */
+
+.wp-output {
+  flex: 1 1 auto;
+  height: 60vh;
+  min-height: 300px;
+  margin: 0;
+  padding: var(--wp-pad);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 4px;
+  overflow: auto;
+  font-family: var(--wp-font);
+  font-size: var(--wp-size);
+  line-height: var(--wp-line);
+  white-space: pre;
+  tab-size: 4;
+  transition: opacity 0.15s;
+}
+/* While the current source does not convert, the pane keeps the last good
+   output but dims it to show it is stale. */
+.wp-output.wp-stale { opacity: 0.4; }
+
+.wp-status {
+  margin-top: 0.6em;
+  font-size: 0.85em;
+  opacity: 0.8;
+  min-height: 1.2em;
+}
+.wp-status.wp-status-error { color: #e45649; opacity: 1; }
+
+.wp-diagnostics { list-style: none; margin: 0.4em 0 0; padding: 0; }
+.wp-diagnostics li {
+  padding: 0.35em 0.5em;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.wp-diagnostics li:hover { background: rgba(128, 128, 128, 0.12); }
+.wp-diagnostics li.wp-d-error { border-left-color: #e45649; }
+.wp-diagnostics li.wp-d-warning { border-left-color: #d19a2a; }
+.wp-diagnostics li.wp-d-suggestion { border-left-color: #4078f2; }
+.wp-diagnostics .wp-d-loc { opacity: 0.6; margin-right: 0.5em; font-variant-numeric: tabular-nums; }
+.wp-diagnostics .wp-d-hint { display: block; opacity: 0.75; margin-top: 0.15em; font-style: italic; }
+.wp-diagnostics .wp-d-related { display: block; opacity: 0.65; margin-top: 0.15em; padding-left: 1em; }
+.wp-diagnostics .wp-d-fix {
+  margin-left: 0.6em;
+  padding: 0 0.4em;
+  font-size: 0.9em;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+#wax-playground.wp-unsupported .wp-panes,
+#wax-playground.wp-unsupported .wp-toolbar,
+#wax-playground.wp-unsupported .wp-diagnostics { display: none; }
+</style>
+<script>
+(function () {
+  "use strict";
+
+  var root = document.getElementById("wax-playground");
+  if (!root) return;
+  // mdbook's print view concatenates every chapter (raw HTML included) into one
+  // page; don't boot a second copy of the toolchain into the printout.
+  if (location.pathname.endsWith("print.html")) return;
+
+  var els = {
+    direction: document.getElementById("wp-direction"),
+    example: document.getElementById("wp-example"),
+    upload: document.getElementById("wp-upload"),
+    uploadInput: document.getElementById("wp-upload-input"),
+    format: document.getElementById("wp-format"),
+    share: document.getElementById("wp-share"),
+    host: document.getElementById("wp-editor-host"),
+    output: document.getElementById("wp-output").querySelector("code"),
+    outputBox: document.getElementById("wp-output"),
+    srcTitle: document.getElementById("wp-src-title"),
+    outTitle: document.getElementById("wp-out-title"),
+    status: document.getElementById("wp-status"),
+    diagnostics: document.getElementById("wp-diagnostics"),
+  };
+
+  var DEFAULT_SRC =
+    '#[export = "add"]\n' +
+    "fn add(x: i32, y: i32) -> i32 {\n" +
+    "    x + y;\n" +
+    "}\n";
+
+  var DEFAULT_WAT =
+    '(func $add (export "add") (param $x i32) (param $y i32) (result i32)\n' +
+    "  local.get $x\n" +
+    "  local.get $y\n" +
+    "  i32.add)\n";
+
+  var wax = null;
+  var editor = null; // the source editor (CodeMirror, or a textarea fallback)
+  var waxKeywords = []; // Wax keyword list, from playground/keywords.json
+  // Each direction keeps its own source, so switching restores what you had
+  // (the languages differ, so the other direction's text would not be valid).
+  var savedDocs = { wax: DEFAULT_SRC, wat: DEFAULT_WAT };
+  var lastDirection = null; // the direction currently loaded in the editor
+
+  // ---- The wasm loader (mirrors editors/vscode/src/wax-runtime.ts, web branch).
+  // The loader fetches its own .wasm; we serve the bytes from memory via a fetch
+  // shim so no relative-URL heuristic has to be right on this page.
+
+  var ASSET_DIR = "playground/";
+  var LOADER = ASSET_DIR + "wax_format_js.bc.wasm.js";
+
+  function wasmNameFromLoader(src) {
+    var m = src.match(/"link":\s*\[\s*\[\s*"([^"]+)"/);
+    if (!m) throw new Error("could not find the wasm module name in the loader");
+    return m[1] + ".wasm";
+  }
+
+  function installFetchShim(bytes) {
+    var previous = Object.getOwnPropertyDescriptor(globalThis, "fetch");
+    globalThis.fetch = function (input) {
+      if (String(input).endsWith(".wasm")) {
+        return Promise.resolve(
+          new Response(bytes, { headers: { "content-type": "application/wasm" } })
+        );
+      }
+      throw new Error("wax: unexpected fetch for " + String(input));
+    };
+    return function () {
+      if (previous) Object.defineProperty(globalThis, "fetch", previous);
+      else delete globalThis.fetch;
+    };
+  }
+
+  function waitForGlobal(name, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var start = Date.now();
+      (function tick() {
+        var v = globalThis[name];
+        if (v) return resolve(v);
+        if (Date.now() - start > timeoutMs)
+          return reject(new Error("runtime did not initialise in " + timeoutMs + "ms"));
+        setTimeout(tick, 10);
+      })();
+    });
+  }
+
+  async function loadWax() {
+    var loaderSrc = await (await fetch(LOADER)).text();
+    var wasmName = wasmNameFromLoader(loaderSrc);
+    var wasmBytes = new Uint8Array(
+      await (await fetch(ASSET_DIR + "wax_format_js.bc.wasm.assets/" + wasmName)).arrayBuffer()
+    );
+    var restore = installFetchShim(wasmBytes);
+    try {
+      new Function("require", loaderSrc)(undefined);
+      return await waitForGlobal("wax", 15000);
+    } finally {
+      restore();
+    }
+  }
+
+  // ---- The CodeMirror editor bundle (docs/tools/playground, built by esbuild).
+  // Self-hosted beside the page; installs globalThis.WaxCM. Best-effort: if it
+  // fails to load, the page falls back to a plain textarea.
+
+  function loadEditorBundle() {
+    if (globalThis.WaxCM) return Promise.resolve(true);
+    return new Promise(function (resolve) {
+      var s = document.createElement("script");
+      s.src = ASSET_DIR + "wax-editor.bundle.js";
+      s.onload = function () { resolve(!!globalThis.WaxCM); };
+      s.onerror = function () { resolve(false); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // ---- Share links: source deflated into the URL fragment (never sent to a
+  // server). CompressionStream keeps long snippets compact.
+
+  function toBase64Url(bytes) {
+    var s = "";
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function fromBase64Url(str) {
+    var s = str.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    var bin = atob(s);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function deflate(text) {
+    var cs = new CompressionStream("deflate-raw");
+    var w = cs.writable.getWriter();
+    w.write(new TextEncoder().encode(text));
+    w.close();
+    var buf = await new Response(cs.readable).arrayBuffer();
+    return toBase64Url(new Uint8Array(buf));
+  }
+  async function inflate(b64) {
+    var ds = new DecompressionStream("deflate-raw");
+    var w = ds.writable.getWriter();
+    w.write(fromBase64Url(b64));
+    w.close();
+    return await new Response(ds.readable).text();
+  }
+
+  function readFragment() {
+    var m = /(?:^|[#&])code=([^&]+)/.exec(location.hash);
+    var dir = /(?:^|[#&])dir=(wax|wat)/.exec(location.hash);
+    return { code: m ? m[1] : null, dir: dir ? dir[1] : null };
+  }
+
+  // ---- line/char <-> offset (only the textarea fallback needs this; the
+  // CodeMirror backend maps positions with its own document API).
+
+  function offsetOf(text, line, ch) {
+    var off = 0, l = 0;
+    for (var i = 0; i < text.length && l < line; i++) {
+      if (text.charCodeAt(i) === 10) l++;
+      off = i + 1;
+    }
+    return off + ch;
+  }
+
+  function currentSourceIsWat() {
+    return els.direction.value === "wat";
+  }
+
+  // ---- Cursor preservation across a reformat. Formatting only reflows
+  // whitespace, so we map the cursor by its position among the non-whitespace
+  // characters: "just after the Nth non-blank character" is the same token
+  // before and after, whatever the indentation does.
+
+  function nonWsBefore(text, pos) {
+    var k = 0;
+    for (var i = 0; i < pos && i < text.length; i++) {
+      if (!/\s/.test(text[i])) k++;
+    }
+    return k;
+  }
+
+  function offsetAfterNonWs(text, k) {
+    var count = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (!/\s/.test(text[i])) {
+        count++;
+        if (count === k) return i + 1;
+      }
+    }
+    // k === 0 (cursor before any content) or past the end: first/last position.
+    if (k <= 0) {
+      for (var j = 0; j < text.length; j++) if (!/\s/.test(text[j])) return j;
+    }
+    return text.length;
+  }
+
+  // ---- Output highlighting: colour the read-only output with the same
+  // semantic tokens the editor uses, so both panes agree with the toolchain.
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function highlightToHtml(text, tokens) {
+    var starts = [0];
+    for (var i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) === 10) starts.push(i + 1);
+    }
+    var marks = [];
+    tokens.forEach(function (t) {
+      if (t.line >= starts.length) return;
+      var from = starts[t.line] + t.character;
+      var to = Math.min(text.length, from + t.length);
+      if (to > from) marks.push([from, to, t.kind]);
+    });
+    marks.sort(function (a, b) { return a[0] - b[0]; });
+    var html = "", pos = 0;
+    marks.forEach(function (m) {
+      if (m[0] < pos) return; // skip overlaps
+      html += escapeHtml(text.slice(pos, m[0]));
+      html += '<span class="cm-wt-' + m[2] + '">' + escapeHtml(text.slice(m[0], m[1])) + "</span>";
+      pos = m[1];
+    });
+    return html + escapeHtml(text.slice(pos));
+  }
+
+  // The output language is the other format: WAT for a Wax source, Wax for a
+  // WAT source.
+  function outputLanguageIsWat() {
+    return !currentSourceIsWat();
+  }
+
+  function showOutput(text) {
+    var lang = outputLanguageIsWat() ? "wat" : "wax";
+    // Prefer the editor bundle's highlighter, so the output is coloured exactly
+    // like the source pane (keywords/types/literals/comments + semantic tokens).
+    if (globalThis.WaxCM && globalThis.WaxCM.highlightToHtml) {
+      try {
+        els.output.innerHTML = globalThis.WaxCM.highlightToHtml(text, lang, wax, waxKeywords);
+        return;
+      } catch (e) {
+        /* fall through to the semantic-only path */
+      }
+    }
+    try {
+      var toks = lang === "wat" ? wax.semanticTokensWat(text) : wax.semanticTokens(text);
+      els.output.innerHTML = highlightToHtml(text, toks || []);
+    } catch (e) {
+      els.output.textContent = text;
+    }
+  }
+
+  // ---- Diagnostics list (both editor backends). CodeMirror also shows inline
+  // squiggles, a lint gutter, and hover messages; this list adds a persistent,
+  // click-to-jump view with related spans, and drives the status summary.
+
+  function renderDiagnostics(diags) {
+    els.diagnostics.textContent = "";
+    diags.forEach(function (d) {
+      var li = document.createElement("li");
+      li.className = "wp-d-" + d.severity;
+      var loc = document.createElement("span");
+      loc.className = "wp-d-loc";
+      loc.textContent = (d.startLine + 1) + ":" + (d.startChar + 1);
+      li.appendChild(loc);
+      var msg = document.createElement("span");
+      msg.textContent = d.message + (d.warning ? " [" + d.warning + "]" : "");
+      li.appendChild(msg);
+      if (d.hint) {
+        var hint = document.createElement("span");
+        hint.className = "wp-d-hint";
+        hint.textContent = "hint: " + d.hint;
+        li.appendChild(hint);
+      }
+      (d.related || []).forEach(function (r) {
+        var rel = document.createElement("span");
+        rel.className = "wp-d-related";
+        rel.textContent = (r.startLine + 1) + ":" + (r.startChar + 1) + " " + r.message;
+        li.appendChild(rel);
+      });
+      // A quick-fix button, for diagnostics that carry an edit. The editor's
+      // lint tooltip offers the same fix, but it is fiddly to reach with the
+      // mouse (it dismisses if the cursor strays); this button is always here.
+      if (d.edit) {
+        var fix = document.createElement("button");
+        fix.type = "button";
+        fix.className = "wp-d-fix";
+        fix.textContent = "Fix";
+        fix.addEventListener("click", function (ev) {
+          ev.stopPropagation(); // don't also trigger the row's jump-to
+          if (!editor) return;
+          editor.applyEdit(d.edit);
+          editor.focus();
+          run();
+        });
+        li.appendChild(fix);
+      }
+      li.addEventListener("click", function () {
+        if (editor) editor.selectRange(d.startLine, d.startChar, d.endLine, d.endChar);
+      });
+      els.diagnostics.appendChild(li);
+    });
+  }
+
+  function updateStatus(diags) {
+    var errors = diags.filter(function (d) { return d.severity === "error"; }).length;
+    var warns = diags.filter(function (d) { return d.severity === "warning"; }).length;
+    var parts = [];
+    if (errors) parts.push(errors + (errors === 1 ? " error" : " errors"));
+    if (warns) parts.push(warns + (warns === 1 ? " warning" : " warnings"));
+    setStatus(parts.length ? parts.join(", ") : "No problems.", errors > 0);
+  }
+
+  // Diagnostics arrive from CodeMirror's linter (or, in the fallback, from
+  // run()); either way they are the raw wax `check` results.
+  function onDiagnostics(diags) {
+    renderDiagnostics(diags);
+    updateStatus(diags);
+  }
+
+  function setStatus(msg, isError) {
+    els.status.textContent = msg;
+    els.status.classList.toggle("wp-status-error", !!isError);
+  }
+
+  // ---- The editor backend: CodeMirror when the bundle loaded, else a plain
+  // textarea. Both expose the same tiny interface used below.
+
+  // mdbook puts the active theme's name on <html> (light, rust, coal, navy,
+  // ayu); coal/navy/ayu are the dark ones.
+  function isDarkTheme() {
+    return /(?:^|\s)(coal|navy|ayu)(?:\s|$)/.test(document.documentElement.className);
+  }
+
+  function buildEditor(doc) {
+    if (editor) editor.destroy();
+    els.host.textContent = "";
+    var language = currentSourceIsWat() ? "wat" : "wax";
+
+    if (globalThis.WaxCM && wax) {
+      var cm = globalThis.WaxCM.createWaxEditor({
+        parent: els.host,
+        doc: doc,
+        language: language,
+        wax: wax,
+        dark: isDarkTheme(),
+        keywords: waxKeywords,
+        onDocChange: scheduleRun,
+        onDiagnostics: onDiagnostics,
+      });
+      editor = {
+        isCM: true,
+        getDoc: cm.getDoc,
+        setDoc: cm.setDoc,
+        focus: cm.focus,
+        setDark: cm.setDark,
+        getCursor: cm.getCursor,
+        setCursor: cm.setCursor,
+        selectRange: cm.selectRange,
+        applyEdit: cm.applyEdit,
+        destroy: cm.destroy,
+      };
+    } else {
+      var ta = document.createElement("textarea");
+      ta.className = "wp-input";
+      ta.spellcheck = false;
+      ta.setAttribute("autocapitalize", "off");
+      ta.setAttribute("autocomplete", "off");
+      ta.setAttribute("autocorrect", "off");
+      ta.value = doc;
+      ta.addEventListener("input", scheduleRun);
+      els.host.appendChild(ta);
+      editor = {
+        isCM: false,
+        getDoc: function () { return ta.value; },
+        setDoc: function (t) { ta.value = t; },
+        focus: function () { ta.focus(); },
+        getCursor: function () { return ta.selectionStart; },
+        setCursor: function (p) { ta.setSelectionRange(p, p); },
+        selectRange: function (sl, sc, el2, ec) {
+          var s = offsetOf(ta.value, sl, sc);
+          var e = offsetOf(ta.value, el2, ec);
+          ta.focus();
+          ta.setSelectionRange(s, Math.max(s, e));
+        },
+        applyEdit: function (edit) {
+          var s = offsetOf(ta.value, edit.startLine, edit.startChar);
+          var e = Math.max(s, offsetOf(ta.value, edit.endLine, edit.endChar));
+          ta.value = ta.value.slice(0, s) + edit.newText + ta.value.slice(e);
+        },
+        destroy: function () { ta.remove(); },
+      };
+    }
+  }
+
+  // ---- The live conversion pass (output pane). Diagnostics are handled by the
+  // CodeMirror linter; the textarea fallback computes them here instead.
+
+  function run() {
+    if (!wax || !editor) return;
+    var src = editor.getDoc();
+    var srcIsWat = currentSourceIsWat();
+
+    var result = srcIsWat ? wax.toWax(src) : wax.toWat(src);
+
+    // The output refreshes live as you type. On a conversion error we keep the
+    // last successful output but dim it, rather than blanking or echoing the
+    // error text (the diagnostics already report what is wrong): the pane stays
+    // useful and it is clear it is stale, not current.
+    if (result.ok) {
+      els.outputBox.classList.remove("wp-stale");
+      showOutput(result.text || "");
+    } else {
+      els.outputBox.classList.add("wp-stale");
+    }
+
+    if (!editor.isCM) {
+      onDiagnostics(srcIsWat ? wax.checkWat(src) : wax.check(src, []));
+    }
+  }
+
+  var debounceTimer = null;
+  function scheduleRun() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(run, 150);
+  }
+
+  // ---- Pane labels track the direction / output mode.
+
+  function updateLabels() {
+    var srcIsWat = currentSourceIsWat();
+    els.srcTitle.textContent = srcIsWat ? "WAT source" : "Wax source";
+    els.outTitle.textContent = srcIsWat ? "Wax output" : "WAT output";
+  }
+
+  // ---- Upload: load a .wasm / .wat / .wax file into the source pane, converting
+  // it to the current source language. Wasm is detected by extension or its
+  // magic bytes; text is read as WAT or Wax by extension, else sniffed (a
+  // leading "(" means WAT).
+
+  function bytesToBinaryString(bytes) {
+    var out = "";
+    var CHUNK = 0x8000;
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return out;
+  }
+
+  async function handleUpload(file) {
+    if (!file || !wax || !editor) return;
+    var srcIsWat = currentSourceIsWat();
+    var name = file.name.toLowerCase();
+    try {
+      var bytes = new Uint8Array(await file.arrayBuffer());
+      var isWasm =
+        name.endsWith(".wasm") ||
+        (bytes.length >= 4 &&
+          bytes[0] === 0x00 && bytes[1] === 0x61 &&
+          bytes[2] === 0x73 && bytes[3] === 0x6d);
+      var result;
+      if (isWasm) {
+        var bin = bytesToBinaryString(bytes);
+        result = srcIsWat ? wax.wasmToWat(bin) : wax.wasmToWax(bin);
+      } else {
+        var text = new TextDecoder().decode(bytes);
+        var fmt = name.endsWith(".wat")
+          ? "wat"
+          : name.endsWith(".wax")
+          ? "wax"
+          : /^\s*(\(|;;)/.test(text) // a leading "(" or ";;" comment reads as WAT
+          ? "wat"
+          : "wax";
+        if (fmt === (srcIsWat ? "wat" : "wax")) result = { ok: true, text: text };
+        else if (fmt === "wax") result = wax.toWat(text); // wax -> wat
+        else result = wax.toWax(text); // wat -> wax
+      }
+      if (!result.ok || result.text == null) {
+        setStatus("Could not load " + file.name + ": " + (result.error || ""), true);
+        return;
+      }
+      editor.setDoc(result.text);
+      editor.focus();
+      run();
+      setStatus("Loaded " + file.name + ".", false);
+    } catch (e) {
+      setStatus("Could not load " + file.name + ": " + e.message, true);
+    }
+  }
+
+  // ---- Wiring.
+
+  function wire() {
+    // Switching direction changes the source language, so the editor is rebuilt
+    // (its analysis is wired per language) around the current text.
+    els.direction.addEventListener("change", function () {
+      var newDir = els.direction.value;
+      // Stash the outgoing source under its direction, restore the incoming one.
+      if (editor && lastDirection) savedDocs[lastDirection] = editor.getDoc();
+      lastDirection = newDir;
+      updateLabels();
+      buildEditor(savedDocs[newDir]);
+      run();
+    });
+
+    els.example.addEventListener("change", function () {
+      // The option value is the example's Wax source. Load it into the current
+      // direction — translated to WAT when that is the source language, so the
+      // examples work as both Wax and WAT (decompiler) inputs.
+      var code = els.example.value;
+      if (!code || !editor) return;
+      els.example.value = ""; // reset to the placeholder so re-picking works
+      if (currentSourceIsWat()) {
+        var r = wax.toWat(code);
+        if (!r.ok || r.text == null) {
+          setStatus("Could not load that example as WAT: " + (r.error || ""), true);
+          return;
+        }
+        code = r.text;
+      }
+      editor.setDoc(code);
+      run();
+    });
+
+    els.upload.addEventListener("click", function () {
+      els.uploadInput.click();
+    });
+    els.uploadInput.addEventListener("change", function () {
+      var file = els.uploadInput.files && els.uploadInput.files[0];
+      els.uploadInput.value = ""; // allow re-uploading the same file
+      handleUpload(file);
+    });
+
+    els.format.addEventListener("click", function () {
+      if (!wax || !editor) return;
+      var src = editor.getDoc();
+      var result = currentSourceIsWat() ? wax.formatWat(src) : wax.format(src);
+      if (result.ok && result.text != null) {
+        var k = nonWsBefore(src, editor.getCursor());
+        editor.setDoc(result.text);
+        editor.setCursor(offsetAfterNonWs(result.text, k));
+        editor.focus();
+        run();
+      } else {
+        setStatus(result.error || "cannot format invalid source", true);
+      }
+    });
+
+    els.share.addEventListener("click", async function () {
+      if (!editor) return;
+      try {
+        var encoded = await deflate(editor.getDoc());
+        var hash = "#code=" + encoded + (currentSourceIsWat() ? "&dir=wat" : "");
+        history.replaceState(null, "", location.pathname + location.search + hash);
+        var link = location.href;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(link);
+          setStatus("Link copied — open it to reload this code.", false);
+        } else {
+          setStatus("Link ready in the address bar — copy it to share this code.", false);
+        }
+      } catch (e) {
+        setStatus("Could not build a link: " + e.message, true);
+      }
+    });
+  }
+
+  async function populateExamples() {
+    try {
+      var examples = await (await fetch(ASSET_DIR + "examples.json")).json();
+      examples.forEach(function (ex) {
+        var opt = document.createElement("option");
+        opt.value = ex.code;
+        opt.textContent = ex.title;
+        els.example.appendChild(opt);
+      });
+    } catch (e) {
+      /* Examples are a convenience; a missing file must not break the page. */
+    }
+  }
+
+  async function loadKeywords() {
+    try {
+      var kws = await (await fetch(ASSET_DIR + "keywords.json")).json();
+      if (Array.isArray(kws)) waxKeywords = kws;
+    } catch (e) {
+      /* Keyword colouring is a nicety; a missing file just leaves them plain. */
+    }
+  }
+
+  async function boot() {
+    wire();
+    populateExamples();
+    await loadKeywords();
+
+    // Restore a shared snippet, else the default.
+    var frag = readFragment();
+    var initial;
+    if (frag.code) {
+      // A shared link fully determines the direction (Wax unless dir=wat).
+      els.direction.value = frag.dir === "wat" ? "wat" : "wax";
+      try {
+        initial = await inflate(frag.code);
+      } catch (e) {
+        initial = savedDocs[els.direction.value];
+      }
+    } else {
+      // No shared link: honour the current direction — a browser restores the
+      // <select> across a reload — and load that direction's default source,
+      // not always the Wax one.
+      initial = savedDocs[els.direction.value];
+    }
+    savedDocs[els.direction.value] = initial;
+    lastDirection = els.direction.value;
+    updateLabels();
+
+    try {
+      // Load the wasm toolchain and the editor bundle concurrently: the 1.5 MB
+      // wasm instantiation overlaps with the editor-bundle fetch. loadEditorBundle
+      // never rejects (it falls back to a textarea), so only loadWax can reject.
+      var loaded = await Promise.all([loadWax(), loadEditorBundle()]);
+      wax = loaded[0];
+    } catch (e) {
+      root.classList.add("wp-unsupported");
+      setStatus(root.getAttribute("data-unsupported") + " (" + e.message + ")", true);
+      return;
+    }
+
+    buildEditor(initial);
+    run();
+
+    // mdbook switches theme in place (no reload); swap the editor's theme when
+    // its light/dark-ness flips so the CodeMirror colours follow — in place, so
+    // undo history, cursor and scroll are kept.
+    var lastDark = isDarkTheme();
+    new MutationObserver(function () {
+      var d = isDarkTheme();
+      if (d !== lastDark && editor && editor.isCM) {
+        lastDark = d;
+        editor.setDark(d);
+      }
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  }
+
+  boot();
+})();
+</script>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="feature-support"><a class="header" href="#feature-support">Feature Support</a></h1>
 <p>Wax works across all three formats (Wax, WAT, Wasm) and targets recent
@@ -1887,43 +2789,8 @@ m.<span class="hljs-title">size</span>()   m.<span class="hljs-title">grow</span
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
 <p>Complete examples demonstrating Wax features and their WebAssembly equivalents.</p>
-<h2 id="named-module"><a class="header" href="#named-module">Named Module</a></h2>
-<p>A <code>#![module = "..."]</code> inner attribute names the module.</p>
-<h3 id="wax"><a class="header" href="#wax">Wax</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![module = </span><span class="hljs-string">"calculator"</span><span class="hljs-meta">]</span>
-
-<span class="hljs-meta">#[export = </span><span class="hljs-string">"square"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">square</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    x * x;
-}</span></pre>
-
-<h3 id="equivalent-wat"><a class="header" href="#equivalent-wat">Equivalent WAT</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span> <span class="hljs-variable">$calculator</span>
-  (<span class="hljs-keyword">func</span> <span class="hljs-variable">$square</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"square"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
-    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
-    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
-    <span class="hljs-keyword">i32.mul</span>))</span></pre>
-
-<h2 id="feature-declaration"><a class="header" href="#feature-declaration">Feature Declaration</a></h2>
-<p>A <code>#![feature = "..."]</code> inner attribute declares an optional proposal the
-module uses, so it compiles and validates with no <code>-X</code> flag.</p>
-<h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span>
-
-<span class="hljs-keyword">rec</span> {
-    <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
-    <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { };
-}</span></pre>
-
-<h3 id="equivalent-wat-1"><a class="header" href="#equivalent-wat-1">Equivalent WAT</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span>
-  (<span class="hljs-meta">@feature</span> <span class="hljs-string">"custom-descriptors"</span>)
-  (<span class="hljs-keyword">rec</span>
-    (<span class="hljs-keyword">type</span> <span class="hljs-variable">$obj</span> (<span class="hljs-keyword">descriptor</span> <span class="hljs-variable">$obj_desc</span>) (<span class="hljs-keyword">struct</span> (<span class="hljs-keyword">field</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>)))
-    (<span class="hljs-keyword">type</span> <span class="hljs-variable">$obj_desc</span> (<span class="hljs-keyword">describes</span> <span class="hljs-variable">$obj</span>) (<span class="hljs-keyword">struct</span>))))</span></pre>
-
 <h2 id="arithmetic-functions"><a class="header" href="#arithmetic-functions">Arithmetic Functions</a></h2>
-<h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
+<h3 id="wax"><a class="header" href="#wax">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">add</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     x + y;
@@ -1934,7 +2801,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     x * y;
 }</span></pre>
 
-<h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat"><a class="header" href="#equivalent-wat">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$add</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"add"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$y</span>
@@ -1946,7 +2813,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
   <span class="hljs-keyword">i32.mul</span>)</span></pre>
 
 <h2 id="factorial-with-recursion"><a class="header" href="#factorial-with-recursion">Factorial with Recursion</a></h2>
-<h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
+<h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"factorial"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">factorial</span>(n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">if</span> n &lt;=s <span class="hljs-number">1</span> =&gt; <span class="hljs-type">i32</span> {
@@ -1956,7 +2823,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     }
 }</span></pre>
 
-<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-1"><a class="header" href="#equivalent-wat-1">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$factorial</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"factorial"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$n</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>
   <span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>
@@ -1973,7 +2840,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
   <span class="hljs-keyword">end</span>)</span></pre>
 
 <h2 id="factorial-with-tail-call"><a class="header" href="#factorial-with-tail-call">Factorial with Tail Call</a></h2>
-<h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
+<h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"factorial"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">factorial</span>(n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">become</span> <span class="hljs-title">factorial_helper</span>(n, <span class="hljs-number">1</span>);
@@ -1988,7 +2855,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
 }</span></pre>
 
 <h2 id="loop-with-early-exit"><a class="header" href="#loop-with-early-exit">Loop with Early Exit</a></h2>
-<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
+<h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">ints</span> = [<span class="hljs-type">i32</span>];
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"find_first_zero"</span><span class="hljs-meta">]</span>
@@ -2008,7 +2875,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     <span class="hljs-keyword">unreachable</span>;
 }</span></pre>
 
-<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$find_first_zero</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"find_first_zero"</span>)
       (<span class="hljs-keyword">param</span> <span class="hljs-variable">$arr</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$array_i32</span>)) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">local</span> <span class="hljs-variable">$len</span> <span class="hljs-type">i32</span>)
@@ -2041,7 +2908,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     <span class="hljs-keyword">br</span> <span class="hljs-variable">$search</span>))</span></pre>
 
 <h2 id="while-loops-1"><a class="header" href="#while-loops-1">While Loops</a></h2>
-<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
+<h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"triangle"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">triangle</span>(n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">let</span> i: <span class="hljs-type">i32</span> = <span class="hljs-number">0</span>;
@@ -2064,7 +2931,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     steps;
 }</span></pre>
 
-<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$triangle</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"triangle"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$n</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">local</span> <span class="hljs-variable">$i</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">local</span> <span class="hljs-variable">$total</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$i</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>))
@@ -2089,7 +2956,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
 )</span></pre>
 
 <h2 id="dispatch-jump-table"><a class="header" href="#dispatch-jump-table">Dispatch (Jump Table)</a></h2>
-<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
+<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"rgb_channel"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">rgb_channel</span>(color: <span class="hljs-type">i32</span>, value: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">dispatch</span> color [<span class="hljs-symbol">'red</span>, <span class="hljs-symbol">'green</span>, <span class="hljs-symbol">'blue</span>, <span class="hljs-keyword">else</span> <span class="hljs-symbol">'bad</span>] {
@@ -2100,7 +2967,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     }
 }</span></pre>
 
-<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$rgb_channel</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"rgb_channel"</span>)
   (<span class="hljs-keyword">param</span> <span class="hljs-variable">$color</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$value</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   (<span class="hljs-keyword">block</span> <span class="hljs-variable">$red</span>
@@ -2115,7 +2982,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     (<span class="hljs-keyword">i32.shl</span> (<span class="hljs-keyword">i32.and</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$value</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">255</span>)) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">16</span>))))</span></pre>
 
 <h2 id="type-match"><a class="header" href="#type-match">Type Match</a></h2>
-<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
+<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">cell</span> = { value: <span class="hljs-type">i32</span> };
 <span class="hljs-keyword">type</span> <span class="hljs-type">cons</span> = { head: &amp;<span class="hljs-type">eq</span>, tail: &amp;?<span class="hljs-type">eq</span> };
 
@@ -2128,7 +2995,7 @@ module uses, so it compiles and validates with no <code>-X</code> flag.</p>
     }
 }</span></pre>
 
-<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
 <p>The scrutinee is evaluated once and threaded through a <code>br_on_cast</code> chain in the
 innermost block; each test branches out to its arm’s block (named by a readable
 <code>$arm</code>/<code>$default</code> label, picked fresh so it cannot capture a user branch)
@@ -2153,7 +3020,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
   (<span class="hljs-keyword">return</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>)))</span></pre>
 
 <h2 id="structs-and-methods"><a class="header" href="#structs-and-methods">Structs and Methods</a></h2>
-<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
+<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_point"</span><span class="hljs-meta">]</span>
@@ -2169,7 +3036,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }</span></pre>
 
 <h2 id="mutable-structs"><a class="header" href="#mutable-structs">Mutable Structs</a></h2>
-<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
+<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">counter</span> = { value: <span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"new_counter"</span><span class="hljs-meta">]</span>
@@ -2188,7 +3055,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }</span></pre>
 
 <h2 id="inferring-struct-and-array-types"><a class="header" href="#inferring-struct-and-array-types">Inferring Struct and Array Types</a></h2>
-<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
+<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
 <span class="hljs-keyword">type</span> <span class="hljs-type">ints</span> = [<span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span>];
 
@@ -2223,7 +3090,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }</span></pre>
 
 <h2 id="inferring-block-result-types"><a class="header" href="#inferring-block-result-types">Inferring Block Result Types</a></h2>
-<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
+<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
 <p>A block’s result type, <code>=&gt; T</code> on an <code>if</code>, or the type after <code>do</code> (and likewise
 <code>loop</code>, <code>try</code>, and <code>try_table</code>), may be omitted where it is fixed by the values
 the block produces or by the surrounding context:</p>
@@ -2247,7 +3114,7 @@ the block produces or by the surrounding context:</p>
 }</span></pre>
 
 <h2 id="arrays-1"><a class="header" href="#arrays-1">Arrays</a></h2>
-<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
+<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">bytes</span> = [<span class="hljs-keyword">mut</span> <span class="hljs-type">i8</span>];
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
@@ -2281,7 +3148,7 @@ the block produces or by the surrounding context:</p>
 }</span></pre>
 
 <h2 id="exception-handling"><a class="header" href="#exception-handling">Exception Handling</a></h2>
-<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
+<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">tag</span> <span class="hljs-title">divide_by_zero</span>();
 <span class="hljs-keyword">tag</span> <span class="hljs-title">overflow</span>();
 
@@ -2303,7 +3170,7 @@ the block produces or by the surrounding context:</p>
 }</span></pre>
 
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
-<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">list</span> = { value: <span class="hljs-type">i32</span>, next: &amp;?<span class="hljs-type">list</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_node"</span><span class="hljs-meta">]</span>
@@ -2320,8 +3187,25 @@ the block produces or by the surrounding context:</p>
     n.<span class="hljs-variable">value</span> + <span class="hljs-title">sum_list</span>(n.<span class="hljs-variable">next</span>);
 }</span></pre>
 
+<h2 id="named-module"><a class="header" href="#named-module">Named Module</a></h2>
+<p>A <code>#![module = "..."]</code> inner attribute names the module.</p>
+<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![module = </span><span class="hljs-string">"calculator"</span><span class="hljs-meta">]</span>
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"square"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">square</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
+    x * x;
+}</span></pre>
+
+<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span> <span class="hljs-variable">$calculator</span>
+  (<span class="hljs-keyword">func</span> <span class="hljs-variable">$square</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"square"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+    <span class="hljs-keyword">i32.mul</span>))</span></pre>
+
 <h2 id="imports-and-exports-1"><a class="header" href="#imports-and-exports-1">Imports and Exports</a></h2>
-<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
+<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-comment">// Import a function and a global from the host environment</span>
 <span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> {
     <span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(value: <span class="hljs-type">i32</span>);
@@ -2338,7 +3222,7 @@ the block produces or by the surrounding context:</p>
 
 <h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
 <p>A more complex example showing bitwise operations:</p>
-<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
+<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"hash_mix_int"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">hash_mix_int</span>(h: <span class="hljs-type">i32</span>, d: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     ((d * <span class="hljs-number">0xcc9e2d51</span>).<span class="hljs-title">rotl</span>(<span class="hljs-number">15</span>) * <span class="hljs-number">0x1b873593</span> ^ h).<span class="hljs-title">rotl</span>(<span class="hljs-number">13</span>) * <span class="hljs-number">5</span> + <span class="hljs-number">0xe6546b64</span>;
@@ -2358,7 +3242,7 @@ the block produces or by the surrounding context:</p>
 <code>i16</code> array (<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code>
 prefix). An <code>i8</code> array holds the raw UTF-8 bytes; an <code>i16</code> array holds the
 UTF-16 code units. See <a href="#strings">Strings</a>.</p>
-<h3 id="wax-18"><a class="header" href="#wax-18">Wax</a></h3>
+<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">chars</span> = [<span class="hljs-type">i8</span>];
 <span class="hljs-keyword">type</span> <span class="hljs-type">wide</span> = [<span class="hljs-type">i16</span>];
 
@@ -2377,7 +3261,7 @@ UTF-16 code units. See <a href="#strings">Strings</a>.</p>
     <span class="hljs-type">wide</span> # <span class="hljs-string">"café"</span>;              <span class="hljs-comment">// the UTF-16 units 'c', 'a', 'f', 'é'</span>
 }</span></pre>
 
-<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
 they round-trip back to Wax unchanged:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$newline</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"newline"</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>) (<span class="hljs-meta">@char</span> <span class="hljs-string">"\n"</span>))
@@ -2396,7 +3280,7 @@ four UTF-16 units <code>99, 97, 102, 233</code>. The character comes back as the
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
 they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
-<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
+<h3 id="wax-18"><a class="header" href="#wax-18">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"blend"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">blend</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     x * <span class="hljs-number">2</span>;
@@ -2404,7 +3288,7 @@ they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
     _ + _;
 }</span></pre>
 
-<h3 id="equivalent-wat-9"><a class="header" href="#equivalent-wat-9">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$blend</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"blend"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
   <span class="hljs-keyword">i32.const</span> <span class="hljs-number">2</span>
@@ -2418,7 +3302,7 @@ they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
 stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
-<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
+<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">divmod</span>(a: <span class="hljs-type">i32</span>, b: <span class="hljs-type">i32</span>) -&gt; (<span class="hljs-type">i32</span>, <span class="hljs-type">i32</span>) {
     a /s b;
     a %s b;
@@ -2430,7 +3314,7 @@ stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
     q + r;
 }</span></pre>
 
-<h3 id="equivalent-wat-10"><a class="header" href="#equivalent-wat-10">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-9"><a class="header" href="#equivalent-wat-9">Equivalent WAT</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$divmod</span> (<span class="hljs-keyword">param</span> <span class="hljs-variable">$a</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$b</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span> <span class="hljs-type">i32</span>)
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$a</span>
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$b</span>
@@ -2450,11 +3334,41 @@ stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
   <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$r</span>
   <span class="hljs-keyword">i32.add</span>)</span></pre>
 
+<h2 id="linear-memory"><a class="header" href="#linear-memory">Linear Memory</a></h2>
+<p>A <code>memory</code> declaration reserves linear memory. <code>load</code>/<code>store</code> methods on it read
+and write, with the access width in the method name; a narrow (<code>load8</code>/<code>load16</code>)
+load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
+<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_bytes</span>(start: <span class="hljs-type">i32</span>, end: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-keyword">let</span> total: <span class="hljs-type">i32</span> = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">let</span> p: <span class="hljs-type">i32</span> = start;
+    <span class="hljs-keyword">while</span> p &lt;u end {
+        total += mem.<span class="hljs-title">load8</span>(p) <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;   <span class="hljs-comment">// byte load, zero-extended</span>
+        p += <span class="hljs-number">1</span>;
+    }
+    total;
+}</span></pre>
+
+<h2 id="data-segments-with-numeric-values"><a class="header" href="#data-segments-with-numeric-values">Data Segments with Numeric Values</a></h2>
+<p>A data segment’s contents can mix string literals with typed numeric runs —
+<code>[type: values]</code>, packed little-endian — instead of hand-escaping every byte.</p>
+<h3 id="wax-21"><a class="header" href="#wax-21">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
+
+<span class="hljs-comment">// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.</span>
+<span class="hljs-keyword">data</span> header @ mem[<span class="hljs-number">0</span>] =
+    <span class="hljs-string">"GIF89a"</span>
+    ++ [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>]
+    ++ [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
+
 <h2 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h2>
 <p>128-bit integer arithmetic uses the <code>i64::</code> intrinsics, which take and return
 their operands as <code>(low, high)</code> pairs of <code>i64</code> values. Each returns two
 results, so a multi-value <code>let</code> binds them.</p>
-<h3 id="wax-21"><a class="header" href="#wax-21">Wax</a></h3>
+<h3 id="wax-22"><a class="header" href="#wax-22">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add_u128"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">add_u128</span>(a_lo: <span class="hljs-type">i64</span>, a_hi: <span class="hljs-type">i64</span>, b_lo: <span class="hljs-type">i64</span>, b_hi: <span class="hljs-type">i64</span>) -&gt; (<span class="hljs-type">i64</span>, <span class="hljs-type">i64</span>) {
     <span class="hljs-keyword">let</span> (lo, hi) = <span class="hljs-type">i64</span>::<span class="hljs-title">add128</span>(a_lo, a_hi, b_lo, b_hi);
@@ -2467,6 +3381,24 @@ results, so a multi-value <code>let</code> binds them.</p>
     <span class="hljs-type">i64</span>::<span class="hljs-title">mul_wide_u</span>(a, b);
 }</span></pre>
 
+<h2 id="feature-declaration"><a class="header" href="#feature-declaration">Feature Declaration</a></h2>
+<p>A <code>#![feature = "..."]</code> inner attribute declares an optional proposal the
+module uses, so it compiles and validates with no <code>-X</code> flag.</p>
+<h3 id="wax-23"><a class="header" href="#wax-23">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span>
+
+<span class="hljs-keyword">rec</span> {
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { };
+}</span></pre>
+
+<h3 id="equivalent-wat-10"><a class="header" href="#equivalent-wat-10">Equivalent WAT</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span>
+  (<span class="hljs-meta">@feature</span> <span class="hljs-string">"custom-descriptors"</span>)
+  (<span class="hljs-keyword">rec</span>
+    (<span class="hljs-keyword">type</span> <span class="hljs-variable">$obj</span> (<span class="hljs-keyword">descriptor</span> <span class="hljs-variable">$obj_desc</span>) (<span class="hljs-keyword">struct</span> (<span class="hljs-keyword">field</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>)))
+    (<span class="hljs-keyword">type</span> <span class="hljs-variable">$obj_desc</span> (<span class="hljs-keyword">describes</span> <span class="hljs-variable">$obj</span>) (<span class="hljs-keyword">struct</span>))))</span></pre>
+
 <h2 id="custom-descriptors"><a class="header" href="#custom-descriptors">Custom Descriptors</a></h2>
 <p>A struct can carry a <em>descriptor</em>: a second struct linked to it by reciprocal
 <a href="#descriptors"><code>descriptor</code>/<code>describes</code> clauses</a>. The
@@ -2475,8 +3407,10 @@ descriptor operand (the type the operand <em>describes</em>), so all of them sha
 <code>descriptor(d)</code> clause. <code>struct.new_desc</code> allocates carrying a descriptor,
 <code>.descriptor</code> reads it back, and <code>as [?]descriptor(d)</code> / <code>br_on_cast [?]descriptor(d)</code>
 cast on descriptor equality (a leading <code>?</code> makes the result nullable).</p>
-<h3 id="wax-22"><a class="header" href="#wax-22">Wax</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">rec</span> {
+<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#![feature = </span><span class="hljs-string">"custom-descriptors"</span><span class="hljs-meta">]</span>
+
+<span class="hljs-keyword">rec</span> {
     <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
     <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { kind: <span class="hljs-type">i32</span> };
 }
@@ -2501,7 +3435,7 @@ cast on descriptor equality (a leading <code>?</code> makes the result nullable)
 a conditional branch likely or unlikely taken. Prefix the branch with
 <code>#[likely]</code> / <code>#[unlikely]</code>; the hint is preserved through every conversion (no
 feature flag required).</p>
-<h3 id="wax-23"><a class="header" href="#wax-23">Wax</a></h3>
+<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"clamp_low"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">clamp_low</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-meta">#[likely]</span> <span class="hljs-keyword">if</span> x &gt;=s <span class="hljs-number">0</span> =&gt; <span class="hljs-type">i32</span> {
@@ -2517,36 +3451,6 @@ feature flag required).</p>
         <span class="hljs-meta">#[unlikely]</span> <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'l</span> n;
     }
 }</span></pre>
-
-<h2 id="linear-memory"><a class="header" href="#linear-memory">Linear Memory</a></h2>
-<p>A <code>memory</code> declaration reserves linear memory. <code>load</code>/<code>store</code> methods on it read
-and write, with the access width in the method name; a narrow (<code>load8</code>/<code>load16</code>)
-load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
-<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
-
-<span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_bytes</span>(start: <span class="hljs-type">i32</span>, end: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">let</span> total: <span class="hljs-type">i32</span> = <span class="hljs-number">0</span>;
-    <span class="hljs-keyword">let</span> p: <span class="hljs-type">i32</span> = start;
-    <span class="hljs-keyword">while</span> p &lt;u end {
-        total += mem.<span class="hljs-title">load8</span>(p) <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;   <span class="hljs-comment">// byte load, zero-extended</span>
-        p += <span class="hljs-number">1</span>;
-    }
-    total;
-}</span></pre>
-
-<h2 id="data-segments-with-numeric-values"><a class="header" href="#data-segments-with-numeric-values">Data Segments with Numeric Values</a></h2>
-<p>A data segment’s contents can mix string literals with typed numeric runs —
-<code>[type: values]</code>, packed little-endian — instead of hand-escaping every byte.</p>
-<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
-
-<span class="hljs-comment">// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.</span>
-<span class="hljs-keyword">data</span> header @ mem[<span class="hljs-number">0</span>] =
-    <span class="hljs-string">"GIF89a"</span>
-    ++ [<span class="hljs-type">f32</span>: <span class="hljs-number">1.0</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.25</span>, <span class="hljs-number">0.0</span>]
-    ++ [<span class="hljs-type">i16</span>: <span class="hljs-number">640</span>, <span class="hljs-number">480</span>];</span></pre>
 
 <h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
 <p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
