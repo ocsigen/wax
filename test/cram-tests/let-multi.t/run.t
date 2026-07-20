@@ -43,11 +43,11 @@ The number of names must match the number of values the initializer provides.
 
   $ wax check bad-count.wax
   Error: This instruction provides 2 value(s) but 3 was/were expected.
-   ──➤  bad-count.wax:7:5
+   ──➤  bad-count.wax:7:23
   5 │ 
   6 │ fn f() -> i32 {
   7 │     let (x, _y, _z) = divmod(1, 2);
-    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·                       ^^^^^^^^^^^^
   8 │     x;
   9 │ }
   [128]
@@ -56,11 +56,11 @@ An annotation is checked against the value bound to that name.
 
   $ wax check bad-type.wax
   Error: This expression has type 'i32' but is expected to have type 'i64'.
-   ──➤  bad-type.wax:7:5
+   ──➤  bad-type.wax:7:24
   5 │ 
   6 │ fn f() -> i64 {
   7 │     let (x: i64, _y) = divmod(1, 2);
-    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·                        ^^^^^^^^^^^^
   8 │     x;
   9 │ }
   [128]

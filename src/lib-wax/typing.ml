@@ -6032,7 +6032,7 @@ and type_let ctx i =
             let result_types = fst i'.info in
             let n = List.length bindings in
             if Array.length result_types <> n then
-              Error.value_count_mismatch ctx.diagnostics ~location:i.info
+              Error.value_count_mismatch ctx.diagnostics ~location:(snd i'.info)
                 ~expected:n
                 ~provided:(Array.length result_types);
             let src = Array.of_list bindings in
@@ -6043,7 +6043,7 @@ and type_let ctx i =
                   else Cell.make Error
                 in
                 let binding', redundant =
-                  bind_let_value ctx ~location:i.info result_ty binding
+                  bind_let_value ctx ~location:(snd i'.info) result_ty binding
                 in
                 (* Suggest dropping a redundant annotation in a tuple binding
                    ([let (a: t, b) = e] -> [let (a, b) = e]). The span after this
