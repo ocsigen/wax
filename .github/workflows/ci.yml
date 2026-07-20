@@ -77,14 +77,14 @@ jobs:
           ocaml-compiler: "5.4"
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
       - name: Set up Binaryen
         # wasm_of_ocaml needs Binaryen (wasm-opt/wasm-merge) to build the wasm
         # runtime; same action and version as the npm-package workflow.
-        uses: Aandreba/setup-binaryen@v1.0.0
+        uses: Aandreba/setup-binaryen@v1
         with:
           token: ${{ github.token }}
 
