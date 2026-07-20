@@ -428,11 +428,20 @@ fi
 # minus the intentionally one-sided lints (precedence is wax-only; eager-select's
 # wasm side covers only folded selects; the naming lints fire only while
 # decompiling wasm->wax, never in a `check`).
-lint_codes() { # $1 = file (format from extension): its sorted-unique warn codes
+parity_excl='precedence|eager-select|naming-conflict|reserved-word-rename|generated-name|compound-assignment|field-punning|redundant-annotation'
+# Value-dependent lints read an operand's VALUE or concrete TYPE. A hole ([_]) or
+# under-specified literal ([{}]) in the decompiled wax hides that from the typer,
+# while the lowered wat exposes the concrete operand to the validator — so a
+# one-sided fire on such a program is a decompiler-representation artifact, not a
+# linter gap. They stay compared on hole-free wax (where a genuine gap surfaces:
+# both linters agree on hand-written Wax), and are dropped only when the wax form
+# below contains a hole or an empty struct literal.
+value_lints='shift-count-overflow|constant-trap|constant-condition|tautological-comparison|redundant-operation|cast-always-fails|unused-result'
+lint_codes() { # $1 = file; $2 = exclusion regex (extended-regex, whole-line)
   timeout -k 5 "$TIMEOUT" "$WAX" check -W all=warning \
     --error-format json "$1" 2>&1 >/dev/null \
     | grep -oE '"warning":"[^"]+"' | sed 's/.*:"//; s/"$//' \
-    | grep -vxE 'precedence|eager-select|naming-conflict|reserved-word-rename|generated-name|compound-assignment|field-punning|redundant-annotation' \
+    | grep -vxE "$2" \
     | sort -u
 }
 # The wax form of the program (decompiled + simplified for wat/wasm input; the
@@ -453,8 +462,15 @@ watf=""
   [ "$(classify_wax -i wax -f wat "$waxf" -o "$watf")" = ok ] || watf=""
 }
 if [ -n "$waxf" ] && [ -n "$watf" ]; then
-  cwax="$(lint_codes "$waxf")"
-  cwat="$(lint_codes "$watf")"
+  # A hole ([_] as a token) or empty struct literal ([{}]) means the wax hides
+  # an operand value/type the lowered wat exposes; drop the value-dependent lints
+  # from the comparison then (see [value_lints]).
+  excl="$parity_excl"
+  if grep -qE '(^|[^A-Za-z0-9_])_([^A-Za-z0-9_]|$)|\{[[:space:]]*\}' "$waxf"; then
+    excl="$excl|$value_lints"
+  fi
+  cwax="$(lint_codes "$waxf" "$excl")"
+  cwat="$(lint_codes "$watf" "$excl")"
   if [ "$cwax" != "$cwat" ]; then
     only_wax="$(comm -23 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat") | paste -sd, -)"
     only_wat="$(comm -13 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat") | paste -sd, -)"
