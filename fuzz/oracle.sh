@@ -17,6 +17,9 @@
 #   1. Crash      — no pipeline may exit other than 0 (ok) or 128 (clean error).
 #   2. Diff-valid — a binary wax emits must be accepted by `wasm-tools validate`
 #                   (a false accept means wax produces invalid wasm).
+#   3b. Text-valid — the WAT *text* wax emits (via `--desugar`) must validate too;
+#                   the printer is a separate path from the binary encoder, so
+#                   valid-binary-but-invalid-text is a real bug.
 #   3. Validity   — wax's accept/reject verdict matches the known ground truth.
 #   4. Idempotence— format(format(x)) == format(x), textually.
 #   5. Round-trip — x -> wasm  and  x -> wax -> wasm  must be semantically equal
@@ -245,6 +248,26 @@ fi
 
 # The remaining oracles only make sense when wax accepts the input.
 [ "$verdict" = ok ] || exit 0
+
+# ---- 3b. Text emitter soundness: the WAT *text* must be valid too. ----
+# The dual of oracle 3: that one validates the emitted binary, but the text
+# printer is a separate code path, so a module can encode to a valid binary yet
+# print to invalid WAT (e.g. an out-of-f32-range value: the binary stores its
+# rounded f32 bits, but the printer emitted the original out-of-range literal as
+# an [f32.const], which the text parser rejects). Emit with [--desugar] so the
+# Wax-only annotations ([(@string …)] etc.) become core wasm that wasm-tools can
+# read; [--desugar] cleanly errors (skipped by [classify_wax]) on an unresolved
+# [(@if …)], so this only fires on genuinely invalid emitted text.
+demit=(--desugar -i "$FMT" -f wat "$IN" -o "$WORK/cand.wat")
+if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
+   && ! grep -q "likely-confusing unicode" "$WORK/cand.wat.err"; then
+  # The [likely-confusing unicode] rejection is a wasm-tools *text* lint (an RTL
+  # override etc. in an export name) — the module is spec-valid and its binary
+  # validates, so wax emitting the name verbatim is correct, not a bug.
+  finding FALSE_ACCEPT HIGH "$IN" \
+    "wax accepted the module but emitted WAT text wasm-tools rejects: $(head -1 "$WORK/cand.wat.err")" \
+    "$(repro "${demit[@]}") && wasm-tools validate --features all $WORK/cand.wat"
+fi
 
 # ---- 4. Idempotence: formatting is a fixed point. ----
 # Only for text formats (binary "formatting" is re-encoding, covered elsewhere).
