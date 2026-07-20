@@ -21,7 +21,14 @@ module Loc = struct
     a.loc_start.Lexing.pos_cnum = b.loc_start.Lexing.pos_cnum
     && a.loc_end.Lexing.pos_cnum = b.loc_end.Lexing.pos_cnum
 
-  let hash (a : t) = (a.loc_start.Lexing.pos_cnum * 65599) + a.loc_end.pos_cnum
+  (* [Hashtbl.Make] buckets on the low bits, so the hash must mix well there.
+     Spans have [end ≈ start + len], so a plain [start * k + end] collapses to
+     [start * (k+1)]; two distinct odd multipliers break that correlation and a
+     final xor-shift folds the high bits down into the bucket bits. *)
+  let hash (a : t) =
+    let s = a.loc_start.Lexing.pos_cnum and e = a.loc_end.Lexing.pos_cnum in
+    let h = (s * 0x9E3779B1) lxor (e * 0x85EBCA77) in
+    h lxor (h lsr 16)
 end
 
 module Tbl = Hashtbl.Make (Loc)
