@@ -183,6 +183,21 @@ module Error = struct
       report context ~location (*:(loc_last_char location)*)
         (text "The stack is empty.")
 
+  (* FIXME: point to the hole *)
+  let short_stack context ~location ~actual ~expected =
+    (* Like [unbound_name], suppress this in error-recovery mode: a stack
+       underflow while type-checking a best-effort AST is usually a cascade from
+       a value-producing construct dropped at a sync boundary, not a real
+       mistake. Both callers ([pop_any]/[pop]) recover with [Error]/[()], so
+       nothing downstream cascades; genuine underflows in intact code still
+       surface on a clean re-check once the syntax errors are fixed. *)
+    if not (Wax_utils.Diagnostic.in_recovery context) then
+      report context ~location
+        (text "Expecting " ++ Message.int expected
+         ++ text " value(s) from the stack, but there are only "
+         ++ Message.int actual
+        ^^ text ".")
+
   let let_in_conditional context ~location =
     report context ~location
       (text
@@ -1867,20 +1882,24 @@ let ( let*! ) e f =
    An underflow turns the stack unreachable (mirroring the Wasm validator's
    [pop_any]), so one missing value is reported once rather than once per
    subsequent pop. *)
-let pop_any ctx i st =
+let pop_any ctx i current expected st =
   match st with
   | Unreachable -> (st, Cell.make Unknown)
   | Poisoned -> (st, Cell.make Error)
   | Cons (_, ty, r) -> (r, ty)
   | Empty ->
-      Error.empty_stack ctx.diagnostics ~location:i.info;
+      Error.short_stack ctx.diagnostics ~location:i.info ~actual:current
+        ~expected;
       (Poisoned, Cell.make Error)
 
-let rec pop_many ctx i n accu =
-  if n = 0 then return accu
-  else
-    let* ty = pop_any ctx i in
-    pop_many ctx i (n - 1) (ty :: accu)
+let pop_many ctx i count =
+  let rec loop n accu =
+    if n = count then return accu
+    else
+      let* ty = pop_any ctx i n count in
+      loop (n + 1) (ty :: accu)
+  in
+  loop 0 []
 
 (*ZZZ This is for block parameters and return values:
   there should be n .. on the stack, but there are ...
@@ -3789,8 +3808,82 @@ let bump_value_loc ctx st node =
       if emits_value ctx node then { st with value_loc = Some (snd node.info) }
       else st
 
+let rec count_holes i =
+  match i.desc with
+  | Hole -> 1
+  | BinOp (_, l, r)
+  | Array (_, l, r)
+  | ArraySegment (_, _, l, r)
+  | ArrayGet (l, r) ->
+      count_holes l + count_holes r
+  | ArraySet (t, i, v) -> count_holes t + count_holes i + count_holes v
+  | Call (f, args) | TailCall (f, args) ->
+      count_holes f + List.fold_left (fun acc i -> acc + count_holes i) 0 args
+  | If { cond = i; _ }
+  | Let (_, Some i)
+  | Set (_, _, i)
+  | Tee (_, i)
+  | Labelled (_, i)
+  | UnOp (_, i)
+  | Cast (i, _)
+  | Test (i, _)
+  | NonNull i
+  | Br (_, Some i)
+  | Br_if (_, i)
+  | Hinted (_, i)
+  | On (i, _)
+  | Br_table (_, i)
+  | Br_on_null (_, i)
+  | Br_on_non_null (_, i)
+  | Br_on_cast (_, _, i)
+  | Br_on_cast_fail (_, _, i)
+  | ArrayDefault (_, i)
+  | ThrowRef i
+  | ContNew (_, i)
+  | Return (Some i)
+  | StructDefaultDesc i
+  | GetDescriptor i
+  | StructGet (i, _) ->
+      count_holes i
+  | CastDesc (i1, _, i2)
+  | Br_on_cast_desc_eq (_, _, i1, i2)
+  | Br_on_cast_desc_eq_fail (_, _, i1, i2)
+  | StructSet (i1, _, i2) ->
+      count_holes i1 + count_holes i2
+  (* A punned field ([None]) is a [Get], which contains no holes. *)
+  | Struct (_, l) ->
+      List.fold_left
+        (fun acc (_, i) -> acc + Option.fold ~none:0 ~some:count_holes i)
+        0 l
+  | StructDesc (d, l) ->
+      count_holes d
+      + List.fold_left
+          (fun acc (_, i) -> acc + Option.fold ~none:0 ~some:count_holes i)
+          0 l
+  | Sequence l
+  | ArrayFixed (_, l)
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l)
+  | Throw (_, l) ->
+      List.fold_left (fun acc i -> acc + count_holes i) 0 l
+  | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
+  (* [dispatch]/[match], [while] and [do]-[while] are block-like: their
+     operands/scrutinee and bodies are checked inside the blocks they desugar
+     to, so no hole at this level draws from the stack. *)
+  | Block _ | Loop _ | While _ | TryTable _ | Try _ | TryCatch _
+  | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _ | String _
+  | Int _ | Float _ | Get _ | Path _ | Null | Unreachable | Nop
+  | Let (_, None)
+  | Br (_, None)
+  | Return None ->
+      0
+
 (* Type one operand of a distribution point against exactly its own hole-slice —
-   the front [Typing_lint.count_holes child] pending values — and fold in the hole-order
+   the front [count_holes child] pending values — and fold in the hole-order
    check (see [hole_st]). [run] is the child-typer applied to the child (an
    [instruction]/[check_instruction] action), [node_of] extracts the typed
    instruction from its result (identity, resp. [fst]). The child's own leftover
@@ -3804,7 +3897,7 @@ let hole_child ctx child node_of run st =
       let st', r = run st in
       (bump_value_loc ctx st' (node_of r), r)
   | pending ->
-      let n = Typing_lint.count_holes child in
+      let n = count_holes child in
       let reported =
         if (not st.reported) && n > 0 && st.value_loc <> None then (
           Error.before_hole ctx.diagnostics ~location:(Option.get st.value_loc);
@@ -3860,11 +3953,7 @@ let type_trailing_operand ctx run =
    emitted before it. *)
 let fold_operand ctx child node st =
   let st =
-    if
-      (not st.reported)
-      && Typing_lint.count_holes child > 0
-      && st.value_loc <> None
-    then (
+    if (not st.reported) && count_holes child > 0 && st.value_loc <> None then (
       Error.before_hole ctx.diagnostics ~location:(Option.get st.value_loc);
       { st with reported = true })
     else st
@@ -3872,13 +3961,13 @@ let fold_operand ctx child node st =
   bump_value_loc ctx st node
 
 (* Bridge from the statement (stack) monad to the expression monad: pop the
-   [Typing_lint.count_holes i] hole operands off the operand stack into the pending list and
+   [count_holes i] hole operands off the operand stack into the pending list and
    run [f] (an expression-monad action) with a fresh hole state, returning its
    result in the stack monad. Typing hands each hole its slice and the hole-order
    check runs inline ([hole_child]); the final expression state is discarded (a
    leftover pending is a recovery-only artefact, see [pop_parameter]). *)
 let with_holes ctx i build =
-  let* pending = pop_many ctx i (Typing_lint.count_holes i) [] in
+  let* pending = pop_many ctx i (count_holes i) in
   (* [build ()] is forced only here, after [pop_many], so a stack underflow it
      reports is queued before any diagnostic the typer emits eagerly (before its
      first monadic step). *)
@@ -3898,7 +3987,7 @@ let with_holes ctx i build =
    condition sits in the leading test of a void loop — so this only rejects
    hand-written code. *)
 let reject_control_holes ctx ~construct ~role ~recovery operand =
-  if Typing_lint.count_holes operand > 0 then (
+  if count_holes operand > 0 then (
     Error.hole_in_control_operand ctx.diagnostics ~location:operand.info
       ~construct ~role;
     (* Replace the whole operand with a hole-free value of the shape the
@@ -7358,8 +7447,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             fields;
         let front_holes =
           List.fold_left
-            (fun acc (_, w) ->
-              acc + Option.fold ~none:0 ~some:Typing_lint.count_holes w)
+            (fun acc (_, w) -> acc + Option.fold ~none:0 ~some:count_holes w)
             0 fields
         in
         let front_pending, tail_pending = list_split front_holes st.pending in
@@ -8010,9 +8098,7 @@ and type_indirect_call ctx i i' l =
      init-locals effects replayed as the last operand, matching [to_wasm]. The
      error arms still synthesize the arguments for recovery. *)
  fun st ->
-  let front_holes =
-    List.fold_left (fun acc a -> acc + Typing_lint.count_holes a) 0 l
-  in
+  let front_holes = List.fold_left (fun acc a -> acc + count_holes a) 0 l in
   let front_pending, tail_pending = list_split front_holes st.pending in
   let i', replay =
     type_trailing_operand ctx (fun () ->
@@ -8337,7 +8423,7 @@ and match_recover_scrutinee ctx scrutinee = function
   | Some scrut' -> scrut'
   | None ->
       let pending =
-        List.init (Typing_lint.count_holes scrutinee) (fun _ -> Cell.make Error)
+        List.init (count_holes scrutinee) (fun _ -> Cell.make Error)
       in
       snd
         (instruction ctx scrutinee

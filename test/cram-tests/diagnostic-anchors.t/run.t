@@ -137,7 +137,7 @@ turns the stack unreachable, as in the Wasm validator).
   > }
   > WAX
   $ wax check --error-format short holes.wax
-  holes.wax:2:5: error: The stack is empty.
+  holes.wax:2:5: error: Expecting 2 value(s) from the stack, but there are only 0.
   holes.wax:2:17: error: This expression occurs before a hole '_'.
   holes.wax:2:29: error: Only constant expressions are allowed here.
   holes.wax:2:50: error: Only constant expressions are allowed here.

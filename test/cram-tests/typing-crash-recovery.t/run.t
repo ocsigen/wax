@@ -114,7 +114,7 @@ is not separately reported:
   > WAX
 
   $ wax check extra-field-hole.wax
-  Error: The stack is empty.
+  Error: Expecting 1 value(s) from the stack, but there are only 0.
    ──➤  extra-field-hole.wax:2:15
   1 │ type p = { a: i32 };
   2 │ const g: &p = { a: 1, zzz: _ };

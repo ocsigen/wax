@@ -18,9 +18,6 @@ val cast_is_total : Ast.casttype -> bool
 val is_effectless : 'a Ast.instr -> bool
 (** Whether evaluating an expression has no side effect and cannot trap. *)
 
-val count_holes : ('a Ast.instr_desc, 'a) Ast.annotated -> int
-(** The number of [_] holes drawing from the operand stack at this node. *)
-
 val collect_assigned_locals :
   Typing_env.StringSet.t ->
   ('a Ast.instr_desc, 'a) Ast.annotated ->
