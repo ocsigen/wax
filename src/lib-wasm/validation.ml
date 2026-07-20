@@ -403,14 +403,22 @@ module Error = struct
            ++ Message.enumerate ~conj:"or" (List.map Message.ident suggestions)
           ^^ text "?")
 
+  (* A zero-width [Id] is a placeholder to suppress the cascade from — but only
+     in error-recovery mode, where the parser inserts them. Outside recovery a
+     zero-width [Id] instead marks a name synthesized by [Binary_to_text] (which
+     uses [no_loc]); its unbound-index error is a genuine soundness finding on a
+     malformed binary and must be reported, not swallowed. *)
+  let suppress_placeholder context id =
+    is_recovery_placeholder id && D.in_recovery context
+
   let unbound_label context ~location id lst =
-    if is_recovery_placeholder id then ()
+    if suppress_placeholder context id then ()
     else
       report context ~location ~severity:Error ?hint:(did_you_mean lst)
         (text "Unknown label:" ++ index id ++ text "is not bound.")
 
   let unbound_index context ~location kind id lst =
-    if is_recovery_placeholder id then ()
+    if suppress_placeholder context id then ()
     else
       report context ~location ~severity:Error ?hint:(did_you_mean lst)
         ((text "Unknown" ++ text kind)
