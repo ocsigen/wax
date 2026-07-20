@@ -2977,6 +2977,20 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
           | _ -> None
         in
         Error.redundant_cast ?edit ctx.diagnostics ~location ~is_test
+  | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
+      Valtype { internal = I32 | I64; _ } )
+    when (not is_test)
+         && (not (is_bottom_heaptype op_src))
+         && Wax_wasm.Types.heap_subtype info op.typ Internal.Any
+         && not
+              (Wax_wasm.Types.heap_subtype info op.typ Internal.I31
+              || Wax_wasm.Types.heap_subtype info Internal.I31 op.typ) ->
+      (* [ref as iN_s/u] extracts an i31 payload: it lowers to a [ref.cast (ref
+         i31)] then an [i31.get] (see [To_wasm.default_cast]). An [any]-hierarchy
+         reference that can never be an [i31] — a [struct]/[array], not
+         [any]/[eq]/[i31] — makes that [ref.cast] always trap, exactly as the
+         Wasm validator reports on the lowered form. *)
+      Error.cast_always_fails ctx.diagnostics ~location ~is_test
   | _ -> ()
 
 (* The type lookups below never fail *)
