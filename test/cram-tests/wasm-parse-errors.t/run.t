@@ -78,3 +78,13 @@ allows:
   File "long-leb.wasm", line 1, characters 14-14:
   Error: integer representation too long
   [128]
+
+The reserved byte following `atomic.fence` must be zero — no memory-order value
+is defined. Here a module with a single `atomic.fence` whose reserved byte is
+0x7f rather than 0x00:
+
+  $ printf '\000asm\001\000\000\000\001\004\001\140\000\000\003\002\001\000\007\011\001\005fence\000\000\012\007\001\005\000\376\003\177\013' > bad-fence.wasm
+  $ wax -i wasm bad-fence.wasm -f wat
+  File "bad-fence.wasm", line 1, characters 37-37:
+  Error: nonzero byte after `atomic.fence`
+  [128]

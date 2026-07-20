@@ -5069,8 +5069,23 @@ and type_arith ctx i =
       let typ = expression_type ctx i' in
       let ty =
         match Cell.get typ with
-        | Unknown | Error -> (
+        | Error -> (
             match op.desc with Not -> i32_cell | Neg | Pos -> Cell.make Number)
+        | Unknown -> (
+            match op.desc with
+            | Not -> i32_cell
+            | Neg | Pos ->
+                (* Unify the result with the operand's own cell (as the committed
+                   case below and [Add]/[Sub]/[Mul] do), rather than handing back
+                   a fresh [Number]. [-e] preserves width, so a later pin on the
+                   result — e.g. an [as f64] promote consuming the negation of a
+                   [select] of holes on the polymorphic dead-code stack — must pin
+                   the operand too. A disconnected result cell lets the operand
+                   stay [Unknown] (so [to_wasm] lowers it at the i32 default)
+                   while the result is pinned to another width, an incoherent
+                   negation that lowers to [i32.sub] annotated as that width. *)
+                Cell.set typ Number;
+                typ)
         | _ -> (
             match op.desc with
             | Not ->
@@ -6354,11 +6369,21 @@ and type_atomic_method_call ctx i func recv memname meth family args =
      family by its type, so it accepts either — pinned to the integer group,
      with a still-flexible literal defaulting to i32 as usual; the merged cell
      is the RMW's result (the returned old value). A 64-bit access is
-     necessarily i64. [Unknown]/[Error] (dead code / recovery) pass through. *)
+     necessarily i64. An [Unknown] operand (a hole on the polymorphic dead-code
+     stack) is pinned to the flexible [Int] rather than left [Unknown]: the RMW
+     is a concrete op that [To_wasm] must emit, so an [Unknown] result — unlike a
+     flexible literal tree — cannot be re-parsed at a cast's width and would drop
+     the cast ([(m.atomic_rmw32(_, _) as i64_u)] losing its extend). As [Int] it
+     defaults to i32 like any flexible integer, yet a consumer can still pin it to
+     i64 (e.g. an i64 memory address), so both round-trip. [Error] (already
+     reported) stays the untouched bottom. *)
   let check_value v =
     let vty = expression_type ctx v in
     match Cell.get vty with
-    | Unknown | Error -> vty
+    | Unknown ->
+        Cell.set vty Int;
+        vty
+    | Error -> vty
     | _ -> check_int_bin_op ctx ~location:(snd v.info) vty (Cell.make Int)
   in
   let result =

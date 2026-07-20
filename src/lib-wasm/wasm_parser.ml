@@ -1021,10 +1021,12 @@ and instruction ch =
     | 0x0B -> error ch "unexpected end opcode"
     | 0xFE -> (
         let code = uint ch in
-        if code = 0x03 then
-          (* atomic.fence: a reserved consistency-model byte follows *)
-          let (_ : int) = uint ch in
-          AtomicFence
+        if code = 0x03 then (
+          (* atomic.fence: a reserved consistency-model byte follows; it must
+             be zero — no memory-order value is defined. *)
+          let b = uint ch in
+          if b <> 0 then error ch "nonzero byte after `atomic.fence`";
+          AtomicFence)
         else
           match Atomics.of_opcode code with
           | Some op ->
