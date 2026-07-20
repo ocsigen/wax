@@ -1,4 +1,4 @@
-(* The value methods member completion offers ([Typing.integer_methods] /
+(* The value methods member completion offers ([Members.integer_methods] /
    [float_methods]) must match what the typer accepts, or completion would
    suggest a method that fails to type-check — or show it a wrong signature. The
    method dispatch is match-based and cannot be enumerated, so this test builds a
@@ -33,10 +33,10 @@ let error_count src =
       |> List.length
 
 (* The result type the registry claims for [m] on receiver [recv]. *)
-let result_type recv (m : Typing.value_method) =
+let result_type recv (m : Members.value_method) =
   match m.vm_result with
-  | Typing.Same -> recv
-  | Typing.Reinterpret -> (
+  | Members.Same -> recv
+  | Members.Reinterpret -> (
       match recv with
       | "i32" -> "f32"
       | "i64" -> "f64"
@@ -44,7 +44,7 @@ let result_type recv (m : Typing.value_method) =
       | "f64" -> "i64"
       | other -> other)
 
-let check recv (m : Typing.value_method) =
+let check recv (m : Members.value_method) =
   let args = if m.vm_binary then "y" else "" in
   let src =
     Printf.sprintf "fn t(x: %s, y: %s) { let r: %s = x.%s(%s); _ = r; }\n" recv
@@ -99,27 +99,28 @@ let v128_call_errors name =
   | _ -> -1
 
 let () =
-  List.iter (check "i32") Typing.integer_methods;
-  List.iter (check "i64") Typing.integer_methods;
-  List.iter (check "f32") Typing.float_methods;
-  List.iter (check "f64") Typing.float_methods;
+  List.iter (check "i32") Members.integer_methods;
+  List.iter (check "i64") Members.integer_methods;
+  List.iter (check "f32") Members.float_methods;
+  List.iter (check "f64") Members.float_methods;
   let src =
     "type arr = [i32];\nfn t(x: &arr) { let r: i32 = x.length(); _ = r; }\n"
   in
   Printf.printf "arr .length      %s\n"
     (match error_count src with 0 -> "ok" | _ -> "FAIL");
-  let v128 = Typing.simd_v128_methods () in
+  let v128 = Members.simd_v128_methods () in
   Printf.printf "\nv128: %d methods offered\n" (List.length v128);
   let failures =
     List.filter
-      (fun (c : Typing.member_candidate) -> v128_call_errors c.member_name <> 0)
+      (fun (c : Members.member_candidate) ->
+        v128_call_errors c.member_name <> 0)
       v128
   in
   (match failures with
   | [] -> Printf.printf "all type-check\n"
   | fs ->
       List.iter
-        (fun (c : Typing.member_candidate) ->
+        (fun (c : Members.member_candidate) ->
           Printf.printf "  FAIL %s\n" c.member_name)
         fs);
   Printf.printf "\nsample signatures:\n";
@@ -127,7 +128,7 @@ let () =
     (fun name ->
       match
         List.find_opt
-          (fun (c : Typing.member_candidate) -> c.member_name = name)
+          (fun (c : Members.member_candidate) -> c.member_name = name)
           v128
       with
       | Some c -> Printf.printf "  %-22s %s\n" c.member_name c.member_detail
@@ -149,7 +150,7 @@ let () =
      [namespace_members] cannot offer a name [type_path_intrinsic_call] rejects;
      an offered member with no known call shape prints UNCHECKED so it is
      noticed. *)
-  let ns_call ns (c : Typing.member_candidate) =
+  let ns_call ns (c : Members.member_candidate) =
     let name = c.member_name in
     match ns with
     | "atomic" -> Some "fn t() { atomic::fence(); }\n"
@@ -185,12 +186,12 @@ let () =
   Printf.printf "\nflexible receivers:\n";
   List.iter
     (fun (label, recv_expr, arg, ty) ->
-      match Typing.numeric_receiver_candidates ty with
+      match Members.numeric_receiver_candidates ty with
       | None -> Printf.printf "  %-14s (none)\n" label
       | Some cands ->
           let fails =
             List.filter_map
-              (fun (c : Typing.member_candidate) ->
+              (fun (c : Members.member_candidate) ->
                 let a = if List.mem c.member_name binary then arg else "" in
                 if
                   error_count
@@ -206,7 +207,7 @@ let () =
           let sig_of name =
             match
               List.find_opt
-                (fun (c : Typing.member_candidate) -> c.member_name = name)
+                (fun (c : Members.member_candidate) -> c.member_name = name)
                 cands
             with
             | Some c -> Printf.sprintf "%s: %s" name c.member_detail
@@ -236,10 +237,10 @@ let () =
   Printf.printf "\nnamespace members:\n";
   List.iter
     (fun ns ->
-      let members = Typing.namespace_members ns in
+      let members = Members.namespace_members ns in
       Printf.printf "  %s:: (%d)\n" ns (List.length members);
       List.iter
-        (fun (c : Typing.member_candidate) ->
+        (fun (c : Members.member_candidate) ->
           let status =
             match ns_call ns c with
             | None -> "UNCHECKED"
@@ -260,7 +261,7 @@ let () =
      shape the typer rejects shows up. The `mem` fixture is [shared] and carries
      a [v128] (for atomic and lane operands) plus a data segment; the `table`
      one a same-typed element segment. *)
-  let is_void (c : Typing.member_candidate) =
+  let is_void (c : Members.member_candidate) =
     let suf = "-> ()" and d = c.member_detail in
     String.length d >= String.length suf
     && String.sub d (String.length d - String.length suf) (String.length suf)
@@ -303,7 +304,7 @@ let () =
   let check_obj label fixture recv cands =
     Printf.printf "  %s (%d)\n" label (List.length cands);
     List.iter
-      (fun (c : Typing.member_candidate) ->
+      (fun (c : Members.member_candidate) ->
         let args =
           String.concat ", " (List.map arg_for (params_of c.member_detail))
         in
@@ -320,6 +321,6 @@ let () =
   in
   Printf.printf "\nmemory / table methods:\n";
   check_obj "memory" mem_fixture "mem"
-    (Typing.memory_method_candidates ~addr_name:"i32");
+    (Members.memory_method_candidates ~addr_name:"i32");
   check_obj "table" tab_fixture "tab"
-    (Typing.table_method_candidates ~addr_name:"i32" ~elem_name:"&?func")
+    (Members.table_method_candidates ~addr_name:"i32" ~elem_name:"&?func")

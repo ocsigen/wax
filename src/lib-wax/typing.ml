@@ -1,207 +1,21 @@
 open Ast
 module Cond = Wax_wasm.Cond_solver
 module Nz = Wax_wasm.Types.Normalized
-
-type typed_module_annotation = Ast.storagetype option array * Ast.location
-
 open Infer
+open Typing_env
 
-(* The typed tree as it stands during checking, before the cells are resolved to
-   [typed_module_annotation]: each node carries the inference cells for the
-   values it leaves on the stack, plus its span. [f] resolves these to storage
-   types for the Wasm conversion; the editor reads the cells directly (they carry
-   the flexible-literal / unknown distinctions [output_inferred_type] renders,
-   which resolution discards). *)
-type inferred_module_annotation = inferred_type Cell.t array * Ast.location
+type typed_module_annotation = Typing_env.typed_module_annotation
+type inferred_module_annotation = Typing_env.inferred_module_annotation
 
-(* A resolved name or label reference: the source span of a *use*, the span(s)
-   of the *definition(s)* it binds to, and a rendered one-line summary of what it
-   resolves to (the referenced type's structure, or a variable's type) for a
-   hover on a name that is not itself an expression. There is more than one
-   definition only under conditional compilation (a name declared in several
-   mutually exclusive branches). Accumulated during type checking into a
-   [reference list ref] when the caller supplies one, for the editor's
-   go-to-definition and hover; nil otherwise, so an ordinary compile pays
-   nothing. *)
-(* What a resolved reference summarises for a hover on a name that is not itself
-   an expression: a variable's type, or a referenced type's definition. Kept as
-   data, not a rendered string — nothing is formatted until a hover actually
-   asks (the editor renders the one it needs), so a check pays only a boxing per
-   reference. *)
-type hover_target = Value_type of inferred_valtype | Type_def of subtype
+type hover_target = Typing_env.hover_target =
+  | Value_type of inferred_valtype
+  | Type_def of subtype
 
-type reference = {
+type reference = Typing_env.reference = {
   use : Ast.location;
   definitions : Ast.location list;
   hover : hover_target option;
 }
-
-type resolve_sink = reference list ref option
-
-(* A synthesized node (an interned function type looked up for a call, a
-   desugared construct) carries [Ast.dummy_loc] rather than a source span; skip
-   those, so only genuine source references are recorded. *)
-let is_source (l : location) = l.loc_start.Lexing.pos_cnum >= 0
-
-let same_span (a : location) (b : location) =
-  a.loc_start.Lexing.pos_cnum = b.loc_start.Lexing.pos_cnum
-  && a.loc_end.Lexing.pos_cnum = b.loc_end.Lexing.pos_cnum
-
-(* Record a punned struct-literal field's span (the field name, which is also
-   the variable use), so the editor can expand it on rename. *)
-let record_pun (sink : location list ref option) (name_info : location) =
-  match sink with
-  | Some r when is_source name_info -> r := name_info :: !r
-  | _ -> ()
-
-(* A member-completion candidate for [recv.<here>] or [ns::<here>]: a struct
-   field, a value method, or a namespace free function, its [member_kind]
-   driving the editor's icon and [member_detail] a rendered type/signature —
-   the field's declared type or the method/function's signature. *)
-type member_kind = Field | Method | Function
-
-type member_candidate = {
-  member_name : string;
-  member_kind : member_kind;
-  member_detail : string;
-}
-
-(* What a member access [recv.<here>]'s completion candidates are derived from.
-   The typer records this lightweight descriptor (a kind and the receiver's
-   type), and {!member_candidates} turns it into the candidate list on demand —
-   so the list, which for a v128 or memory receiver is large, is built only for
-   the access under the cursor, not at every access in the file. *)
-type member_receiver =
-  | R_numeric of inferred_type
-      (** a value receiver: its integer / float / v128 methods *)
-  | R_struct of fieldtype Ast.annotated_array  (** the struct's fields *)
-  | R_array of fieldtype  (** by element type: [length]/[fill]/[copy]/[init] *)
-  | R_memory of [ `I32 | `I64 ]  (** by address type *)
-  | R_table of [ `I32 | `I64 ] * reftype  (** by address and element type *)
-  | R_cont of member_candidate list
-      (** a continuation-typed receiver: the resume family and [switch],
-          prebuilt (their signatures need the type context) *)
-
-(* Record, at a struct field access, the (possibly partial) field's span and the
-   receiver it is on, for member completion. [None] outside the editor. *)
-let record_members (sink : (location * member_receiver) list ref option) field
-    receiver =
-  match sink with
-  | Some r when is_source field -> r := (field, receiver) :: !r
-  | _ -> ()
-
-(* What a value method's result type is relative to its receiver: [Same] as the
-   receiver, or the equal-width opposite numeric family ([i32]<->[f32],
-   [i64]<->[f64]), as [from_bits] / [to_bits] reinterpret. *)
-type method_result = Same | Reinterpret
-
-type value_method = {
-  vm_name : string;
-  vm_binary : bool;  (** takes a second operand of the receiver's type *)
-  vm_result : method_result;
-}
-
-let meth ?(binary = false) ?(result = Same) vm_name =
-  { vm_name; vm_binary = binary; vm_result = result }
-
-(* The value methods offered by member completion for an integer / float
-   receiver. A curated registry: the method dispatch (see
-   [type_unary_intrinsic_call] / [type_binary_intrinsic_call]) is match-based
-   and cannot be enumerated, so the test in test/method-consistency type-checks
-   each of these — arity and result type included — to keep the registry in step
-   with what the typer actually accepts. Vector ([v128]) and memory / table
-   methods (a different dispatch path) are not covered yet. *)
-let integer_methods =
-  [
-    meth "clz";
-    meth "ctz";
-    meth "popcnt";
-    meth "extend8_s";
-    meth "extend16_s";
-    meth ~result:Reinterpret "from_bits";
-    meth ~binary:true "rotl";
-    meth ~binary:true "rotr";
-  ]
-
-let float_methods =
-  [
-    meth "abs";
-    meth "ceil";
-    meth "floor";
-    meth "trunc";
-    meth "nearest";
-    meth "sqrt";
-    meth ~result:Reinterpret "to_bits";
-    meth ~binary:true "min";
-    meth ~binary:true "max";
-    meth ~binary:true "copysign";
-  ]
-
-let numtype_name : Ast.valtype -> string = function
-  | I32 -> "i32"
-  | I64 -> "i64"
-  | F32 -> "f32"
-  | F64 -> "f64"
-  | V128 -> "v128"
-  | Ref _ -> "ref"
-
-(* The member-completion candidates for [methods] on a numeric receiver
-   rendered as [recv_name] (a concrete [i32] or a flexible-literal family like
-   [int]), with a real signature ([fn() -> i32], [fn(f32) -> f32]).
-   [reinterp_name] is the result type of a bit-reinterpreting method
-   ([from_bits]/[to_bits]) — the opposite family, which for a flexible receiver
-   is rendered by family name too. *)
-let method_candidates ~recv_name ~reinterp_name methods =
-  List.map
-    (fun m ->
-      let params = if m.vm_binary then recv_name else "" in
-      let result =
-        match m.vm_result with
-        | Same -> recv_name
-        | Reinterpret -> reinterp_name
-      in
-      {
-        member_name = m.vm_name;
-        member_kind = Method;
-        member_detail = Printf.sprintf "fn(%s) -> %s" params result;
-      })
-    methods
-
-(* A struct field's declared type, rendered for the member-completion detail
-   (e.g. [i32], [mut i32], [&point]) as it reads in a type definition. [Output]
-   here is [Infer.Output] (open Infer), whose printers take a formatter. *)
-let render_fieldtype (f : Ast.fieldtype) =
-  String.trim (Format.asprintf "%a" Output.fieldtype f)
-
-(* A reference type rendered as it reads in source (e.g. [&func], [&?extern]),
-   for a table's element type in the member-completion detail. *)
-let render_reftype (rt : Ast.reftype) =
-  String.trim (Format.asprintf "%a" Output.valtype (Ast.Ref rt))
-
-(* The member candidates for a struct's [fields] (each name and declared type),
-   for member completion. *)
-let struct_candidates fields =
-  Array.to_list fields
-  |> List.map (fun f ->
-      let nm, typ = f.Ast.desc in
-      {
-        member_name = nm.Ast.desc;
-        member_kind = Field;
-        member_detail = render_fieldtype typ;
-      })
-
-let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
-  match sink with
-  | Some r when is_source use -> (
-      (* Drop synthesized definitions and the self-reference a name's own
-         declaration makes when it looks itself up (go-to-definition on a
-         definition has nowhere useful to go). *)
-      match
-        List.filter (fun d -> is_source d && not (same_span d use)) definitions
-      with
-      | [] -> ()
-      | definitions -> r := { use; definitions; hover } :: !r)
-  | _ -> ()
 
 (*** Diagnostics ***)
 
@@ -260,15 +74,6 @@ module Error = struct
       Diagnostic.report context ~location ~severity:Warning ?warning ?universal
         ?hint ?edit ?related ~message ()
 
-  (* A machine-applicable simplification (severity [Suggestion]), carrying the
-     rewrite in [edit] for editor quick fixes and shown by [wax check] only when
-     its [warning] is enabled. Marked [universal] so path-sensitive checking
-     reports it once; suppressed in recovery mode like [warn]. *)
-  let suggest ~warning ~edit context ~location message =
-    if not (Wax_utils.Diagnostic.in_recovery context) then
-      Diagnostic.report context ~location ~severity:Suggestion ~warning
-        ~universal:true ~edit ~message ()
-
   (* A local declared by a [let] but never read. Prefix its name with [_] to
      silence the warning — offered as a quick fix by a zero-width [edit] that
      inserts the [_] at the name's start. *)
@@ -297,11 +102,6 @@ module Error = struct
     warn ~warning:Wax_utils.Warning.Unused_import ~universal:true context
       ~location
       (text "The imported" ++ text kind ++ name x ++ text "is never used.")
-
-  (* An operation with no effect on its result, or a constant result. *)
-  let redundant_operation context ~location message =
-    warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true context
-      ~location message
 
   (* A cast/test whose operand can never have the target type. *)
   let cast_always_fails context ~location ~is_test =
@@ -361,106 +161,12 @@ module Error = struct
       ~location
       (text "The label" ++ name x ++ text "is never used.")
 
-  (* A shift whose constant count is at least the operand's bit width. Wasm
-     shifts mask the count modulo the width, so the result is very likely not
-     what was intended. *)
-  (* [count] is the shift count as an unsigned 64-bit value (a hex literal such
-     as [0xffff_ffff_ffff_ffff] is a large positive count, not [-1]), so print
-     and reduce it unsigned. *)
-  let shift_overflow context ~location ~width count =
-    warn ~warning:Wax_utils.Warning.Shift_overflow ~universal:true context
-      ~location
-      ~hint:
-        ((text "Wasm masks the count modulo" ++ Message.int width)
-        ^^ text "," ++ text "shifting by"
-           ++ Message.uint64 (Int64.unsigned_rem count (Int64.of_int width))
-           ++ text "instead.")
-      (text "The shift count" ++ Message.uint64 count
-       ++ text "is at least the operand width ("
-      ^^ Message.int width ^^ text " bits).")
-
-  (* An integer division or remainder by a constant zero: it always traps. *)
-  let division_by_zero context ~location =
-    warn ~warning:Wax_utils.Warning.Constant_trap ~universal:true context
-      ~location
-      (text "This integer division or remainder by zero always traps.")
-
-  (* A comparison whose result does not depend on its variable operand. *)
-  let tautological_comparison context ~location ~value =
-    warn ~warning:Wax_utils.Warning.Tautological_comparison ~universal:true
-      context ~location
-      ((text "This comparison is always" ++ Message.bool value) ^^ text ".")
-
-  (* A branch, loop, or [select] condition that is a constant. *)
-  let constant_condition context ~location ~value =
-    warn ~warning:Wax_utils.Warning.Constant_condition ~universal:true context
-      ~location
-      ((text "This condition is always" ++ Message.bool value) ^^ text ".")
-
-  (* A side-effect-free expression whose result is computed and then dropped. *)
-  let unused_result context ~location =
-    warn ~warning:Wax_utils.Warning.Unused_result ~universal:true context
-      ~location
-      (text
-         "The result of this expression is discarded, and computing it has no \
-          effect.")
-
-  (* A trapping float-to-integer conversion of a constant that lies outside the
-     target type's range (or is NaN/infinite): it always traps. *)
-  let conversion_out_of_range context ~location =
-    warn ~warning:Wax_utils.Warning.Constant_trap ~universal:true context
-      ~location
-      (text
-         "This conversion always traps: the constant is out of the target \
-          type's range.")
-
   (* A statement that can never be reached: it follows an unconditional branch,
      [return], or [unreachable]. [related] points at the diverging instruction. *)
   let dead_code context ~location ~related =
     warn ~warning:Wax_utils.Warning.Dead_code ~universal:true context ~location
       ~related
       (text "This code is unreachable.")
-
-  (* A trapping or effectful operation inside a branch of a [?:]. Because [?:]
-     compiles to a [select], which evaluates both branches, the operation runs
-     even when the condition selects the other branch — unlike the [?:] of most
-     languages, which is lazy. [select] points at the whole [?:]. *)
-  let eager_select context ~location ~select =
-    warn ~warning:Wax_utils.Warning.Eager_select ~universal:true context
-      ~location
-      ~related:
-        [
-          {
-            Wax_utils.Diagnostic.location = select;
-            message =
-              text
-                "This '?:' evaluates both branches (it compiles to a 'select').";
-          };
-        ]
-      ~hint:(text "Use an 'if' expression to evaluate only the chosen branch.")
-      (text
-         "This operation is evaluated even when the condition selects the \
-          other branch.")
-
-  (* Two operators whose relative precedence is easy to misremember are mixed
-     without parentheses (see {!lint_precedence}). [location] is the outer
-     operator, [inner] the tighter-binding one; the [kind]s name the two
-     operator classes ("shift", "arithmetic", "comparison", "bitwise"). *)
-  let precedence ?edit context ~location ~inner ~outer_kind ~inner_kind =
-    warn ?edit ~warning:Wax_utils.Warning.Precedence ~universal:true context
-      ~location
-      ~related:
-        [
-          {
-            Wax_utils.Diagnostic.location = inner;
-            message =
-              text "This" ++ text inner_kind
-              ++ text "operator binds tighter than the"
-              ++ text outer_kind ++ text "operator.";
-          };
-        ]
-      ~hint:(text "Add parentheses to make the grouping explicit.")
-      (text "Operator precedence here is easy to misread.")
 
   let empty_stack context ~location =
     (* Like [unbound_name], suppress this in error-recovery mode: a stack
@@ -1071,32 +777,8 @@ end
 
 (*** Symbol tables and namespaces ***)
 
-module StringSet = Set.Make (String)
-module StringMap = Map.Make (String)
-
-(* The option let-operators (the [@] suffix denotes "optional"): [let*@] binds
-   through [Some]/short-circuits on [None] (Option.bind), [let+@] maps the
-   payload (Option.map), and [let>@] runs an effect only when [Some]
-   (Option.iter). Distinct from the stack-threading [let*]/[let*!] defined with
-   the typing monad further down. *)
-let ( let*@ ) = Option.bind
-let ( let+@ ) o f = Option.map f o
-let ( let>@ ) o f = Option.iter f o
-
-(* Names are resolved relative to a "current assumption" — the conjunction of
-   the conditional-branch conditions enclosing the point being typed. The cell
-   is shared by every namespace and table of one module typing, and updated as
-   the passes descend into [#[if]]/[#[else]] branches. When no conditionals are
-   present (or when checking a single specialized configuration) it stays
-   [true_] and these structures behave like plain name-keyed tables. *)
 module Namespace = struct
-  type t = {
-    cond : Cond.t ref;
-    tbl : (string, (string * location * Cond.t) list) Hashtbl.t;
-    links : resolve_sink;
-        (* Where [Tbl.resolve] records a use -> definition(s) reference, shared
-           across the namespaces of one module; [None] disables recording. *)
-  }
+  include Typing_env.Namespace
 
   let make ?(links = None) cond = { cond; tbl = Hashtbl.create 16; links }
   let entries ns x = try Hashtbl.find ns.tbl x.desc with Not_found -> []
@@ -1124,19 +806,7 @@ module Namespace = struct
 end
 
 module Tbl = struct
-  type 'a t = {
-    kind : string;
-    namespace : Namespace.t;
-    tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
-    (* Names referenced (looked up) through this table, so a declaration that is
-       never referenced can be reported as unused. Populated by [resolve];
-       queried by [is_used]. *)
-    used : (string, unit) Hashtbl.t;
-    hover : 'a -> hover_target option;
-        (* A summary of a resolved value (its type / definition), attached to
-           the reference [resolve] records, for editor hover on a name that is
-           not an expression. [fun _ -> None] leaves the reference hover-less. *)
-  }
+  include Typing_env.Tbl
 
   let make ?(hover = fun _ -> None) namespace kind =
     {
@@ -1233,21 +903,7 @@ module Tbl = struct
     | _ -> Hashtbl.remove env.tbl x.desc
 end
 
-(*** Types and the type context ***)
-
-type types = (Wax_wasm.Types.ref_index * subtype) Tbl.t
-
-type type_context = {
-  internal_types : Wax_wasm.Types.t;
-  types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
-  features : Wax_utils.Feature.set;
-      (* The enabled optional features / proposals, and which are used. *)
-  mutable subtyping_info_cache : Wax_wasm.Types.subtyping_info option;
-      (* Memoised subtyping info for [internal_types]; invalidated by [add_type]
-         when a type is added (including function types minted while
-         type-checking, e.g. an inline [&fn(..)] cast target), so subtyping
-         queries always see the current type space. Read via [subtyping_info]. *)
-}
+type types = Typing_env.types
 
 let get_type_definition d types nm = Option.map snd (Tbl.find d types nm)
 
@@ -1258,7 +914,7 @@ let def_id : Wax_wasm.Types.ref_index -> Wax_wasm.Types.Id.t = function
   | Rec _ -> assert false
 
 (* How a source reference appears inside a rec group being registered. *)
-let resolve_type_ref d ctx name =
+let resolve_type_ref d (ctx : type_context) name =
   let+@ res = Tbl.find d ctx.types name in
   fst res
 
@@ -1413,7 +1069,7 @@ let n_storagetype d ctx ty : Nz.storagetype option =
 
 let n_fieldtype d ctx ty : Nz.fieldtype option = muttype n_storagetype d ctx ty
 
-let comptype d ctx (ty : comptype) : Nz.comptype option =
+let comptype d (ctx : type_context) (ty : comptype) : Nz.comptype option =
   match ty with
   | Func ty ->
       let+@ ty = n_functype d ctx ty in
@@ -1445,8 +1101,8 @@ let defined_before current : Wax_wasm.Types.ref_index -> bool = function
   | Def _ -> true
   | Rec pos -> pos < current
 
-let subtype d ctx current { typ; supertype; final; descriptor; describes } :
-    Nz.subtype option =
+let subtype d (ctx : type_context) current
+    { typ; supertype; final; descriptor; describes } : Nz.subtype option =
   let*@ typ = comptype d ctx typ in
   let*@ supertype =
     match supertype with
@@ -1476,7 +1132,7 @@ let subtype d ctx current { typ; supertype; final; descriptor; describes } :
   let+@ describes = resolve_opt describes in
   { Nz.typ; supertype; final; descriptor; describes }
 
-let rectype d ctx ty =
+let rectype d (ctx : type_context) ty =
   array_mapi_opt (fun i elt -> subtype d ctx i (snd elt.desc)) ty
 
 (* Replace a leading [..] splice sentinel in each struct of the rec group with
@@ -1486,7 +1142,7 @@ let rectype d ctx ty =
    it. Returns a fresh array; the parsed module AST keeps its sentinel (for
    [format] / decompilation round-trip), while the internal type and [ctx.types]
    get the expanded fields. *)
-let expand_splices d ctx ty =
+let expand_splices d (ctx : type_context) ty =
   let expanded = Array.copy ty in
   Array.iteri
     (fun i elt ->
@@ -1562,7 +1218,7 @@ let reserved_type_names =
     "atomic" (* the intrinsic namespace *);
   ]
 
-let add_type d ctx ty =
+let add_type d (ctx : type_context) ty =
   Array.iteri
     (fun i elt ->
       let name, (typ : subtype) = elt.desc in
@@ -1634,127 +1290,6 @@ let add_type d ctx ty =
       Some i'
 
 (*** The module context ***)
-
-type module_context = {
-  (* --- Diagnostics and whole-run configuration --- *)
-  diagnostics : Wax_utils.Diagnostic.context;
-  warn_unused : bool;
-      (* Whether to report locals declared by a [let] but never read. Enabled
-         only when validation is requested. *)
-  simplify : bool;
-  (* Whether to rewrite the AST while typing: drop casts the inferred types
-         make redundant and tighten [&?extern]/[&?any] casts to
-         [&extern]/[&any]. Enabled only when converting from Wasm; for
-         hand-written Wax (formatting, or compiling to Wasm) casts are kept as
-         written. *)
-  suggest : bool;
-  (* Whether to emit [Suggestion] diagnostics carrying machine-applicable
-         rewrites (redundant-cast removal, compound assignment, field punning, a
-         redundant [let] annotation), for editor quick fixes and [wax check].
-         The AST is left untouched (unlike [simplify], which rewrites it); the
-         two are mutually exclusive. Enabled for hand-written Wax only. *)
-  (* --- Module-wide type and name tables (built once, before any body) --- *)
-  type_context : type_context;
-  types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
-  (* Per function: interned type index, type name, and whether a reference to it
-     is exact (a defined function or an exact import — custom-descriptors). *)
-  functions : (Wax_wasm.Types.Id.t * string * bool) Tbl.t;
-  globals : (*mutable:*) (bool * inferred_valtype option) Tbl.t;
-      (* As for [locals], the type is [None] for a global whose initializer
-         failed to type — a poison global read as [Error] to avoid cascades. *)
-  import_globals : (bool * inferred_valtype option) Tbl.t;
-      (* The globals in scope for a table initializer: only the imported ones.
-         A table is typed before the module's own globals are registered, so its
-         initializer can reference only imports (unlike a global initializer,
-         which sees the globals declared before it). *)
-  tags : functype Tbl.t;
-  memories : (int * [ `I32 | `I64 ]) Tbl.t;
-  datas : unit Tbl.t;
-  tables : ([ `I32 | `I64 ] * reftype) Tbl.t;
-  elems : reftype Tbl.t;
-  structs_by_fields : (string, ident option) Hashtbl.t;
-  (* Maps a struct's canonical field-set key (see [field_set_key]) to the
-         unique struct type with that field set, or [None] when several share
-         it. Lets a struct literal whose name is omitted resolve from its fields
-         alone (and the name be dropped when the fields make it unambiguous).
-         Built once at module-context creation. *)
-  (* --- Per-function state (reset on entry to each function) --- *)
-  mutable locals : (inferred_valtype option * location) StringMap.t;
-      (* The local's type paired with its binding site's source span (for
-         go-to-definition). The type is [None] when it could not be determined
-         because its initializer failed to type — an error-recovery "poison"
-         local, read as the [Error] type so its uses don't cascade into further
-         errors. *)
-  mutable initialized_locals : StringSet.t;
-      (* Locals known to hold a value at the current point. A non-defaultable
-         (non-nullable reference) local starts uninitialized and must be
-         assigned before it is read. The set is captured by [{ ctx with ... }]
-         on block entry, so an assignment inside a block does not escape it.
-         Within a straight-line operand sequence it only grows, which is what
-         lets a trailing operand typed out of emission order be reconciled by
-         [type_trailing_operand]. *)
-  mutable deferred_uninit : ident list ref list;
-      (* A stack of collectors for uninitialized-local reads deferred by a
-         trailing operand typed out of emission order (see
-         [type_trailing_operand]). While non-empty, an uninitialized read funnels
-         into the innermost (head) collector instead of erroring, to be re-checked
-         against the true state at the operand's emission slot. Empty outside such
-         an operand, so a read then reports immediately. *)
-  read_locals : StringSet.t ref;
-      (* Names of locals read so far in the current function. A [ref] (rather
-         than a snapshot field) so reads inside a block propagate to the
-         function level. Reset per function. *)
-  local_decls : ident list ref;
-      (* The [let]-bound locals declared in the current function, in declaration
-         order, so an unread one can be reported as unused. Reset per function. *)
-  used_labels : StringSet.t ref;
-      (* Names of block labels branched to so far in the current function
-         (marked by [branch_target]). A [ref] so a branch nested in a block
-         propagates to the function level. Reset per function. *)
-  deferred_lints : (unit -> unit) list ref;
-      (* Lints that must read a result cell only once typing has pinned it (the
-         [shift-count-overflow] lint reads the shifted operand's width, which a
-         later context can widen). Accumulated across the whole configuration and
-         flushed at the end of [type_configuration], when every cell is final. *)
-  label_decls : ident list;
-      (* The block labels declared in the current function's body, collected up
-         front from the source AST (see [collect_labels]), so one never branched
-         to can be reported as unused. Reset per function. *)
-  assigned_locals : StringSet.t;
-      (* Names of locals assigned ([Set]/[Tee] targets) anywhere in the current
-         function, collected once on entry (see [collect_assigned_locals]). Lets
-         the annotation-drop on a fused [let x: T = e] tell a write-once local —
-         which may narrow to [e]'s subtype just like an immutable global — from
-         one a later assignment still needs the wider [T] for. Reset per
-         function. *)
-  control_types : (label option * inferred_type Cell.t array) list;
-      (* Each enclosing control frame's label (kept as its [ident], so a branch
-         can be linked to the labelled construct for go-to-definition) and the
-         types it delivers. *)
-  return_types : inferred_type Cell.t array;
-  (* --- Conditional-compilation branch assumption --- *)
-  cond : Cond.t ref;
-      (* Current branch assumption (shared with every namespace/table above);
-         set while typing a conditional branch so names resolve per branch. *)
-  cond_env : Cond.env;
-  resolve_links : resolve_sink;
-      (* Where use -> definition references are recorded (locals via
-         [resolve_variable], labels via [branch_target]; module fields via
-         [Tbl.resolve] through the namespaces). The same sink the namespaces
-         hold; [None] outside the editor. *)
-  pun_spans : location list ref option;
-      (* The span of each punned struct-literal field (the bare-name form,
-         [x] standing for [x: x]), recorded at the field name. Such a span is
-         both a field name and a variable use, so the editor must expand it
-         ([x] -> [x: new]) rather than replace it on rename. [None] outside the
-         editor. *)
-  member_completions : (location * member_receiver) list ref option;
-      (* At each struct field access [recv.field], the field-name span paired
-         with the receiver's members (a struct's fields, or the value methods of
-         a numeric / array receiver), for member completion. The editor offers
-         those when the cursor is on the (possibly partial) field. [None]
-         outside the editor. *)
-}
 
 (* The subtyping info for the current type space, memoised on [type_context] and
    rebuilt on demand after [add_type] invalidates it. Always current, so a
@@ -2698,332 +2233,11 @@ let check_type ctx i ty =
     Error.instruction_type_mismatch ctx.diagnostics ~location:(snd i.info) ty'
       ty
 
-(*** Lint checks on constant operands ***)
-
-(* Parse a Wax integer literal (decimal or [0x] hex, with [_] separators) to an
-   [int64], or [None] if it is malformed or does not fit. *)
-let int_literal_value s =
-  Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
-
-(* Whether [e] is the integer literal equal to [n]. *)
-let int_literal_value_is n (e : _ Ast.instr) =
-  match e.desc with Ast.Int s -> int_literal_value s = Some n | _ -> false
-
-(* Whether [e] is the integer literal zero. *)
-let int_literal_value_is_zero e = int_literal_value_is 0L e
-
-(* The [int64] value of a constant integer operand, looking through a leading
-   sign. A negative literal is [UnOp (Neg, Int …)], not a bare [Int], so the
-   constant-condition and shift lints below miss it unless they look through the
-   [Neg] — the Wasm validator sees the folded [i32.const] directly. *)
-let rec int_operand_value (e : _ Ast.instr) =
-  match e.desc with
-  | Ast.Int s -> int_literal_value s
-  | UnOp ({ desc = Neg; _ }, a) -> Option.map Int64.neg (int_operand_value a)
-  | UnOp ({ desc = Pos; _ }, a) -> int_operand_value a
-  | _ -> None
-
-(* [x << n] / [x >> n] with a constant [n] at least the operand's bit width:
-   Wasm masks [n] modulo the width, so the shift is almost certainly not what
-   was meant. The operand width comes from the result cell: a concrete i32/i64,
-   or a still-flexible integer at its default width (Number/Int -> i32,
-   LargeInt -> i64). This is deferred (see [ctx.deferred_lints]) until typing
-   finishes, so a literal a later context pins to a wider type is already
-   concrete here — [1 << 40] typed [i64] is fine, typed [i32] is not — and only a
-   genuinely unconstrained operand falls back to a default. *)
-let lint_shift ctx op result rhs =
-  (* Parse a constant shift count unsigned: a hex literal past [2^63] wraps to a
-     negative [int64] under a signed parse, so compare unsigned. Look through a
-     leading sign, as [lint_condition] does — a negative count (masked modulo the
-     width, so still surprising) is [UnOp (Neg, Int …)], not a bare [Int]. A
-     literal exceeding [u64] ([None]) is left alone (astronomically large, and
-     beyond what the message can render). *)
-  let rec shift_count (e : _ Ast.instr) =
-    match e.desc with
-    | Ast.Int s ->
-        let bits = String.concat "" (String.split_on_char '_' s) in
-        if String.starts_with ~prefix:"0x" bits then Int64.of_string_opt bits
-        else Int64.of_string_opt ("0u" ^ bits)
-    | UnOp ({ desc = Neg; _ }, a) -> Option.map Int64.neg (shift_count a)
-    | UnOp ({ desc = Pos; _ }, a) -> shift_count a
-    | _ -> None
-  in
-  match op.desc with
-  | Shl | Shr _ -> (
-      match
-        match Cell.get result with
-        | Valtype { internal = I32; _ } | Number | Int -> Some 32
-        | Valtype { internal = I64; _ } | LargeInt -> Some 64
-        | _ -> None
-      with
-      | None -> ()
-      | Some width -> (
-          match shift_count rhs with
-          | Some n when Int64.unsigned_compare n (Int64.of_int width) >= 0 ->
-              Error.shift_overflow ctx.diagnostics ~location:op.info ~width n
-          | _ -> ()))
-  | _ -> ()
-
-(* Run and clear the lints deferred until their result cells were pinned (see
-   [ctx.deferred_lints]). Called once each per-body scope (global initializers,
-   then each function body) finishes typing, so the diagnostics stay in source
-   order rather than all landing at the end of the module. *)
-let flush_deferred_lints ctx =
-  List.iter (fun f -> f ()) (List.rev !(ctx.deferred_lints));
-  ctx.deferred_lints := []
-
-(* Integer [/] or [%] by a constant zero always traps. [Div (Some _)] and
-   [Rem _] are the integer forms ([Div None] is float division, which does not
-   trap on a zero divisor). *)
-let lint_division ctx op rhs =
-  match op.desc with
-  | (Div (Some _) | Rem _) when int_literal_value_is_zero rhs ->
-      Error.division_by_zero ctx.diagnostics ~location:op.info
-  | _ -> ()
-
-(* Parse a Wax float literal (decimal or hex float with [_] separators, or the
-   [nan:0x…] form) to an OCaml float, or [None] if it is malformed. *)
-let float_literal_value s =
-  if String.length s >= 3 && String.equal (String.sub s 0 3) "nan" then
-    Some Float.nan
-  else float_of_string_opt (String.concat "" (String.split_on_char '_' s))
-
-(* Round an [f64] to the nearest representable [f32] (the demote the runtime
-   applies), via the single-precision bit layout. *)
-let round_to_f32 f = Int32.float_of_bits (Int32.bits_of_float f)
-
-(* The lattice type of a float(-valued) literal [s]: the flexible [Float] (either
-   width, pinned by context) when [s] rounds to a valid f32, else concrete [f64].
-   An out-of-f32-range magnitude must never be pinned to f32 — it would print as
-   an out-of-range [f32.const] — so a later [as f32] lowers to a real [f64->f32]
-   demote instead of folding into the literal. *)
-let float_literal_lattice s =
-  if Wax_wasm.Misc.is_float32 s then Float else Valtype f64_valtype
-
-(* The float value of a constant operand, looking through a leading sign and a
-   demote/promote to a float type. The latter matters because a constant [f32]
-   has no literal suffix, so the decompiler prints it as [<lit> as f32] — a
-   trapping conversion's constant operand ([<big> as f32 as i32_u_strict]) then
-   hides behind that [as f32]. Round through the demote so the folded value is
-   the one the conversion actually sees. *)
-let rec float_operand_value i =
-  match i.desc with
-  | Ast.Float s -> float_literal_value s
-  | UnOp ({ desc = Neg; _ }, e) -> Option.map Float.neg (float_operand_value e)
-  | UnOp ({ desc = Pos; _ }, e) -> float_operand_value e
-  | Cast (e, Valtype F32) -> Option.map round_to_f32 (float_operand_value e)
-  | Cast (e, Valtype F64) -> float_operand_value e
-  | _ -> None
-
-(* Whether a trapping (toward-zero) float-to-integer conversion of [f] to the
-   given target/signage would trap: [f] is NaN or infinite, or its truncation
-   lies outside the target range. Bounds are the exact powers of two, so a value
-   is flagged only when it is definitely out of range (no false positives near a
-   boundary the float type cannot represent exactly). *)
-let float_conversion_traps target signage f =
-  if not (Float.is_finite f) then true
-  else
-    let t = Float.trunc f in
-    let pow2 n = Float.ldexp 1. n in
-    match (target, signage) with
-    | `I32, Signed -> t < -.pow2 31 || t >= pow2 31
-    | `I32, Unsigned -> t < 0. || t >= pow2 32
-    | `I64, Signed -> t < -.pow2 63 || t >= pow2 63
-    | `I64, Unsigned -> t < 0. || t >= pow2 64
-
-(* A trapping float-to-integer conversion ([e as i32_s] and the like — the
-   [strict] cast forms lower to [trunc], which traps, rather than [trunc_sat])
-   of a constant float that is out of the target range: it always traps. *)
-let lint_conversion ctx ~location typ operand =
-  match typ with
-  | Signedtype { typ = (`I32 | `I64) as target; signage; strict = true } -> (
-      match float_operand_value operand with
-      | Some f when float_conversion_traps target signage f ->
-          Error.conversion_out_of_range ctx.diagnostics ~location
-      | _ -> ())
-  | _ -> ()
-
-(* Whether two operands are the same pure read (a local or global [get]), so the
-   two evaluations yield the same value with no side effect. Restricted to [get]
-   to stay conservative — no calls, no field/array reads that could trap. *)
-let identical_operands (l : _ Ast.instr) (r : _ Ast.instr) =
-  match (l.desc, r.desc) with
-  | Get a, Get b -> String.equal a.desc b.desc
-  | _ -> false
-
-(* A comparison whose result is constant regardless of its variable operand: an
-   unsigned comparison against zero ([a <u 0] is false, [a >=u 0] is true), or a
-   comparison of two identical operands ([a < a] is false, [a == a] is true).
-   The signed/unsigned option marks an integer comparison; [Eq]/[Ne] carry no
-   signage, so a self-comparison is only flagged for a concrete integer operand
-   (a float [a == a] is false on NaN, and reference identity is a separate
-   concern). *)
-let lint_comparison ctx op l r =
-  let is_int e =
-    match Cell.get (expression_type ctx e) with
-    | Valtype { internal = I32 | I64; _ } -> true
-    | _ -> false
-  in
-  let tautology =
-    match op.desc with
-    | Lt (Some Unsigned) when int_literal_value_is_zero r -> Some false
-    | Ge (Some Unsigned) when int_literal_value_is_zero r -> Some true
-    | Gt (Some Unsigned) when int_literal_value_is_zero l -> Some false
-    | Le (Some Unsigned) when int_literal_value_is_zero l -> Some true
-    | (Lt (Some _) | Gt (Some _)) when identical_operands l r -> Some false
-    | (Le (Some _) | Ge (Some _)) when identical_operands l r -> Some true
-    | Eq when identical_operands l r && is_int l -> Some true
-    | Ne when identical_operands l r && is_int l -> Some false
-    | _ -> None
-  in
-  match tautology with
-  | Some value ->
-      Error.tautological_comparison ctx.diagnostics ~location:op.info ~value
-  | None -> ()
-
-(* An arithmetic operation with no effect on its result (an identity operand or
-   two identical operands), or whose result is a constant regardless of the
-   variable operand (an absorbing operand). Off by default. *)
-let lint_redundant ctx op l r =
-  let is0 = int_literal_value_is 0L in
-  let is1 = int_literal_value_is 1L in
-  let is_int e =
-    match Cell.get (expression_type ctx e) with
-    | Valtype { internal = I32 | I64; _ } -> true
-    | _ -> false
-  in
-  let no_effect () =
-    Error.redundant_operation ctx.diagnostics ~location:op.info
-      (Wax_utils.Message.text "This operation has no effect on its result.")
-  in
-  let always v =
-    Error.redundant_operation ctx.diagnostics ~location:op.info
-      Wax_utils.Message.(
-        (text "This operation always yields" ++ int64 v) ^^ text ".")
-  in
-  match op.desc with
-  | Add when is0 l || is0 r -> no_effect () (* x + 0 *)
-  | (Sub | Shl | Shr _) when is0 r -> no_effect () (* x - 0, x << 0 *)
-  | Mul when is1 l || is1 r -> no_effect () (* x * 1 *)
-  | Div (Some _) when is1 r -> no_effect () (* x / 1 *)
-  | (Or | Xor) when is0 l || is0 r -> no_effect () (* x | 0, x ^ 0 *)
-  | (And | Or) when identical_operands l r -> no_effect () (* x & x, x | x *)
-  | Mul when is0 l || is0 r -> always 0L (* x * 0 *)
-  | And when is0 l || is0 r -> always 0L (* x & 0 *)
-  | Rem _ when is1 r -> always 0L (* x % 1 *)
-  | Xor when identical_operands l r -> always 0L (* x ^ x (integer bitwise) *)
-  (* [x - x] is 0 only for integers: a float [x - x] is NaN when [x] is NaN or
-     an infinity, so the result is not a constant. *)
-  | Sub when identical_operands l r && is_int l -> always 0L
-  | _ -> ()
-
-(* A branch, loop, or [select] condition that is a constant literal, so it
-   always takes the same path. [is_while] excludes the idiomatic infinite loop
-   [while <nonzero>] (only [while 0], a loop that never runs, is flagged). *)
-let lint_condition ctx ?(is_while = false) (cond : _ Ast.instr) =
-  match int_operand_value cond with
-  | Some n ->
-      let value = n <> 0L in
-      if not (is_while && value) then
-        Error.constant_condition ctx.diagnostics ~location:cond.info ~value
-  | None -> ()
-
-(* Whether evaluating [e] has no side effect and cannot trap, so computing it
-   only to discard the result is pointless. Conservative: reads of locals/
-   globals and constants, pure arithmetic/logic over them, and heap allocations
-   (which are effect-free and non-trapping) whose operands are themselves
-   effect-free. Excludes calls, assignments, field/element accesses (may trap on
-   null / out of bounds), casts, [array.new_data]/[array.new_elem] (trap out of
-   bounds), and trapping arithmetic ([/]/[%]). Mirrors the Wasm validator's
-   purity classification (see [lint_body] in [Validation]). *)
-(* The no-argument and one-argument numeric instruction methods ([x.abs()],
-   [x.min(y)]) parse as [Call (StructGet (recv, m), args)] (see [is_unary_method]
-   / the method registries). They are pure and total, so discarding one is
-   pointless — except [length] ([array.length] traps on a null array), left
-   impure. Mirrors the Wasm validator's [classify] purity table. *)
-let is_pure_unary_method = function
-  | "clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s" | "abs" | "ceil"
-  | "floor" | "trunc" | "nearest" | "sqrt" | "to_bits" | "from_bits" ->
-      true
-  | _ -> false
-
-let is_pure_binary_method = function
-  | "rotl" | "rotr" | "min" | "max" | "copysign" -> true
-  | _ -> false
-
-(* Whether a cast is total (never traps), so discarding its result is pointless.
-   A [strict] float-to-int conversion lowers to [trunc] (traps out of range); its
-   saturating form and every numeric widen/narrow/convert is total. A reference
-   cast ([as &T]) may trap and is conservatively treated as non-total (the
-   never-trapping [extern.convert_any] is spelled the same way but not
-   distinguished here). Mirrors the Wasm validator's [classify]. *)
-let cast_is_total = function
-  | Ast.Signedtype { typ; strict; _ } -> (
-      match typ with `F32 | `F64 -> true | `I32 | `I64 -> not strict)
-  | Valtype (I32 | I64 | F32 | F64) -> true
-  | Valtype (V128 | Ref _) | Functype _ -> false
-
-let rec is_effectless (e : _ Ast.instr) =
-  (* A field value; the punning shorthand [{x}] reads a local/global. *)
-  let field (_, v) = match v with Some e -> is_effectless e | None -> true in
-  match e.desc with
-  | Get _ | Int _ | Float _ | Char _ | String _ | Null | StructDefault _ -> true
-  | UnOp (_, a) -> is_effectless a
-  | Call ({ desc = StructGet (recv, m); _ }, [])
-    when is_pure_unary_method m.desc ->
-      is_effectless recv
-  | Call ({ desc = StructGet (recv, m); _ }, [ a ])
-    when is_pure_binary_method m.desc ->
-      is_effectless recv && is_effectless a
-  (* A SIMD vector method on a value ([v.add_i32x4(w)], [v.trunc_sat_f32x4_u()]):
-     every vector op is pure and non-trapping (the trapping SIMD accesses are the
-     [mem.]-path loads/stores, classified separately by [Simd.mem_method]). *)
-  | Call ({ desc = StructGet (recv, m); _ }, args)
-    when Wax_wasm.Simd.classify m.desc <> None ->
-      is_effectless recv && List.for_all is_effectless args
-  (* A [v128::…] SIMD constructor or vector op ([v128::i8x16(…)], a lane build)
-     is effect-free and non-trapping when its operands are — the trapping SIMD
-     memory accesses use the [mem.] path, not [v128::]. *)
-  | Call ({ desc = Path ({ desc = "v128"; _ }, _); _ }, args) ->
-      List.for_all is_effectless args
-  (* [memory.size] / [table.size] ([m.size()]) reads the current size: pure and
-     non-trapping, unlike the effectful grow/fill/copy/init on the same path. *)
-  | Call
-      ({ desc = StructGet ({ desc = Get _; _ }, { desc = "size"; _ }); _ }, [])
-    ->
-      true
-  (* A typed null [null as &?t] is [ref.null] (a constant), not a trapping ref
-     cast, so it is effect-free like a bare [null]. *)
-  | Cast ({ desc = Null; _ }, Valtype (Ref { nullable = true; _ })) -> true
-  | Cast (a, ct) when cast_is_total ct -> is_effectless a
-  | BinOp ({ desc = Div _ | Rem _; _ }, _, _) -> false
-  | BinOp (_, a, b) -> is_effectless a && is_effectless b
-  | Select (a, b, c) -> is_effectless a && is_effectless b && is_effectless c
-  | Test (a, _) -> is_effectless a
-  | Struct (_, fields) -> List.for_all field fields
-  | StructDesc (d, fields) -> is_effectless d && List.for_all field fields
-  | StructDefaultDesc d -> is_effectless d
-  | Array (_, elt, len) -> is_effectless elt && is_effectless len
-  | ArrayDefault (_, len) -> is_effectless len
-  | ArrayFixed (_, elts) -> List.for_all is_effectless elts
-  | _ -> false
-
-(* The concrete type an initializer would take with no annotation, matching the
-   resolution of the unannotated [let] case. Returns [None] for types we never
-   want to drop an annotation for (packed or still unconstrained). Pure: it does
-   not mutate [ty], so it can be read before [check_type] constrains it. *)
-let standalone_valtype ctx ty =
-  match Cell.get ty with
-  | Valtype v -> Some v
-  | Int | Number -> Some i32_valtype
-  | LargeInt -> Some i64_valtype
-  | Float -> Some f64_valtype
-  | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
-  (* The bottom reference concretizes to the non-null [&none], matching the type
-     [null!] produced before [UnknownRef] existed. *)
-  | UnknownRef ->
-      internalize_valtype ctx (Ref { nullable = false; typ = None_ })
-  | Int8 | Int16 | Unknown | Error | Collecting _ -> None
+(* [standalone_valtype] is context-independent (its only reference result is the
+   built-in [None_] bottom), so the typer's ctx-threading call sites delegate to
+   the pure {!Typing_env.standalone_valtype}; the [ctx] is kept for call-site
+   uniformity. *)
+let standalone_valtype _ctx ty = Typing_env.standalone_valtype ty
 
 (* Resolve the type that an omitted annotation takes from its initializer, as in
    [let x = e] or [const x = e]: an as-yet-unconstrained literal is pinned to a
@@ -3478,585 +2692,6 @@ let check_resume_handlers ctx ~result_types handlers =
                 | _ -> ())))
     handlers
 
-let rec count_holes i =
-  match i.desc with
-  | Hole -> 1
-  | BinOp (_, l, r)
-  | Array (_, l, r)
-  | ArraySegment (_, _, l, r)
-  | ArrayGet (l, r) ->
-      count_holes l + count_holes r
-  | ArraySet (t, i, v) -> count_holes t + count_holes i + count_holes v
-  | Call (f, args) | TailCall (f, args) ->
-      count_holes f + List.fold_left (fun acc i -> acc + count_holes i) 0 args
-  | If { cond = i; _ }
-  | Let (_, Some i)
-  | Set (_, _, i)
-  | Tee (_, i)
-  | Labelled (_, i)
-  | UnOp (_, i)
-  | Cast (i, _)
-  | Test (i, _)
-  | NonNull i
-  | Br (_, Some i)
-  | Br_if (_, i)
-  | Hinted (_, i)
-  | On (i, _)
-  | Br_table (_, i)
-  | Br_on_null (_, i)
-  | Br_on_non_null (_, i)
-  | Br_on_cast (_, _, i)
-  | Br_on_cast_fail (_, _, i)
-  | ArrayDefault (_, i)
-  | ThrowRef i
-  | ContNew (_, i)
-  | Return (Some i)
-  | StructDefaultDesc i
-  | GetDescriptor i
-  | StructGet (i, _) ->
-      count_holes i
-  | CastDesc (i1, _, i2)
-  | Br_on_cast_desc_eq (_, _, i1, i2)
-  | Br_on_cast_desc_eq_fail (_, _, i1, i2)
-  | StructSet (i1, _, i2) ->
-      count_holes i1 + count_holes i2
-  (* A punned field ([None]) is a [Get], which contains no holes. *)
-  | Struct (_, l) ->
-      List.fold_left
-        (fun acc (_, i) -> acc + Option.fold ~none:0 ~some:count_holes i)
-        0 l
-  | StructDesc (d, l) ->
-      count_holes d
-      + List.fold_left
-          (fun acc (_, i) -> acc + Option.fold ~none:0 ~some:count_holes i)
-          0 l
-  | Sequence l
-  | ArrayFixed (_, l)
-  | ContBind (_, _, l)
-  | Suspend (_, l)
-  | Resume (_, _, l)
-  | ResumeThrow (_, _, _, l)
-  | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l)
-  | Throw (_, l) ->
-      List.fold_left (fun acc i -> acc + count_holes i) 0 l
-  | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
-  (* [dispatch]/[match], [while] and [do]-[while] are block-like: their
-     operands/scrutinee and bodies are checked inside the blocks they desugar
-     to, so no hole at this level draws from the stack. *)
-  | Block _ | Loop _ | While _ | TryTable _ | Try _ | TryCatch _
-  | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _ | String _
-  | Int _ | Float _ | Get _ | Path _ | Null | Unreachable | Nop
-  | Let (_, None)
-  | Br (_, None)
-  | Return None ->
-      0
-
-(* Accumulate into [acc] the local names assigned ([Set]/[Tee] targets) anywhere
-   in [i], recursing through every sub-instruction. Mirrors the case coverage of
-   {!Sink_let.occurs}: only [Set]/[Tee] write a local, every other case just
-   recurses. A drop ([_ = e], an anonymous [Let]) names no local, so it just
-   recurses via the [Let] case. Wasm-derived locals are uniquely named within a
-   function, so the
-   resulting by-name set is exact; a stray name collision could only keep an
-   annotation, never wrongly drop one. *)
-let rec collect_assigned_locals acc i =
-  let in_list acc l = List.fold_left collect_assigned_locals acc l in
-  let in_opt acc o =
-    match o with Some i -> collect_assigned_locals acc i | None -> acc
-  in
-  match i.desc with
-  | Set (id, _, e) | Tee (id, e) ->
-      collect_assigned_locals (StringSet.add id.desc acc) e
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      in_list acc block.desc
-  | While { cond; step; block; _ } ->
-      let acc = collect_assigned_locals acc cond in
-      let acc =
-        Option.fold ~none:acc ~some:(collect_assigned_locals acc) step
-      in
-      in_list acc block.desc
-  | If { cond; if_block; else_block; _ } ->
-      let acc = in_list (collect_assigned_locals acc cond) if_block.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
-  | Try { block; catches; catch_all; _ } ->
-      let acc = in_list acc block.desc in
-      let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
-      in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
-  | TryCatch { block; arms; _ } ->
-      let acc = in_list acc block.desc in
-      List.fold_left (fun acc a -> in_list acc a.arm_body.desc) acc arms
-  | Call (t, args) | TailCall (t, args) ->
-      in_list (collect_assigned_locals acc t) args
-  | Cast (e, _)
-  | Test (e, _)
-  | NonNull e
-  | StructGet (e, _)
-  | GetDescriptor e
-  | StructDefaultDesc e
-  | UnOp (_, e)
-  | Br_if (_, e)
-  | Hinted (_, e)
-  | On (e, _)
-  | Labelled (_, e)
-  | Br_table (_, e)
-  | Br_on_null (_, e)
-  | Br_on_non_null (_, e)
-  | Br_on_cast (_, _, e)
-  | Br_on_cast_fail (_, _, e)
-  | ThrowRef e
-  | ArrayDefault (_, e)
-  | ContNew (_, e) ->
-      collect_assigned_locals acc e
-  (* A punned field ([None]) is a [Get] and assigns nothing. *)
-  | Struct (_, fields) ->
-      List.fold_left
-        (fun acc (_, e) ->
-          Option.fold ~none:acc ~some:(collect_assigned_locals acc) e)
-        acc fields
-  | StructDesc (d, fields) ->
-      List.fold_left
-        (fun acc (_, e) ->
-          Option.fold ~none:acc ~some:(collect_assigned_locals acc) e)
-        (collect_assigned_locals acc d)
-        fields
-  | CastDesc (e1, _, e2)
-  | Br_on_cast_desc_eq (_, _, e1, e2)
-  | Br_on_cast_desc_eq_fail (_, _, e1, e2)
-  | StructSet (e1, _, e2)
-  | Array (_, e1, e2)
-  | ArraySegment (_, _, e1, e2)
-  | ArrayGet (e1, e2)
-  | BinOp (_, e1, e2) ->
-      collect_assigned_locals (collect_assigned_locals acc e1) e2
-  | ArraySet (e1, e2, e3) | Select (e1, e2, e3) ->
-      collect_assigned_locals
-        (collect_assigned_locals (collect_assigned_locals acc e1) e2)
-        e3
-  | ArrayFixed (_, l)
-  | ContBind (_, _, l)
-  | Suspend (_, l)
-  | Resume (_, _, l)
-  | ResumeThrow (_, _, _, l)
-  | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l)
-  | Throw (_, l)
-  | Sequence l ->
-      in_list acc l
-  | Dispatch { index; arms; _ } ->
-      List.fold_left
-        (fun acc (_, b) -> in_list acc b.desc)
-        (collect_assigned_locals acc index)
-        arms
-  | Match { scrutinee; arms; default } ->
-      let acc = collect_assigned_locals acc scrutinee in
-      let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc arms
-      in
-      in_list acc default.desc
-  | Let (_, body) -> in_opt acc body
-  | Br (_, o) | Return o -> in_opt acc o
-  | If_annotation { then_body; else_body; _ } ->
-      let acc = in_list acc then_body.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
-  | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
-  | Float _ | StructDefault _ ->
-      acc
-
-(* Accumulate into [acc] the block labels declared anywhere in [i], from the
-   source AST (before any lowering, so synthesized labels from [while]/[dispatch]/
-   [match] desugaring are never collected). Every case recurses; the labelled
-   constructs also contribute their own label. The [dispatch]/[match] arm labels
-   are branch targets, not declarations, so they are not collected. Mirrors the
-   case coverage of {!collect_assigned_locals}. *)
-let rec collect_labels acc (i : _ Ast.instr) =
-  let in_list acc l = List.fold_left collect_labels acc l in
-  let in_opt acc o =
-    match o with Some i -> collect_labels acc i | None -> acc
-  in
-  let add acc label = match label with Some l -> l :: acc | None -> acc in
-  match i.desc with
-  | Block { label; block; _ }
-  | Loop { label; block; _ }
-  | TryTable { label; block; _ } ->
-      in_list (add acc label) block.desc
-  | While { label; cond; step; block; _ } ->
-      let acc = collect_labels (add acc label) cond in
-      let acc = Option.fold ~none:acc ~some:(collect_labels acc) step in
-      in_list acc block.desc
-  | If { label; cond; if_block; else_block; _ } ->
-      let acc = in_list (collect_labels (add acc label) cond) if_block.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
-  | Try { label; block; catches; catch_all; _ } ->
-      let acc = in_list (add acc label) block.desc in
-      let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
-      in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
-  | TryCatch { label; block; arms; _ } ->
-      let acc = in_list (add acc label) block.desc in
-      List.fold_left (fun acc a -> in_list acc a.arm_body.desc) acc arms
-  | Call (t, args) | TailCall (t, args) -> in_list (collect_labels acc t) args
-  | Set (_, _, e)
-  | Tee (_, e)
-  | Labelled (_, e)
-  | Cast (e, _)
-  | Test (e, _)
-  | NonNull e
-  | StructGet (e, _)
-  | GetDescriptor e
-  | StructDefaultDesc e
-  | UnOp (_, e)
-  | Br_if (_, e)
-  | Hinted (_, e)
-  | On (e, _)
-  | Br_table (_, e)
-  | Br_on_null (_, e)
-  | Br_on_non_null (_, e)
-  | Br_on_cast (_, _, e)
-  | Br_on_cast_fail (_, _, e)
-  | ThrowRef e
-  | ArrayDefault (_, e)
-  | ContNew (_, e) ->
-      collect_labels acc e
-  | Struct (_, fields) ->
-      List.fold_left (fun acc (_, e) -> in_opt acc e) acc fields
-  | StructDesc (d, fields) ->
-      List.fold_left
-        (fun acc (_, e) -> in_opt acc e)
-        (collect_labels acc d) fields
-  | CastDesc (e1, _, e2)
-  | Br_on_cast_desc_eq (_, _, e1, e2)
-  | Br_on_cast_desc_eq_fail (_, _, e1, e2)
-  | StructSet (e1, _, e2)
-  | Array (_, e1, e2)
-  | ArraySegment (_, _, e1, e2)
-  | ArrayGet (e1, e2)
-  | BinOp (_, e1, e2) ->
-      collect_labels (collect_labels acc e1) e2
-  | ArraySet (e1, e2, e3) | Select (e1, e2, e3) ->
-      collect_labels (collect_labels (collect_labels acc e1) e2) e3
-  | ArrayFixed (_, l)
-  | ContBind (_, _, l)
-  | Suspend (_, l)
-  | Resume (_, _, l)
-  | ResumeThrow (_, _, _, l)
-  | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l)
-  | Throw (_, l)
-  | Sequence l ->
-      in_list acc l
-  | Dispatch { index; arms; _ } ->
-      List.fold_left
-        (fun acc (_, b) -> in_list acc b.desc)
-        (collect_labels acc index) arms
-  | Match { scrutinee; arms; default } ->
-      let acc = collect_labels acc scrutinee in
-      let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc arms
-      in
-      in_list acc default.desc
-  | Let (_, body) -> in_opt acc body
-  | Br (_, o) | Return o -> in_opt acc o
-  | If_annotation { then_body; else_body; _ } ->
-      let acc = in_list acc then_body.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
-  | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
-  | Float _ | StructDefault _ ->
-      acc
-
-(* The location of a trapping or effectful operation reached on the eagerly-
-   evaluated spine of a [?:] branch [e], or [None] if the branch only reads
-   locals/globals and computes pure arithmetic. Descends through pure operators
-   (into the operands that are always evaluated) but stops at any nested control
-   construct (an inner [if], [?:], block, loop, …): the sub-expressions guarded
-   by it are not evaluated unconditionally, and a nested [?:] is linted in its
-   own right. The hazard set matches the Wasm validator's ([lint_eager_select]
-   in [Validation]): integer division/remainder, field and element accesses,
-   [!], the descriptor cast, [array.new_data]/[array.new_elem], [unreachable],
-   calls, assignments, throws, and stack-switching — but not plain casts (a
-   [ref.cast] is diagnosed by [cast-always-fails] instead). *)
-let rec find_eager_hazard (e : _ Ast.instr) =
-  let ( <|> ) o f = match o with Some _ -> o | None -> f () in
-  let descend l =
-    List.fold_left (fun acc e -> acc <|> fun () -> find_eager_hazard e) None l
-  in
-  match e.desc with
-  (* Trapping or effectful operations: report the operation itself. *)
-  | ArrayGet _ | ArraySet _ | StructGet _ | StructSet _ | GetDescriptor _
-  | NonNull _ | CastDesc _ | ArraySegment _ | Unreachable | Call _ | TailCall _
-  | Set _ | Tee _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _
-  | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ ->
-      Some e.info
-  | BinOp ({ desc = Div (Some _) | Rem _; _ }, _, _) -> Some e.info
-  (* Pure operators: descend into their eagerly-evaluated operands. *)
-  | BinOp (_, a, b) -> descend [ a; b ]
-  | UnOp (_, a)
-  | Cast (a, _)
-  | Test (a, _)
-  | Labelled (_, a)
-  | ArrayDefault (_, a)
-  | StructDefaultDesc a
-  (* An [on]-clause only ever wraps a resume-family call — itself a hazard — so
-     descend into it rather than treating it as a nested control construct. *)
-  | On (a, _) ->
-      find_eager_hazard a
-  | Array (_, a, b) -> descend [ a; b ]
-  | ArrayFixed (_, l) | Sequence l -> descend l
-  | Struct (_, fields) -> descend (List.filter_map (fun (_, v) -> v) fields)
-  | StructDesc (d, fields) ->
-      find_eager_hazard d <|> fun () ->
-      descend (List.filter_map (fun (_, v) -> v) fields)
-  | Let (_, init) -> (
-      match init with Some e -> find_eager_hazard e | None -> None)
-  (* Constants, reads, and allocations of default values never trap; nested
-     control constructs guard their sub-expressions, so stop there. *)
-  | Get _ | Path _ | Int _ | Float _ | Char _ | String _ | Null | Nop | Hole
-  | StructDefault _ | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _
-  | TryCatch _ | Br _ | Br_if _ | Br_table _ | Dispatch _ | Match _
-  | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _
-  | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ | Hinted _ | Return _
-  | Select _ | If_annotation _ ->
-      None
-
-(* Report an eager-evaluation hazard in the [?:] branch [arm]; [select] is the
-   location of the whole [?:] (for the secondary caret). *)
-let lint_eager_select ctx ~select arm =
-  match find_eager_hazard arm with
-  | Some location -> Error.eager_select ctx.diagnostics ~location ~select
-  | None -> ()
-
-(* Human-readable name of a binary operator's precedence class, for the
-   [precedence] lint's message. The classification and the confusing-mix table
-   are shared with the Wax printer — see {!Ast_utils.binop_kind} and
-   {!Ast_utils.confusing_precedence}. *)
-let binop_kind_name = function
-  | `Shift -> "shift"
-  | `Arith -> "arithmetic"
-  | `Bitwise -> "bitwise"
-  | `Comparison -> "comparison"
-
-(* Whether the operand [child] of a binary operator was written parenthesized.
-   Parentheses are erased by the grammar ([1 << (n - 1)] and [1 << n - 1] parse
-   to the same tree), so this is decided from the source text: a parenthesized
-   operand is immediately preceded by [(] (a right operand) or followed by [)]
-   (a left operand), skipping whitespace. With no source available, assume it is
-   parenthesized (so the lint stays silent rather than risk a false positive). *)
-let operand_parenthesized ctx ~op ~side (child : _ Ast.instr) =
-  match Wax_utils.Diagnostic.source ctx.diagnostics with
-  | None -> true
-  | Some src ->
-      let is_space = function ' ' | '\t' | '\n' | '\r' -> true | _ -> false in
-      let n = String.length src in
-      (* Index of the next significant (non-trivia) character at or after [i],
-         skipping whitespace and comments — line ([//…]) and nesting block
-         ([/*…*/]) — so a comment between an operand and its bracket does not
-         hide the parenthesis (a whitespace-only skip used to warn spuriously). *)
-      let rec skip_fwd i =
-        if i >= n then i
-        else if is_space src.[i] then skip_fwd (i + 1)
-        else if i + 1 < n && src.[i] = '/' && src.[i + 1] = '/' then
-          let rec eol j = if j >= n || src.[j] = '\n' then j else eol (j + 1) in
-          skip_fwd (eol (i + 2))
-        else if i + 1 < n && src.[i] = '/' && src.[i + 1] = '*' then
-          let rec blk depth j =
-            if j + 1 >= n then n
-            else if src.[j] = '/' && src.[j + 1] = '*' then
-              blk (depth + 1) (j + 2)
-            else if src.[j] = '*' && src.[j + 1] = '/' then
-              if depth = 1 then j + 2 else blk (depth - 1) (j + 2)
-            else blk depth (j + 1)
-          in
-          skip_fwd (blk 1 (i + 2))
-        else i
-      in
-      let significant_is c from = from < n && src.[from] = c in
-      (* Both operands are tested by scanning forward, since a parenthesised
-         operand always has a bracket downstream: the right operand's [(] follows
-         the operator, the left operand's [)] follows the operand. *)
-      let from =
-        match side with
-        | `Right -> skip_fwd op.info.loc_end.pos_cnum
-        | `Left -> skip_fwd child.info.loc_end.pos_cnum
-      in
-      significant_is (match side with `Right -> '(' | `Left -> ')') from
-
-(* The [precedence] lint: flag a binary operator [op] one of whose operands is
-   itself a binary operator of a confusingly-related class (see
-   {!Ast_utils.confusing_precedence}), written without disambiguating
-   parentheses. The Wax printer parenthesises exactly these mixes (see
-   [Output]), so re-printed / decompiled Wax stays quiet under the lint. *)
-let lint_precedence ctx (op : (binop, location) annotated) e1 e2 =
-  let outer = Ast_utils.binop_kind op.desc in
-  List.iter
-    (fun (child, side) ->
-      match child.desc with
-      | BinOp (inner_op, _, _)
-        when Ast_utils.confusing_precedence outer
-               (Ast_utils.binop_kind inner_op.desc)
-             && not (operand_parenthesized ctx ~op ~side child) ->
-          (* The fix is to parenthesise the tighter-binding sub-expression the
-             lint identifies ([child]). An edit is one contiguous replacement, so
-             it replaces [child]'s span with '(' ^ its source slice ^ ')'. *)
-          let edit =
-            match Wax_utils.Diagnostic.source ctx.diagnostics with
-            | Some src ->
-                let s = child.info.loc_start.pos_cnum
-                and e = child.info.loc_end.pos_cnum in
-                if 0 <= s && s <= e && e <= String.length src then
-                  Some
-                    {
-                      Wax_utils.Diagnostic.edit_location = child.info;
-                      new_text = "(" ^ String.sub src s (e - s) ^ ")";
-                    }
-                else None
-            | None -> None
-          in
-          Error.precedence ?edit ctx.diagnostics ~location:op.info
-            ~inner:inner_op.info ~outer_kind:(binop_kind_name outer)
-            ~inner_kind:(binop_kind_name (Ast_utils.binop_kind inner_op.desc))
-      | _ -> ())
-    [ (e1, `Left); (e2, `Right) ]
-
-(* Walk the source AST (before any lowering, so [while] keeps its own condition
-   rather than the [if] it desugars to) and report the purely-syntactic lints: a
-   constant branch/loop/select condition, and a drop ([_ = e]) of a
-   side-effect-free expression. Runs once over the source rather than in the type
-   checker's expression handling. Mirrors the case coverage of
-   {!collect_labels}. *)
-let rec lint_source ctx (i : _ Ast.instr) =
-  let list l = List.iter (lint_source ctx) l in
-  let opt o = Option.iter (lint_source ctx) o in
-  match i.desc with
-  | If { cond; if_block; else_block; _ } ->
-      lint_condition ctx cond;
-      lint_source ctx cond;
-      list if_block.desc;
-      Option.iter (fun b -> list b.desc) else_block
-  | While { cond; step; block; _ } ->
-      lint_condition ctx ~is_while:true cond;
-      lint_source ctx cond;
-      opt step;
-      list block.desc
-  | Select (c, t, e) ->
-      lint_condition ctx c;
-      lint_eager_select ctx ~select:i.info t;
-      lint_eager_select ctx ~select:i.info e;
-      lint_source ctx c;
-      lint_source ctx t;
-      lint_source ctx e
-  | Br_if (_, c) ->
-      (* A br_if that carries a value has operand [Sequence [values…; cond]], so
-         the condition is the last element; a bare br_if's operand is the
-         condition itself. *)
-      let cond =
-        match c.desc with
-        | Sequence (_ :: _ as seq) -> List.nth seq (List.length seq - 1)
-        | _ -> c
-      in
-      lint_condition ctx cond;
-      lint_source ctx c
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      list block.desc
-  | Try { block; catches; catch_all; _ } ->
-      list block.desc;
-      List.iter (fun (_, b) -> list b.desc) catches;
-      Option.iter (fun b -> list b.desc) catch_all
-  | TryCatch { block; arms; _ } ->
-      list block.desc;
-      List.iter (fun a -> list a.arm_body.desc) arms
-  | Call (t, args) | TailCall (t, args) ->
-      lint_source ctx t;
-      list args
-  | Set (id, op, e) ->
-      (* A plain self-assignment [x = x] has no effect. A compound assignment
-         [x op= x] is not redundant (e.g. [x += x] doubles it). The pointless-
-         drop check lives in the [Let] case, since a drop [_ = e] is an anonymous
-         binding. *)
-      (match (op, e.desc) with
-      | None, Get id' when String.equal id.desc id'.desc ->
-          Error.redundant_operation ctx.diagnostics ~location:i.info
-            (Wax_utils.Message.text
-               "This assignment writes the variable back to itself.")
-      | _ -> ());
-      lint_source ctx e
-  | Tee (_, e)
-  | Labelled (_, e)
-  | Cast (e, _)
-  | Test (e, _)
-  | NonNull e
-  | StructGet (e, _)
-  | GetDescriptor e
-  | StructDefaultDesc e
-  | UnOp (_, e)
-  | Hinted (_, e)
-  | On (e, _)
-  | Br_table (_, e)
-  | Br_on_null (_, e)
-  | Br_on_non_null (_, e)
-  | Br_on_cast (_, _, e)
-  | Br_on_cast_fail (_, _, e)
-  | ThrowRef e
-  | ArrayDefault (_, e)
-  | ContNew (_, e) ->
-      lint_source ctx e
-  | Struct (_, fields) ->
-      List.iter (fun (_, e) -> Option.iter (lint_source ctx) e) fields
-  | StructDesc (d, fields) ->
-      lint_source ctx d;
-      List.iter (fun (_, e) -> Option.iter (lint_source ctx) e) fields
-  | BinOp (op, e1, e2) ->
-      lint_precedence ctx op e1 e2;
-      lint_source ctx e1;
-      lint_source ctx e2
-  | CastDesc (e1, _, e2)
-  | Br_on_cast_desc_eq (_, _, e1, e2)
-  | Br_on_cast_desc_eq_fail (_, _, e1, e2)
-  | StructSet (e1, _, e2)
-  | Array (_, e1, e2)
-  | ArraySegment (_, _, e1, e2)
-  | ArrayGet (e1, e2) ->
-      lint_source ctx e1;
-      lint_source ctx e2
-  | ArraySet (e1, e2, e3) ->
-      lint_source ctx e1;
-      lint_source ctx e2;
-      lint_source ctx e3
-  | ArrayFixed (_, l)
-  | ContBind (_, _, l)
-  | Suspend (_, l)
-  | Resume (_, _, l)
-  | ResumeThrow (_, _, _, l)
-  | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l)
-  | Throw (_, l)
-  | Sequence l ->
-      list l
-  | Dispatch { index; arms; _ } ->
-      lint_source ctx index;
-      List.iter (fun (_, b) -> list b.desc) arms
-  | Match { scrutinee; arms; default } ->
-      lint_source ctx scrutinee;
-      List.iter (fun (_, b) -> list b.desc) arms;
-      list default.desc
-  | Let (bindings, body) ->
-      (* A drop [_ = e] is a single anonymous binding; if [e] is effect-free,
-         computing it only to discard the result is pointless. *)
-      (match (bindings, body) with
-      | [ (None, _) ], Some e when is_effectless e ->
-          Error.unused_result ctx.diagnostics ~location:e.info
-      | _ -> ());
-      opt body
-  | Br (_, o) | Return o -> opt o
-  | If_annotation { then_body; else_body; _ } ->
-      list then_body.desc;
-      Option.iter (fun b -> list b.desc) else_body
-  | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
-  | Float _ | StructDefault _ ->
-      ()
-
 (* Whether the receiver of a scalar-intrinsic-method call [recv.min(..)] names a
    reference (e.g. a struct) rather than a numeric value. Decided purely, by
    looking the name up in the locals / globals — no typing, so the dispatch can
@@ -4229,315 +2864,6 @@ let is_bottom_heaptype = function
   | None_ | NoFunc | NoExtern | NoExn | NoCont -> true
   | _ -> false
 
-(* The source substring spanned by [loc], if the source and the byte range are
-   available. Suggestions build their replacement text from such slices. *)
-let source_slice ctx (loc : Ast.location) =
-  match Wax_utils.Diagnostic.source ctx.diagnostics with
-  | Some src ->
-      let s = loc.loc_start.Lexing.pos_cnum
-      and e = loc.loc_end.Lexing.pos_cnum in
-      if 0 <= s && s <= e && e <= String.length src then
-        Some (String.sub src s (e - s))
-      else None
-  | None -> None
-
-(* The location running from position [loc_start] to [loc_end], used to describe
-   the exact span a suggestion's edit replaces (e.g. the ' as t' suffix of a
-   redundant cast). *)
-let span (loc_start : Lexing.position) (loc_end : Lexing.position) :
-    Ast.location =
-  { Ast.loc_start; loc_end }
-
-(* A deletion edit: the machine-applicable rewrite that removes the span [loc]
-   (an empty replacement). The removal-style suggestions — a redundant
-   annotation, a punned field's [: x], a construction/block/if result type, a
-   redundant cast — all build this. *)
-let deletion_edit (loc : Ast.location) : Wax_utils.Diagnostic.edit =
-  { Wax_utils.Diagnostic.edit_location = loc; new_text = "" }
-
-(* [s] with every comment blanked to spaces (newlines kept, so byte offsets and
-   line structure are preserved). Wax has [//] line comments and nesting [/* */]
-   block comments; the source-scanning suggestions run on this so a delimiter
-   ([:], [|], a keyword) inside a comment is never mistaken for real syntax. *)
-let blank_comments s =
-  let n = String.length s in
-  let b = Bytes.of_string s in
-  let blank lo hi =
-    for k = lo to hi - 1 do
-      if s.[k] <> '\n' then Bytes.set b k ' '
-    done
-  in
-  let i = ref 0 in
-  while !i < n do
-    if !i + 1 < n && s.[!i] = '/' && s.[!i + 1] = '/' then (
-      let j = ref (!i + 2) in
-      while !j < n && s.[!j] <> '\n' do
-        incr j
-      done;
-      blank !i !j;
-      i := !j)
-    else if !i + 1 < n && s.[!i] = '/' && s.[!i + 1] = '*' then (
-      let j = ref (!i + 2) and depth = ref 1 in
-      while !depth > 0 && !j < n do
-        if !j + 1 < n && s.[!j] = '/' && s.[!j + 1] = '*' then (
-          j := !j + 2;
-          incr depth)
-        else if !j + 1 < n && s.[!j] = '*' && s.[!j + 1] = '/' then (
-          j := !j + 2;
-          decr depth)
-        else incr j
-      done;
-      blank !i !j;
-      i := !j)
-    else incr i
-  done;
-  Bytes.to_string b
-
-(* Locate the ': t' type annotation in the source between a binding name's end
-   ([name_end]) and the boundary after it ([boundary] — the initializer, the next
-   binding, or the tuple close). The AST keeps no span for the annotation, so it
-   is recovered from the source: skip past the ':', then scan to the first of
-   [,] [=] [;] [)] []] that terminates it. This is safe because every annotation
-   position parses a [value_type] (see [value_type] in parser.mly) — an
-   identifier or [&[?][!]ident] — a short token sequence that never contains any
-   of those characters or a bracket (an inline [&fn(...)] type exists only in
-   cast position, never here). Returns a pair: the type's own span (to underline)
-   and the ': t' span to delete (from the ':' to the type's end, so a comment
-   before it is kept). [None] when the annotation spans several lines or cannot
-   be isolated. *)
-let annotation_spans ctx (name_end : Lexing.position)
-    (boundary : Lexing.position) =
-  if name_end.pos_lnum <> boundary.pos_lnum then None
-  else
-    match source_slice ctx (span name_end boundary) with
-    | None -> None
-    | Some gap -> (
-        (* Blank comments so a ':' or terminator inside one is not mistaken for
-           the annotation's. *)
-        let gap = blank_comments gap in
-        match String.index_opt gap ':' with
-        | None -> None
-        | Some colon ->
-            let n = String.length gap in
-            let stop =
-              let rec scan i =
-                if i >= n then n
-                else
-                  match gap.[i] with
-                  | ')' | ']' | ',' | '=' | ';' -> i
-                  | _ -> scan (i + 1)
-              in
-              scan (colon + 1)
-            in
-            let is_ws c = c = ' ' || c = '\t' in
-            let s = ref (colon + 1) and e = ref stop in
-            while !s < !e && is_ws gap.[!s] do
-              incr s
-            done;
-            while !e > !s && is_ws gap.[!e - 1] do
-              decr e
-            done;
-            if !s >= !e then None
-            else
-              let at off =
-                { name_end with pos_cnum = name_end.pos_cnum + off }
-              in
-              Some (span (at !s) (at !e), span (at colon) (at !e)))
-
-(* Suggest dropping a binding's redundant type annotation — the ': t' that the
-   initializer's inferred type already pins ([let x: t = e] -> [let x = e], and
-   likewise for each binding of a tuple [let] and a redundant global annotation).
-   The span is recovered by [annotation_spans]; the edit deletes the ': t',
-   underlining just the type. *)
-let suggest_redundant_annotation ctx ~name_end ~boundary =
-  match annotation_spans ctx name_end boundary with
-  | Some (type_span, delete_span) ->
-      Error.suggest ~warning:Wax_utils.Warning.Redundant_annotation
-        ~edit:(deletion_edit delete_span)
-        ctx.diagnostics ~location:type_span
-        (Wax_utils.Message.text
-           "This type annotation is redundant; the initializer's type is \
-            inferred.")
-  | None -> ()
-
-(* The binary operators that have a compound-assignment form [x op= e] (the
-   arithmetic and bitwise ones); comparisons are excluded. Mirrors the parser's
-   [compound_assign_op]. *)
-let compound_assignable = function
-  | Add | Sub | Mul | Div _ | Rem _ | And | Or | Xor | Shl | Shr _ -> true
-  | Eq | Ne | Lt _ | Gt _ | Le _ | Ge _ -> false
-
-(* Suggest rewriting a plain assignment [x = x op e] as the compound form
-   [x op= e]. Only fires when the left operand is [x] itself (so [x = e - x] is
-   left alone, since it is not [x -= e]). The replacement is spliced from the
-   source: the target, the operator's own span (which already excludes the '='),
-   and the right operand — so any comment or spacing inside [e] is preserved. *)
-let suggest_compound_assignment ctx ~location idx (rhs_expr : _ instr) =
-  match rhs_expr.desc with
-  | BinOp (op, lhs, rhs)
-    when compound_assignable op.desc
-         && match lhs.desc with Get g -> g.desc = idx.desc | _ -> false -> (
-      match
-        ( source_slice ctx idx.info,
-          source_slice ctx op.info,
-          source_slice ctx rhs.info )
-      with
-      | Some target, Some opstr, Some rhs_src ->
-          Error.suggest ~warning:Wax_utils.Warning.Compound_assignment
-            ~edit:
-              {
-                Wax_utils.Diagnostic.edit_location = location;
-                new_text = Printf.sprintf "%s %s= %s" target opstr rhs_src;
-              }
-            ctx.diagnostics ~location
-            (Wax_utils.Message.text
-               (Printf.sprintf
-                  "This assignment can use the compound form '%s %s= …'." target
-                  opstr))
-      | _ -> ())
-  | _ -> ()
-
-(* Suggest the punning shorthand [{x}] for a field written explicitly as [x: x]
-   (its value is [Get x] for the like-named local/global). Deletes the ': x' that
-   runs from the field name's end to the value's end. *)
-let suggest_punning ctx (name : ident) written =
-  match written with
-  | Some ({ desc = Get g; _ } as value) when g.desc = name.desc ->
-      Error.suggest ~warning:Wax_utils.Warning.Field_punning
-        ~edit:(deletion_edit (span name.info.loc_end value.info.loc_end))
-        ctx.diagnostics ~location:name.info
-        (Wax_utils.Message.text
-           (Printf.sprintf "This field can use the punning shorthand '%s'."
-              name.desc))
-  | _ -> ()
-
-(* Suggest dropping a construction's redundant type name — the [T] in a struct
-   [{T| …}] or array [{T| …}] literal that the fields / expected type already
-   pin. The name-less surface form omits the [T|] separator, so the edit deletes
-   from the name's start through the following [|] (found by a short source scan,
-   bailing out if a newline intervenes). *)
-let suggest_drop_type_name ctx (name : ident) =
-  match Wax_utils.Diagnostic.source ctx.diagnostics with
-  | None -> ()
-  | Some src ->
-      let n = String.length src in
-      let i = ref name.info.loc_end.pos_cnum in
-      while !i < n && (src.[!i] = ' ' || src.[!i] = '\t') do
-        incr i
-      done;
-      if !i < n && src.[!i] = '|' then
-        let after = { name.info.loc_end with pos_cnum = !i + 1 } in
-        Error.suggest ~warning:Wax_utils.Warning.Redundant_annotation
-          ~edit:(deletion_edit (span name.info.loc_start after))
-          ctx.diagnostics ~location:name.info
-          (Wax_utils.Message.text
-             "This type name is redundant; it is inferred here.")
-
-(* Suggest dropping a block's redundant result type — the [t] in [do t { … }] /
-   [loop t { … }] / [try t { … }] that the context already pins. A block
-   expression takes no params, so the result is a single bare type between the
-   keyword and the [{]. The AST keeps no span for it, so it is found in the
-   source: locate the (reserved, hence unambiguous) keyword as a whole word, then
-   take the type up to the brace. Comments are blanked first (so a keyword inside
-   one is not matched), and it bails unless keyword and brace are on one line, so
-   a wrong edit is never produced. *)
-let suggest_block_result ctx ~keyword (block_start : Lexing.position)
-    (brace_start : Lexing.position) =
-  match
-    if block_start.pos_lnum <> brace_start.pos_lnum then None
-    else
-      Option.map blank_comments
-        (source_slice ctx (span block_start brace_start))
-  with
-  | None -> ()
-  | Some prefix -> (
-      let is_id c =
-        (c >= 'a' && c <= 'z')
-        || (c >= 'A' && c <= 'Z')
-        || (c >= '0' && c <= '9')
-        || c = '_'
-      in
-      let m = String.length keyword and n = String.length prefix in
-      let rec find i =
-        if i + m > n then None
-        else if
-          String.sub prefix i m = keyword
-          && (i = 0 || not (is_id prefix.[i - 1]))
-          && (i + m = n || not (is_id prefix.[i + m]))
-        then Some i
-        else find (i + 1)
-      in
-      match find 0 with
-      | None -> ()
-      | Some k ->
-          let is_ws c = c = ' ' || c = '\t' in
-          let s = ref (k + m) and e = ref n in
-          while !s < n && is_ws prefix.[!s] do
-            incr s
-          done;
-          while !e > !s && is_ws prefix.[!e - 1] do
-            decr e
-          done;
-          if !s < !e then
-            let at off =
-              { block_start with pos_cnum = block_start.pos_cnum + off }
-            in
-            Error.suggest
-              ~warning:Wax_utils.Warning.Redundant_annotation
-                (* Delete just the type token, so a comment before the [{] is kept;
-                 the formatter tidies the leftover spacing. *)
-              ~edit:(deletion_edit (span (at !s) (at !e)))
-              ctx.diagnostics
-              ~location:(span (at !s) (at !e))
-              (Wax_utils.Message.text
-                 "This result type is redundant; it is inferred from the \
-                  context."))
-
-(* Suggest dropping an [if]'s redundant result type — the [=> t] between the
-   condition and the [{] that the context already pins (the [if]-expression
-   analogue of [suggest_block_result]). The AST keeps no span for it, so it is
-   found in the source between the condition's end and the brace: locate the
-   [=>], then take the type up to the brace. Comments are blanked first and it
-   bails unless [=>] and brace are on one line. The edit deletes the whole
-   [=> t]. *)
-let suggest_if_result ctx (cond_end : Lexing.position)
-    (brace_start : Lexing.position) =
-  match
-    if cond_end.pos_lnum <> brace_start.pos_lnum then None
-    else
-      Option.map blank_comments (source_slice ctx (span cond_end brace_start))
-  with
-  | None -> ()
-  | Some gap -> (
-      let n = String.length gap in
-      let rec find i =
-        if i + 1 >= n then None
-        else if gap.[i] = '=' && gap.[i + 1] = '>' then Some i
-        else find (i + 1)
-      in
-      match find 0 with
-      | None -> ()
-      | Some arrow ->
-          let is_ws c = c = ' ' || c = '\t' in
-          let s = ref (arrow + 2) and e = ref n in
-          while !s < n && is_ws gap.[!s] do
-            incr s
-          done;
-          while !e > !s && is_ws gap.[!e - 1] do
-            decr e
-          done;
-          if !s < !e then
-            let at off = { cond_end with pos_cnum = cond_end.pos_cnum + off } in
-            Error.suggest
-              ~warning:Wax_utils.Warning.Redundant_annotation
-                (* Delete the whole '=> t'; the formatter tidies the spacing. *)
-              ~edit:(deletion_edit (span (at arrow) (at !e)))
-              ctx.diagnostics
-              ~location:(span (at !s) (at !e))
-              (Wax_utils.Message.text
-                 "This result type is redundant; it is inferred from the \
-                  context."))
-
 (* The [typ] to store for a do/loop/try/try_table block after its body is typed:
    fill an omitted result from [expected] (so re-parse / [to_wasm] recovers it),
    or drop a declared result on [simplify] when it equals the context — then
@@ -4551,7 +2877,7 @@ let context_block_typ ctx ~keyword (block_start : Lexing.position)
     (brace_start : Lexing.position) typ ~expected ~result_cell =
   let redundant = block_result_redundant ctx typ ~expected ~result_cell in
   if ctx.suggest && redundant then
-    suggest_block_result ctx ~keyword block_start brace_start;
+    Typing_suggest.suggest_block_result ctx ~keyword block_start brace_start;
   if typ.results = [||] then
     match standalone_valtype ctx expected with
     | Some iv -> { typ with results = [| iv.typ |] }
@@ -4786,127 +3112,7 @@ let address_valtype (at : [ `I32 | `I64 ]) : inferred_valtype =
   match at with `I32 -> i32_valtype | `I64 -> i64_valtype
 
 let address_cell at = valtype_cell (address_valtype at)
-
-(* Expected operand/result type of a SIMD intrinsic, as a fresh type cell. *)
-let simd_valtype : Simd.ty -> inferred_valtype = function
-  | TV128 -> { typ = V128; internal = V128; anon_comptype = None }
-  | TI32 -> i32_valtype
-  | TI64 -> i64_valtype
-  | TF32 -> f32_valtype
-  | TF64 -> f64_valtype
-
-let simd_cell t = valtype_cell (simd_valtype t)
-let simd_ty_name t = numtype_name (simd_valtype t).typ
-
-(* The member-completion candidate for a SIMD method [name] (e.g. [add_i32x4]),
-   its signature read straight from the registry the typer dispatches through
-   ([Simd.classify]): the leading constant lane immediates, then the
-   non-receiver stack operands, then the result. *)
-let simd_method_candidate name =
-  let detail =
-    match Simd.classify name with
-    | Some { operands = _receiver :: rest; result; imm; _ } ->
-        let imm_params =
-          match imm with
-          | Simd.No_imm -> []
-          | Lane _ -> [ "lane index" ]
-          | Shuffle -> [ "16 lane indices" ]
-        in
-        let params = imm_params @ List.map simd_ty_name rest in
-        let result =
-          match result with Some t -> simd_ty_name t | None -> "()"
-        in
-        Printf.sprintf "fn(%s) -> %s" (String.concat ", " params) result
-    | _ -> ""
-  in
-  { member_name = name; member_kind = Method; member_detail = detail }
-
-(* The value methods offered by member completion for a [v128] receiver — the
-   vector ops [v.add_i32x4(w)], enumerated from the SIMD registry (so, unlike
-   the scalar registries above, no drift is possible: the same table classifies
-   the call). *)
-let simd_v128_methods () =
-  List.map simd_method_candidate (Simd.method_names Simd.TV128)
-
-(* The value-method candidates member completion offers for a numeric receiver
-   of inferred type [t], or [None] if it has none. Beyond the concrete numeric
-   valtypes ([i32] … [f64], [v128]), a receiver can still be a flexible literal
-   type: an [int] takes its integer methods only, a [number] or [large number]
-   both families (either narrowing is still open), a [float] its float methods
-   only. A packed [i8]/[i16] read must be cast before any method, so gets none.
-   The [from_bits]/[to_bits] reinterpretation flips the family, rendered by
-   family name for a flexible receiver since the width is uncommitted. *)
-let numeric_receiver_candidates (t : inferred_type) :
-    member_candidate list option =
-  let ints ~recv_name ~reinterp =
-    method_candidates ~recv_name ~reinterp_name:reinterp integer_methods
-  in
-  let floats ~recv_name ~reinterp =
-    method_candidates ~recv_name ~reinterp_name:reinterp float_methods
-  in
-  match t with
-  | Valtype { typ = I32; _ } -> Some (ints ~recv_name:"i32" ~reinterp:"f32")
-  | Valtype { typ = I64; _ } -> Some (ints ~recv_name:"i64" ~reinterp:"f64")
-  | Valtype { typ = F32; _ } -> Some (floats ~recv_name:"f32" ~reinterp:"i32")
-  | Valtype { typ = F64; _ } -> Some (floats ~recv_name:"f64" ~reinterp:"i64")
-  | Valtype { typ = V128; _ } -> Some (simd_v128_methods ())
-  | Int -> Some (ints ~recv_name:"int" ~reinterp:"float")
-  | Number ->
-      Some
-        (ints ~recv_name:"number" ~reinterp:"float"
-        @ floats ~recv_name:"number" ~reinterp:"int")
-  | LargeInt ->
-      Some
-        (ints ~recv_name:"large number" ~reinterp:"float"
-        @ floats ~recv_name:"large number" ~reinterp:"int")
-  | Float -> Some (floats ~recv_name:"float" ~reinterp:"int")
-  | _ -> None
-
-(* Whether a value receiver of type [t] has value methods, as an [R_numeric]
-   descriptor — the cheap classification the recorder uses to decide whether to
-   record, without building the (possibly large) candidate list. Its domain must
-   match [numeric_receiver_candidates] returning [Some]. *)
-let numeric_receiver_kind (t : inferred_type) : member_receiver option =
-  match t with
-  | Valtype { typ = I32 | I64 | F32 | F64 | V128; _ }
-  | Int | Number | LargeInt | Float ->
-      Some (R_numeric t)
-  | _ -> None
-
-let address_type_name : [ `I32 | `I64 ] -> string = function
-  | `I32 -> "i32"
-  | `I64 -> "i64"
-
-(* [fn(<params>) -> <result>], with an empty result rendered [()] and several
-   as a tuple. *)
-let render_signature params result =
-  let result =
-    match result with
-    | [] -> "()"
-    | [ r ] -> r
-    | rs -> "(" ^ String.concat ", " rs ^ ")"
-  in
-  Printf.sprintf "fn(%s) -> %s" (String.concat ", " params) result
-
-(* The methods member completion offers on a continuation-typed receiver — the
-   resume family and [switch] — with [params]/[results] the rendered parameter
-   and result types of the continuation's function type and [switch_results]
-   the rendered results of a [switch] (the last parameter's own continuation
-   parameters, when it has one). Unlike the other receivers, the candidate
-   list is built at record time (the signatures need the type context) and
-   carried by {!R_cont}; the editor's signature help rebuilds it from the
-   declarations. *)
-let cont_method_candidates ~params ~results ~switch_results =
-  let m member_name member_detail =
-    { member_name; member_kind = Method; member_detail }
-  in
-  let leading = List.filteri (fun i _ -> i < List.length params - 1) params in
-  [
-    m "resume" (render_signature params results);
-    m "resume_throw" (render_signature [ "tag(payload)" ] results);
-    m "resume_throw_ref" (render_signature [ "&?exn" ] results);
-    m "switch" (render_signature (leading @ [ "tag: tag" ]) switch_results);
-  ]
+let simd_cell t = valtype_cell (Members.simd_valtype t)
 
 (* Build the {!R_cont} descriptor of a receiver of declared continuation type
    [ct], rendering the method signatures from the type context. *)
@@ -4943,209 +3149,8 @@ let cont_receiver ctx ct =
     | Some rs -> rs
     | None -> []
   in
-  R_cont (cont_method_candidates ~params ~results ~switch_results)
-
-(* The atomic memory accesses ([mem.atomic_load32(addr)],
-   [mem.atomic_rmw_add8(addr, v)], …), enumerated from the
-   {!Wax_wasm.Atomics.families} the typer dispatches on; the address takes
-   [addr_name]. The name carries the access width only: a narrow load returns
-   the raw-bits [i8]/[i16] (resolved by a surrounding [as iN_u] cast) and a
-   narrow store/RMW value picks the i32/i64 family by its type (rendered
-   [int]); the 64-bit accesses are necessarily [i64]. *)
-let atomic_method_candidates ~addr_name =
-  let value : Wax_wasm.Atomics.width -> string = function
-    | `W8 | `W16 | `W32 -> "int"
-    | `W64 -> "i64"
-  in
-  let load_result : Wax_wasm.Atomics.width -> string = function
-    | `W8 -> "i8"
-    | `W16 -> "i16"
-    | `W32 -> "i32"
-    | `W64 -> "i64"
-  in
-  List.map
-    (fun f ->
-      let operands, results =
-        match (f : Wax_wasm.Atomics.family) with
-        | Load w -> ([], [ load_result w ])
-        | Store w -> ([ value w ], [])
-        | Rmw (Wax_wasm.Ast.AtomicCmpxchg, w) ->
-            ([ value w; value w ], [ value w ])
-        | Rmw (_, w) -> ([ value w ], [ value w ])
-        | Wait `I32 -> ([ "i32"; "i64" ], [ "i32" ])
-        | Wait `I64 -> ([ "i64"; "i64" ], [ "i32" ])
-        | Notify -> ([ "i32" ], [ "i32" ])
-      in
-      {
-        member_name = Wax_wasm.Atomics.method_name f;
-        member_kind = Method;
-        member_detail =
-          render_signature
-            ((addr_name :: operands) @ [ "offset?: int" ])
-            results;
-      })
-    Wax_wasm.Atomics.families
-
-(* The SIMD memory accesses ([mem.loadv128(addr)],
-   [mem.load8_lane(addr, v, lane)], …), enumerated from
-   {!Wax_wasm.Simd.mem_method_names}; the first operand is the address. *)
-let simd_mem_method_candidates ~addr_name =
-  List.map
-    (fun name ->
-      let mi : Simd.mem_intrinsic = Option.get (Simd.mem_method name) in
-      let rest =
-        match mi.m_operands with
-        | _addr :: r -> List.map simd_ty_name r
-        | [] -> []
-      in
-      let params =
-        (addr_name :: rest)
-        @ (if mi.m_lane then [ "lane: int" ] else [])
-        @ [ "offset?: int"; "align?: int" ]
-      in
-      {
-        member_name = name;
-        member_kind = Method;
-        member_detail =
-          render_signature params
-            (match mi.m_result with Some t -> [ simd_ty_name t ] | None -> []);
-      })
-    Simd.mem_method_names
-
-(* The value methods member completion offers on a memory receiver
-   [mem.load8(addr)], with [addr_name] the memory's address type: the scalar
-   loads/stores (with their optional labelled [offset]/[align] immediates),
-   the size/grow/fill/copy/init management ops, and the atomic and SIMD memory
-   accesses. *)
-let memory_method_candidates ~addr_name =
-  let m member_name member_detail =
-    { member_name; member_kind = Method; member_detail }
-  in
-  let load name r =
-    m name
-      (Printf.sprintf "fn(%s, offset?: int, align?: int) -> %s" addr_name r)
-  in
-  let store name v =
-    m name
-      (Printf.sprintf "fn(%s, %s, offset?: int, align?: int) -> ()" addr_name v)
-  in
-  [
-    load "load8" "i32";
-    load "load16" "i32";
-    load "load32" "i32";
-    load "load64" "i64";
-    load "loadf32" "f32";
-    load "loadf64" "f64";
-    store "store8" "i32";
-    store "store16" "i32";
-    store "store32" "i32";
-    store "store64" "i64";
-    store "storef32" "f32";
-    store "storef64" "f64";
-    m "size" (Printf.sprintf "fn() -> %s" addr_name);
-    m "grow" (Printf.sprintf "fn(%s) -> %s" addr_name addr_name);
-    m "fill" (Printf.sprintf "fn(%s, i32, %s) -> ()" addr_name addr_name);
-    m "copy"
-      (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name addr_name addr_name);
-    m "init" (Printf.sprintf "fn(data, %s, i32, i32) -> ()" addr_name);
-  ]
-  @ atomic_method_candidates ~addr_name
-  @ simd_mem_method_candidates ~addr_name
-
-(* The value methods member completion offers on a table receiver [tab.size()],
-   with [addr_name] the table's address type and [elem_name] its element type:
-   the size/grow/fill/copy/init management ops. Element access is [tab[i]], not
-   a method. *)
-let table_method_candidates ~addr_name ~elem_name =
-  let m member_name member_detail =
-    { member_name; member_kind = Method; member_detail }
-  in
-  [
-    m "size" (Printf.sprintf "fn() -> %s" addr_name);
-    m "grow" (Printf.sprintf "fn(%s, %s) -> %s" elem_name addr_name addr_name);
-    m "fill"
-      (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name elem_name addr_name);
-    m "copy"
-      (Printf.sprintf "fn(%s, %s, %s) -> ()" addr_name addr_name addr_name);
-    m "init" (Printf.sprintf "fn(elem, %s, i32, i32) -> ()" addr_name);
-  ]
-
-(* The methods member completion offers on an array receiver [a.length()] with
-   element [elem]: [length], and the [fill]/[copy]/[init] bulk operations (the
-   last from a data / element segment). Indices and counts are [i32]; [fill]'s
-   value and [copy]'s source array are the element type. *)
-let array_method_candidates elem =
-  let m member_name member_detail =
-    { member_name; member_kind = Method; member_detail }
-  in
-  let value = render_fieldtype { elem with Ast.mut = false } in
-  let arr = "&[" ^ render_fieldtype elem ^ "]" in
-  [
-    m "length" "fn() -> i32";
-    m "fill" (Printf.sprintf "fn(i32, %s, i32) -> ()" value);
-    m "copy" (Printf.sprintf "fn(i32, %s, i32, i32) -> ()" arr);
-    m "init" (Printf.sprintf "fn(seg, i32, i32, i32) -> ()");
-  ]
-
-(* The member-completion candidates a recorded {!member_receiver} stands for,
-   derived on demand (the editor forces only the one under the cursor). *)
-let member_candidates : member_receiver -> member_candidate list = function
-  | R_numeric t -> Option.value ~default:[] (numeric_receiver_candidates t)
-  | R_struct fields -> struct_candidates fields
-  | R_array elem -> array_method_candidates elem
-  | R_memory at -> memory_method_candidates ~addr_name:(address_type_name at)
-  | R_table (at, rt) ->
-      table_method_candidates ~addr_name:(address_type_name at)
-        ~elem_name:(render_reftype rt)
-  | R_cont l -> l
-
-(* Free-function members offered after [v128::] — [bitselect] and the per-shape
-   const constructors — with signatures from the SIMD registry. *)
-let simd_free_members () =
-  List.map
-    (fun name ->
-      let full = Simd.free_full name in
-      let detail =
-        match Simd.const_shape_of_name full with
-        | Some shape ->
-            Printf.sprintf "fn(%d lanes) -> v128" (Simd.const_arity shape)
-        | None -> (
-            match Simd.classify full with
-            | Some { operands; result; _ } ->
-                Printf.sprintf "fn(%s) -> %s"
-                  (String.concat ", " (List.map simd_ty_name operands))
-                  (match result with Some t -> simd_ty_name t | None -> "()")
-            | None -> "")
-      in
-      { member_name = name; member_kind = Function; member_detail = detail })
-    Simd.free_member_names
-
-(* The free functions offered by completion after an intrinsic namespace path
-   [ns::]: [v128::] holds the SIMD const constructors and [bitselect], [i64::]
-   the wide-arithmetic ops, [atomic::] the memory fence. Mirrors the dispatch in
-   [type_path_intrinsic_call] / [type_wide_arith_call] (test/method-consistency
-   type-checks each offered call). Empty for an unknown namespace. *)
-let namespace_members ns : member_candidate list =
-  let fn member_name member_detail =
-    { member_name; member_kind = Function; member_detail }
-  in
-  let wide = "fn(i64, i64, i64, i64) -> (i64, i64)" in
-  let mul = "fn(i64, i64) -> (i64, i64)" in
-  match ns with
-  | "v128" -> simd_free_members ()
-  | "i64" ->
-      [
-        fn "add128" wide;
-        fn "sub128" wide;
-        fn "mul_wide_s" mul;
-        fn "mul_wide_u" mul;
-      ]
-  | "atomic" -> [ fn "fence" "fn() -> ()" ]
-  | _ -> []
-
-(* The intrinsic namespace names ([v128], [i64], [atomic]), for completion of
-   the [ns] before [::]. Exactly the namespaces {!namespace_members} answers. *)
-let intrinsic_namespaces = [ "v128"; "i64"; "atomic" ]
+  Members.R_cont
+    (Members.cont_method_candidates ~params ~results ~switch_results)
 
 (* Memory access method names. The value width is in the name; signedness and the
    i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)
@@ -5702,7 +3707,7 @@ let bump_value_loc ctx st node =
       else st
 
 (* Type one operand of a distribution point against exactly its own hole-slice —
-   the front [count_holes child] pending values — and fold in the hole-order
+   the front [Typing_lint.count_holes child] pending values — and fold in the hole-order
    check (see [hole_st]). [run] is the child-typer applied to the child (an
    [instruction]/[check_instruction] action), [node_of] extracts the typed
    instruction from its result (identity, resp. [fst]). The child's own leftover
@@ -5716,7 +3721,7 @@ let hole_child ctx child node_of run st =
       let st', r = run st in
       (bump_value_loc ctx st' (node_of r), r)
   | pending ->
-      let n = count_holes child in
+      let n = Typing_lint.count_holes child in
       let reported =
         if (not st.reported) && n > 0 && st.value_loc <> None then (
           Error.before_hole ctx.diagnostics ~location:(Option.get st.value_loc);
@@ -5772,7 +3777,11 @@ let type_trailing_operand ctx run =
    emitted before it. *)
 let fold_operand ctx child node st =
   let st =
-    if (not st.reported) && count_holes child > 0 && st.value_loc <> None then (
+    if
+      (not st.reported)
+      && Typing_lint.count_holes child > 0
+      && st.value_loc <> None
+    then (
       Error.before_hole ctx.diagnostics ~location:(Option.get st.value_loc);
       { st with reported = true })
     else st
@@ -5780,13 +3789,13 @@ let fold_operand ctx child node st =
   bump_value_loc ctx st node
 
 (* Bridge from the statement (stack) monad to the expression monad: pop the
-   [count_holes i] hole operands off the operand stack into the pending list and
+   [Typing_lint.count_holes i] hole operands off the operand stack into the pending list and
    run [f] (an expression-monad action) with a fresh hole state, returning its
    result in the stack monad. Typing hands each hole its slice and the hole-order
    check runs inline ([hole_child]); the final expression state is discarded (a
    leftover pending is a recovery-only artefact, see [pop_parameter]). *)
 let with_holes ctx i build =
-  let* pending = pop_many ctx i (count_holes i) [] in
+  let* pending = pop_many ctx i (Typing_lint.count_holes i) [] in
   (* [build ()] is forced only here, after [pop_many], so a stack underflow it
      reports is queued before any diagnostic the typer emits eagerly (before its
      first monadic step). *)
@@ -5806,7 +3815,7 @@ let with_holes ctx i build =
    condition sits in the leading test of a void loop — so this only rejects
    hand-written code. *)
 let reject_control_holes ctx ~construct ~role ~recovery operand =
-  if count_holes operand > 0 then (
+  if Typing_lint.count_holes operand > 0 then (
     Error.hole_in_control_operand ctx.diagnostics ~location:operand.info
       ~construct ~role;
     (* Replace the whole operand with a hole-free value of the shape the
@@ -5815,6 +3824,14 @@ let reject_control_holes ctx ~construct ~role ~recovery operand =
        stack-underflow or wrong-shape cascade on top of the reported error. *)
     ({ operand with desc = recovery }, true))
   else (operand, false)
+
+(* The lattice type of a float(-valued) literal [s]: the flexible [Float] (either
+   width, pinned by context) when [s] rounds to a valid f32, else concrete [f64].
+   An out-of-f32-range magnitude must never be pinned to f32 — it would print as
+   an out-of-range [f32.const] — so a later [as f32] lowers to a real [f64->f32]
+   demote instead of folding into the literal. *)
+let float_literal_lattice s =
+  if Wax_wasm.Misc.is_float32 s then Float else Valtype f64_valtype
 
 let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
     =
@@ -6932,10 +4949,11 @@ and type_arith ctx i =
         (* Deferred: the shift lint reads the operand width from [ty], which a
            later context can still widen (e.g. [1 << 40] pinned [i64]). *)
         ctx.deferred_lints :=
-          (fun () -> lint_shift ctx op ty i2') :: !(ctx.deferred_lints);
-        lint_division ctx op i2';
-        lint_comparison ctx op i1' i2';
-        lint_redundant ctx op i1' i2'
+          (fun () -> Typing_lint.lint_shift ctx op ty i2')
+          :: !(ctx.deferred_lints);
+        Typing_lint.lint_division ctx op i2';
+        Typing_lint.lint_comparison ctx op i1' i2';
+        Typing_lint.lint_redundant ctx op i1' i2'
       end;
       return_expression i (BinOp (op, i1', i2')) ty
   | UnOp (op, i') ->
@@ -6981,7 +4999,8 @@ and type_cast ctx i =
   match i.desc with
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
-      if ctx.warn_unused then lint_conversion ctx ~location:i.info typ i';
+      if ctx.warn_unused then
+        Typing_lint.lint_conversion ctx ~location:i.info typ i';
       (* When converting from Wasm, fuse two casts whose inserted intermediate
          type is superfluous (only when [ctx.simplify]); [to_wasm] re-expands
          each single cast to the same instructions:
@@ -7304,13 +5323,14 @@ and type_aggregate_access ctx i =
            match i'.desc with
            | Get name when memory_receiver ctx name ->
                let _, at = Option.get (Tbl.find_opt ctx.memories name) in
-               record_members ctx.member_completions field.info (R_memory at)
+               record_members ctx.member_completions field.info
+                 (Members.R_memory at)
            | Get name when table_receiver ctx name ->
                let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
                record_members ctx.member_completions field.info
-                 (R_table (at, rt))
+                 (Members.R_table (at, rt))
            | _ -> (
-               match numeric_receiver_kind (Cell.get ty) with
+               match Members.numeric_receiver_kind (Cell.get ty) with
                | Some r -> record_members ctx.member_completions field.info r
                | None -> ()));
         match (Cell.get ty, field.desc) with
@@ -7319,7 +5339,7 @@ and type_aggregate_access ctx i =
             match def.typ with
             | Struct fields -> (
                 record_members ctx.member_completions field.info
-                  (R_struct fields);
+                  (Members.R_struct fields);
                 match
                   Array.find_map
                     (fun f ->
@@ -7336,7 +5356,7 @@ and type_aggregate_access ctx i =
                 (match def.typ with
                 | Array elem ->
                     record_members ctx.member_completions field.info
-                      (R_array elem)
+                      (Members.R_array elem)
                 | Cont _ ->
                     if ctx.member_completions <> None then
                       record_members ctx.member_completions field.info
@@ -7414,7 +5434,7 @@ and type_aggregate_access ctx i =
             | None -> None
             | Some fields -> (
                 record_members ctx.member_completions field.info
-                  (R_struct fields);
+                  (Members.R_struct fields);
                 match
                   Array.find_map
                     (fun f ->
@@ -7639,7 +5659,8 @@ and type_variable_access ctx i =
       (if ctx.suggest && op = None then
          match resolved with
          | Local _ | Global _ ->
-             suggest_compound_assignment ctx ~location:i.info idx i'
+             Typing_suggest.suggest_compound_assignment ctx ~location:i.info idx
+               i'
          | Func_ref _ | Unbound -> ());
       return_statement i (Set (idx, op, value)) [||]
   | Tee (idx, i') -> (
@@ -7719,7 +5740,7 @@ and type_let ctx i =
                      pos_cnum = i.info.loc_start.pos_cnum + 1;
                    }
              in
-             suggest_redundant_annotation ctx ~name_end
+             Typing_suggest.suggest_redundant_annotation ctx ~name_end
                ~boundary:(snd i'.info).loc_start);
           return_statement i
             (Let ([ (name_opt, if drop then None else Some annot) ], Some i'))
@@ -7774,7 +5795,7 @@ and type_let ctx i =
                        in
                        Option.iter
                          (fun boundary ->
-                           suggest_redundant_annotation ctx
+                           Typing_suggest.suggest_redundant_annotation ctx
                              ~name_end:name.info.loc_end ~boundary)
                          boundary
                    | None -> ());
@@ -8951,7 +6972,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
         let redundant = name_redundant typ || field_unique in
         if ctx.simplify && redundant then None
         else begin
-          if ctx.suggest && redundant then suggest_drop_type_name ctx name;
+          if ctx.suggest && redundant then
+            Typing_suggest.suggest_drop_type_name ctx name;
           Some typ
         end
   in
@@ -8993,7 +7015,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
   | Struct (ty, fields) ->
       if ctx.suggest then
         List.iter
-          (fun (name, written) -> suggest_punning ctx name written)
+          (fun (name, written) ->
+            Typing_suggest.suggest_punning ctx name written)
           fields;
       (* The unique struct type these fields name, if any: used to resolve an
          omitted name and to drop a present one that the fields already pin. *)
@@ -9145,11 +7168,13 @@ and check_instruction ?(drop_supertype = false) ctx expected
       fun st ->
         if ctx.suggest then
           List.iter
-            (fun (name, written) -> suggest_punning ctx name written)
+            (fun (name, written) ->
+              Typing_suggest.suggest_punning ctx name written)
             fields;
         let front_holes =
           List.fold_left
-            (fun acc (_, w) -> acc + Option.fold ~none:0 ~some:count_holes w)
+            (fun acc (_, w) ->
+              acc + Option.fold ~none:0 ~some:Typing_lint.count_holes w)
             0 fields
         in
         let front_pending, tail_pending = list_split front_holes st.pending in
@@ -9524,7 +7549,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
          (deleting the [=> t]). Both key on the same test. *)
       let redundant = block_result_redundant ctx typ ~expected ~result_cell in
       if ctx.suggest && redundant then
-        suggest_if_result ctx cond.info.loc_end if_block.info.loc_start;
+        Typing_suggest.suggest_if_result ctx cond.info.loc_end
+          if_block.info.loc_start;
       let typ =
         if omitted then
           match standalone_valtype ctx expected with
@@ -9796,7 +7822,9 @@ and type_indirect_call ctx i i' l =
      init-locals effects replayed as the last operand, matching [to_wasm]. The
      error arms still synthesize the arguments for recovery. *)
  fun st ->
-  let front_holes = List.fold_left (fun acc a -> acc + count_holes a) 0 l in
+  let front_holes =
+    List.fold_left (fun acc a -> acc + Typing_lint.count_holes a) 0 l
+  in
   let front_pending, tail_pending = list_split front_holes st.pending in
   let i', replay =
     type_trailing_operand ctx (fun () ->
@@ -10117,7 +8145,7 @@ and match_recover_scrutinee ctx scrutinee = function
   | Some scrut' -> scrut'
   | None ->
       let pending =
-        List.init (count_holes scrutinee) (fun _ -> Cell.make Error)
+        List.init (Typing_lint.count_holes scrutinee) (fun _ -> Cell.make Error)
       in
       snd
         (instruction ctx scrutinee
@@ -11377,7 +9405,7 @@ let rec globals ctx fields =
                        hand-written Wax, exactly as a [let] binding does; the
                        [simplify] drop below is the Wasm->Wax mirror. *)
                     if ctx.suggest && redundant then
-                      suggest_redundant_annotation ctx
+                      Typing_suggest.suggest_redundant_annotation ctx
                         ~name_end:name.info.loc_end ~boundary:def.info.loc_start;
                     let drop = ctx.simplify && redundant in
                     ((if drop then None else Some annot), def'))
@@ -11482,19 +9510,20 @@ let rec functions ctx fields =
               (* Fresh per-function tracking of branched-to labels, and the
                  labels declared in the body (collected once, up front). *)
               used_labels = ref StringSet.empty;
-              label_decls = List.fold_left collect_labels [] body;
+              label_decls = List.fold_left Typing_lint.collect_labels [] body;
               (* Locals a later assignment writes, collected up front so a
                  fused [let]'s drop can spot a write-once binding (linear: one
                  traversal per function, not per binding). *)
               assigned_locals =
-                List.fold_left collect_assigned_locals StringSet.empty body;
+                List.fold_left Typing_lint.collect_assigned_locals
+                  StringSet.empty body;
               control_types = [ (label, return_types) ];
               return_types;
             }
           in
           (* The syntactic lints (constant conditions, dropped pure values) read
              the source body, before typing shadows [body] with the typed one. *)
-          if ctx.warn_unused then List.iter (lint_source ctx) body;
+          if ctx.warn_unused then List.iter (Typing_lint.lint_source ctx) body;
           let body =
             with_empty_stack ctx ~location ~kind:Function
               (let* body = block_contents ctx return_types body in
@@ -11504,7 +9533,7 @@ let rec functions ctx fields =
           (* The body is fully typed, so the deferred lints (shift-count widths)
              can now read their pinned cells; run them here, in this function, so
              they stay in source order among the other diagnostics. *)
-          flush_deferred_lints ctx;
+          Typing_lint.flush_deferred_lints ctx;
           (* A local or label whose name starts with [_] is intentionally
              unused. *)
           if ctx.warn_unused then begin
@@ -12089,7 +10118,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   (* Global initializers are fully typed now; run their deferred lints (see
      [ctx.deferred_lints]) before the function bodies, keeping every diagnostic
      in source order. *)
-  flush_deferred_lints ctx;
+  Typing_lint.flush_deferred_lints ctx;
   let typed_fields = functions ctx phased_fields in
   (* Report module fields — functions and globals — that are defined but never
      referenced (the module-level analog of an unused local). A field is exempt

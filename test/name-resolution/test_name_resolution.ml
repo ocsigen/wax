@@ -77,12 +77,12 @@ let resolve name src =
          (The lines are sorted, not the receivers, which hold inference cells.) *)
       !members
       |> List.map (fun (l, receiver) ->
-          let show (c : Typing.member_candidate) =
+          let show (c : Members.member_candidate) =
             Printf.sprintf "%s: %s" c.member_name c.member_detail
           in
           Printf.sprintf "member @ %s -> %s" (span l)
             (String.concat ", "
-               (List.map show (Typing.member_candidates receiver))))
+               (List.map show (Members.member_candidates receiver))))
       |> List.sort_uniq compare |> List.iter print_endline;
       print_newline ()
 

@@ -131,7 +131,7 @@ type analysis = {
       (* use -> definition(s) references, for go-to-definition. *)
   a_puns : Wax_utils.Ast.location list;
       (* punned struct-literal field spans, which rename must expand. *)
-  a_members : (Wax_utils.Ast.location * Wax_lang.Typing.member_receiver) list;
+  a_members : (Wax_utils.Ast.location * Wax_lang.Members.member_receiver) list;
       (* at each member access, the field span and what the receiver is (a
          struct, a numeric / v128 value, a memory / table), for member
          completion; the candidate list is derived on demand. *)
@@ -1181,8 +1181,8 @@ let cont_namespace_members ast ns =
   | Some { typ = Cont ft; _ } ->
       let fn member_name member_detail =
         {
-          Wax_lang.Typing.member_name;
-          member_kind = Wax_lang.Typing.Function;
+          Wax_lang.Members.member_name;
+          member_kind = Wax_lang.Members.Function;
           member_detail;
         }
       in
@@ -1192,7 +1192,7 @@ let cont_namespace_members ast ns =
       ]
   | _ -> []
 
-let member_completion (c : Wax_lang.Typing.member_candidate) =
+let member_completion (c : Wax_lang.Members.member_candidate) =
   {
     k_name = c.member_name;
     k_kind =
@@ -1227,7 +1227,8 @@ let namespace_position ~encoding src line ch =
 let completion_string ?(encoding = UTF16) src line ch defines =
   if is_member_position ~encoding src line ch then
     match member_receiver_at ~encoding src line ch (analyze src).a_members with
-    | Some r -> List.map member_completion (Wax_lang.Typing.member_candidates r)
+    | Some r ->
+        List.map member_completion (Wax_lang.Members.member_candidates r)
     | None -> (
         (* A bare [.]: the parser drops the field-less access, so nothing is
            recorded. Splice a sentinel field in so [recv.<sentinel>] parses and
@@ -1246,7 +1247,7 @@ let completion_string ?(encoding = UTF16) src line ch defines =
             (analyze_uncached repaired).a_members
         with
         | Some r ->
-            List.map member_completion (Wax_lang.Typing.member_candidates r)
+            List.map member_completion (Wax_lang.Members.member_candidates r)
         | None -> [])
   else
     match namespace_position ~encoding src line ch with
@@ -1254,7 +1255,7 @@ let completion_string ?(encoding = UTF16) src line ch defines =
         (* After [ns::]: the intrinsic namespace's free functions, known
            textually, need no parse; a declared continuation type's
            [new]/[bind] members are resolved from the buffer's AST. *)
-        match Wax_lang.Typing.namespace_members ns with
+        match Wax_lang.Members.namespace_members ns with
         | [] -> (
             let ast_opt, _, _ =
               Wax_parser.parse_recover ~filename:"<buffer>"
@@ -1296,7 +1297,7 @@ let completion_string ?(encoding = UTF16) src line ch defines =
                 k_kind = "namespace";
                 k_detail = "intrinsic namespace";
               })
-            Wax_lang.Typing.intrinsic_namespaces
+            Wax_lang.Members.intrinsic_namespaces
         in
         match ast_opt with
         | None -> keywords @ namespaces
@@ -1354,12 +1355,12 @@ let callee_label ast callee =
       !found
   | Path (ns, nm) ->
       let members =
-        match Wax_lang.Typing.namespace_members ns.desc with
+        match Wax_lang.Members.namespace_members ns.desc with
         | [] -> cont_namespace_members ast ns.desc
         | members -> members
       in
       List.find_map
-        (fun (c : Wax_lang.Typing.member_candidate) ->
+        (fun (c : Wax_lang.Members.member_candidate) ->
           if c.member_name = nm.desc then Some c.member_detail else None)
         members
   | _ -> None
@@ -1404,15 +1405,15 @@ let method_label typed_module recv meth_name =
           (* an array receiver: its element type selects the array methods; a
              continuation receiver, the resume family and switch *)
           match array_element typed_module n.desc with
-          | Some elem -> Some (Wax_lang.Typing.array_method_candidates elem)
+          | Some elem -> Some (Wax_lang.Members.array_method_candidates elem)
           | None -> (
               match cont_signature typed_module n.desc with
               | Some (params, results, switch_results) ->
                   Some
-                    (Wax_lang.Typing.cont_method_candidates ~params ~results
+                    (Wax_lang.Members.cont_method_candidates ~params ~results
                        ~switch_results)
-              | None -> Wax_lang.Typing.numeric_receiver_candidates ty))
-      | _ -> Wax_lang.Typing.numeric_receiver_candidates ty
+              | None -> Wax_lang.Members.numeric_receiver_candidates ty))
+      | _ -> Wax_lang.Members.numeric_receiver_candidates ty
   in
   let candidates =
     match recv.desc with
@@ -1431,18 +1432,18 @@ let method_label typed_module recv meth_name =
         match !obj with
         | Some (`Mem at) ->
             Some
-              (Wax_lang.Typing.memory_method_candidates
+              (Wax_lang.Members.memory_method_candidates
                  ~addr_name:(addr_type_name at))
         | Some (`Tab (at, rt)) ->
             Some
-              (Wax_lang.Typing.table_method_candidates
+              (Wax_lang.Members.table_method_candidates
                  ~addr_name:(addr_type_name at)
                  ~elem_name:(render_valtype (Ref rt)))
         | None -> value ())
     | _ -> value ()
   in
   Option.bind candidates
-    (List.find_map (fun (c : Wax_lang.Typing.member_candidate) ->
+    (List.find_map (fun (c : Wax_lang.Members.member_candidate) ->
          if c.member_name = meth_name then Some c.member_detail else None))
 
 (* The [start, end) offsets of each top-level parameter within a rendered
