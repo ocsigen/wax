@@ -34,8 +34,17 @@ jobs:
         with:
           ocaml-compiler: "5.4"
 
+      - name: Set up Binaryen
+        # wasm_of_ocaml needs Binaryen (wasm-opt/wasm-merge) to build the wasm
+        # runtime; same action and version as the npm-package workflow.
+        uses: Aandreba/setup-binaryen@v1.0.0
+        with:
+          token: ${{ github.token }}
+
       - name: Install dependencies
-        run: opam install . --deps-only
+        run: |
+          opam install . --deps-only
+          opam install js_of_ocaml js_of_ocaml-ppx wasm_of_ocaml-compiler
 
       - name: Build the playground wasm bundle
         run: opam exec -- dune build --profile release src/editor/wax_format_js.bc.wasm.js
