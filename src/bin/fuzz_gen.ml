@@ -853,7 +853,7 @@ let local_liveness_seq d : Ast.location Ast.instr list =
 
 (* One clean type error, to reach the checker's mismatch-reporting arms. *)
 let poison () : Ast.location Ast.instr =
-  match rnd 7 with
+  match rnd 8 with
   | 0 ->
       nl
         (Ast.Let
@@ -884,6 +884,35 @@ let poison () : Ast.location Ast.instr =
              nl (Ast.Get (id "c")),
              nl (Ast.Get (id "d")) ))
       (* signed cmp on floats *)
+  | 6 ->
+      (* [br_table] with a REPEATED target and a mismatched delivered value
+         (the block wants i32, [c] is f32): the per-distinct-target check must
+         report the mismatch ONCE, not once per occurrence — the diagnostics
+         -shape (DIAG_DUP) case the corpus never contains. *)
+      let lbl = id "bt_poison" in
+      nl
+        (Ast.Let
+           ( [ (None, None) ],
+             Some
+               (nl
+                  (Ast.Block
+                     {
+                       label = Some lbl;
+                       typ = Ast.{ params = [||]; results = [| valtype I32 |] };
+                       block =
+                         nl
+                           [
+                             nl
+                               (Ast.Br_table
+                                  ( [ lbl; lbl; lbl ],
+                                    nl
+                                      (Ast.Sequence
+                                         [
+                                           nl (Ast.Get (id "c"));
+                                           nl (Ast.Get (id "a"));
+                                         ]) ));
+                           ];
+                     })) ))
   | _ ->
       (* An [&eq] cast to an inline function type whose signature matches no
          declared type: cross-hierarchy, so it rejects, but the target type is

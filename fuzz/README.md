@@ -68,6 +68,9 @@ fuzz/cond-fromwasm-fuzz.sh       # from_wasm (wat->wax) of conditional modules: 
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
 fuzz/mutate-wat.sh [count]  # text-mutate the wat seeds (edge literals) + check them
 fuzz/validate-fuzz.sh       # type-flip valid wat + differential vs the reference (validator rejection arms); COUNT=N
+fuzz/wat-cross-proposal.sh  # graft exact/cont/descriptor constructs across proposals (crash oracle); COUNT=N
+fuzz/unreachable-fuzz.sh    # metamorphic: inserting `unreachable` preserves validity (dead-code principal typing); COUNT=N
+fuzz/fault-locality.sh      # single-fault locality: one unbound use-site ref = one local error (index-space poisoning guard; .wat + .wax); COUNT=N, WAX_COUNT=N
 fuzz/num-id-fuzz.sh         # metamorphic: flipping a type ref name<->number must decompile identically (from_wasm ref resolution); COUNT=N corpus breadth
 fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two-cast chains
 fuzz/wat-cast-const.sh      # deterministic round-trip of each conversion on edge-value consts (catches over-rejection)
@@ -93,7 +96,8 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
-`validate-fuzz.sh`, `num-id-fuzz.sh`, `cond-fromwasm-fuzz.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`,
+`fault-locality.sh`, `num-id-fuzz.sh`, `cond-fromwasm-fuzz.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -139,6 +143,17 @@ of them). The copy lives in the run's scratch dir and is removed on exit.
   `.wasm` per module by `wasm-tools json-from-wast`. The JSON's command type tags
   each module `valid` (`module`) or `invalid` (`assert_invalid` /
   `assert_malformed`) — giving differential-validation ground truth on both sides.
+* cross-proposal seeds (`cross-*.wat`, via `cross-corpus.sh`, run by
+  `build-corpus.sh`) — the in-tree stack-switching and custom-descriptors inputs
+  (the spec proposal suites, text-split by `wast-extract.js`, plus cram
+  fixtures), which wasm-smith cannot generate and the binary path above must
+  skip (the gated suite needs a feature flag the oracle does not pass).
+  Harvested as TEXT with a `(@feature "custom-descriptors")` annotation injected
+  where needed, so each module self-declares its proposal and validates
+  flag-free; a module enters only if wasm-tools AND wax both accept it (the few
+  known, documented divergences — pinned in `wasm_test_suite.expected` or their
+  cram tests — are listed at harvest time and left out, rather than re-reported
+  as FALSE_REJECT by every corpus run).
 
 ## The Wax source side
 
@@ -241,7 +256,9 @@ never as a method/cast receiver, whose type the checker infers bottom-up.
 `return` (it is a diverging control construct, not a value-producing
 expression). With `err` it plants a single mismatch instead, to exercise the
 rejection arms (100% accepted / 100% cleanly rejected respectively, never a
-crash).
+crash). A rejection is also held to the diagnostics-shape invariant (the Wax
+mirror of oracle 2b): no located `--error-format short` line may repeat —
+REVIEW `DIAG_DUP` otherwise (reported, not gating; only HIGH findings gate).
 
 The oracle is the checker-soundness invariant *"Wax typing mirrors Wasm
 validation"*: an accepted module must emit a binary the reference validator
@@ -405,6 +422,64 @@ the reference rejects) or `OVER_REJECT` split is a REVIEW finding and a crash is
 HIGH. Clean on the corpus; the guard makes it precise (it fired only on
 pre-existing base divergences before the agreement precondition was added).
 
+`wat-cross-proposal.sh` grafts one proposal's construct onto a module shaped by
+another (`mode=cross` of `wat-type-mutate.awk`): wrap a concrete `(ref $t)` in
+`(exact …)`, splice a `(cont $f)` wrapper over a func type, or link a struct
+pair with `(descriptor)`/`(describes)`. wasm-smith can emit neither stack
+switching nor custom descriptors and the single-proposal corpus/spec modules
+never mix them, so the proposal-INTERSECTION arms of the validator are dark to
+every other campaign — which is where the switch-on-`(ref (exact $cont))`
+assert crash lived (verified: reverting that fix turns this campaign red, via a
+harvested stack-switching seed plus one exact-wrap). Mutants need not stay
+valid; the oracle is the exit-code contract (crash-only), swept over `check`
+and the wat→wasm / wat→wax conversions with `-X custom-descriptors` so the
+gated arms actually run. Deterministic given `SEED`; built-in seeds keep it
+alive without a corpus; findings under `fuzz/cross-findings/`.
+
+`unreachable-fuzz.sh` is a metamorphic oracle on dead-code typing: inserting
+`unreachable` at any instruction boundary of a valid module preserves validity
+(the code after it validates against the polymorphic stack; local-init tracking
+is unaffected since no `local.set` is removed). No generator can produce a
+module whose VALIDITY depends on how dead code is typed, so this is the only
+systematic exercise of the validator's `Bot`/`Bot_ref` principal-typing arms —
+the class behind the `extern.convert_any` unreachable over-rejection (verified:
+reverting that fix turns the built-in convert seed red). Bases are normalized
+to unfolded WAT and `wat-unreachable-insert.awk` plants `unreachable` before an
+instruction line inside a function body only (global/segment initializers are
+also printed unfolded, and a constant expression legitimately rejects it). A
+wax rejection is arbitrated by the spec reference interpreter (`REF`): REF
+accepts the mutant → HIGH `OVER_REJECT`; REF rejects it → the inserter broke
+validity (REVIEW `INSERTER`); REF absent or unable to parse the BASE (a
+proposal its build lacks, e.g. stack switching) → REVIEW, never misclassified.
+Findings under `fuzz/unreachable-findings/`.
+
+`fault-locality.sh` is the diagnostics-locality guard: plant exactly ONE fault
+in a valid module — `wat-fault-mutate.js` retargets a single use-site
+identifier at a fresh unbound name, definitions and all other uses intact —
+and assert every reported error sits on the fault's line, at most `MAX_ERRORS`
+(3) of them. This is the regression guard for the index-space poisoning
+discipline (a definition whose own resolution fails still claims its index):
+pre-poisoning, one broken definition shifted every later index, so numeric
+references silently resolved to the WRONG entity and errors cascaded across
+the module (verified: neutering the poisoned-entry registration fails the
+built-in global/table/tag/type seeds). The use-site fault direction is
+deliberate — faulting a definition used by name at N sites yields N correct
+errors, so the clean O(1) invariant belongs to the use-site fault, with the
+built-in seeds referencing everything else numerically. `SILENT` (an unbound
+reference produced no error) and `BLOWUP` (>3 errors, all local) are REVIEW;
+an off-line error is HIGH. Needs node; findings under `fuzz/fault-findings/`.
+The same invariant runs against the Wax typer: `wax-fault-mutate.js` retargets
+one `.wax` use site — a callee, a branch label (the value-carrying `br_on_*`
+family included), or a construction literal name — over built-in Wax seeds
+plus `WAX_COUNT` corpus-wax modules (hole-style smith seeds included). This
+oracle is what surfaced the typer's same-location duplicate classes, the
+silently-accepted unbound construction names, and the recovery-arity cascades
+recorded in `TYPING-FINDINGS-TRIAGE.md` — all since fixed, and the exclusions
+that guarded them lifted, so the oracle now guards the fixed behavior. The one
+remaining exclusion is the explicit-type signature form (`fn f: T (…)`),
+whose single error legitimately anchors on the declaration's first line
+rather than the reference's (see the mutator's header).
+
 `num-id-fuzz.sh` targets a third seam of the same subsystem from the *decompile*
 side: how `from_wasm` resolves a type referenced by its numeric index versus by
 its `$name`. A `(type N)` / `(ref N)` and the `(type $name)` / `(ref $name)`
@@ -496,6 +571,7 @@ same modules decompiled to Wax, so no separate wax corpus is needed.
 | `FALSE_REJECT`  | HIGH   | `wax check` accepts every module known valid. |
 | `FALSE_ACCEPT`  | HIGH   | `wax check` rejects every module known invalid; and a binary wax emits from an accepted module passes `wasm-tools validate` (emitter soundness). |
 | `VALIDATOR_DIFF`| REVIEW | For untagged input, `wax check`'s verdict matches `wasm-tools validate`. |
+| `DIAG_DUP`      | REVIEW | A rejection never repeats a diagnostic line (`--error-format short`, located lines): a location+message duplicate means two passes both reported one broken construct. |
 | `ROUNDTRIP`     | HIGH   | `x → wax → wasm` recompiles and validates; and for a wax input, `wax → wasm → wax → wasm` re-validates (the two directions compose). |
 | `IDEMPOTENCE`   | REVIEW | `format(format(x)) == format(x)` textually. |
 

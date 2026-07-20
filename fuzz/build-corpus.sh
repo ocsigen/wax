@@ -128,6 +128,12 @@ echo "spec-suite invalid modules: $ni"
 [ "$nfail" -gt 0 ] && echo "spec-suite .wast that json-from-wast could not split: $nfail"
 [ "$nprop" -gt 0 ] && echo "spec-suite .wast skipped (off-by-default proposal): $nprop"
 [ "$HAVE_JQ" = 0 ] && echo "(install jq to also harvest the invalid-module corpus)"
+
+# 3. Cross-proposal seeds (stack switching, custom descriptors) — text-harvested
+# with self-declaring feature annotations, since wasm-smith cannot generate
+# either proposal and the binary path above must skip the gated suite. Best
+# effort: skips cleanly when node is absent.
+bash "$(dirname "${BASH_SOURCE[0]}")/cross-corpus.sh" "$OUT" || true
 echo
 echo "corpus written to $OUT"
 echo "  valid:   $(find "$OUT/valid" -type f | wc -l) files"

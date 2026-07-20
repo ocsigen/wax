@@ -7,3 +7,6 @@ mutate-wat-findings/
 mutate-wasm-findings/
 diff-findings/
 mutate-sound-findings/
+cross-findings/
+unreachable-findings/
+fault-findings/

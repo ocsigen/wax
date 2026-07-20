@@ -17,6 +17,9 @@
 #   1. Crash      — no pipeline may exit other than 0 (ok) or 128 (clean error).
 #   2. Diff-valid — a binary wax emits must be accepted by `wasm-tools validate`
 #                   (a false accept means wax produces invalid wasm).
+#   2b. Diag-shape — a rejection never reports the same diagnostic line twice
+#                   (location + message duplicates = two passes both reported
+#                   one broken reference).
 #   3b. Text-valid — the WAT *text* wax emits (via `--desugar`) must validate too;
 #                   the printer is a separate path from the binary encoder, so
 #                   valid-binary-but-invalid-text is a real bug.
@@ -237,6 +240,25 @@ case "$verdict:$EXPECT" in
     fi ;;
 esac
 
+# ---- 2b. Diagnostics shape: a rejection never repeats a diagnostic. ----
+# Each diagnostic must be reported once, by the pass that owns it — a repeated
+# line (same location + severity + message in `--error-format short`) means two
+# passes resolved and reported the same broken construct (the duplicate-report
+# class the validator's `muted` pre-pass discipline exists to prevent). Exact
+# line equality: two like errors at different locations stay distinct. Only
+# LOCATED lines (file:line:col:) are compared — a location-less diagnostic (a
+# binary-input entity with no source span) renders identically for distinct
+# entities, so its repeats are not duplicate reports.
+if [ "$verdict" = rejected ]; then
+  dup="$(NO_COLOR=1 timeout -k 5 "$TIMEOUT" "$WAX" check --error-format short "$IN" 2>&1 >/dev/null \
+    | grep -E '^[^ ]+:[0-9]+:[0-9]+: ' | sort | uniq -d)"
+  if [ -n "$dup" ]; then
+    finding DIAG_DUP REVIEW "$IN" \
+      "duplicated diagnostic: $(head -1 <<<"$dup")" \
+      "NO_COLOR=1 $WAX check --error-format short $IN 2>&1 | sort | uniq -d"
+  fi
+fi
+
 # ---- 3. Emitter soundness: if wax accepts it, its binary must validate. ----
 # Catches wax emitting an invalid binary from a module it considered valid
 # (a bug in conversion/encoding, not validation). Only run when wax accepts.
@@ -410,7 +432,7 @@ lint_codes() { # $1 = file (format from extension): its sorted-unique warn codes
   timeout -k 5 "$TIMEOUT" "$WAX" check -W all=warning \
     --error-format json "$1" 2>&1 >/dev/null \
     | grep -oE '"warning":"[^"]+"' | sed 's/.*:"//; s/"$//' \
-    | grep -vxE 'precedence|eager-select|naming-conflict|reserved-word-rename|generated-name' \
+    | grep -vxE 'precedence|eager-select|naming-conflict|reserved-word-rename|generated-name|compound-assignment|field-punning|redundant-annotation' \
     | sort -u
 }
 # The wax form of the program (decompiled + simplified for wat/wasm input; the

@@ -17,7 +17,9 @@
 # the extra smith-derived Wax/WAT seeds, the MUTATE_* counts drive the mutation
 # campaigns, EXEC_WAST_COUNT drives the behavioural slice (`exec.sh` over a
 # deterministic SEED-keyed subset of core .wast files), DIFF_VALIDATE_COUNT
-# drives diff-validate.sh, and VALIDATE_FUZZ_COUNT drives validate-fuzz.sh.
+# drives diff-validate.sh, VALIDATE_FUZZ_COUNT drives validate-fuzz.sh,
+# CROSS_PROPOSAL_COUNT drives wat-cross-proposal.sh, UNREACHABLE_COUNT drives
+# unreachable-fuzz.sh, and FAULT_LOCALITY_COUNT drives fault-locality.sh.
 # COUNT and SMITH are still accepted as legacy coarse
 # overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools; node
 # and the reference interpreter (REF) unlock the execution oracles (campaigns
@@ -40,6 +42,9 @@ mutate_wasm_struct="${MUTATE_WASM_STRUCT_COUNT:-${mutate_wasm}}"
 exec_wast="${EXEC_WAST_COUNT:-64}"
 diff_validate="${DIFF_VALIDATE_COUNT:-${legacy_count:-3000}}"
 validate_fuzz="${VALIDATE_FUZZ_COUNT:-${legacy_count:-800}}"
+cross_proposal="${CROSS_PROPOSAL_COUNT:-${legacy_count:-1500}}"
+unreachable="${UNREACHABLE_COUNT:-${legacy_count:-800}}"
+fault_locality="${FAULT_LOCALITY_COUNT:-${legacy_count:-600}}"
 if [ "${QUICK:-0}" = 1 ]; then
   smith=40
   corpus_smith=40
@@ -50,6 +55,9 @@ if [ "${QUICK:-0}" = 1 ]; then
   exec_wast=5
   diff_validate=100
   validate_fuzz=100
+  cross_proposal=100
+  unreachable=60
+  fault_locality=60
 fi
 
 command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
@@ -58,7 +66,7 @@ command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
 }
 
 echo "nightly campaigns — SEED=$SEED  (replay this run with: SEED=$SEED fuzz/nightly.sh)" >&2
-echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz" >&2
+echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz cross-proposal=$cross_proposal unreachable=$unreachable fault-locality=$fault_locality" >&2
 
 fail=0 passed=0 skipped=0 failed_list=""
 
@@ -150,6 +158,16 @@ run diff-validate.sh "$diff_validate"
 # against wasm-tools. Corpus-dependent, so it runs here (nightly builds the
 # corpus) rather than in the per-PR check.sh, where it always skips.
 run "COUNT=$validate_fuzz" validate-fuzz.sh
+# Cross-proposal mutation (exact/cont/descriptor grafts) over the corpus —
+# including the cross-*.wat seeds build-corpus harvested above — hunting for
+# crashes in the proposal-intersection arms no generator reaches.
+run "COUNT=$cross_proposal" wat-cross-proposal.sh
+# Metamorphic dead-code oracle: inserting `unreachable` at an instruction
+# boundary must preserve validity (the validator's Bot/principal-typing arms).
+run "COUNT=$unreachable" unreachable-fuzz.sh
+# Single-fault locality: one retargeted use-site reference must yield exactly
+# the local unbound error — the index-space poisoning regression guard.
+run "COUNT=$fault_locality" fault-locality.sh
 
 echo >&2
 echo "==================== fuzz/nightly.sh summary ====================" >&2

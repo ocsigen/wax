@@ -138,6 +138,21 @@ fuzz_one() {
   # Also drive the dedicated `check` path (type-check only, no emission).
   case "$(classify_wax check "$wax")" in
     crash:*) out+="$(finding TYPE HIGH "gen$i" "crash on wax check" "wax check <(fuzz_gen $((SEED + i)) $errflag)")"$'\n'; printf F >&2 ;;
+    rejected)
+      # Diagnostics-shape invariant on the rejection (the Wax mirror of
+      # oracle.sh's 2b): a rejection must not repeat a located diagnostic
+      # line — a location+message duplicate means one broken construct was
+      # reported twice. The `err` modules exercise this on every mismatch arm
+      # the generator can plant.
+      local dup
+      dup="$(NO_COLOR=1 timeout -k 5 "$TIMEOUT" "$WAX" check --error-format short "$wax" 2>&1 >/dev/null \
+        | grep -E '^[^ ]+:[0-9]+:[0-9]+: ' | sort | uniq -d)"
+      if [ -n "$dup" ]; then
+        out+="$(finding TYPE REVIEW "gen$i" \
+          "DIAG_DUP: duplicated diagnostic: $(head -1 <<<"$dup")" \
+          "fuzz_gen $((SEED + i)) $errflag >m.wax; wax check --error-format short m.wax 2>&1 | sort | uniq -d")"$'\n'
+        printf F >&2
+      fi ;;
   esac
 
   [ -n "$out" ] && printf '%s' "$out" >"$RESULTS/$i"
@@ -158,12 +173,13 @@ echo >&2
 REPORT="$RESULTS/report"
 cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
 n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
+h=$(grep -c $'\tHIGH\t' "$REPORT" 2>/dev/null); h=${h:-0}
 echo "=================== type-fuzz report ==================="
 echo "modules: $COUNT"
-echo "findings (crash / unsound / round-trip): $n"
+echo "findings (crash / unsound / round-trip / diag-dup): $n  (HIGH: $h)"
 if [ "$n" -gt 0 ]; then
   echo
   cut -f2,3,4,5 "$REPORT" | sort -u | sed 's/^/  /'
 fi
-[ "$n" -gt 0 ] && exit 1
+[ "$h" -gt 0 ] && exit 1
 exit 0
