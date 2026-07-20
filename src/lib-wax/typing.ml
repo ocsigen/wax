@@ -19,6 +19,10 @@ type reference = Typing_env.reference = {
 
 (*** Diagnostics ***)
 
+let loc_last_char loc =
+  let loc_end = loc.loc_end in
+  { loc with loc_start = { loc_end with pos_cnum = loc_end.pos_cnum - 1 } }
+
 module Error = struct
   open Wax_utils
 
@@ -68,7 +72,7 @@ module Error = struct
      and the lints may fire on mangled recovered code. Warnings are advisory, so
      suppress them wholesale here — the user fixes the syntax errors first and the
      warnings surface on a clean re-check. This is the warning-severity analogue
-     of the [unbound_name]/[empty_stack] cascade guards. *)
+     of the [unbound_name]/[short_stack] cascade guards. *)
   let warn ?warning ?universal ?hint ?edit ?related context ~location message =
     if not (Wax_utils.Diagnostic.in_recovery context) then
       Diagnostic.report context ~location ~severity:Warning ?warning ?universal
@@ -168,33 +172,23 @@ module Error = struct
       ~related
       (text "This code is unreachable.")
 
-  let loc_last_char loc =
-    let loc_end = loc.loc_end in
-    { loc with loc_start = { loc_end with pos_cnum = loc_end.pos_cnum - 1 } }
-
-  let empty_stack context ~location =
+  let short_stack context kind ~location ~actual ~expected =
     (* Like [unbound_name], suppress this in error-recovery mode: a stack
        underflow while type-checking a best-effort AST is usually a cascade from
        a value-producing construct dropped at a sync boundary, not a real
        mistake. Both callers ([pop_any]/[pop]) recover with [Error]/[()], so
        nothing downstream cascades; genuine underflows in intact code still
        surface on a clean re-check once the syntax errors are fixed. *)
-    if not (Wax_utils.Diagnostic.in_recovery context) then
-      report context ~location (*:(loc_last_char location)*)
-        (text "The stack is empty.")
-
-  (* FIXME: point to the hole *)
-  let short_stack context ~location ~actual ~expected =
-    (* Like [unbound_name], suppress this in error-recovery mode: a stack
-       underflow while type-checking a best-effort AST is usually a cascade from
-       a value-producing construct dropped at a sync boundary, not a real
-       mistake. Both callers ([pop_any]/[pop]) recover with [Error]/[()], so
-       nothing downstream cascades; genuine underflows in intact code still
-       surface on a clean re-check once the syntax errors are fixed. *)
+    let values =
+      match kind with
+      | `Input -> "argument(s)"
+      | `Output -> "returned value(s)"
+      | `Holes -> "value(s)"
+    in
     if not (Wax_utils.Diagnostic.in_recovery context) then
       report context ~location
-        (text "Expecting " ++ Message.int expected
-         ++ text " value(s) from the stack, but there are only "
+        (text "Expecting " ++ Message.int expected ++ text values
+         ++ text "from the stack, but there are"
          ++ Message.int actual
         ^^ text ".")
 
@@ -206,7 +200,7 @@ module Error = struct
 
   let non_empty_stack context ~location render =
     report context ~location:(loc_last_char location)
-      (text "Some values remain on the stack:" ^^ Message.raw render)
+      (text "Some values remain on the stack:" ^^ Message.raw render ^^ text ".")
 
   (* Report the values still on the stack by pointing a caret at each of them.
      [location] carries the topmost value; [related] the others. *)
@@ -262,13 +256,14 @@ module Error = struct
        ++ kw (meth ^ "()")
       ^^ text ".")
 
-  let type_mismatch context ~location ty' ty =
+  let type_mismatch context ~location ~current ty' ty =
     report context ~location
-      ((text "Expecting type" ++ typ ty ++ text "but got type" ++ typ ty')
+      (text "Argument" ++ Message.int current ++ text "should have type"
+       ++ typ ty ++ text "but has type" ++ typ ty'
       ^^ text ".")
 
   let not_an_expression context ~location n =
-    (* Suppress in error-recovery mode, like [empty_stack]: an instruction with
+    (* Suppress in error-recovery mode, like [short_stack]: an instruction with
        the wrong number of values in expression position is usually a cascade
        from recovery mangling the surrounding code (a dropped operand, or a
        construct auto-closed at EOF). Both callers recover with [Error], so
@@ -1888,7 +1883,8 @@ let pop_any ctx i current expected st =
   | Poisoned -> (st, Cell.make Error)
   | Cons (_, ty, r) -> (r, ty)
   | Empty ->
-      Error.short_stack ctx.diagnostics ~location:i.info ~actual:current
+      (* FIXME: point to the hole *)
+      Error.short_stack ctx.diagnostics `Holes ~location:i.info ~actual:current
         ~expected;
       (Poisoned, Cell.make Error)
 
@@ -1901,20 +1897,7 @@ let pop_many ctx i count =
   in
   loop 0 []
 
-(*ZZZ This is for block parameters and return values:
-  there should be n .. on the stack, but there are ...
-  (with type)
-  The nth argument should have type BLA but has type BLA
-  (unless we have a locationfrom the stack)
-*)
-let pop ctx ~location ty st =
-  let mismatch loc_opt ty' =
-    match loc_opt with
-    | Some loc ->
-        Error.expression_type_mismatch ctx.diagnostics ~location:loc
-          ~provided:ty' ~expected:ty
-    | None -> Error.type_mismatch ctx.diagnostics ~location ty' ty
-  in
+let pop ctx kind ~location current expected ty st =
   match st with
   | Unreachable | Poisoned -> (st, ())
   | Cons (loc_opt, ty', r) -> (
@@ -1930,20 +1913,36 @@ let pop ctx ~location ty st =
              genuine value below it reading as a bogus leftover. *)
           (st, ())
       | _ ->
-          if not (subtype ctx ty' ty) then mismatch loc_opt ty';
+          (if not (subtype ctx ty' ty) then
+             match loc_opt with
+             | Some loc ->
+                 Error.expression_type_mismatch ctx.diagnostics ~location:loc
+                   ~provided:ty' ~expected:ty
+             | None ->
+                 Error.type_mismatch ctx.diagnostics ~location ~current ty' ty);
           (r, ()))
   | Empty ->
-      Error.empty_stack ctx.diagnostics ~location;
+      Error.short_stack ctx.diagnostics kind
+        ~location:
+          (match kind with
+          | `Input | `Holes -> location
+          | `Output -> loc_last_char location)
+        ~actual:(expected - current - 1)
+        ~expected;
       (* As in [pop_any]: an underflow poisons the stack, so one missing value
          is reported once, not once per remaining pop. *)
       (Poisoned, ())
 
-let pop_args ctx ~location args =
-  Array.fold_right
-    (fun ty rem ->
-      let* () = rem in
-      pop ctx ~location ty)
-    args (return ())
+let pop_args ctx kind ~location args =
+  let len = Array.length args in
+  let rec loop pos =
+    if pos = 0 then return ()
+    else
+      let pos = pos - 1 in
+      let* () = pop ctx kind ~location pos len args.(pos) in
+      loop pos
+  in
+  loop len
 
 (* Pushing an [Error] value poisons the whole stack ([Unreachable]): the failed
    producer's true arity is unknown (a call that did not resolve may have
@@ -8437,7 +8436,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx ~location:i.info params in
+      let* () = pop_args ctx `Input ~location:i.info params in
       let instrs' = block ctx i.info label params results results instrs in
       return_statement i
         (Block { label; typ; block = { blkloc with desc = instrs' } })
@@ -8447,7 +8446,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx ~location:i.info params in
+      let* () = pop_args ctx `Input ~location:i.info params in
       let instrs' = block ctx i.info label params results params instrs in
       return_statement i
         (Loop { label; typ; block = { blkloc with desc = instrs' } })
@@ -8466,7 +8465,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx ~location:i.info params in
+      let* () = pop_args ctx `Input ~location:i.info params in
       let if_block =
         {
           if_block with
@@ -8499,7 +8498,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx ~location:i.info params in
+      let* () = pop_args ctx `Input ~location:i.info params in
       let body' = block ctx i.info label params results results body in
       check_trytable_catches ctx catches;
       return_statement i
@@ -8511,7 +8510,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx ~location:i.info params in
+      let* () = pop_args ctx `Input ~location:i.info params in
       let body' = block ctx i.info label params results results body in
       let catches, catch_all =
         type_try_catches ctx i label ~results catches catch_all
@@ -8858,7 +8857,7 @@ and block ctx loc label params results br_params block =
          { ctx with control_types = (label, br_params) :: ctx.control_types }
          results block
      in
-     let* () = pop_args ctx ~location:loc results in
+     let* () = pop_args ctx `Output ~location:loc results in
      return block')
 
 (* Like [block] for a paramless block checked against a single [result] type, but
@@ -8919,7 +8918,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
        | Cons (loc', tv, _) ->
            cs.collected <- (loc', Cell.make (Cell.get tv)) :: cs.collected
        | Empty | Unreachable | Poisoned -> ());
-       let st, () = pop_args ctx ~location:loc [| result |] st in
+       let st, () = pop_args ctx `Output ~location:loc [| result |] st in
        (* Return the cell: the caller may deliver more values to it (a [try]'s catch
           handlers) before [block_keep_needed] reads the join. Every value reaching
           the exit is already validated against [result] — the fall-through by
@@ -9866,7 +9865,7 @@ let rec functions ctx fields =
           let body =
             with_empty_stack ctx ~location ~kind:Function
               (let* body = block_contents ctx return_types body in
-               let* () = pop_args ctx ~location return_types in
+               let* () = pop_args ctx `Output ~location return_types in
                return body)
           in
           (* The body is fully typed, so the deferred lints (shift-count widths)

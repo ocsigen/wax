@@ -5,10 +5,9 @@ context. It now points at the enclosing construct.
 A function that promises a result but has an empty body:
 
   $ wax --validate empty_body.wax -o out.wat
-  Error: The stack is empty.
-   ──➤  empty_body.wax:1:1
+  Error: Expecting 1 returned value(s) from the stack, but there are 0.
+   ──➤  empty_body.wax:2:1
   1 │ fn f() -> i32 {
-    · ^^^^^^^^^^^^^^^^
   2 │ }
     · ^
   3 │ 
@@ -17,12 +16,10 @@ A function that promises a result but has an empty body:
 A function whose body produces no value for its declared result:
 
   $ wax --validate missing_result.wax -o out.wat
-  Error: The stack is empty.
-   ──➤  missing_result.wax:1:1
+  Error: Expecting 1 returned value(s) from the stack, but there are 0.
+   ──➤  missing_result.wax:3:1
   1 │ fn f() -> i32 {
-    · ^^^^^^^^^^^^^^^^
   2 │     let x = 1;
-    · ^^^^^^^^^^^^^^^
   3 │ }
     · ^
   4 │ 
