@@ -1318,8 +1318,14 @@ let with_cond_ref cond_ref cond_env diagnostics ~location cond positive f =
 let with_cond ctx ~location cond positive f =
   with_cond_ref ctx.cond ctx.cond_env ctx.diagnostics ~location cond positive f
 
+(* The [lookup_*_type] family resolves a type NAME to its composite type of the
+   expected kind. An unbound name is REPORTED (at the reference, with
+   spell-check suggestions — [Tbl.find]); silently returning [None] here let a
+   construction literal naming an unbound type be accepted and lowered to
+   [unreachable]. A bound name of the wrong kind gets the kind-specific
+   error. *)
 let lookup_func_type ?location ctx name =
-  let*@ ty = Tbl.find_opt ctx.type_context.types name in
+  let*@ ty = Tbl.find ctx.diagnostics ctx.type_context.types name in
   match (snd ty).typ with
   | Func f -> Some f
   | Struct _ | Array _ | Cont _ ->
@@ -1328,7 +1334,7 @@ let lookup_func_type ?location ctx name =
       None
 
 let lookup_struct_type ?location ctx name =
-  let*@ ty = Tbl.find_opt ctx.type_context.types name in
+  let*@ ty = Tbl.find ctx.diagnostics ctx.type_context.types name in
   match (snd ty).typ with
   | Struct fields -> Some fields
   | Func _ | Array _ | Cont _ ->
@@ -1358,7 +1364,7 @@ let field_value (name : ident) = function
   | None -> { desc = Get name; info = name.info }
 
 let lookup_array_type ?location ctx name =
-  let*@ ty = Tbl.find_opt ctx.type_context.types name in
+  let*@ ty = Tbl.find ctx.diagnostics ctx.type_context.types name in
   match (snd ty).typ with
   | Array field -> Some field
   | Func _ | Struct _ | Cont _ ->
@@ -1379,7 +1385,7 @@ let inline_comptype ctx (name : ident) =
 
 (* The name of the function type a continuation type wraps. *)
 let lookup_cont_inner ?location ctx name =
-  let*@ ty = Tbl.find_opt ctx.type_context.types name in
+  let*@ ty = Tbl.find ctx.diagnostics ctx.type_context.types name in
   match (snd ty).typ with
   | Cont ft -> Some ft
   | Func _ | Struct _ | Array _ ->
@@ -1773,6 +1779,11 @@ let signed_cast ctx ty ty' =
 type stack =
   | Unreachable
   | Empty
+  | Poisoned
+    (* The poison of an already-reported failure whose stack effect is
+         unknown (a producer that did not resolve, an underflow): pops yield
+         [Error] silently — unlike [Unreachable] (dead code), whose pops yield
+         [Unknown] and re-default, and which the dead-code lint keys on. *)
   | Cons of location * inferred_type Cell.t * stack
 
 let rec output_stack pp st =
@@ -1782,6 +1793,9 @@ let rec output_stack pp st =
   | Unreachable ->
       Wax_utils.Printer.space pp.SP.printer ();
       SP.print_styled pp Wax_utils.Colors.Keyword "unreachable"
+  | Poisoned ->
+      Wax_utils.Printer.space pp.SP.printer ();
+      SP.print_styled pp Wax_utils.Colors.Keyword "poisoned"
   | Cons (_, ty, st) ->
       Wax_utils.Printer.space pp.SP.printer ();
       output_inferred_type_styled pp ty;
@@ -1834,14 +1848,18 @@ let ( let*! ) e f =
         }
 
 (* Pop the top operand's type. An [Unreachable] (polymorphic) stack yields a
-   fresh [Unknown] and consumes nothing; [Empty] is a genuine stack underflow. *)
+   fresh [Unknown] and consumes nothing; [Empty] is a genuine stack underflow.
+   An underflow turns the stack unreachable (mirroring the Wasm validator's
+   [pop_any]), so one missing value is reported once rather than once per
+   subsequent pop. *)
 let pop_any ctx i st =
   match st with
   | Unreachable -> (st, Cell.make Unknown)
+  | Poisoned -> (st, Cell.make Error)
   | Cons (_, ty, r) -> (r, ty)
   | Empty ->
       Error.empty_stack ctx.diagnostics ~location:i.info;
-      (st, Cell.make Error)
+      (Poisoned, Cell.make Error)
 
 let rec pop_many ctx i n accu =
   if n = 0 then return accu
@@ -1857,7 +1875,7 @@ let rec pop_many ctx i n accu =
 *)
 let pop ctx ~location ty st =
   match st with
-  | Unreachable -> (st, ())
+  | Unreachable | Poisoned -> (st, ())
   | Cons (loc, ty', r) -> (
       match Cell.get ty' with
       | Error ->
@@ -1876,7 +1894,9 @@ let pop ctx ~location ty st =
           (r, ()))
   | Empty ->
       Error.empty_stack ctx.diagnostics ~location;
-      (st, ())
+      (* As in [pop_any]: an underflow poisons the stack, so one missing value
+         is reported once, not once per remaining pop. *)
+      (Poisoned, ())
 
 let pop_args ctx ~location args =
   Array.fold_right
@@ -1885,7 +1905,17 @@ let pop_args ctx ~location args =
       pop ctx ~location ty)
     args (return ())
 
-let push loc ty st = (Cons (loc, ty, st), ())
+(* Pushing an [Error] value poisons the whole stack ([Unreachable]): the failed
+   producer's true arity is unknown (a call that did not resolve may have
+   produced any number of values), so later consumers must absorb any count
+   silently — reporting an underflow there would anchor a derived error away
+   from the original fault. This is the push-side twin of [with_empty_stack]'s
+   rule that an [Error] anywhere on the stack suppresses the leftover report,
+   and of [pop_any]'s underflow-turns-unreachable. *)
+let push loc ty st =
+  match Cell.get ty with
+  | Error -> ((match st with Unreachable -> Unreachable | _ -> Poisoned), ())
+  | _ -> (Cons (loc, ty, st), ())
 
 let rec push_results results =
   match results with
@@ -1918,10 +1948,10 @@ let with_empty_stack ctx ~kind:_ ~location f =
           if loc.loc_start.Lexing.pos_cnum >= 0 then loc :: locs else locs
         in
         scan has_error locs st
-    | Empty | Unreachable -> (has_error, List.rev locs)
+    | Empty | Unreachable | Poisoned -> (has_error, List.rev locs)
   in
   (match st with
-  | Empty | Unreachable -> ()
+  | Empty | Unreachable | Poisoned -> ()
   | Cons _ -> (
       match scan false [] st with
       | true, _ -> () (* poison on the stack: an already-reported cascade *)
@@ -1998,6 +2028,7 @@ let branch_target ctx label =
         in
         Error.unbound_name ctx.diagnostics ~location:label.info ~suggestions
           "label" label;
+        ctx.unresolved_label := true;
         [||]
     | (Some label', res) :: _ when label.desc = label'.desc ->
         ctx.used_labels := StringSet.add label.desc !(ctx.used_labels);
@@ -2060,6 +2091,9 @@ type resolved_var =
   | Local of inferred_valtype option
   | Global of bool (* mutable *) * inferred_valtype option
   | Func_ref of Wax_wasm.Types.Id.t * string * bool
+  | Poisoned
+    (* A function whose signature failed to resolve: bound, already reported
+         at its definition, reads as [Error] with no further report. *)
   | Unbound
 
 let resolve_variable ctx idx =
@@ -2073,7 +2107,8 @@ let resolve_variable ctx idx =
       | Some (mut, ty) -> Global (mut, ty)
       | None -> (
           match Tbl.find_opt ctx.functions idx with
-          | Some (ty, ty', exact) -> Func_ref (ty, ty', exact)
+          | Some (Some (ty, ty', exact)) -> Func_ref (ty, ty', exact)
+          | Some None -> Poisoned
           | None -> Unbound))
 
 (* Whether [name] denotes a memory (resp. table) usable as a method/index
@@ -2210,7 +2245,17 @@ let expression_type ctx i =
   match typ with
   | [| ty |] -> ty
   | _ ->
-      Error.not_an_expression ctx.diagnostics ~location (Array.length typ);
+      (* Once per span: several consumers may query the same node (see the
+         [not_expression_reported] field). *)
+      let key =
+        (location.loc_start.Lexing.pos_cnum, location.loc_end.Lexing.pos_cnum)
+      in
+      if not (Hashtbl.mem ctx.not_expression_reported key) then (
+        Hashtbl.add ctx.not_expression_reported key ();
+        (* An unresolved label in this function makes the value shape
+           unreliable (see [unresolved_label]); stay quiet then. *)
+        if not !(ctx.unresolved_label) then
+          Error.not_an_expression ctx.diagnostics ~location (Array.length typ));
       Cell.make Error
 
 let check_subtype ctx ~location ty' ty =
@@ -2890,8 +2935,10 @@ let context_block_typ ctx ~keyword (block_start : Lexing.position)
    subtyping two heap types share a value only when one is a subtype of the
    other, so unrelated types make the cast always trap / the test always false
    (unless a shared [null] slips through); an operand that already has the target
-   type makes it redundant. A bottom-reference operand is skipped: its cast is
-   load-bearing (dropping it loses the type the value stands in for).
+   type makes it redundant. A bottom-reference operand's CAST is skipped: it is
+   load-bearing (dropping it loses the type the value stands in for). A TEST
+   deletes nothing, so a bottom operand is linted like any other — mirroring the
+   Wasm validator's [lint_cast], which has no bottom exclusion.
 
    [operand_location] is the source span of the cast's operand, used (under
    [ctx.suggest]) to offer a quick fix that removes a redundant cast by deleting
@@ -2902,7 +2949,7 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
   match (op_natural, target_natural) with
   | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
       Valtype { internal = Ref tgt; _ } )
-    when not (is_bottom_heaptype op_src) ->
+    when is_test || not (is_bottom_heaptype op_src) ->
       (* [any] <-> [extern] across hierarchies is the lossless
          [extern.convert_any] / [any.convert_extern] conversion (the surface
          spells it [as &extern] / [as &any]), not a [ref.cast]: it never traps
@@ -4049,13 +4096,20 @@ and type_branch ctx i =
   | Br (label, i') ->
       (* Sequence of instructions *)
       let params = branch_target ctx label in
+      (* An unbound label was already reported by [branch_target]; its [[||]]
+         params are not a real arity, so skip the checks that would anchor
+         derived errors here (see [label_in_scope]). *)
+      let bound = label_in_scope ctx label in
       let* i' =
         match i' with
-        | Some i' ->
+        | Some i' when bound ->
             let* i' = check_against ctx params i' in
             return (Some i')
+        | Some i' ->
+            let* i' = instruction ctx i' in
+            return (Some i')
         | None ->
-            if params <> [||] then
+            if bound && params <> [||] then
               Error.value_count_mismatch ctx.diagnostics ~location:i.info
                 ~expected:(Array.length params) ~provided:0;
             return None
@@ -4067,7 +4121,13 @@ and type_branch ctx i =
       let ty, types = split_on_last_type ctx ~location:loc i' in
       check_subtype ctx ~location:loc ty i32_cell;
       let params = branch_target ctx label in
-      let result = deliver_to_branch_target ctx ~loc ~types ~params in
+      (* Unbound label (already reported): the fall-through passes the values
+         through unchanged, with no checks against the [[||]] pseudo-params. *)
+      let result =
+        if label_in_scope ctx label then
+          deliver_to_branch_target ctx ~loc ~types ~params
+        else types
+      in
       return_statement i (Br_if (label, i')) result
   (* Branch-hinting proposal: the hint is advisory; type the wrapped branch and
      carry its result through unchanged. *)
@@ -4079,15 +4139,37 @@ and type_branch ctx i =
       let loc = snd i'.info in
       let ty, types = split_on_last_type ctx ~location:loc i' in
       check_subtype ctx ~location:loc ty i32_cell;
-      let len = Array.length (branch_target ctx (List.hd labels)) in
-      List.iter
-        (fun label ->
-          let params = branch_target ctx label in
-          if Array.length params <> len then
-            Error.value_count_mismatch ctx.diagnostics ~location:i.info
-              ~expected:len ~provided:(Array.length params);
-          check_subtypes ctx ~location:loc types params)
-        labels;
+      (* Resolve every target (an unbound one reports at its own span, and
+         used-label marking runs per occurrence); check arity and types only
+         against the bound ones — an unbound label's [[||]] is not a real
+         arity — and only ONCE per DISTINCT target: the check is purely
+         per-target, so a repeated one would only repeat an identical report
+         (mirrors the validator's [Br_table] dedup). Labels are names within
+         the one enclosing scope — there is no numeric spelling on the Wax
+         side — so identical spellings resolve to the same frame and the name
+         is the target's identity. The reference arity is the first BOUND
+         target's. *)
+      let targets =
+        List.map
+          (fun label ->
+            (label, label_in_scope ctx label, branch_target ctx label))
+          labels
+      in
+      (match List.find_opt (fun (_, bound, _) -> bound) targets with
+      | Some (_, _, first) ->
+          let len = Array.length first in
+          let seen = Hashtbl.create 8 in
+          List.iter
+            (fun (label, bound, params) ->
+              if bound && not (Hashtbl.mem seen label.desc) then begin
+                Hashtbl.add seen label.desc ();
+                if Array.length params <> len then
+                  Error.value_count_mismatch ctx.diagnostics ~location:i.info
+                    ~expected:len ~provided:(Array.length params);
+                check_subtypes ctx ~location:loc types params
+              end)
+            targets
+      | None -> ());
       return_statement i (Br_table (labels, i')) [||]
   | Br_on_null (idx, i') ->
       let* i' = instruction ctx i' in
@@ -4124,15 +4206,24 @@ and type_branch ctx i =
       let params = branch_target ctx idx in
       (* Like [br_if]: the values below the reference are delivered to the target
          and continue on the non-null fall-through, and the recovered non-null
-         reference is appended. *)
-      let result = deliver_to_branch_target ctx ~loc ~types ~params in
+         reference is appended. An unbound label (already reported) delivers
+         nothing; the values pass through unchecked. *)
+      let result =
+        if label_in_scope ctx idx then
+          deliver_to_branch_target ctx ~loc ~types ~params
+        else types
+      in
       return_statement i (Br_on_null (idx, i')) (Array.append result [| typ' |])
   | Br_on_non_null (idx, i') ->
       let* i' = instruction ctx i' in
       let params = branch_target ctx idx in
+      let bound = label_in_scope ctx idx in
       let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let typ = Cell.get typ in
+      (* An unbound label (already reported): skip the checks against the
+         [[||]] pseudo-params; the fall-through keeps the below-values. *)
       (match typ with
+      | _ when not bound -> ()
       | Unknown | Error | UnknownRef -> ()
       | Valtype
           {
@@ -4175,22 +4266,29 @@ and type_branch ctx i =
         (* The branch delivers [types ++ [ref]] to the target and the fall-through
            keeps all but that trailing ref. A target with no params is malformed
            (already reported by [check_subtypes] above); [max 0] avoids
-           [Array.sub _ 0 (-1)] and leaves an empty fall-through. *)
-        (Array.sub params 0 (max 0 (Array.length params - 1)))
+           [Array.sub _ 0 (-1)] and leaves an empty fall-through. For an
+           unbound label the below-values pass through unchanged. *)
+        (if bound then Array.sub params 0 (max 0 (Array.length params - 1))
+         else types)
   | Br_on_cast (label, ty, i') ->
       let* i' = instruction ctx i' in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
       let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let params = branch_target ctx label in
-      (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
-       let typ =
-         Cell.make
-           (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
-       in
-       check_subtypes ctx ~location:(snd i'.info)
-         (Array.append types [| typ |])
-         params);
+      let bound = label_in_scope ctx label in
+      (* Unbound label (already reported): no check against the [[||]]
+         pseudo-params, and the fall-through keeps the below-values. *)
+      (if bound then
+         let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
+         let typ =
+           Cell.make
+             (Valtype
+                { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+         in
+         check_subtypes ctx ~location:(snd i'.info)
+           (Array.append types [| typ |])
+           params);
       (* On success the branch carries the cast target [ty] (via [params]); the
          fall-through keeps the value at its residual type [typ2] ([ty'] minus
          [ty]). [typ1] re-types the operand as the lub of its type and [ty]. *)
@@ -4253,7 +4351,8 @@ and type_branch ctx i =
              ty,
              { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
         (Array.append
-           (Array.sub params 0 (max 0 (Array.length params - 1)))
+           (if bound then Array.sub params 0 (max 0 (Array.length params - 1))
+            else types)
            [| typ2 |])
   | Br_on_cast_fail (label, ty, i') ->
       let* i' = instruction ctx i' in
@@ -4319,9 +4418,12 @@ and type_branch ctx i =
             None
       in
       let params = branch_target ctx label in
-      check_subtypes ctx ~location:(snd i'.info)
-        (Array.append types [| typ2 |])
-        params;
+      let bound = label_in_scope ctx label in
+      (* Unbound label: as in [Br_on_cast] above. *)
+      if bound then
+        check_subtypes ctx ~location:(snd i'.info)
+          (Array.append types [| typ2 |])
+          params;
       let typ =
         Cell.make
           (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
@@ -4332,7 +4434,8 @@ and type_branch ctx i =
              ty,
              { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
         (Array.append
-           (Array.sub params 0 (max 0 (Array.length params - 1)))
+           (if bound then Array.sub params 0 (max 0 (Array.length params - 1))
+            else types)
            [| typ |])
   | Br_on_cast_desc_eq (label, nullable, i', d) ->
       (* As [br_on_cast]; the target [ty] is recovered from the descriptor
@@ -4347,14 +4450,19 @@ and type_branch ctx i =
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
       let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let params = branch_target ctx label in
-      (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
-       let typ =
-         Cell.make
-           (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
-       in
-       check_subtypes ctx ~location:(snd i'.info)
-         (Array.append types [| typ |])
-         params);
+      let bound = label_in_scope ctx label in
+      (* Unbound label (already reported): no check against the [[||]]
+         pseudo-params, and the fall-through keeps the below-values. *)
+      (if bound then
+         let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
+         let typ =
+           Cell.make
+             (Valtype
+                { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+         in
+         check_subtypes ctx ~location:(snd i'.info)
+           (Array.append types [| typ |])
+           params);
       let*! typ1, typ2 =
         match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
@@ -5604,6 +5712,10 @@ and type_variable_access ctx i =
                        };
                    anon_comptype = inline_comptype ctx name;
                  })
+        | Poisoned ->
+            (* Already reported at the definition; the Error poison keeps the
+               use quiet. *)
+            Cell.make Error
         | Unbound ->
             Error.unbound_name ctx.diagnostics ~location:idx.info
               ~suggestions:(get_suggestions ctx idx.desc)
@@ -5634,7 +5746,7 @@ and type_variable_access ctx i =
         | Local (Some ity) | Global (_, Some ity) ->
             let* c, _ = check_instruction ctx (valtype_cell ity) to_check in
             return c
-        | Local None | Global (_, None) | Func_ref _ | Unbound ->
+        | Local None | Global (_, None) | Func_ref _ | Poisoned | Unbound ->
             instruction ctx to_check
       in
       let value =
@@ -5652,16 +5764,21 @@ and type_variable_access ctx i =
             Error.immutable ctx.diagnostics ~location:idx.info "global"
       | Func_ref _ ->
           Error.not_assignable ctx.diagnostics ~location:idx.info idx
+      | Poisoned -> (* already reported at the definition *) ()
       | Unbound ->
-          Error.unbound_name ctx.diagnostics ~location:idx.info
-            ~suggestions:(set_suggestions ctx idx.desc)
-            "variable" idx);
+          (* A compound assignment's desugared read (the [Get idx] injected
+             into [to_check] above) already reported the unbound name at this
+             same span; reporting the write too would duplicate it. *)
+          if op = None then
+            Error.unbound_name ctx.diagnostics ~location:idx.info
+              ~suggestions:(set_suggestions ctx idx.desc)
+              "variable" idx);
       (if ctx.suggest && op = None then
          match resolved with
          | Local _ | Global _ ->
              Typing_suggest.suggest_compound_assignment ctx ~location:i.info idx
                i'
-         | Func_ref _ | Unbound -> ());
+         | Func_ref _ | Poisoned | Unbound -> ());
       return_statement i (Set (idx, op, value)) [||]
   | Tee (idx, i') -> (
       (* Only a local is assignable. Resolve it first so the value can be
@@ -5683,6 +5800,10 @@ and type_variable_access ctx i =
       | Global _ | Func_ref _ ->
           let* i' = instruction ctx i' in
           Error.not_assignable ctx.diagnostics ~location:idx.info idx;
+          return_expression i (Tee (idx, i')) (expression_type ctx i')
+      | Poisoned ->
+          (* Already reported at the definition; recover like a poison local. *)
+          let* i' = instruction ctx i' in
           return_expression i (Tee (idx, i')) (expression_type ctx i')
       | Unbound ->
           let* i' = instruction ctx i' in
@@ -7834,8 +7955,12 @@ and type_indirect_call ctx i i' l =
         in
         i')
   in
+  (* Query the callee's expression type once: [expression_type] reports a
+     zero/multi-value callee ("an expression is expected here"), so asking
+     twice — here and in [type_body] below — would report it twice. *)
+  let callee_type = expression_type ctx i' in
   let functype =
-    match Cell.get (expression_type ctx i') with
+    match Cell.get callee_type with
     | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
         lookup_func_type ctx ty
     | _ -> None
@@ -7846,7 +7971,7 @@ and type_indirect_call ctx i i' l =
   in
   let type_body =
     let* l' = typed_call_args ctx l param_types in
-    match Cell.get (expression_type ctx i') with
+    match Cell.get callee_type with
     | Valtype { typ = Ref { typ = Type _ | Exact _; _ }; _ } -> (
         match functype with
         | None ->
@@ -8544,11 +8669,12 @@ and block_contents ctx results l =
                 (Array.to_list (Array.map (fun ty -> (i.info, ty)) results))
             in
             return [ i' ]
-        | Cons _ | Unreachable ->
+        | Cons _ | Unreachable | Poisoned ->
             (* The block's value is already on the stack, produced by an earlier
-                instruction (or the code is unreachable); this trailing one is a
-                statement, not the result-producer, so type it as such rather
-                than routing it through [check_instruction]. *)
+                instruction (or the code is unreachable / the stack poisoned);
+                this trailing one is a statement, not the result-producer, so
+                type it as such rather than routing it through
+                [check_instruction]. *)
             let* i' = toplevel_instruction ctx i in
             let* () =
               push_results
@@ -8656,7 +8782,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
        (match st with
        | Cons (loc', tv, _) ->
            cs.collected <- (Some loc', Cell.make (Cell.get tv)) :: cs.collected
-       | Empty | Unreachable -> ());
+       | Empty | Unreachable | Poisoned -> ());
        let st, () = pop_args ctx ~location:loc [| result |] st in
        (* Return the cell: the caller may deliver more values to it (a [try]'s catch
           handlers) before [block_keep_needed] reads the join. Every value reaching
@@ -8904,11 +9030,11 @@ and collect_into ctx loc label ~cs ~r instrs =
        | Cons (loc, tv, Empty) ->
            cs.collected <- (Some loc, tv) :: cs.collected;
            (Empty, body')
-       | Cons (loc, tv, Unreachable) ->
+       | Cons (loc, tv, (Unreachable | Poisoned)) ->
            cs.collected <- (Some loc, tv) :: cs.collected;
            (Unreachable, body')
        | Empty -> (Empty, body')
-       | Unreachable -> (Unreachable, body')
+       | (Unreachable | Poisoned) as st -> (st, body')
        | Cons _ -> (st, body'))
 
 (* Join the values reaching a block's exit into its inferred result, or [None]
@@ -9067,80 +9193,114 @@ let check_type_definitions ctx =
             if not (valid_subtype && descriptor_ok && describes_ok) then
               Error.invalid_subtype ctx.diagnostics ~location sup)
 
+(* Check that [i] is a constant expression. The recursion returns whether the
+   SUBTREE already reported a violation: an enclosing construct whose own shape
+   test fails only because a nested offender was already reported (a
+   non-constant leaf poisons every level of a nested [BinOp] chain) must not
+   re-report — one root cause, one diagnostic, at the innermost offender. *)
 let rec check_constant_instruction ctx i =
+  ignore (constant_instruction ctx i : bool)
+
+and constant_instruction ctx i =
   let location = snd i.info in
+  let required () =
+    Error.constant_expression_required ctx.diagnostics ~location;
+    true
+  in
   match i.desc with
   | Get idx -> (
       match Tbl.find_opt ctx.globals idx with
       | Some (mut, _) ->
-          if mut then Error.constant_global_required ctx.diagnostics ~location
-      | None -> (* ref.func *) ())
-  | Null | StructDefault _ | Int _ | Float _ | Char _ | String _ -> ()
+          if mut then (
+            Error.constant_global_required ctx.diagnostics ~location;
+            true)
+          else false
+      | None -> (* ref.func *) false)
+  | Null | StructDefault _ | Int _ | Float _ | Char _ | String _ -> false
   (* [array.new_default] fills with the field default, but its length is an
      arbitrary expression that must itself be constant (like the sibling [Array]
      / [ArrayFixed] / [ContNew] constructors). *)
-  | ArrayDefault (_, len) -> check_constant_instruction ctx len
+  | ArrayDefault (_, len) -> constant_instruction ctx len
   (* A punned field ([None], written [{x}]) is a [Get] of the like-named global,
      so it must satisfy the same constant-global rule; check that implicit [Get].
      The [storagetype] array of the fabricated node is unused by the [Get] arm. *)
-  | Struct (_, l) -> List.iter (check_constant_field ctx) l
+  | Struct (_, l) ->
+      List.fold_left (fun r f -> constant_field ctx f || r) false l
   | StructDesc (d, l) ->
-      check_constant_instruction ctx d;
-      List.iter (check_constant_field ctx) l
-  | StructDefaultDesc d -> check_constant_instruction ctx d
-  | ArrayFixed (_, l) -> List.iter (check_constant_instruction ctx) l
+      let r = constant_instruction ctx d in
+      List.fold_left (fun r f -> constant_field ctx f || r) r l
+  | StructDefaultDesc d -> constant_instruction ctx d
+  | ArrayFixed (_, l) ->
+      List.fold_left (fun r i -> constant_instruction ctx i || r) false l
   | Array (_, i1, i2) ->
-      check_constant_instruction ctx i1;
-      check_constant_instruction ctx i2
+      let r1 = constant_instruction ctx i1 in
+      constant_instruction ctx i2 || r1
   (* [cont.new] allocates a fresh continuation from a (constant) function
      reference, so it is itself constant; its operand must be constant too. This
      tracks the open stack-switching spec PR (the spec does not list it yet). *)
-  | ContNew (_, f) -> check_constant_instruction ctx f
+  | ContNew (_, f) -> constant_instruction ctx f
   | BinOp ({ desc = Add | Sub | Mul; _ }, i1, i2) -> (
-      check_constant_instruction ctx i1;
-      check_constant_instruction ctx i2;
-      match Cell.get (expression_type ctx i) with
-      | Int | Valtype { internal = I32 | I64; _ } -> ()
-      | _ -> Error.constant_expression_required ctx.diagnostics ~location)
+      let r1 = constant_instruction ctx i1 in
+      let r2 = constant_instruction ctx i2 in
+      if r1 || r2 then true
+      else
+        match Cell.get (expression_type ctx i) with
+        (* [Error] is the poison of an already-reported operand (e.g. a hole);
+           a second report here would duplicate it. *)
+        | Int | Valtype { internal = I32 | I64; _ } | Error -> r1 || r2
+        | _ -> required ())
   | Cast ({ desc = Null; _ }, Valtype (Ref { nullable = true; _ })) ->
       (* ref.null *)
-      ()
+      false
   | Cast (i', Valtype (Ref { typ = I31; _ })) -> (
-      (* ref.i31 *)
-      check_constant_instruction ctx i';
-      match Cell.get (expression_type ctx i') with
-      | Valtype { internal = I32; _ } -> ()
-      | _ -> Error.constant_expression_required ctx.diagnostics ~location)
+      if
+        (* ref.i31 *)
+        constant_instruction ctx i'
+      then true
+      else
+        match Cell.get (expression_type ctx i') with
+        (* [Error]: already reported (see the [BinOp] arm). *)
+        | Valtype { internal = I32; _ } | Error -> false
+        | _ -> required ())
   | Cast (i', Valtype (Ref { typ = Extern; nullable })) ->
       (* extern.convert_any *)
-      check_constant_instruction ctx i';
-      if
+      if constant_instruction ctx i' then true
+      else if
         match (Cell.get (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
               (Wax_wasm.Types.val_subtype (subtyping_info ctx) internal
                  (Ref { nullable; typ = Any }))
+        (* [Error]: already reported (see the [BinOp] arm). *)
+        | Error -> false
         | _ -> true
-      then Error.constant_expression_required ctx.diagnostics ~location
+      then required ()
+      else false
   | Cast (i', Valtype (Ref { typ = Any; nullable })) ->
       (* any.convert_extern *)
-      check_constant_instruction ctx i';
-      if
+      if constant_instruction ctx i' then true
+      else if
         match (Cell.get (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
               (Wax_wasm.Types.val_subtype (subtyping_info ctx) internal
                  (Ref { nullable; typ = Extern }))
+        (* [Error]: already reported (see the [BinOp] arm). *)
+        | Error -> false
         | _ -> true
-      then Error.constant_expression_required ctx.diagnostics ~location
-  | UnOp ({ desc = Pos; _ }, i') -> check_constant_instruction ctx i'
-  | UnOp ({ desc = Neg; _ }, { desc = Float _ | Int _; _ }) -> ()
+      then required ()
+      else false
+  | UnOp ({ desc = Pos; _ }, i') -> constant_instruction ctx i'
+  | UnOp ({ desc = Neg; _ }, { desc = Float _ | Int _; _ }) -> false
   (* [v128::<shape>(..)] is a constant expression; its lanes are literals.
-     Other SIMD ops are not constant. *)
-  | Call ({ desc = Path (ns, name); _ }, args)
+     Other SIMD ops are not constant. The lanes are NOT re-walked here: the
+     intrinsic's own typing already rejects any non-literal lane (with this
+     same "constant expression required" report, at the lane's span), so
+     re-checking each argument would report every bad lane twice. *)
+  | Call ({ desc = Path (ns, name); _ }, _)
     when ns.desc = Simd.free_namespace
          && Simd.const_shape_of_name (Simd.free_full name.desc) <> None ->
-      List.iter (check_constant_instruction ctx) args
+      false
   | UnOp ({ desc = Neg | Not; _ }, _)
   | BinOp
       ( {
@@ -9160,17 +9320,16 @@ let rec check_constant_instruction ctx i =
   | Br_on_cast_desc_eq_fail _ | Hinted _ | Throw _ | ThrowRef _ | ContBind _
   | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | On _
   | Return _ | Sequence _ | Select _ | If_annotation _ | Labelled _ ->
-      Error.constant_expression_required ctx.diagnostics ~location
+      required ()
 
 (* A struct-literal field in a constant expression. An explicit value is checked
    directly; a punned field ([None]) is the implicit [Get] of the like-named
    global, which must also be an immutable global. *)
-and check_constant_field ctx (name, i) =
+and constant_field ctx (name, i) =
   match i with
-  | Some i -> check_constant_instruction ctx i
+  | Some i -> constant_instruction ctx i
   | None ->
-      check_constant_instruction ctx
-        { desc = Get name; info = ([||], name.info) }
+      constant_instruction ctx { desc = Get name; info = ([||], name.info) }
 
 (*** Globals, functions, and declarations ***)
 
@@ -9455,12 +9614,16 @@ let rec functions ctx fields =
              desc = Func { name; sign; body = label, body; typ; attributes };
              info = location;
            } as f) ->
-          let*@ func_typ =
+          let func_typ =
             let*@ ty =
               (* Resolve the function's own declared type without marking the
                  function name used — its definition site is not a reference, so
-                 the unused-field lint can still flag it if nothing calls it. *)
-              let*@ _, tname, _ = Tbl.find_no_mark ctx.functions name in
+                 the unused-field lint can still flag it if nothing calls it.
+                 A poison entry ([Some None] — the signature failed, reported at
+                 registration) yields [None] here; the body is still checked
+                 below, with the failed types as Error poison. *)
+              let*@ entry = Tbl.find_no_mark ctx.functions name in
+              let*@ _, tname, _ = entry in
               Tbl.find ctx.diagnostics ctx.types { name with desc = tname }
             in
             match ty with
@@ -9469,16 +9632,53 @@ let rec functions ctx fields =
                 Error.expected_func_type ctx.diagnostics ~location:name.info;
                 None
           in
+          (* For a poisoned signature, the source [sign] is re-resolved with
+             MUTED diagnostics — its failure was already reported at
+             registration — and whatever fails again becomes Error poison (a
+             poison local / an Error result cell), so the body's own errors
+             still surface without cascades. *)
+          let mctx =
+            match func_typ with
+            | Some _ -> ctx
+            | None ->
+                {
+                  ctx with
+                  diagnostics =
+                    Wax_utils.Diagnostic.collector ~parent:ctx.diagnostics ();
+                }
+          in
           (* A [#[start]] function must have no parameters and no results. *)
-          if
-            List.exists (fun (k, _, _) -> k = "start") attributes
-            && not
-                 (Array.length func_typ.params = 0
-                 && Array.length func_typ.results = 0)
-          then
-            Error.start_function_signature ctx.diagnostics ~location:name.info;
-          let*@ return_types =
-            array_map_opt (fun typ -> internalize ctx typ) func_typ.results
+          (match func_typ with
+          | Some func_typ ->
+              if
+                List.exists (fun (k, _, _) -> k = "start") attributes
+                && not
+                     (Array.length func_typ.params = 0
+                     && Array.length func_typ.results = 0)
+              then
+                Error.start_function_signature ctx.diagnostics
+                  ~location:name.info
+          | None -> ());
+          let return_types =
+            match func_typ with
+            | Some func_typ -> (
+                match
+                  array_map_opt
+                    (fun typ -> internalize ctx typ)
+                    func_typ.results
+                with
+                | Some r -> r
+                | None -> [||] (* a resolved type's results resolve *))
+            | None -> (
+                match sign with
+                | Some { results; _ } ->
+                    Array.map
+                      (fun typ ->
+                        match internalize mctx typ with
+                        | Some c -> c
+                        | None -> Cell.make Error)
+                      results
+                | None -> [||])
           in
           let locals = ref StringMap.empty in
           (match sign with
@@ -9488,9 +9688,11 @@ let rec functions ctx fields =
                   let id, typ = p.desc in
                   match id with
                   | Some id ->
-                      let>@ typ = internalize_valtype ctx typ in
-                      locals :=
-                        StringMap.add id.desc (Some typ, id.info) !locals
+                      (* A parameter type that does not resolve still binds the
+                         name, as a poison local (read as [Error]), so the
+                         body's uses of it do not cascade. *)
+                      let typ = internalize_valtype mctx typ in
+                      locals := StringMap.add id.desc (typ, id.info) !locals
                   | None -> ())
                 params
           | _ -> ());
@@ -9505,6 +9707,7 @@ let rec functions ctx fields =
                   (fun k _ s -> StringSet.add k s)
                   !locals StringSet.empty;
               (* Fresh per-function tracking of declared and read locals. *)
+              unresolved_label = ref false;
               read_locals = ref StringSet.empty;
               local_decls = ref [];
               (* Fresh per-function tracking of branched-to labels, and the
@@ -9633,44 +9836,55 @@ let check_inline_type ctx ~location referenced sign =
             Error.inline_function_type_mismatch ctx.diagnostics ~location
       | _ -> ())
 
-let fundecl ctx name typ sign =
-  if Tbl.exists ctx.diagnostics ctx.functions name then None
-  else
-    match typ with
-    | Some typ -> (
-        let*@ info = Tbl.find ctx.diagnostics ctx.types typ in
-        (* The referenced type must be a function type (as for tags below); if
+(* Resolve a function declaration's type (a named reference or an inline
+   signature). Reports resolution failures; returns [None] then. *)
+let fundecl_typ ctx name typ sign =
+  match typ with
+  | Some typ -> (
+      let*@ info = Tbl.find ctx.diagnostics ctx.types typ in
+      (* The referenced type must be a function type (as for tags below); if
            an inline signature is also given, it must match. *)
-        match snd info with
-        | { typ = Func ft; _ } ->
-            check_inline_type ctx ~location:typ.info ft sign;
-            Some (def_id (fst info), typ.desc)
-        | _ ->
-            Error.expected_func_type ctx.diagnostics ~location:typ.info;
-            None)
-    | None -> (
-        match sign with
-        | Some sign ->
-            let name = { name with desc = "<func:" ^ name.desc ^ ">" } in
-            let+@ i =
-              (* [add_type] runs the [functype] converter, which already checks
+      match snd info with
+      | { typ = Func ft; _ } ->
+          check_inline_type ctx ~location:typ.info ft sign;
+          Some (def_id (fst info), typ.desc)
+      | _ ->
+          Error.expected_func_type ctx.diagnostics ~location:typ.info;
+          None)
+  | None -> (
+      match sign with
+      | Some sign ->
+          let name = { name with desc = "<func:" ^ name.desc ^ ">" } in
+          let+@ i =
+            (* [add_type] runs the [functype] converter, which already checks
                  parameter-name uniqueness, so [sign] needs no separate
                  [funsig] pass here (that would report duplicates twice). *)
-              add_type ctx.diagnostics ctx.type_context
-                [|
-                  Ast.no_loc
-                    ( name,
-                      {
-                        supertype = None;
-                        typ = Func sign;
-                        final = true;
-                        descriptor = None;
-                        describes = None;
-                      } );
-                |]
-            in
-            (i, name.desc)
-        | None -> assert false)
+            add_type ctx.diagnostics ctx.type_context
+              [|
+                Ast.no_loc
+                  ( name,
+                    {
+                      supertype = None;
+                      typ = Func sign;
+                      final = true;
+                      descriptor = None;
+                      describes = None;
+                    } );
+              |]
+          in
+          (i, name.desc)
+      | None -> assert false)
+
+(* Register a function (defined or imported) under [name]. A signature that
+   fails to resolve still CLAIMS the name, as a poison entry ([None]): its
+   uses resolve quietly to [Error] instead of cascading into unbound-name
+   reports, and its body is still checked (see [functions]) — the Wax mirror
+   of the validator's poisoned index entries. A duplicate name registers
+   nothing (the first entry stands; [Tbl.exists] reports the clash). *)
+let register_function ctx d name typ sign ~exact =
+  if not (Tbl.exists d ctx.functions name) then
+    Tbl.add d ctx.functions name
+      (Option.map (fun (i, n) -> (i, n, exact)) (fundecl_typ ctx name typ sign))
 
 let field_attributes (field : _ modulefield) =
   match field with
@@ -9842,6 +10056,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       type_context;
       types = type_context.types;
       structs_by_fields;
+      not_expression_reported = Hashtbl.create 16;
       functions = Tbl.make namespace "function";
       globals = Tbl.make ~hover:hover_of_global namespace "global";
       import_globals = Tbl.make ~hover:hover_of_global namespace "global";
@@ -9852,6 +10067,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       tags = Tbl.make (Namespace.make ~links cond) "tag";
       locals = StringMap.empty;
       warn_unused;
+      unresolved_label = ref false;
       read_locals = ref StringSet.empty;
       local_decls = ref [];
       used_labels = ref StringSet.empty;
@@ -9896,8 +10112,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   let register_import (decl : Ast.import_decl) =
     match decl.kind with
     | Import_func { typ; sign; exact } ->
-        let>@ i, n = fundecl ctx decl.id typ sign in
-        Tbl.add diagnostics ctx.functions decl.id (i, n, exact)
+        register_function ctx diagnostics decl.id typ sign ~exact
     | Import_global { mut; typ } ->
         let>@ typ = internalize_valtype ctx typ in
         Tbl.add diagnostics ctx.globals decl.id (mut, Some typ)
@@ -9930,12 +10145,11 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
              reference to it is exact — but exact reference types are part of
              custom-descriptors; without it, type it as the plain inexact
              reference, as before the proposal. *)
-          let>@ i, n = fundecl ctx name typ sign in
           let exact =
             Wax_utils.Feature.is_enabled ctx.type_context.features
               Wax_utils.Feature.Custom_descriptors
           in
-          Tbl.add diagnostics ctx.functions name (i, n, exact)
+          register_function ctx diagnostics name typ sign ~exact
       | Tag { name; typ; sign; _ } -> register_tag name typ sign
       | Data { name; _ } ->
           Option.iter (fun n -> Tbl.add diagnostics ctx.datas n ()) name
@@ -10047,7 +10261,9 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     then begin
       let name = decl.desc.id in
       let func_typ =
-        let*@ _, tname, _ = Tbl.find ctx.diagnostics ctx.functions name in
+        let*@ entry = Tbl.find ctx.diagnostics ctx.functions name in
+        (* A poison entry: the signature failure was already reported. *)
+        let*@ _, tname, _ = entry in
         let*@ _, ty =
           Tbl.find ctx.diagnostics ctx.types { name with desc = tname }
         in

@@ -1,3 +1,4 @@
+type t_12 = { };
 rec {
     type t_3 = open fn() -> (v128, i64, v128);
 }

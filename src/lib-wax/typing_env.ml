@@ -196,8 +196,12 @@ type module_context = {
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
   (* Per function: interned type index, type name, and whether a reference to it
-     is exact (a defined function or an exact import — custom-descriptors). *)
-  functions : (Wax_wasm.Types.Id.t * string * bool) Tbl.t;
+     is exact (a defined function or an exact import — custom-descriptors).
+     [None] is a poison entry — a function whose signature failed to resolve
+     (reported at the definition): the name stays bound so its uses do not
+     cascade into unbound-name reports, mirroring the Wasm validator's poisoned
+     index entries. *)
+  functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;
   globals : (*mutable:*) (bool * inferred_valtype option) Tbl.t;
       (* As for [locals], the type is [None] for a global whose initializer
          failed to type — a poison global read as [Error] to avoid cascades. *)
@@ -217,6 +221,14 @@ type module_context = {
          it. Lets a struct literal whose name is omitted resolve from its fields
          alone (and the name be dropped when the fields make it unambiguous).
          Built once at module-context creation. *)
+  not_expression_reported : (int * int, unit) Hashtbl.t;
+  (* Source spans (byte offsets) already reported by [expression_type]'s
+         "an expression is expected here". [expression_type] is a *query* with
+         a reporting side effect, and one node is legitimately queried by
+         several consumers (a call's callee twice, a labelled block as both
+         value and statement), which would repeat the identical report — so it
+         fires once per span. Shared by the [{ ctx with … }] copies (one table
+         per configuration). *)
   (* --- Per-function state (reset on entry to each function) --- *)
   mutable locals : (inferred_valtype option * location) StringMap.t;
       (* The local's type paired with its binding site's source span (for
@@ -239,6 +251,15 @@ type module_context = {
          into the innermost (head) collector instead of erroring, to be re-checked
          against the true state at the operand's emission slot. Empty outside such
          an operand, so a read then reports immediately. *)
+  unresolved_label : bool ref;
+      (* Whether a branch in the current function failed to resolve its label
+         (reported by [branch_target]). While set, a value-shape complaint
+         ([expression_type]'s "an expression is expected here") is suppressed
+         as a likely cascade: a block whose only value delivery was the
+         unresolved branch legitimately computes no value, and reporting that
+         would anchor a derived error away from the unbound label. The
+         per-function analogue of the error-recovery-mode suppression. Reset
+         per function. *)
   read_locals : StringSet.t ref;
       (* Names of locals read so far in the current function. A [ref] (rather
          than a snapshot field) so reads inside a block propagate to the

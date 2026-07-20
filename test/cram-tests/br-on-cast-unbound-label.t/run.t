@@ -22,12 +22,4 @@ error is reported instead. Regression: the nightly mutate-wax campaign.
     ·                    ^^^^^
   5 │     };
   6 │ }
-  Error: This instruction provides 1 value(s) but 0 was/were expected.
-   ──➤  bad.wax:4:30
-  2 │ fn f(x: &?struct) {
-  3 │     _ = do {
-  4 │         br_on_cast 'nope &t0 x;
-    ·                              ^
-  5 │     };
-  6 │ }
   [128]

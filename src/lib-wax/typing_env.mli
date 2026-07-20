@@ -137,7 +137,7 @@ type module_context = {
   suggest : bool;
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
-  functions : (Wax_wasm.Types.Id.t * string * bool) Tbl.t;
+  functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;
   globals : (bool * Infer.inferred_valtype option) Tbl.t;
   import_globals : (bool * Infer.inferred_valtype option) Tbl.t;
   tags : Ast.functype Tbl.t;
@@ -146,9 +146,11 @@ type module_context = {
   tables : ([ `I32 | `I64 ] * Ast.reftype) Tbl.t;
   elems : Ast.reftype Tbl.t;
   structs_by_fields : (string, Ast.ident option) Hashtbl.t;
+  not_expression_reported : (int * int, unit) Hashtbl.t;
   mutable locals : (Infer.inferred_valtype option * Ast.location) StringMap.t;
   mutable initialized_locals : StringSet.t;
   mutable deferred_uninit : Ast.ident list ref list;
+  unresolved_label : bool ref;
   read_locals : StringSet.t ref;
   local_decls : Ast.ident list ref;
   used_labels : StringSet.t ref;
