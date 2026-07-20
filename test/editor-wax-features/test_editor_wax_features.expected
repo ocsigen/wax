@@ -1,0 +1,27 @@
+=== references (from #[if] definition):
+  (3,7)-(3,8)
+  (7,7)-(7,8)
+  (10,16)-(10,17)
+=== references (from #[else] definition):
+  (3,7)-(3,8)
+  (7,7)-(7,8)
+  (10,16)-(10,17)
+=== references (from the shared use):
+  (3,7)-(3,8)
+  (7,7)-(7,8)
+  (10,16)-(10,17)
+
+=== rename f -> h (from #[if] definition) ===
+  (3,7)-(3,8) := h
+  (7,7)-(7,8) := h
+  (10,16)-(10,17) := h
+=== rename f -> h (from #[else] definition) ===
+  (3,7)-(3,8) := h
+  (7,7)-(7,8) := h
+  (10,16)-(10,17) := h
+
+=== symbols (outline) ===
+  function f (3,7)-(3,8)
+  function f (7,7)-(7,8)
+  function g (10,3)-(10,4)
+

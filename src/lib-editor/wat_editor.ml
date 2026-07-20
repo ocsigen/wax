@@ -122,17 +122,9 @@ let wat_type_map src = (analyze src).a_types
    line. An instruction that produces no value renders to nothing, so its span
    yields no hover rather than the enclosing instruction's type. *)
 let hover_string ?(encoding = UTF16) src line ch =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
-  let span (loc : Wax_utils.Ast.location) =
-    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
-  in
+  let target = target ~encoding src line ch in
+  let contains = contains target in
+  let span = span_width in
   let entries = wat_type_map src in
   (* The innermost span (smallest width) covering the cursor. *)
   let best =
@@ -191,17 +183,9 @@ let hover_string ?(encoding = UTF16) src line ch =
    jumps to the type. The validator records the target type's definition span at
    each such value/reference span. *)
 let type_definition_string ?(encoding = UTF16) src line ch =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
-  let span (loc : Wax_utils.Ast.location) =
-    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
-  in
+  let target = target ~encoding src line ch in
+  let contains = contains target in
+  let span = span_width in
   let best =
     List.fold_left
       (fun best (loc, _cfg, rt) ->
@@ -222,17 +206,9 @@ let wat_bindings src = (analyze src).a_bindings
 (* The binding whose definition or one of whose uses covers the cursor (smallest
    span winning), together with that covering occurrence's span. *)
 let wat_binding_at ~encoding src line ch =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
-  let span (loc : Wax_utils.Ast.location) =
-    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
-  in
+  let target = target ~encoding src line ch in
+  let contains = contains target in
+  let span = span_width in
   List.fold_left
     (fun best (b : Wax_wasm.Resolve.binding) ->
       let occ = b.defs @ b.uses in
@@ -276,16 +252,20 @@ let inlays_string src =
   List.concat_map
     (fun (b : Wax_wasm.Resolve.binding) ->
       match b.defs with
-      | [] -> []
-      | def :: _ ->
+      (* Skip a synthesized (dummy) definition span — recovery can insert one
+         with [pos_cnum = -1], which [slice] cannot cut. *)
+      | (def : Wax_utils.Ast.location) :: _ when def.loc_start.pos_cnum >= 0 ->
           let name = slice src def in
           List.filter_map
             (fun (loc : Wax_utils.Ast.location) ->
-              let text = slice src loc in
-              if String.length text > 0 && text.[0] <> '$' then
-                Some { n_pos = loc.loc_end; n_label = " " ^ name }
-              else None)
-            b.uses)
+              if loc.loc_start.pos_cnum < 0 then None
+              else
+                let text = slice src loc in
+                if String.length text > 0 && text.[0] <> '$' then
+                  Some { n_pos = loc.loc_end; n_label = " " ^ name }
+                else None)
+            b.uses
+      | _ -> [])
     (wat_bindings src)
 
 (* As [rename_prepare_string], but for WAT: the span at the cursor, if it sits on
@@ -344,6 +324,8 @@ let wat_rename_clashes src edits (b : Wax_wasm.Resolve.binding) def_start =
   let before = List.length b.defs + List.length b.uses in
   let src' = apply_wat_rename_edits src edits in
   let new_def_start = map_wat_offset edits def_start in
+  (* Resolve the speculative rewrite off-cache: it is a transient buffer, so
+     caching it would evict a genuinely open document. *)
   match
     List.find_opt
       (fun (b' : Wax_wasm.Resolve.binding) ->
@@ -351,7 +333,7 @@ let wat_rename_clashes src edits (b : Wax_wasm.Resolve.binding) def_start =
           (fun (d : Wax_utils.Ast.location) ->
             d.loc_start.Lexing.pos_cnum = new_def_start)
           b'.defs)
-      (wat_bindings src')
+      (analyze_uncached src').a_bindings
   with
   | None -> true (* the definition token vanished — the name broke the parse *)
   | Some b' -> List.length b'.defs + List.length b'.uses <> before
@@ -370,13 +352,27 @@ let rename_string ?(encoding = UTF16) src line ch newname =
       in
       let edits =
         List.filter_map
-          (fun loc ->
-            let text = slice src loc in
-            if String.length text > 0 && text.[0] = '$' then Some (loc, repl)
-            else None)
+          (fun (loc : Wax_utils.Ast.location) ->
+            if loc.loc_start.pos_cnum < 0 then None
+            else
+              let text = slice src loc in
+              if String.length text > 0 && text.[0] = '$' then Some (loc, repl)
+              else None)
           (wat_occurrences b)
       in
       if edits = [] then Rename_edits []
+      else if
+        (* The replacement is spliced in raw, so reject a name that is not a
+           plain WAT identifier up front (mirrors the Wax side's check) rather
+           than letting an invalid name surface only as a misleading structural
+           "already in use" clash. [repl] always carries the leading [$]; the
+           idchars after it must form a valid identifier (the quoted [$"…"] form
+           is not accepted for rename). *)
+        not
+          (Wax_wasm.Lexer.is_valid_identifier
+             (String.sub repl 1 (String.length repl - 1)))
+      then
+        Rename_conflict (Printf.sprintf "%S is not a valid identifier." newname)
       else
         let def_start =
           (List.hd b.Wax_wasm.Resolve.defs).Wax_utils.Ast.loc_start.pos_cnum
@@ -418,17 +414,9 @@ let completion_string ?(encoding = UTF16) src line ch (_defines : string list) =
   match (analyze src).a_ast with
   | None -> []
   | Some ast -> (
-      let target = (line + 1, byte_column ~encoding src line ch) in
-      let pos (p : Lexing.position) =
-        (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-      in
-      let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-      let contains (loc : Wax_utils.Ast.location) =
-        le (pos loc.loc_start) target && le target (pos loc.loc_end)
-      in
-      let width (loc : Wax_utils.Ast.location) =
-        loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
-      in
+      let target = target ~encoding src line ch in
+      let contains = contains target in
+      let width = span_width in
       let expected = ref [] in
       ignore (Wax_wasm.Resolve.f ~expected ast);
       (* The narrowest index use-site covering the cursor (a zero-width inserted
@@ -527,6 +515,24 @@ let to_wax_string src =
           Ok (Buffer.contents buf)
       with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
 
+(* Iterate [f] over every WAT module field, descending into the branches of an
+   [(@if …)] conditional annotation (whose bodies hold nested fields), so a field
+   guarded by a condition is walked like any other. *)
+let rec wat_iter_fields f fields =
+  let open Wax_wasm.Ast in
+  List.iter
+    (fun (field :
+           ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
+             Wax_utils.Ast.location )
+           annotated) ->
+      f field;
+      match field.desc with
+      | Text.Module_if_annotation { then_fields; else_fields; _ } ->
+          wat_iter_fields f then_fields.desc;
+          Option.iter (fun b -> wat_iter_fields f b.desc) else_fields
+      | _ -> ())
+    fields
+
 (* The same outline for a Wasm-text module. Its fields differ from Wax's: the
    [$id] name is optional, and a definition carries its exports separately, so an
    anonymous definition is named by its first export, else by a fallback word. *)
@@ -617,25 +623,14 @@ let wat_field_symbols
 let symbols_string src =
   match (analyze src).a_ast with
   | None -> []
-  | Some (_name, fields) -> List.concat_map wat_field_symbols fields
-
-(* Iterate [f] over every WAT module field, descending into the branches of an
-   [(@if …)] conditional annotation (whose bodies hold nested fields), so a field
-   guarded by a condition is walked like any other. *)
-let rec wat_iter_fields f fields =
-  let open Wax_wasm.Ast in
-  List.iter
-    (fun (field :
-           ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
-             Wax_utils.Ast.location )
-           annotated) ->
-      f field;
-      match field.desc with
-      | Text.Module_if_annotation { then_fields; else_fields; _ } ->
-          wat_iter_fields f then_fields.desc;
-          Option.iter (fun b -> wat_iter_fields f b.desc) else_fields
-      | _ -> ())
-    fields
+  | Some (_name, fields) ->
+      (* [wat_iter_fields] descends into [(@if …)] branches (a
+         [Module_if_annotation] yields no symbol of its own but its nested fields
+         do), so a field guarded by conditional compilation is spliced flat into
+         the outline rather than skipped. *)
+      let syms = ref [] in
+      wat_iter_fields (fun f -> syms := !syms @ wat_field_symbols f) fields;
+      !syms
 
 (* Apply [f] to every instruction (recursively) in a WAT field's code — a
    function body, or a global / elem / data / table initializer expression. *)
@@ -663,17 +658,14 @@ let wat_field_iter_instr f
    call takes its arguments off the stack, so there is no argument position to
    track. *)
 let signature_help_string ?(encoding = UTF16) src line ch =
-  let target = (line + 1, byte_column ~encoding src line ch) in
+  let target = target ~encoding src line ch in
+  (* [pos] is still needed locally for the active-parameter arithmetic below (it
+     maps one argument's end position, not the cursor). *)
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
   in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
-  let span (loc : Wax_utils.Ast.location) =
-    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
-  in
+  let contains = contains target in
+  let span = span_width in
   let same_span (a : Wax_utils.Ast.location) (b : Wax_utils.Ast.location) =
     a.loc_start.pos_cnum = b.loc_start.pos_cnum
     && a.loc_end.pos_cnum = b.loc_end.pos_cnum
@@ -710,13 +702,16 @@ let signature_help_string ?(encoding = UTF16) src line ch =
           match signature with
           | None -> None
           | Some (params, results) ->
-              (* The active parameter: how many operands end before the cursor,
-                 clamped to the parameter count. *)
+              (* The active parameter: how many operands end strictly before the
+                 cursor, clamped to the parameter count. Strict [<] (matching the
+                 Wax side) so the cursor immediately after argument 1's last char
+                 still counts argument 1 as active, not the next one. *)
+              let lt a b = le a b && a <> b in
               let active =
                 let open Wax_wasm.Ast in
                 List.fold_left
                   (fun acc a ->
-                    if le (pos a.info.loc_end) target then acc + 1 else acc)
+                    if lt (pos a.info.loc_end) target then acc + 1 else acc)
                   0 args
               in
               let nparams = List.length params in
@@ -746,14 +741,7 @@ let signature_help_string ?(encoding = UTF16) src line ch =
    instruction spans covering the cursor, innermost first, from the recovered
    parse (so it survives a mid-edit buffer). *)
 let selection_range_string ?(encoding = UTF16) src line ch =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
+  let contains = contains (target ~encoding src line ch) in
   match (analyze src).a_ast with
   | None -> []
   | Some (_name, fields) ->

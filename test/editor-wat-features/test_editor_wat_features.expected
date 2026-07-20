@@ -148,3 +148,16 @@
   no defines [] -> (none)
   residual (unrelated define) [other=1] -> (none)
 
+=== rename to an invalid identifier ===
+  $add -> "a b" (spaces):
+  conflict: "a b" is not a valid identifier.
+  $add -> "a)" (paren):
+  conflict: "a)" is not a valid identifier.
+  $add -> "" (empty):
+  conflict: "" is not a valid identifier.
+
+=== outline with (@if) branches ===
+  function $a
+  function $b
+  function $c
+

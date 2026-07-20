@@ -339,19 +339,9 @@ let render_hover_target ~name = function
    typed tree. *)
 let hover_string ?(encoding = UTF16) src line ch =
   let a = analyze src in
-  (* Lexing lines are one-based and its columns are byte offsets; [ch] is a
-     zero-based UTF-16 column, so convert it against the buffer. *)
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
-  let span (loc : Wax_utils.Ast.location) =
-    loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
-  in
+  let target = target ~encoding src line ch in
+  let contains = contains target in
+  let span = span_width in
   (* The innermost expression node under the cursor and its rendered type. Track
      the smallest span containing the cursor; a child's span is contained in its
      parent's, so the smallest is the innermost node. Renders [None] for a
@@ -451,17 +441,13 @@ let inlays_string src =
    the position and return its definitions — usually one, several only for a name
    defined in multiple conditional-compilation branches. *)
 let definition_string ?(encoding = UTF16) src line ch =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let target = target ~encoding src line ch in
   let best =
     List.fold_left
       (fun best (r : Wax_lang.Typing.reference) ->
         let loc = r.use in
-        if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
-          let span = loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum in
+        if contains target loc then
+          let span = span_width loc in
           match best with
           | Some (best_span, _) when best_span <= span -> best
           | _ -> Some (span, r.definitions)
@@ -485,17 +471,9 @@ let type_definition_string ?(encoding = UTF16) src line ch =
   | None -> []
   | Some typed -> (
       let open Wax_lang.Ast in
-      let target = (line + 1, byte_column ~encoding src line ch) in
-      let pos (p : Lexing.position) =
-        (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-      in
-      let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-      let contains (loc : Wax_utils.Ast.location) =
-        le (pos loc.loc_start) target && le target (pos loc.loc_end)
-      in
-      let span (loc : Wax_utils.Ast.location) =
-        loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
-      in
+      let target = target ~encoding src line ch in
+      let contains = contains target in
+      let span = span_width in
       (* The innermost node covering the cursor that leaves at least one value. *)
       let best = ref None in
       let observe ((tys, loc) : Wax_lang.Typing.inferred_module_annotation) =
@@ -552,26 +530,44 @@ let same_span (a : Wax_utils.Ast.location) (b : Wax_utils.Ast.location) =
 
 let references_string ?(encoding = UTF16) src line ch =
   let refs = (analyze src).a_defs in
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  let contains = contains (target ~encoding src line ch) in
+  let dedup =
+    List.sort_uniq (fun (a : Wax_utils.Ast.location) b ->
+        let c = compare a.loc_start.pos_cnum b.loc_start.pos_cnum in
+        if c = 0 then compare a.loc_end.pos_cnum b.loc_end.pos_cnum else c)
   in
   (* The definition span(s) the cursor picks out: from a use it sits on, or a
      definition it sits on directly. *)
-  let targets =
+  let initial =
     List.concat_map
       (fun (r : Wax_lang.Typing.reference) ->
         (if contains r.use then r.definitions else [])
         @ List.filter contains r.definitions)
       refs
-    |> List.sort_uniq (fun (a : Wax_utils.Ast.location) b ->
-        let c = compare a.loc_start.pos_cnum b.loc_start.pos_cnum in
-        if c = 0 then compare a.loc_end.pos_cnum b.loc_end.pos_cnum else c)
   in
+  (* Close the target set over shared references: any reference whose definition
+     set intersects the current targets contributes all of its definitions —
+     connected components over the def-sets, iterated to a fixpoint (tiny data).
+     A name defined once per conditional-compilation branch has one definition
+     span per branch, linked by a use shared outside the conditional; picking one
+     branch's definition must still rename the sibling branch's, or the module
+     breaks under the other configuration. Renaming from a use already reached
+     every branch (that use's [definitions] holds them all); this extends the
+     same reach to a rename started from one definition. *)
+  let rec close targets =
+    let is_target loc = List.exists (same_span loc) targets in
+    let expanded =
+      List.fold_left
+        (fun acc (r : Wax_lang.Typing.reference) ->
+          if List.exists is_target r.definitions then r.definitions @ acc
+          else acc)
+        targets refs
+      |> dedup
+    in
+    if List.length expanded = List.length targets then targets
+    else close expanded
+  in
+  let targets = close (dedup initial) in
   if targets = [] then []
   else
     let is_target loc = List.exists (same_span loc) targets in
@@ -599,14 +595,8 @@ let references_string ?(encoding = UTF16) src line ch =
    renaming the variable does not silently rename the field. Returns
    [(span, replacement)] edits, empty when the cursor is not on a renameable
    symbol — the provider then declines. *)
-let occurrence_at ?(encoding = UTF16) src line ch (loc : Wax_utils.Ast.location)
-    =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  le (pos loc.loc_start) target && le target (pos loc.loc_end)
+let occurrence_at ~encoding src line ch (loc : Wax_utils.Ast.location) =
+  contains (target ~encoding src line ch) loc
 
 (* The span of the token to rename (for the editor's prepare step), or [None]
    when the cursor is not on a renameable symbol. *)
@@ -656,9 +646,12 @@ let apply_rename_edits src newname edits =
    symbol — a use outside it now binding to one of its definitions (a foreign
    name captured, or the reverse half of a collision), or a use of it now
    binding to a definition outside it (it escaped to a shadowing name)? Either
-   way the rename changed a name's resolution. [renamed_spans] are the symbol's
-   occurrences in [src']'s byte offsets. *)
-let rename_crosses_binding src' renamed_spans =
+   way the rename changed a name's resolution. [defs] is the renamed buffer's
+   reference graph ([a_defs]) and [renamed_spans] are the symbol's occurrences in
+   that buffer's byte offsets. The graph is passed in (rather than re-derived
+   here from the source) so the speculative rewrite is analysed once and does not
+   evict a real open document from the analysis cache. *)
+let rename_crosses_binding defs renamed_spans =
   let renamed = Hashtbl.create 16 in
   List.iter (fun k -> Hashtbl.replace renamed k ()) renamed_spans;
   let is_ours (l : Wax_utils.Ast.location) =
@@ -670,7 +663,7 @@ let rename_crosses_binding src' renamed_spans =
     let binds_foreign = List.exists (fun d -> not (is_ours d)) r.definitions in
     (our_use && binds_foreign) || ((not our_use) && binds_ours)
   in
-  List.exists crosses (analyze src').a_defs
+  List.exists crosses defs
 
 let rename_string ?(encoding = UTF16) src line ch newname =
   let a = analyze src in
@@ -696,7 +689,9 @@ let rename_string ?(encoding = UTF16) src line ch newname =
     Rename_conflict (Printf.sprintf "%S is not a valid identifier." newname)
   else
     let src', renamed_spans = apply_rename_edits src newname edits in
-    let a' = analyze src' in
+    (* Analyse the speculative rewrite off-cache: it is a transient buffer, so
+       caching it would evict a genuinely open document. *)
+    let a' = analyze_uncached src' in
     (* A name that lexes as an identifier can still be a reserved word in the
        positions it lands in (a keyword like [let] or [if]); such a name breaks
        parsing where a valid one would not, so a syntax error the original did
@@ -705,7 +700,7 @@ let rename_string ?(encoding = UTF16) src line ch newname =
     if a.a_syntax = [] && a'.a_syntax <> [] then
       Rename_conflict
         (Printf.sprintf "%S cannot be used as a name here." newname)
-    else if rename_crosses_binding src' renamed_spans then
+    else if rename_crosses_binding a'.a_defs renamed_spans then
       Rename_conflict
         (Printf.sprintf
            "Cannot rename to %S: that name is already in use, and the rename \
@@ -827,7 +822,16 @@ let symbols_string src =
   in
   match ast_opt with
   | None -> []
-  | Some ast -> List.concat_map field_symbols ast
+  | Some ast ->
+      (* [iter_fields] descends into [#[if]]/[#[else]] branches (a [Conditional]
+         yields no symbol of its own but its nested fields do), so a definition
+         guarded by conditional compilation is spliced flat into the outline
+         rather than skipped. *)
+      let syms = ref [] in
+      Wax_lang.Ast_utils.iter_fields
+        (fun field -> syms := !syms @ field_symbols field)
+        ast;
+      !syms
 
 (* Completion (Wax only). After [name.] (a struct field access), the receiver
    struct's field names — recorded by the typer, which the improved parser
@@ -927,13 +931,7 @@ let field_completions
    under [#[if]] is found too. *)
 let function_locals ast target =
   let open Wax_lang.Ast in
-  let contains (loc : Wax_utils.Ast.location) =
-    let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-    let pos (p : Lexing.position) =
-      (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-    in
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
+  let contains = contains target in
   let acc = ref [] in
   Wax_lang.Ast_utils.iter_fields
     (fun field ->
@@ -1009,13 +1007,7 @@ let function_locals ast target =
    no conditionals every guard is [true], so all definitions are offered. *)
 let module_completions src ast target bindings =
   let open Wax_lang.Ast in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
+  let contains = contains target in
   let env = Wax_wasm.Cond_solver.create () in
   let dctx = Wax_utils.Diagnostic.collector ~source:src () in
   (* A branch condition as a solver formula, first partially evaluated against
@@ -1114,7 +1106,7 @@ let line_start_offset src line =
    identifier prefix (possibly empty) whose preceding non-identifier character is
    a [.]. A cheap text test, so ordinary name completion never runs the typed
    pass member completion needs. *)
-let is_member_position ?(encoding = UTF16) src line ch =
+let is_member_position ~encoding src line ch =
   let off = line_start_offset src line + byte_column ~encoding src line ch in
   let i = ref (off - 1) in
   while !i >= 0 && is_ident_char src.[!i] do
@@ -1124,17 +1116,11 @@ let is_member_position ?(encoding = UTF16) src line ch =
 
 (* The receiver of the member access whose (possibly partial) field span covers
    the cursor in [members], if any. *)
-let member_receiver_at ?(encoding = UTF16) src line ch members =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+let member_receiver_at ~encoding src line ch members =
+  let target = target ~encoding src line ch in
   List.find_map
     (fun ((loc : Wax_utils.Ast.location), receiver) ->
-      if le (pos loc.loc_start) target && le target (pos loc.loc_end) then
-        Some receiver
-      else None)
+      if contains target loc then Some receiver else None)
     members
 
 (* The definition of the type named [name] in the module, for resolving a
@@ -1222,7 +1208,7 @@ let member_completion (c : Wax_lang.Typing.member_candidate) =
    [::] immediately precedes the prefix — the namespace name [ns]. A text test,
    like {!is_member_position}: the [::] operator only introduces a namespace
    path, so name completion never belongs here. *)
-let namespace_position ?(encoding = UTF16) src line ch =
+let namespace_position ~encoding src line ch =
   let off = line_start_offset src line + byte_column ~encoding src line ch in
   let i = ref (off - 1) in
   while !i >= 0 && is_ident_char src.[!i] do
@@ -1256,7 +1242,7 @@ let completion_string ?(encoding = UTF16) src line ch defines =
           ^ String.sub src off (String.length src - off)
         in
         match
-          member_receiver_at repaired line ch
+          member_receiver_at ~encoding repaired line ch
             (analyze_uncached repaired).a_members
         with
         | Some r ->
@@ -1549,14 +1535,7 @@ let signature_help_string ?(encoding = UTF16) src line ch =
    it innermost-first. The whole buffer is always the outermost step (select
    all). *)
 let selection_range_string ?(encoding = UTF16) src line ch =
-  let target = (line + 1, byte_column ~encoding src line ch) in
-  let pos (p : Lexing.position) =
-    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
-  in
-  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
-  let contains (loc : Wax_utils.Ast.location) =
-    le (pos loc.loc_start) target && le target (pos loc.loc_end)
-  in
+  let contains = contains (target ~encoding src line ch) in
   let ast_opt, _, _ =
     Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
       ~insert:Wax_lang.Recover.insert ~closers:Wax_lang.Recover.closers src

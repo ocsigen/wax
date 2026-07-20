@@ -1,0 +1,5 @@
+(test
+ (name test_editor_wax_features)
+ ; Links wax_editor (a wax-package lib), so it runs under wax --with-test.
+ (package wax)
+ (libraries wax_editor wax_utils str))

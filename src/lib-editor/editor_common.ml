@@ -119,7 +119,7 @@ type position_encoding = UTF8 | UTF16
    [UTF16] (the default) [char] counts UTF-16 code units, so convert against the
    line prefix; under [UTF8] it already is the byte column. The inverse of
    [position]'s column conversion. *)
-let byte_column ?(encoding = UTF16) src line char =
+let byte_column ~encoding src line char =
   match encoding with
   | UTF8 -> char
   | UTF16 ->
@@ -141,6 +141,37 @@ let byte_column ?(encoding = UTF16) src line char =
 let slice src (loc : Wax_utils.Ast.location) =
   String.sub src loc.loc_start.pos_cnum
     (loc.loc_end.pos_cnum - loc.loc_start.pos_cnum)
+
+(* The cursor-geometry helpers the [*_string] feature functions share: a feature
+   maps its zero-based (line, character) cursor to the (one-based line, byte
+   column) shape node spans carry ([target]), then keeps the innermost span
+   [contains]ing it, comparing widths with [span_width]. [le] is the total order
+   on those (line, column) coordinates. Every location comparison a feature does
+   is built from these, so the same geometry is not re-derived per feature. *)
+
+(* The total order on zero-based-or-one-based (line, column) positions: earlier
+   line first, then earlier column, columns compared inclusively. *)
+let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2)
+
+(* The (one-based line, byte column) coordinate the zero-based editor position
+   [line]/[char] denotes in [src] — the shape [Lexing] positions (and so node
+   spans) carry, so [contains] can compare against them. Folds in the column's
+   [encoding] conversion via [byte_column]. *)
+let target ~encoding src line char =
+  (line + 1, byte_column ~encoding src line char)
+
+(* Whether [loc] covers the cursor [target] (from {!target}): its start is at or
+   before the cursor and its end at or after it. *)
+let contains target (loc : Wax_utils.Ast.location) =
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  le (pos loc.loc_start) target && le target (pos loc.loc_end)
+
+(* The byte width of a location's span, for choosing the innermost of two nested
+   spans (the smaller width is the inner one). *)
+let span_width (loc : Wax_utils.Ast.location) =
+  loc.loc_end.Lexing.pos_cnum - loc.loc_start.pos_cnum
 
 (* An inlay hint: the position it sits at and its label (e.g. [": i32"]). *)
 type inlay = { n_pos : Lexing.position; n_label : string }

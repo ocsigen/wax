@@ -555,4 +555,45 @@ let () =
   inactive "debug=false fast=true (both levels)" [ "debug=false"; "fast=true" ];
   inactive "no defines" [];
   inactive "residual (unrelated define)" [ "other=1" ];
+  print_newline ();
+
+  (* Rename rejects a name that is not a plain WAT identifier up front, with a
+     dedicated message (rather than the misleading structural "already in use"
+     clash it used to produce). Driven from the `$add` definition on line 2. *)
+  let show_rename outcome =
+    match outcome with
+    | Editor_common.Rename_edits edits ->
+        List.iter
+          (fun (loc, repl) ->
+            Printf.printf "  (%d,%d) := %s\n"
+              loc.Wax_utils.Ast.loc_start.pos_lnum
+              (loc.Wax_utils.Ast.loc_start.pos_cnum
+             - loc.Wax_utils.Ast.loc_start.pos_bol)
+              repl)
+          edits
+    | Editor_common.Rename_conflict message ->
+        Printf.printf "  conflict: %s\n" message
+  in
+  Printf.printf "=== rename to an invalid identifier ===\n";
+  Printf.printf "  $add -> \"a b\" (spaces):\n";
+  show_rename (Wat_editor.rename_string src 1 8 "a b");
+  Printf.printf "  $add -> \"a)\" (paren):\n";
+  show_rename (Wat_editor.rename_string src 1 8 "a)");
+  Printf.printf "  $add -> \"\" (empty):\n";
+  show_rename (Wat_editor.rename_string src 1 8 "");
+  print_newline ();
+
+  (* Outline descends into an (@if …) module conditional: the fields guarded by
+     either branch are spliced flat into the outline, not skipped. *)
+  let cond_module =
+    "(module\n\
+    \  (@if $debug\n\
+    \    (@then (func $a))\n\
+    \    (@else (func $b)))\n\
+    \  (func $c))\n"
+  in
+  Printf.printf "=== outline with (@if) branches ===\n";
+  List.iter
+    (fun (s : Editor_common.sym) -> Printf.printf "  %s %s\n" s.s_kind s.s_name)
+    (Wat_editor.symbols_string cond_module);
   print_newline ()

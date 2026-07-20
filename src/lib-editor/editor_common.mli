@@ -87,7 +87,8 @@ val render : Wax_utils.Message.t -> string
 val render_labels :
   Wax_utils.Diagnostic.label list -> (string * Wax_utils.Ast.location) list
 
-(* A syntax error, as a diagnostic (with its related labels but no hint). *)
+(* A syntax error, as a diagnostic, carrying its related labels, any prose hint,
+   and any recovery-derived quick [fix] (surfaced as the diag's [edit]). *)
 val syntax_error_diag : Wax_wasm.Parsing.syntax_error -> diag
 
 (* The errors and warnings a checker collected (without printing), as
@@ -101,11 +102,32 @@ val has_errors : Wax_utils.Diagnostic.context -> bool
 val errors_string : Wax_utils.Diagnostic.context -> string
 
 (* Map an incoming editor position to a byte column for comparison with Lexing
-   columns. The inverse of [position]'s column conversion. *)
-val byte_column : ?encoding:position_encoding -> string -> int -> int -> int
+   columns. The inverse of [position]'s column conversion. [encoding] is
+   mandatory — like {!position} and {!positions}, and unlike the public
+   [*_string] functions — so an internal caller cannot silently drop it and get
+   the UTF-16 default by accident. *)
+val byte_column : encoding:position_encoding -> string -> int -> int -> int
 
 (* The source text a location spans. *)
 val slice : string -> Wax_utils.Ast.location -> string
+
+(* The total order on (line, column) positions: earlier line first, then earlier
+   column (compared inclusively). *)
+val le : int * int -> int * int -> bool
+
+(* The (one-based line, byte column) coordinate a zero-based editor position
+   [line]/[char] denotes in [src] — the shape node spans carry — so {!contains}
+   can compare a span against the cursor. [encoding] is mandatory (see
+   {!byte_column}). *)
+val target : encoding:position_encoding -> string -> int -> int -> int * int
+
+(* Whether a location covers the cursor {!target}: its start at or before it and
+   its end at or after it. *)
+val contains : int * int -> Wax_utils.Ast.location -> bool
+
+(* The byte width of a location's span, for picking the innermost of two nested
+   spans (smaller width is inner). *)
+val span_width : Wax_utils.Ast.location -> int
 
 (* Map a Lexing position to a zero-based (line, character) editor position
    against [src], the character counted in [encoding] units. The inverse of the
