@@ -7337,7 +7337,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | Some typ ->
             require_no_descriptor typ;
             let*! field_types = lookup_struct_type ctx typ in
-            if List.length fields <> Array.length field_types then
+            if List.length fields > Array.length field_types then
               Error.field_count_mismatch ctx.diagnostics ~location:i.info
                 ~expected:(Array.length field_types)
                 ~provided:(List.length fields);

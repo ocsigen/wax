@@ -34,27 +34,15 @@ raises [Not_found] in the hole-order pass:
 
   $ cat > missing-field-hole.wax <<'WAX'
   > type point = { x: i32, y: i32 };
-  > fn f() { 1; let p: &point = {point| x: _}; }
+  > fn f() { 1; let _p: &point = {point| x: _}; }
   > WAX
 
   $ wax check missing-field-hole.wax
-  Error: This structure provides 1 field(s) but 2 was/were expected.
-   ──➤  missing-field-hole.wax:2:29
-  1 │ type point = { x: i32, y: i32 };
-  2 │ fn f() { 1; let p: &point = {point| x: _}; }
-    ·                             ^^^^^^^^^^^^^
-  3 │ 
   Error: There is no field named 'y'.
-   ──➤  missing-field-hole.wax:2:29
+   ──➤  missing-field-hole.wax:2:30
   1 │ type point = { x: i32, y: i32 };
-  2 │ fn f() { 1; let p: &point = {point| x: _}; }
-    ·                             ^^^^^^^^^^^^^
-  3 │ 
-  Warning [unused-local]: The local variable 'p' is never used.
-   ──➤  missing-field-hole.wax:2:17
-  1 │ type point = { x: i32, y: i32 };
-  2 │ fn f() { 1; let p: &point = {point| x: _}; }
-    ·                 ^
+  2 │ fn f() { 1; let _p: &point = {point| x: _}; }
+    ·                              ^^^^^^^^^^^^^
   3 │ 
   [128]
 
@@ -66,27 +54,21 @@ unconsumed, hence the second error.)
 
   $ cat > match-hole.wax <<'WAX'
   > type t = { x: i32 };
-  > fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }
+  > fn f(a: &any) { a; match _ { _p: &t => {} _ => {} } }
   > WAX
 
   $ wax check match-hole.wax
   Error: A hole '_' cannot be used as a 'match' scrutinee.
    ──➤  match-hole.wax:2:26
   1 │ type t = { x: i32 };
-  2 │ fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }
+  2 │ fn f(a: &any) { a; match _ { _p: &t => {} _ => {} } }
     ·                          ^
   3 │ 
   Error: This value remains on the stack.
    ──➤  match-hole.wax:2:17
   1 │ type t = { x: i32 };
-  2 │ fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }
+  2 │ fn f(a: &any) { a; match _ { _p: &t => {} _ => {} } }
     ·                 ^
-  3 │ 
-  Warning [unused-local]: The local variable 'p' is never used.
-   ──➤  match-hole.wax:2:30
-  1 │ type t = { x: i32 };
-  2 │ fn f(a: &any) { a; match _ { p: &t => {} _ => {} } }
-    ·                              ^
   3 │ 
   [128]
 
