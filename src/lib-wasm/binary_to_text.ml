@@ -676,11 +676,14 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
   in
   let func_cnt, table_cnt, mem_cnt, global_cnt, tag_cnt = counts in
   let imports = List.rev imports in
+  (* [m.code] is parallel to the func list; index it as an array so the whole
+     [mapi] is O(n), not O(n^2) via [List.nth] per function. *)
+  let code_arr = Array.of_list m.code in
   let funcs =
     List.mapi
       (fun i func_type_idx ->
         let global_idx = func_cnt + i in
-        let code = List.nth m.code i in
+        let code = code_arr.(i) in
         let local_names =
           match B.IntMap.find_opt global_idx m.names.locals with
           | Some map -> map

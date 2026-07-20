@@ -93,26 +93,30 @@ module Doc = struct
        lookahead without allocating (a [Queue]+[Seq] scan allocated a node per
        token scanned, on every re-scan). [qn] tokens live at [qhd .. qhd+qn) mod
        capacity. *)
+    (* Capacity is always a power of two, so index wrap-around is [land mask]
+       (cheaper than [mod]); [qmask] is [capacity - 1]. *)
     let qbuf = ref (Array.make 32 TEnd) in
+    let qmask = ref 31 in
     let qhd = ref 0 in
     let qn = ref 0 in
-    let qcap () = Array.length !qbuf in
-    let qget i = !qbuf.((!qhd + i) mod qcap ()) in
+    let qget i = !qbuf.((!qhd + i) land !qmask) in
     let qpush x =
-      if !qn = qcap () then (
-        let ncap = 2 * qcap () in
+      if !qn = Array.length !qbuf then (
+        let old = !qbuf and omask = !qmask and ohd = !qhd in
+        let ncap = 2 * Array.length old in
         let nb = Array.make ncap TEnd in
         for i = 0 to !qn - 1 do
-          nb.(i) <- qget i
+          nb.(i) <- old.((ohd + i) land omask)
         done;
         qbuf := nb;
+        qmask := ncap - 1;
         qhd := 0);
-      !qbuf.((!qhd + !qn) mod qcap ()) <- x;
+      !qbuf.((!qhd + !qn) land !qmask) <- x;
       incr qn
     in
     let qpop () =
       let x = !qbuf.(!qhd) in
-      qhd := (!qhd + 1) mod qcap ();
+      qhd := (!qhd + 1) land !qmask;
       decr qn;
       x
     in
