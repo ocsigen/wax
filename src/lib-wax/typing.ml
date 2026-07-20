@@ -550,6 +550,12 @@ module Error = struct
     report context ~location
       (text "Only constant expressions are allowed here.")
 
+  let integer_literal_required context ~location =
+    report context ~location (text "Only integer literals are allowed here.")
+
+  let number_literal_required context ~location =
+    report context ~location (text "Only number literals are allowed here.")
+
   let data_run_bad_element context ~location typename =
     report context ~location
       (text "This value is out of range for the data run's element type"
@@ -3372,7 +3378,7 @@ let take_labels ctx ~allowed labelled =
       | _ ->
           (* Report it and drop the pair, so [check_memarg] (which would also
              fail to read it as a literal) does not report it again. *)
-          Error.constant_expression_required ctx.diagnostics
+          Error.integer_literal_required ctx.diagnostics
             ~location:(snd e.Ast.info);
           (StringSet.add l.desc seen, acc)
   in
@@ -5511,8 +5517,7 @@ and type_cast ctx i =
          desirable when converting from Wasm ([ctx.simplify]): there casts are
          inserted to pin types and precise inference makes some unnecessary. For
          hand-written Wax (formatting, or compiling to Wasm) we keep casts as
-         written.
-         ZZZ Handle select instruction better *)
+         written. *)
       let unnecessary_cast =
         ctx.simplify && (not load_bearing_literal) && (not load_bearing_null)
         && (not load_bearing_bottom_ref)
@@ -7110,7 +7115,7 @@ and type_simd_vector_op_call ctx i func recv meth args =
                 Error.invalid_lane_index ctx.diagnostics ~location:(snd a.info)
                   bound)
         | _ ->
-            Error.constant_expression_required ctx.diagnostics
+            Error.integer_literal_required ctx.diagnostics
               ~location:(snd a.info)
       else
         let operand = 1 + (k - nimm) in
@@ -7192,7 +7197,7 @@ and type_simd_free_intrinsic_call ctx i func ns name args =
                    ) ) ->
                  () (* a float shape accepts any numeric literal lane *)
              | _ ->
-                 Error.constant_expression_required ctx.diagnostics
+                 Error.number_literal_required ctx.diagnostics
                    ~location:(snd a.info))
           args'
     | None ->

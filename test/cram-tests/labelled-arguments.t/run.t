@@ -119,7 +119,7 @@ positional argument after a labelled one, and a non-constant payload:
      ·                         ^^^^^^
   16 │ }
   17 │ fn f(p: i32, x: i32) -> i32 {
-  Error: Only constant expressions are allowed here.
+  Error: Only integer literals are allowed here.
     ──➤  bad.wax:18:25
   16 │ }
   17 │ fn f(p: i32, x: i32) -> i32 {

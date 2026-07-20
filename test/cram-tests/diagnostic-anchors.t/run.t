@@ -125,7 +125,7 @@ A non-literal lane of a constant-position SIMD construction is reported once
   > let gl: v128 = v128::i8x16(1,2,3,4,5,6,7, h(), 9,10,11,12,13,14,15,16);
   > WAX
   $ wax check --error-format short simd-lane.wax
-  simd-lane.wax:2:43: error: Only constant expressions are allowed here.
+  simd-lane.wax:2:43: error: Only number literals are allowed here.
   [128]
 
 A stack underflow is reported once, not once per remaining pop (the underflow
@@ -139,8 +139,8 @@ turns the stack unreachable, as in the Wasm validator).
   $ wax check --error-format short holes.wax
   holes.wax:2:5: error: Expecting 2 value(s) from the stack, but there are 0.
   holes.wax:2:17: error: This expression occurs before a hole '_'.
-  holes.wax:2:29: error: Only constant expressions are allowed here.
-  holes.wax:2:50: error: Only constant expressions are allowed here.
+  holes.wax:2:29: error: Only number literals are allowed here.
+  holes.wax:2:50: error: Only number literals are allowed here.
   [128]
 
 Calling a zero-value expression reports "an expression is expected" once, not
