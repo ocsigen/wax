@@ -90,11 +90,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # dune 3.24.0 breaks wasm_of_ocaml 9.4; hold dune at 3.23.1 (as in the
-          # npm-package workflow). js_of_ocaml + ppx are needed by the editor
-          # export; uucp is not (the committed unicode/XID tables are used, not
-          # the scripts/ generators).
-          opam pin add --yes --no-action dune 3.23.1
           opam install . --deps-only
           opam install js_of_ocaml js_of_ocaml-ppx wasm_of_ocaml-compiler
 
