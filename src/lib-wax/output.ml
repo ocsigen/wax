@@ -610,9 +610,9 @@ let rec get_prec (i : _ Ast.instr) =
   | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | StructDesc _ | StructDefaultDesc _
   | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | ArrayGet _
-  | ArraySet _ | Sequence _ ->
+  | Sequence _ ->
       Atom
-  | Set _ | Tee _ -> Assignement
+  | ArraySet _ | Set _ | Tee _ -> Assignement
   | Call _ | TailCall _ -> CallAndFieldAccess
   | ContNew _ | ContBind _ | Suspend _ | Switch _ -> CallAndFieldAccess
   (* A resume-family instruction with handlers carries its postfix [on] clause,
@@ -661,8 +661,9 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
     | If_annotation _ | Dispatch _ | Match _ ->
         true
-    | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
+    | Call (i, _) | ArrayGet (i, _) ->
         starts_with_block_prec CallAndFieldAccess i
+    | ArraySet (i, _, _) -> starts_with_block_prec Assignement i
     | Cast (i, _) | CastDesc (i, _, _) | Test (i, _) ->
         starts_with_block_prec Cast i
     | NonNull i -> starts_with_block_prec UnaryPostfix i

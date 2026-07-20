@@ -1060,6 +1060,8 @@ plaininstr:
 | o = "+" i = expression { unop $sloc o $loc(o) Pos i } %prec prec_unary
 | o = "-" i = expression { unop $sloc o $loc(o) Neg i } %prec prec_unary
 | i = expression "!" { with_loc $sloc (NonNull i) }
+| i1 = expression "[" i2 = index_expression "]" "=" i3 = expression
+  { with_loc $sloc (ArraySet (i1, i2, i3)) }
 
 array_body:
 | l = expression_list { fun t -> ArrayFixed (t, l) }
@@ -1133,8 +1135,6 @@ statement:
   { with_loc $sloc (ThrowRef i) }
 | BECOME i = expression "(" l = argument_list ")"
    { with_loc $sloc (TailCall(i, l)) }
-| i1 = expression "[" i2 = index_expression "]" "=" i3 = expression
-  { with_loc $sloc (ArraySet (i1, i2, i3)) }
 
 (* [process_stmts] pairs adjacent [#[if]]/[#[else]] groups (see the header). *)
 statement_list:
