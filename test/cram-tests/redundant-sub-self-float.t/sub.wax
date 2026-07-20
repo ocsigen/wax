@@ -1,0 +1,5 @@
+#[export = "int_sub"]
+fn int_sub(x: i32) -> i32 { x - x; }
+
+#[export = "float_sub"]
+fn float_sub(x: f32) -> f32 { x - x; }

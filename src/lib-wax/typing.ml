@@ -2879,6 +2879,11 @@ let lint_comparison ctx op l r =
 let lint_redundant ctx op l r =
   let is0 = int_literal_value_is 0L in
   let is1 = int_literal_value_is 1L in
+  let is_int e =
+    match Cell.get (expression_type ctx e) with
+    | Valtype { internal = I32 | I64; _ } -> true
+    | _ -> false
+  in
   let no_effect () =
     Error.redundant_operation ctx.diagnostics ~location:op.info
       (Wax_utils.Message.text "This operation has no effect on its result.")
@@ -2898,7 +2903,10 @@ let lint_redundant ctx op l r =
   | Mul when is0 l || is0 r -> always 0L (* x * 0 *)
   | And when is0 l || is0 r -> always 0L (* x & 0 *)
   | Rem _ when is1 r -> always 0L (* x % 1 *)
-  | (Sub | Xor) when identical_operands l r -> always 0L (* x - x, x ^ x *)
+  | Xor when identical_operands l r -> always 0L (* x ^ x (integer bitwise) *)
+  (* [x - x] is 0 only for integers: a float [x - x] is NaN when [x] is NaN or
+     an infinity, so the result is not a constant. *)
+  | Sub when identical_operands l r && is_int l -> always 0L
   | _ -> ()
 
 (* A branch, loop, or [select] condition that is a constant literal, so it
