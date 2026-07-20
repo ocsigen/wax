@@ -531,20 +531,39 @@ and instruction ch =
         Loop { label = (); typ; block = Ast.no_loc block }
     | 0x04 ->
         let typ = blocktype ch in
+        (* Give each arm its own byte-offset span (like any decoded
+           instruction), so a per-arm diagnostic anchors at that arm rather
+           than at the whole [if] — two arms failing identically would
+           otherwise render as duplicate reports. An absent [else] keeps
+           [no_loc]; the validator then falls back to the instruction's span. *)
+        let arm_start = ch.pos in
         let if_block = instructions ch [] in
+        let if_info =
+          {
+            Ast.loc_start = position ch arm_start;
+            loc_end = position ch ch.pos;
+          }
+        in
         let else_block =
           if input_byte ch = 0x05 then (
+            let arm_start = ch.pos in
             let b = instructions ch [] in
+            let info =
+              {
+                Ast.loc_start = position ch arm_start;
+                loc_end = position ch ch.pos;
+              }
+            in
             expect_end ch;
-            b)
-          else []
+            { Ast.desc = b; info })
+          else Ast.no_loc []
         in
         If
           {
             label = ();
             typ;
-            if_block = Ast.no_loc if_block;
-            else_block = Ast.no_loc else_block;
+            if_block = { Ast.desc = if_block; info = if_info };
+            else_block;
           }
     | 0x06 ->
         let typ = blocktype ch in

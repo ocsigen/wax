@@ -937,11 +937,21 @@ module Error = struct
          "A type with a descriptor must be allocated with a descriptor \
           (struct.new_desc / struct.new_default_desc).")
 
-  let expected_number_or_vec context ~location ~source =
-    report context ~location ~severity:Error
-      (text "Type mismatch: expecting a numeric or vector type but got type"
-       ++ styp source
-      ^^ text ".")
+  (* [src_loc], when known, is the offending operand's push location; the
+     report is anchored there (like [expected_ref_type]) so two failing
+     operands of one instruction point at themselves, not both at the
+     instruction. *)
+  let expected_number_or_vec context ~location ~src_loc ~source =
+    match src_loc with
+    | None ->
+        report context ~location ~severity:Error
+          (text "Type mismatch: expecting a numeric or vector type but got type"
+           ++ styp source
+          ^^ text ".")
+    | Some location ->
+        report context ~location ~severity:Error
+          ((text "Type mismatch: this produces a value of type" ++ styp source)
+          ^^ text ", but a numeric or vector type is expected.")
 
   let immutable context ~location what =
     report context ~location ~severity:Error
@@ -998,12 +1008,22 @@ end
 
 let print_instr f i = Wax_utils.Printer.run f (fun p -> Output.instr p i)
 
+(* A diagnostics context that drops everything reported to it. Passed to a
+   pre-pass that resolves references the validating pass resolves (and reports)
+   again, so a broken reference is diagnosed once, by the pass that owns it. *)
+let muted d = Wax_utils.Diagnostic.collector ~parent:d ()
+
 (*** Symbol tables (sequences) ***)
 
 module Sequence = struct
+  (* A poisoned entry ([None] in [index_mapping]) claims an index for a
+     definition whose own resolution failed: [last_index] still advances, so
+     later definitions keep their positions and numeric references stay aligned,
+     but [get]/[find] resolve it to [None] silently (no unbound-index error —
+     the real error was reported at the definition site). *)
   type 'a t = {
     name : string;
-    index_mapping : (int, 'a) Hashtbl.t;
+    index_mapping : (int, 'a option) Hashtbl.t;
     label_mapping : (string, int) Hashtbl.t;
     mutable last_index : int;
   }
@@ -1022,27 +1042,41 @@ module Sequence = struct
   let register seq id v =
     let idx = seq.last_index in
     seq.last_index <- seq.last_index + 1;
-    Hashtbl.add seq.index_mapping idx v;
+    Hashtbl.add seq.index_mapping idx (Some v);
+    Option.iter (fun id -> Hashtbl.add seq.label_mapping id.Ast.desc idx) id
+
+  (* Claim the next index for a definition whose own resolution failed, so later
+     definitions keep their positions. The entry is poisoned (see the type). *)
+  let register_failed seq id =
+    let idx = seq.last_index in
+    seq.last_index <- seq.last_index + 1;
+    Hashtbl.add seq.index_mapping idx None;
     Option.iter (fun id -> Hashtbl.add seq.label_mapping id.Ast.desc idx) id
 
   let get d seq (idx : Ast.Text.idx) =
-    try
+    match
       match idx.desc with
-      | Num n -> Some (Hashtbl.find seq.index_mapping (Uint32.to_int n))
+      | Num n -> Hashtbl.find_opt seq.index_mapping (Uint32.to_int n)
       | Id id ->
-          Some
-            (Hashtbl.find seq.index_mapping (Hashtbl.find seq.label_mapping id))
-    with Not_found ->
-      let lst =
-        match idx.desc with
-        | Num _ -> []
-        | Id id ->
-            Wax_utils.Spell_check.f
-              (fun f -> Hashtbl.iter (fun id' _ -> f id') seq.label_mapping)
-              id
-      in
-      Error.unbound_index d ~location:idx.info seq.name idx lst;
-      None
+          Option.bind
+            (Hashtbl.find_opt seq.label_mapping id)
+            (Hashtbl.find_opt seq.index_mapping)
+    with
+    | Some entry ->
+        (* [Some v] is a real definition; [None] a poisoned entry, resolved
+           silently. *)
+        entry
+    | None ->
+        let lst =
+          match idx.desc with
+          | Num _ -> []
+          | Id id ->
+              Wax_utils.Spell_check.f
+                (fun f -> Hashtbl.iter (fun id' _ -> f id') seq.label_mapping)
+                id
+        in
+        Error.unbound_index d ~location:idx.info seq.name idx lst;
+        None
 
   let get_index seq (idx : Ast.Text.idx) =
     match idx.desc with
@@ -1058,6 +1092,19 @@ module Sequence = struct
     match idx.desc with
     | Num n -> Some (Uint32.to_int n)
     | Id id -> Hashtbl.find_opt seq.label_mapping id
+
+  (* Resolve to the value without reporting when the reference is unbound (or is
+     a poisoned entry) — a silent [get], for the same kind of caller as
+     [get_index_opt]. *)
+  let find seq (idx : Ast.Text.idx) =
+    match idx.desc with
+    | Num n ->
+        Option.join (Hashtbl.find_opt seq.index_mapping (Uint32.to_int n))
+    | Id id ->
+        Option.join
+          (Option.bind
+             (Hashtbl.find_opt seq.label_mapping id)
+             (Hashtbl.find_opt seq.index_mapping))
 end
 
 (*** Types and the type context ***)
@@ -1092,6 +1139,14 @@ type type_context = {
       * (Ast.Text.name option * Ast.Text.subtype, Ast.location) Ast.annotated
         option )
     Hashtbl.t;
+  (* Text indices / names of poisoned type definitions: a rec group whose own
+     resolution failed still advances [last_index] (so later numeric type
+     references stay aligned) but registers no mapping. These sets let
+     [get_type_info] resolve such a reference to [None] silently instead of
+     reporting "unknown type" again — the real error was reported at the
+     definition. The analogue of {!Sequence}'s poisoned entries. *)
+  poisoned_index : (Uint32.t, unit) Hashtbl.t;
+  poisoned_label : (string, unit) Hashtbl.t;
   (* For each type definition, keyed by its text-level index: its source index
      node (its name when it has one, else its numeric index, carrying the
      definition's location), and — for a continuation type — the source
@@ -1153,22 +1208,29 @@ let cont_source_functype tc idx =
   | _ -> assert false
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
+  let poisoned =
+    match idx.desc with
+    | Num x -> Hashtbl.mem ctx.poisoned_index x
+    | Id id -> Hashtbl.mem ctx.poisoned_label id
+  in
   let result =
-    try
-      match idx.desc with
-      | Num x -> Some (Hashtbl.find ctx.index_mapping x)
-      | Id id -> Some (Hashtbl.find ctx.label_mapping id)
-    with Not_found ->
-      let lst =
+    if poisoned then (* Silently: the definition site already reported. *) None
+    else
+      try
         match idx.desc with
-        | Num _ -> []
-        | Id id ->
-            Wax_utils.Spell_check.f
-              (fun f -> Hashtbl.iter (fun id' _ -> f id') ctx.label_mapping)
-              id
-      in
-      Error.unbound_index d ~location:idx.info "type" idx lst;
-      None
+        | Num x -> Some (Hashtbl.find ctx.index_mapping x)
+        | Id id -> Some (Hashtbl.find ctx.label_mapping id)
+      with Not_found ->
+        let lst =
+          match idx.desc with
+          | Num _ -> []
+          | Id id ->
+              Wax_utils.Spell_check.f
+                (fun f -> Hashtbl.iter (fun id' _ -> f id') ctx.label_mapping)
+                id
+        in
+        Error.unbound_index d ~location:idx.info "type" idx lst;
+        None
   in
   (* Record the referenced type's source definition, so hover over the type
      identifier shows its subtype. Guarded on the sink, so an ordinary
@@ -1754,14 +1816,16 @@ type stack =
   | Cons of Ast.location option * stack_entry * stack
 
 (* Returns the popped entry, along with its push location. A pop from an
-   unreachable or empty stack yields the unknown value [Bot]. *)
+   unreachable or empty stack yields the unknown value [Bot]; an underflow
+   turns the stack unreachable (as in [pop]), so one missing value is reported
+   once rather than once per subsequent pop. *)
 let pop_any ctx loc st =
   match st with
   | Unreachable -> (Unreachable, (Bot, None))
   | Cons (loc, ty, r) -> (r, (ty, loc))
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
-      (st, (Bot, None))
+      (Unreachable, (Bot, None))
 
 (* The non-null version of a popped reference's source type, for an instruction
    that re-pushes the value with the null case removed. *)
@@ -1908,11 +1972,12 @@ let get_local ctx ?(initialize = false) i =
 (* The result nullability of [extern.convert_any] / [any.convert_extern], which
    propagate the operand's nullability. The operand must be a reference in the
    [typ] hierarchy: a bottom reference satisfies it as known non-null, a
-   fully-unknown [Bot] is treated as nullable, and a non-reference operand (a
+   fully-unknown [Bot] (a polymorphic, unreachable stack) is treated as non-null
+   — the most precise choice, like [Bot_ref] — and a non-reference operand (a
    reported error) is treated as nullable rather than crashing. *)
 let convert_operand_nullable ctx loc entry ~typ =
   match entry with
-  | Bot -> true
+  | Bot -> false
   | Bot_ref -> false
   | Val (ty, source) -> (
       let expected = Ref { nullable = true; typ } in
@@ -1966,11 +2031,21 @@ let float_bin_op_type ty (op : Ast.Text.float_bin_op) =
   | Eq | Ne | Lt | Gt | Le | Ge -> I32
 
 (* Returns the interned block parameter and result types, plus their per-element
-   source types (for [pop_args]/[push_results]'s [~source]). *)
+   source types (for [pop_args]/[push_results]'s [~source]). Like [typeuse], a
+   type reference is resolved in preference to an inline signature; for valid
+   input the two agree ([check_syntax]'s inline check), and preferring the
+   reference makes it the one place a block's typeuse index is resolved (and an
+   unbound one reported). *)
 let blocktype ctx (ty : Ast.Text.blocktype option) =
   match ty with
   | None -> Some ([||], [||], [||], [||])
-  | Some (Typeuse (_, Some ({ params; results } as ft))) ->
+  | Some (Typeuse (Some idx, _)) ->
+      let+@ _, { params; results } = lookup_func_type ctx idx in
+      let param_source, result_source =
+        functype_sources (reference_functype ctx.modul.types idx)
+      in
+      (params, results, param_source, result_source)
+  | Some (Typeuse (None, Some ({ params; results } as ft))) ->
       let*@ iparams =
         array_map_opt
           (fun p ->
@@ -1982,12 +2057,6 @@ let blocktype ctx (ty : Ast.Text.blocktype option) =
       in
       let param_source, result_source = functype_sources ft in
       (iparams, iresults, param_source, result_source)
-  | Some (Typeuse (Some idx, None)) ->
-      let+@ _, { params; results } = lookup_func_type ctx idx in
-      let param_source, result_source =
-        functype_sources (reference_functype ctx.modul.types idx)
-      in
-      (params, results, param_source, result_source)
   | Some (Typeuse (None, None)) -> assert false (* Should not happen *)
   | Some (Valtype ty) ->
       let+@ t = valtype ctx.modul.diagnostics ctx.modul.types ty in
@@ -2471,10 +2540,17 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc I32 in
       let* () = pop_args ctx loc ~source:param_source params in
       let used = track_label ctx label in
-      block ctx loc label ~used ~param_source ~result_source
+      (* Anchor each arm's stack-shape reports (a missing result, leftover
+         values) at that arm, not at the whole [if] — otherwise the two arms'
+         reports are indistinguishable. A synthesized arm (an omitted [else])
+         has no span of its own; fall back to the instruction's. *)
+      let arm_loc (b : (_, Ast.location) Ast.annotated) =
+        if b.Ast.info.loc_start.Lexing.pos_cnum >= 0 then b.Ast.info else loc
+      in
+      block ctx (arm_loc if_block) label ~used ~param_source ~result_source
         ~br_source:result_source ~params ~results ~br_params:results
         if_block.desc;
-      block ctx loc label ~used ~param_source ~result_source
+      block ctx (arm_loc else_block) label ~used ~param_source ~result_source
         ~br_source:result_source ~params ~results ~br_params:results
         else_block.desc;
       push_results ~loc ~source:result_source results
@@ -2698,9 +2774,12 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
         let ts21 = inner_ft.params in
         let ts21_text =
           (* [inner] is [Some] only when [x]'s last parameter is a concrete
-             continuation reference, so its source form is [(ref $idx)]. *)
+             continuation reference, so its source form is [(ref $idx)] or
+             [(ref (exact $idx))] — [cont_functype_of_heaptype] accepts both, so
+             the exactness does not change which type's params are looked up. *)
           match (cont_param_source ctx x).(n - 1) with
-          | Plain (Ref { typ = Type idx; _ }) -> cont_param_source ctx idx
+          | Plain (Ref { typ = Type idx | Exact idx; _ }) ->
+              cont_param_source ctx idx
           | _ -> assert false
         in
         let ts11' = Array.sub ts11 0 (n - 1) in
@@ -2744,14 +2823,41 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let len = Array.length params in
       let* () =
         with_current_stack (fun st ->
+            (* Check each DISTINCT target once: the check is purely per-target,
+               so a target repeated in the list — spelled by depth or by a
+               label name resolving to that same depth — would only repeat an
+               identical report. Unresolved targets are not deduplicated; each
+               occurrence reports its own unbound label at its own span. *)
+            let seen = Hashtbl.create 8 in
+            let repeated (idx' : Ast.Text.idx) =
+              let depth =
+                match idx'.desc with
+                | Num i -> Some (Uint32.to_int i)
+                | Id id ->
+                    let rec find n = function
+                      | [] -> None
+                      | (Some id', _, _, _) :: _ when id = id' -> Some n
+                      | _ :: rem -> find (n + 1) rem
+                    in
+                    find 0 ctx.control_types
+              in
+              match depth with
+              | None -> false
+              | Some d ->
+                  Hashtbl.mem seen d
+                  ||
+                  (Hashtbl.add seen d ();
+                   false)
+            in
             List.iter
               (fun idx' ->
-                let*? params, param_source = branch_target ctx idx' in
-                let len' = Array.length params in
-                if len <> len' then
-                  Error.branch_parameter_count_mismatch ctx.modul.diagnostics
-                    ~location:loc idx len idx' len'
-                else ignore (pop_args ctx loc ~source:param_source params st))
+                if not (repeated idx') then
+                  let*? params, param_source = branch_target ctx idx' in
+                  let len' = Array.length params in
+                  if len <> len' then
+                    Error.branch_parameter_count_mismatch ctx.modul.diagnostics
+                      ~location:loc idx len idx' len'
+                  else ignore (pop_args ctx loc ~source:param_source params st))
               (idx :: lst))
       in
       unreachable
@@ -3029,32 +3135,39 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let* ty2, loc2 = pop_any ctx loc in
       (* A bare [select] forbids reference operands; the bottom reference, like
          any reference, is rejected here. Each operand reduces to its value
-         ([None] when unknown), so the cases below mirror the operand stack. *)
-      let as_operand = function
+         ([None] when unknown), so the cases below mirror the operand stack.
+         Each report is anchored at its operand's push location (when known),
+         so the two operands' reports stay distinguishable. *)
+      let as_operand src_loc = function
         | Bot -> None
         | Bot_ref ->
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
-              ~source:Bottom_ref;
+              ~src_loc ~source:Bottom_ref;
             None
         | Val (ty, source) -> Some (ty, source)
       in
-      match (as_operand ty1, as_operand ty2) with
+      match (as_operand loc1 ty1, as_operand loc2 ty2) with
       | None, None -> push_poly loc
       | Some (ty1, source1), Some (ty2, source2) ->
           if not (number_or_vec ty1) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
-              ~source:source1;
+              ~src_loc:loc1 ~source:source1;
           if not (number_or_vec ty2) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
-              ~source:source2;
+              ~src_loc:loc2 ~source:source2;
           if ty1 <> ty2 then
             Error.select_type_mismatch ctx.modul.diagnostics ~location:loc ~loc1
               ~source1 ~loc2 ~source2;
           push ~source:source1 (Some loc) ty1
-      | Some (ty, source), None | None, Some (ty, source) ->
+      | Some (ty, source), None ->
           if not (number_or_vec ty) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
-              ~source;
+              ~src_loc:loc1 ~source;
+          push ~source (Some loc) ty
+      | None, Some (ty, source) ->
+          if not (number_or_vec ty) then
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
+              ~src_loc:loc2 ~source;
           push ~source (Some loc) ty)
   | Select (Some lst) -> (
       match lst with
@@ -3877,14 +3990,18 @@ and block ctx loc label ~used ~param_source ~result_source ~br_source ~params
 let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   match i.desc with
   | GlobalGet idx ->
-      let*? ty, _ = Sequence.get ctx.diagnostics ctx.globals idx in
+      (* Resolved silently: an unbound global is reported by the stack
+         validation of this same expression (via [get_global]). *)
+      let*? ty, _ = Sequence.find ctx.globals idx in
       if ty.mut then
         Error.non_constant_global ctx.diagnostics ~location:idx.info idx
   | RefFunc i ->
       (* Record the referenced function by INDEX, not by its type: a ref.func in
          a body is valid only if that SAME function occurs outside any body, so
-         keying by type would wrongly accept any other same-typed function. *)
-      let*? _ = Sequence.get ctx.diagnostics ctx.functions i in
+         keying by type would wrongly accept any other same-typed function.
+         Resolved silently: an unbound function is reported by the stack
+         validation (via [get_function]). *)
+      let*? _ = Sequence.find ctx.functions i in
       Hashtbl.replace ctx.refs (Sequence.get_index ctx.functions i) ()
   | RefNull _ | StructNew _ | StructNewDefault _ | StructNewDesc _
   | StructNewDefaultDesc _ | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _
@@ -3980,14 +4097,24 @@ let add_type d ctx ty =
     ty;
   match rectype d ctx ty with
   | None ->
+      (* Resolution of this rec group failed. Drop the placeholder mappings but
+         poison these text indices / names, and still advance [last_index]: later
+         type definitions keep their positions and numeric references stay
+         aligned, while a reference to a poisoned member resolves to [None]
+         silently (the real error was reported by [rectype]). *)
       Array.iteri
         (fun i e ->
           let label = fst e.Ast.desc in
-          Hashtbl.remove ctx.index_mapping (Uint32.of_int (ctx.last_index + i));
+          let idx = Uint32.of_int (ctx.last_index + i) in
+          Hashtbl.remove ctx.index_mapping idx;
+          Hashtbl.replace ctx.poisoned_index idx ();
           Option.iter
-            (fun label -> Hashtbl.remove ctx.label_mapping label.Ast.desc)
+            (fun label ->
+              Hashtbl.remove ctx.label_mapping label.Ast.desc;
+              Hashtbl.replace ctx.poisoned_label label.Ast.desc ())
             label)
-        ty
+        ty;
+      ctx.last_index <- ctx.last_index + Array.length ty
   | Some ty' ->
       (* Well-formedness of [descriptor] / [describes] clauses, which must link
          two struct types within the same recursion group. In [ty'] a [Rec]
@@ -4126,53 +4253,6 @@ let max_table_size address_type _page_size_log2 =
   | `I32 -> Uint64.of_string "0xffff_ffff"
   | `I64 -> Uint64.of_string "0xffff_ffff_ffff_ffff"
 
-let rec register_typeuses d ctx l =
-  List.iter (fun i -> register_typeuses_instr d ctx i) l
-
-and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
-  match i.desc with
-  | Block { typ; _ }
-  | Loop { typ; _ }
-  | If { typ; _ }
-  | TryTable { typ; _ }
-  | Try { typ; _ } -> (
-      match typ with
-      | Some (Typeuse use) -> ignore (typeuse d ctx use)
-      | Some (Valtype _) | None -> ())
-  | CallIndirect (_, use) | ReturnCallIndirect (_, use) ->
-      ignore (typeuse d ctx use)
-  | String _ -> ignore (string_type ctx)
-  | If_annotation _ ->
-      (* Spliced out by [specialize] before validation; cannot occur here. *)
-      assert false
-  | Folded (i, l) ->
-      register_typeuses_instr d ctx i;
-      register_typeuses d ctx l
-  | Hinted (_, i) -> register_typeuses_instr d ctx i
-  | Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _ | Suspend _
-  | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Br _ | Br_if _
-  | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-  | Return | Call _ | CallRef _ | ReturnCall _ | ReturnCallRef _ | Drop
-  | Select _ | LocalGet _ | LocalSet _ | LocalTee _ | GlobalGet _ | GlobalSet _
-  | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _ | AtomicFence
-  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
-  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
-  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefNull _ | RefFunc _
-  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | RefCastDescEq _
-  | RefGetDesc _ | StructNew _ | StructNewDefault _ | StructNewDesc _
-  | StructNewDefaultDesc _ | StructGet _ | StructSet _ | ArrayNew _
-  | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _
-  | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
-  | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _
-  | BinOp _ | Add128 | Sub128 | MulWide _ | I32WrapI64 | I64ExtendI32 _
-  | F32DemoteF64 | F64PromoteF32 | ExternConvertAny | AnyConvertExtern
-  | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
-  | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
-  | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
-  | VecTernOp _ | Char _ ->
-      ()
-
 (* Collect the implicit function types denoted by inline signatures (function
    and tag definitions, imports, block types and [call_indirect]). Following
    the text format, such a type reuses a structurally-equal type if one already
@@ -4182,8 +4262,12 @@ and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
    subtyping information so that it covers every type. Relies on
    {!Types.add_rectype} deduplicating: a [typeuse] encountered later during
    validation then resolves to the type collected here instead of growing the
-   type table. *)
+   type table. Diagnostics are muted: a signature that does not resolve is
+   skipped here and reported by the pass that owns the construct (an import or
+   tag by [build_initial_env], a function by [functions], a block type or
+   [call_indirect] by the body validation). *)
 let collect_implicit_types d ctx fields =
+  let d = muted d in
   let collect sign =
     let>@ ft = n_functype d ctx sign in
     let before = Types.last_index ctx.types in
@@ -4250,62 +4334,83 @@ let build_initial_env ctx fields =
             match id with Some id -> id.Ast.info | None -> field.info
           in
           match desc with
-          | Func { exact; typ = tu } ->
+          | Func { exact; typ = tu } -> (
               let idx = Sequence.next_index ctx.functions in
-              ignore
-                (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
-                 Sequence.register ctx.functions id
-                   (ty, fst tu, typeuse_functype ctx.types tu, exact));
-              ctx.imported_functions <-
-                (idx, id, location) :: ctx.imported_functions;
-              if exports <> [] then Hashtbl.replace ctx.used_functions idx ()
+              match typeuse ctx.diagnostics ctx.types tu with
+              | None ->
+                  (* The typeuse did not resolve (reported above). Claim the
+                     index anyway so later functions stay aligned; skip the
+                     [unused-import] candidate for a definition that failed. *)
+                  Sequence.register_failed ctx.functions id
+              | Some ty ->
+                  Sequence.register ctx.functions id
+                    (ty, fst tu, typeuse_functype ctx.types tu, exact);
+                  ctx.imported_functions <-
+                    (idx, id, location) :: ctx.imported_functions;
+                  if exports <> [] then
+                    Hashtbl.replace ctx.used_functions idx ())
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
-          | Table typ ->
+          | Table typ -> (
               limits ctx "table" typ.limits max_table_size;
               let src = Plain (Ast.Text.Ref typ.reftype) in
-              let>@ typ = tabletype ctx.diagnostics ctx.types typ in
-              Sequence.register ctx.tables id (typ, src)
-          | Global ty ->
+              match tabletype ctx.diagnostics ctx.types typ with
+              | None -> Sequence.register_failed ctx.tables id
+              | Some typ -> Sequence.register ctx.tables id (typ, src))
+          | Global ty -> (
               let idx = Sequence.next_index ctx.globals in
               let src = Plain ty.typ in
-              let>@ ty = globaltype ctx.diagnostics ctx.types ty in
-              Sequence.register ctx.globals id (ty, src);
-              ctx.imported_globals <-
-                (idx, id, location) :: ctx.imported_globals;
-              if exports <> [] then Hashtbl.replace ctx.used_globals idx ()
-          | Tag tu ->
-              let>@ ty = typeuse ctx.diagnostics ctx.types tu in
-              let sign = typeuse_functype ctx.types tu in
+              match globaltype ctx.diagnostics ctx.types ty with
+              | None -> Sequence.register_failed ctx.globals id
+              | Some ty ->
+                  Sequence.register ctx.globals id (ty, src);
+                  ctx.imported_globals <-
+                    (idx, id, location) :: ctx.imported_globals;
+                  if exports <> [] then Hashtbl.replace ctx.used_globals idx ())
+          | Tag tu -> (
+              match typeuse ctx.diagnostics ctx.types tu with
+              | None -> Sequence.register_failed ctx.tags id
+              | Some ty ->
+                  let sign = typeuse_functype ctx.types tu in
+                  (* A tag's function type is deliberately not required to have
+                     empty results: the stack-switching proposal uses tags with
+                     result types (for [suspend] / [resume]), so the
+                     exception-handling restriction to no results is not
+                     enforced. *)
+                  Sequence.register ctx.tags id (ty, sign)))
+      | Func { id; typ; exports; instrs = _; locals = _ } -> (
+          (* Resolved with muted diagnostics: the [functions] pass resolves
+             this typeuse again and owns its errors. *)
+          match typeuse (muted ctx.diagnostics) ctx.types typ with
+          | None ->
+              (* The typeuse did not resolve. Claim the index (later functions
+                 stay aligned) but do not record an [unused-field] candidate. *)
+              Sequence.register_failed ctx.functions id
+          | Some ty ->
+              let sign = typeuse_functype ctx.types typ in
+              (* A module-defined function has exactly its declared type. *)
+              let idx = Sequence.next_index ctx.functions in
+              Sequence.register ctx.functions id (ty, fst typ, sign, true);
+              (* Record it as an [unused-field] candidate; an inline export makes
+                 it externally reachable, so mark it used. *)
+              let location =
+                match id with Some id -> id.Ast.info | None -> field.info
+              in
+              ctx.defined_functions <-
+                (idx, id, location) :: ctx.defined_functions;
+              if exports <> [] then Hashtbl.replace ctx.used_functions idx ())
+      | Tag { id; typ; exports } -> (
+          match typeuse ctx.diagnostics ctx.types typ with
+          | None -> Sequence.register_failed ctx.tags id
+          | Some ty ->
+              let sign = typeuse_functype ctx.types typ in
               (* A tag's function type is deliberately not required to have empty
                  results: the stack-switching proposal uses tags with result
                  types (for [suspend] / [resume]), so the exception-handling
                  restriction to no results is not enforced. *)
+              register_exports ctx exports;
               Sequence.register ctx.tags id (ty, sign))
-      | Func { id; typ; instrs; exports; locals = _ } ->
-          let>@ ty = typeuse ctx.diagnostics ctx.types typ in
-          let sign = typeuse_functype ctx.types typ in
-          (* A module-defined function has exactly its declared type. *)
-          let idx = Sequence.next_index ctx.functions in
-          Sequence.register ctx.functions id (ty, fst typ, sign, true);
-          (* Record it as an [unused-field] candidate; an inline export makes it
-             externally reachable, so mark it used. *)
-          let location =
-            match id with Some id -> id.Ast.info | None -> field.info
-          in
-          ctx.defined_functions <- (idx, id, location) :: ctx.defined_functions;
-          if exports <> [] then Hashtbl.replace ctx.used_functions idx ();
-          register_typeuses ctx.diagnostics ctx.types instrs
-      | Tag { id; typ; exports } ->
-          let>@ ty = typeuse ctx.diagnostics ctx.types typ in
-          let sign = typeuse_functype ctx.types typ in
-          (* A tag's function type is deliberately not required to have empty
-             results: the stack-switching proposal uses tags with result types
-             (for [suspend] / [resume]), so the exception-handling restriction to
-             no results is not enforced. *)
-          register_exports ctx exports;
-          Sequence.register ctx.tags id (ty, sign)
       | _ -> ())
     (List.concat_map Ast_utils.expand_import_group fields)
 
@@ -4408,21 +4513,23 @@ let tables_and_memories ctx fields =
           limits ctx "memory" lim max_memory_size;
           Sequence.register ctx.memories id lim.desc;
           register_exports ctx exports
-      | Table { id; typ; init; exports } ->
+      | Table { id; typ; init; exports } -> (
           limits ctx "table" typ.limits max_table_size;
           let src = Plain (Ast.Text.Ref typ.reftype) in
-          let>@ typ = tabletype ctx.diagnostics ctx.types typ in
-          (match init with
-          | Init_default ->
-              if not typ.reftype.nullable then
-                Error.non_nullable_table_type ctx.diagnostics
-                  ~location:field.info (*ZZZ*)
-          | Init_expr e ->
-              constant_expression ctx ~location:field.info ~expected_source:src
-                (Ref typ.reftype) e
-          | Init_segment _ -> ());
-          Sequence.register ctx.tables id (typ, src);
-          register_exports ctx exports
+          match tabletype ctx.diagnostics ctx.types typ with
+          | None -> Sequence.register_failed ctx.tables id
+          | Some typ ->
+              (match init with
+              | Init_default ->
+                  if not typ.reftype.nullable then
+                    Error.non_nullable_table_type ctx.diagnostics
+                      ~location:field.info (*ZZZ*)
+              | Init_expr e ->
+                  constant_expression ctx ~location:field.info
+                    ~expected_source:src (Ref typ.reftype) e
+              | Init_segment _ -> ());
+              Sequence.register ctx.tables id (typ, src);
+              register_exports ctx exports)
       | _ -> ())
     fields
 
@@ -4430,21 +4537,23 @@ let globals ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
-      | Global { id; typ; init; exports } ->
+      | Global { id; typ; init; exports } -> (
           let src = Plain typ.typ in
-          let>@ typ = globaltype ctx.diagnostics ctx.types typ in
-          constant_expression ctx ~location:field.info ~expected_source:src
-            typ.typ init;
-          let idx = Sequence.next_index ctx.globals in
-          Sequence.register ctx.globals id (typ, src);
-          (* Record it as an [unused-field] candidate; an inline export makes it
-             externally reachable, so mark it used. *)
-          let location =
-            match id with Some id -> id.Ast.info | None -> field.info
-          in
-          ctx.defined_globals <- (idx, id, location) :: ctx.defined_globals;
-          if exports <> [] then Hashtbl.replace ctx.used_globals idx ();
-          register_exports ctx exports
+          match globaltype ctx.diagnostics ctx.types typ with
+          | None -> Sequence.register_failed ctx.globals id
+          | Some typ ->
+              constant_expression ctx ~location:field.info ~expected_source:src
+                typ.typ init;
+              let idx = Sequence.next_index ctx.globals in
+              Sequence.register ctx.globals id (typ, src);
+              (* Record it as an [unused-field] candidate; an inline export makes
+                 it externally reachable, so mark it used. *)
+              let location =
+                match id with Some id -> id.Ast.info | None -> field.info
+              in
+              ctx.defined_globals <- (idx, id, location) :: ctx.defined_globals;
+              if exports <> [] then Hashtbl.replace ctx.used_globals idx ();
+              register_exports ctx exports)
       | String_global { id; typ; init } ->
           (* A named array type is honoured (and must be an i8/i16 array, like
              any string); with none, the global takes the default [<string>]
@@ -4502,40 +4611,46 @@ let segments ctx fields =
       | Table { typ; init; _ } -> (
           match init with
           | Init_default | Init_expr _ -> ()
-          | Init_segment lst ->
+          | Init_segment lst -> (
               let src = Plain (Ast.Text.Ref typ.reftype) in
-              let>@ typ = reftype ctx.diagnostics ctx.types typ.reftype in
+              match reftype ctx.diagnostics ctx.types typ.reftype with
+              | None -> Sequence.register_failed ctx.elem None
+              | Some typ ->
+                  List.iter
+                    (fun e ->
+                      constant_expression ctx ~location:field.info
+                        ~expected_source:src (Ref typ) e)
+                    lst;
+                  Sequence.register ctx.elem None (typ, src)))
+      | Elem { id; typ; init; mode } -> (
+          let elem_source = Plain (Ast.Text.Ref typ) in
+          match reftype ctx.diagnostics ctx.types typ with
+          | None -> Sequence.register_failed ctx.elem id
+          | Some typ ->
+              (match mode with
+              | Passive | Declare -> ()
+              | Active (i, e) ->
+                  let*? tabletype, table_source =
+                    Sequence.get ctx.diagnostics ctx.tables i
+                  in
+                  if
+                    not
+                      (Types.val_subtype ctx.subtyping_info (Ref typ)
+                         (Ref tabletype.reftype))
+                  then
+                    Error.elem_segment_type_mismatch ctx.diagnostics
+                      ~location:field.info ~elem_source ~table_source;
+                  let aty =
+                    address_type_to_valtype tabletype.limits.address_type
+                  in
+                  constant_expression ctx ~location:field.info
+                    ~expected_source:(source_of_valtype aty) aty e);
               List.iter
                 (fun e ->
                   constant_expression ctx ~location:field.info
-                    ~expected_source:src (Ref typ) e)
-                lst;
-              Sequence.register ctx.elem None (typ, src))
-      | Elem { id; typ; init; mode } ->
-          let elem_source = Plain (Ast.Text.Ref typ) in
-          let>@ typ = reftype ctx.diagnostics ctx.types typ in
-          (match mode with
-          | Passive | Declare -> ()
-          | Active (i, e) ->
-              let*? tabletype, table_source =
-                Sequence.get ctx.diagnostics ctx.tables i
-              in
-              if
-                not
-                  (Types.val_subtype ctx.subtyping_info (Ref typ)
-                     (Ref tabletype.reftype))
-              then
-                Error.elem_segment_type_mismatch ctx.diagnostics
-                  ~location:field.info ~elem_source ~table_source;
-              let aty = address_type_to_valtype tabletype.limits.address_type in
-              constant_expression ctx ~location:field.info
-                ~expected_source:(source_of_valtype aty) aty e);
-          List.iter
-            (fun e ->
-              constant_expression ctx ~location:field.info
-                ~expected_source:elem_source (Ref typ) e)
-            init;
-          Sequence.register ctx.elem id (typ, elem_source)
+                    ~expected_source:elem_source (Ref typ) e)
+                init;
+              Sequence.register ctx.elem id (typ, elem_source))
       | _ -> ())
     fields
 
@@ -5015,8 +5130,13 @@ let functions ?(warn_unused = true) ctx fields =
                   let id, typ = p.Ast.desc in
                   initialized_locals := IntSet.add !i !initialized_locals;
                   incr i;
+                  (* Resolved with muted diagnostics: this re-resolution only
+                     runs when the typeuse above already resolved, so a broken
+                     param type here was already reported — by [typeuse] for an
+                     inline-only signature, by [check_syntax]'s inline check
+                     when a named type is also given. *)
                   let interned =
-                    match valtype ctx.diagnostics ctx.types typ with
+                    match valtype (muted ctx.diagnostics) ctx.types typ with
                     | None ->
                         (* Dummy value *) Ref { nullable = false; typ = None_ }
                     | Some typ' -> typ'
@@ -5208,9 +5328,16 @@ let check_syntax ctx lst =
     List.iter (Ast_utils.iter_instr (fun i -> f i.Ast.desc)) instrs
   in
   (* An inline type annotation [(type idx) (param ...) (result ...)] must name a
-     function type whose signature equals the inline one. *)
+     function type whose signature equals the inline one. The reference is
+     resolved with muted diagnostics — an unbound or non-function type is
+     reported by the pass that owns the typeuse ([build_initial_env] for an
+     import or tag, [functions] for a function, the body validation for a block
+     or [call_indirect]); only the inline/named disagreement is this check's to
+     report. The inline signature itself is built loudly: when a reference is
+     also given, [typeuse] ignores the inline form, so an unbound type inside it
+     is reported nowhere else. *)
   let check_inline_type idx target =
-    let>@ gidx = resolve_type_index ctx.diagnostics ctx.types idx in
+    let>@ gidx = resolve_type_index (muted ctx.diagnostics) ctx.types idx in
     match (Types.get_subtype ctx.subtyping_info gidx).typ with
     | Func f -> (
         match functype ctx.diagnostics ctx.types target with
@@ -5219,8 +5346,7 @@ let check_syntax ctx lst =
               Error.inline_function_type_mismatch ctx.diagnostics
                 ~location:idx.Ast.info f
         | None -> ())
-    | Struct _ | Array _ | Cont _ ->
-        Error.expected_func_type ctx.diagnostics ~location:idx.Ast.info idx
+    | Struct _ | Array _ | Cont _ -> ()
   in
   let check_instr_inline desc =
     let check_typeuse = function
@@ -5328,6 +5454,8 @@ let validate_configuration ?(warn_unused = true)
       last_index = 0;
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
+      poisoned_index = Hashtbl.create 16;
+      poisoned_label = Hashtbl.create 16;
       type_defs = Hashtbl.create 16;
       descriptor_source = Hashtbl.create 16;
       features;

@@ -8,8 +8,6 @@ rather than raising an uncaught exception.
 
   $ wax check bad.wasm
   Error: Unknown type: index '0' is not bound.
-  Error: Unknown type: index '0' is not bound.
-  Error: Unknown type: index '0' is not bound.
   [128]
 
 A value-type discriminator is a single byte, not an unbounded LEB. An overlong

@@ -180,16 +180,24 @@ let rec instr (names : B.names) local_names label_names label_counter stack
           {
             label = Option.map Ast.no_loc name;
             typ = Option.map (blocktype names.types) typ;
+            (* Keep each arm's decoded byte-offset span (see the decoder's
+               [If] case): a per-arm diagnostic anchors there. *)
             if_block =
-              Ast.no_loc
-                (List.map
-                   (instr names local_names label_names label_counter stack')
-                   if_block.desc);
+              {
+                Ast.desc =
+                  List.map
+                    (instr names local_names label_names label_counter stack')
+                    if_block.desc;
+                info = if_block.info;
+              };
             else_block =
-              Ast.no_loc
-                (List.map
-                   (instr names local_names label_names label_counter stack')
-                   else_block.desc);
+              {
+                Ast.desc =
+                  List.map
+                    (instr names local_names label_names label_counter stack')
+                    else_block.desc;
+                info = else_block.info;
+              };
           }
     | TryTable { label = _; typ; catches; block } ->
         let name = get_label_name label_names label_counter in

@@ -9,5 +9,4 @@ initializer is `global.get 1`.
 
   $ wax check fwd.wasm
   Error: Unknown global: index '1' is not bound.
-  Error: Unknown global: index '1' is not bound.
   [128]
