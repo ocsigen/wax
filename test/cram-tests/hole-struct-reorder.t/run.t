@@ -27,7 +27,7 @@ type error, not a miscompile:
   > WAX
 
   $ wax mismatch.wax -f wat
-  Error: This instruction has type 'float' but is expected to have type 'i32'.
+  Error: This expression has type 'float' but is expected to have type 'i32'.
    ──➤  mismatch.wax:2:45
   1 │ type S = { x: i32, y: f64 };
   2 │ fn f() -> &S { 2.0; 1; let s = {S| y: _, x: _}; s; }

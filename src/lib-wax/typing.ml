@@ -168,6 +168,10 @@ module Error = struct
       ~related
       (text "This code is unreachable.")
 
+  let loc_last_char loc =
+    let loc_end = loc.loc_end in
+    { loc with loc_start = { loc_end with pos_cnum = loc_end.pos_cnum - 1 } }
+
   let empty_stack context ~location =
     (* Like [unbound_name], suppress this in error-recovery mode: a stack
        underflow while type-checking a best-effort AST is usually a cascade from
@@ -176,7 +180,8 @@ module Error = struct
        nothing downstream cascades; genuine underflows in intact code still
        surface on a clean re-check once the syntax errors are fixed. *)
     if not (Wax_utils.Diagnostic.in_recovery context) then
-      report context ~location (text "The stack is empty.")
+      report context ~location (*:(loc_last_char location)*)
+        (text "The stack is empty.")
 
   let let_in_conditional context ~location =
     report context ~location
@@ -185,7 +190,7 @@ module Error = struct
           declare the local before the conditional.")
 
   let non_empty_stack context ~location render =
-    report context ~location
+    report context ~location:(loc_last_char location)
       (text "Some values remain on the stack:" ^^ Message.raw render)
 
   (* Report the values still on the stack by pointing a caret at each of them.
@@ -265,12 +270,12 @@ module Error = struct
        ++ typ ty1 ++ text "and" ++ typ ty2
       ^^ text ".")
 
-  let instruction_type_mismatch context ~location ty ty' =
+  let expression_type_mismatch context ~location ~provided ~expected =
     report context ~location
-      (text "This instruction has type"
-       ++ typ ty
+      (text "This expression has type"
+       ++ typ provided
        ++ text "but is expected to have type"
-       ++ typ ty'
+       ++ typ expected
       ^^ text ".")
 
   let value_count_mismatch context ~location ~expected ~provided =
@@ -290,7 +295,9 @@ module Error = struct
 
   let if_without_else context ~location =
     report context ~location
-      (text "This 'if' must produce a value and so requires an 'else' branch.")
+      (text "This " ++ kw "if"
+      ++ text " must produce a value and so requires an "
+      ++ kw "else" ++ text " branch.")
 
   let parameterized_block_expression context ~location =
     report context ~location
@@ -343,7 +350,9 @@ module Error = struct
   let final_supertype context ~location x =
     report context ~location
       (text "The type" ++ name x
-      ++ text "is final and cannot be extended; declare it 'open'.")
+       ++ text "is final and cannot be extended; declare it "
+       ++ kw "open"
+      ^^ text ".")
 
   let invalid_subtype context ~location x =
     report context ~location
@@ -454,10 +463,11 @@ module Error = struct
   let br_if_result_mismatch context ~location ~loc ~result ty =
     report context ~location
       ~related:[ typed_branch_label loc ty; typed_branch_label location result ]
-      (text
-         "This [br_if] value stays on the stack as the block's result, so its \
-          type must match the inferred result exactly; add a result annotation \
-          to the block.")
+      (text "This " ++ kw "br_if"
+      ++ text
+           " value stays on the stack as the block's result, so its type must \
+            match the inferred result exactly; add a result annotation to the \
+            block.")
 
   let name_already_bound context ~location kind x =
     report context ~location
@@ -496,7 +506,8 @@ module Error = struct
       ++ text "can only be used as a function call.")
 
   let before_hole context ~location =
-    report context ~location (text "This expression occurs before a hole '_'.")
+    report context ~location
+      ((text "This expression occurs before a hole " ++ kw "_") ^^ text ".")
 
   let hole_in_control_operand context ~location ~construct ~role =
     report context ~location
@@ -510,13 +521,15 @@ module Error = struct
 
   let splice_without_supertype context ~location =
     report context ~location
-      (text
-         "'..' requires a supertype to inherit fields from (write 'type t: \
-          super = { .., ... }').")
+      (kw ".."
+      ++ text " requires a supertype to inherit fields from (write "
+      ++ kw "type t: super = { .., ... }"
+      ++ text ").")
 
   let splice_non_struct context ~location x =
     report context ~location
-      (text "'..' can only inherit fields from a struct supertype;"
+      (kw ".."
+      ++ text " can only inherit fields from a struct supertype;"
       ++ name x ++ text "is not a struct.")
 
   let duplicated_parameter context ~location x =
@@ -1784,7 +1797,7 @@ type stack =
          unknown (a producer that did not resolve, an underflow): pops yield
          [Error] silently — unlike [Unreachable] (dead code), whose pops yield
          [Unknown] and re-default, and which the dead-code lint keys on. *)
-  | Cons of location * inferred_type Cell.t * stack
+  | Cons of location option * inferred_type Cell.t * stack
 
 let rec output_stack pp st =
   let module SP = Wax_utils.Styled_printer in
@@ -1876,9 +1889,16 @@ let rec pop_many ctx i n accu =
   (unless we have a locationfrom the stack)
 *)
 let pop ctx ~location ty st =
+  let mismatch loc_opt ty' =
+    match loc_opt with
+    | Some loc ->
+        Error.expression_type_mismatch ctx.diagnostics ~location:loc
+          ~provided:ty' ~expected:ty
+    | None -> Error.type_mismatch ctx.diagnostics ~location ty' ty
+  in
   match st with
   | Unreachable | Poisoned -> (st, ())
-  | Cons (loc, ty', r) -> (
+  | Cons (loc_opt, ty', r) -> (
       match Cell.get ty' with
       | Error ->
           (* The top value is the poison of an already-reported error. Leave it
@@ -1891,8 +1911,7 @@ let pop ctx ~location ty st =
              genuine value below it reading as a bogus leftover. *)
           (st, ())
       | _ ->
-          if not (subtype ctx ty' ty) then
-            Error.type_mismatch ctx.diagnostics ~location:loc ty' ty;
+          if not (subtype ctx ty' ty) then mismatch loc_opt ty';
           (r, ()))
   | Empty ->
       Error.empty_stack ctx.diagnostics ~location;
@@ -1919,14 +1938,16 @@ let push loc ty st =
   | Error -> ((match st with Unreachable -> Unreachable | _ -> Poisoned), ())
   | _ -> (Cons (loc, ty, st), ())
 
-let rec push_results results =
-  match results with
-  | [] ->
-      if false then prerr_endline "PUSH";
-      return ()
-  | (loc, ty) :: rem ->
-      let* () = push loc ty in
-      push_results rem
+let push_results ~loc results =
+  let len = Array.length results in
+  let loc = if len = 1 then Some loc else None in
+  let rec loop i =
+    if i = len then return ()
+    else
+      let* () = push loc results.(i) in
+      loop (i + 1)
+  in
+  loop 0
 
 type empty_stack_context = Expression | Block | Function
 
@@ -1946,9 +1967,7 @@ let with_empty_stack ctx ~kind:_ ~location f =
         let has_error =
           has_error || match Cell.get cell with Error -> true | _ -> false
         in
-        let locs =
-          if loc.loc_start.Lexing.pos_cnum >= 0 then loc :: locs else locs
-        in
+        let locs = match loc with None -> locs | Some loc -> loc :: locs in
         scan has_error locs st
     | Empty | Unreachable | Poisoned -> (has_error, List.rev locs)
   in
@@ -2264,7 +2283,8 @@ let check_subtype ctx ~location ty' ty =
   (* Pass [location] so that, when [ty] is an inferring block result, the value
      is recorded with its branch site (see [Collecting]). *)
   if not (subtype ~location ctx ty' ty) then
-    Error.instruction_type_mismatch ctx.diagnostics ~location ty' ty
+    Error.expression_type_mismatch ctx.diagnostics ~location ~provided:ty'
+      ~expected:ty
 
 let check_subtypes ctx ~location types' types =
   if Array.length types' <> Array.length types then
@@ -2277,8 +2297,8 @@ let check_type ctx i ty =
   let ty' = expression_type ctx i in
   let ok = subtype ctx ty' ty in
   if not ok then
-    Error.instruction_type_mismatch ctx.diagnostics ~location:(snd i.info) ty'
-      ty
+    Error.expression_type_mismatch ctx.diagnostics ~location:(snd i.info)
+      ~provided:ty' ~expected:ty
 
 (* [standalone_valtype] is context-independent (its only reference result is the
    built-in [None_] bottom), so the typer's ctx-threading call sites delegate to
@@ -5117,8 +5137,9 @@ and type_arith ctx i =
                    left float-capable (there is no float [eqz]). *)
                 | LargeInt -> Cell.set typ (Valtype i64_valtype)
                 | _ ->
-                    Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:op.info typ (Cell.make Int));
+                    Error.expression_type_mismatch ctx.diagnostics
+                      ~location:(snd i'.info) ~provided:typ
+                      ~expected:(Cell.make Int));
                 i32_cell
             | Neg | Pos ->
                 (match Cell.get typ with
@@ -5126,8 +5147,9 @@ and type_arith ctx i =
                 | Int | LargeInt | Float | Number ->
                     ()
                 | _ ->
-                    Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:op.info typ (Cell.make Number));
+                    Error.expression_type_mismatch ctx.diagnostics
+                      ~location:(snd i'.info) ~provided:typ
+                      ~expected:(Cell.make Number));
                 typ)
       in
       return_expression i (UnOp (op, i')) ty
@@ -6330,8 +6352,9 @@ and type_mem_method_call ctx i func recv memname meth args =
                        literal too big for i32. *)
                     ()
                 | _ ->
-                    Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:(snd value'.info) vty (Cell.make Int)))
+                    Error.expression_type_mismatch ctx.diagnostics
+                      ~location:(snd value'.info) ~provided:vty
+                      ~expected:(Cell.make Int)))
         | [] -> ())
   | [] -> ());
   check_memarg ctx ~address_type
@@ -6715,8 +6738,8 @@ and type_array_fill_call ctx i func a meth j v n =
       let>@ ty = internalize ctx (unpack_type typ) in
       let ty' = expression_type ctx v' in
       if not (subtype ctx ty' ty) then
-        Error.instruction_type_mismatch ctx.diagnostics ~location:(snd v'.info)
-          ty' ty
+        Error.expression_type_mismatch ctx.diagnostics ~location:(snd v'.info)
+          ~provided:ty' ~expected:ty
   | Error -> (* receiver already failed to type; recover silently *) ()
   | Unknown | UnknownRef ->
       (* The receiver's type is unknown (unreachable / branch code) or only a
@@ -8691,11 +8714,7 @@ and block_contents ctx results l =
                synthesize the value — a nested block runs its own inference — and
                push its type, to be collected by the enclosing block. *)
             let* i' = with_holes ctx i (fun () -> instruction ctx i) in
-            let* () =
-              push_results
-                (Array.to_list
-                   (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
-            in
+            let* () = push_results ~loc:i.info (fst i'.info) in
             return [ i' ]
         | Empty ->
             (* The stack is empty, so this trailing instruction must produce the
@@ -8708,10 +8727,7 @@ and block_contents ctx results l =
                 rather than the value's own type — that keeps the block's
                 [pop_args] from reporting the same mismatch a second time. *)
             let* i', _ = check_toplevel ctx results.(0) i in
-            let* () =
-              push_results
-                (Array.to_list (Array.map (fun ty -> (i.info, ty)) results))
-            in
+            let* () = push_results ~loc:i.info results in
             return [ i' ]
         | Cons _ | Unreachable | Poisoned ->
             (* The block's value is already on the stack, produced by an earlier
@@ -8720,11 +8736,7 @@ and block_contents ctx results l =
                 type it as such rather than routing it through
                 [check_instruction]. *)
             let* i' = toplevel_instruction ctx i in
-            let* () =
-              push_results
-                (Array.to_list
-                   (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
-            in
+            let* () = push_results ~loc:i.info (fst i'.info) in
             return [ i' ])
           st
   | i :: r ->
@@ -8748,19 +8760,13 @@ and block_contents ctx results l =
                   };
                 ]
         | _ -> ());
-        let st_after, () =
-          push_results
-            (Array.to_list (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
-            st_after
-        in
+        let st_after, () = push_results ~loc:i.info (fst i'.info) st_after in
         let st_after, r' = block_contents ctx results r st_after in
         (st_after, merge_let_tuple ctx i' r')
 
 and block ctx loc label params results br_params block =
   with_empty_stack ctx ~location:loc ~kind:Block
-    (let* () =
-       push_results (Array.to_list (Array.map (fun ty -> (loc, ty)) params))
-     in
+    (let* () = push_results ~loc params in
      let* block' =
        block_contents
          { ctx with control_types = (label, br_params) :: ctx.control_types }
@@ -8825,7 +8831,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
           to [result], so it joins with the branched values at its own type. *)
        (match st with
        | Cons (loc', tv, _) ->
-           cs.collected <- (Some loc', Cell.make (Cell.get tv)) :: cs.collected
+           cs.collected <- (loc', Cell.make (Cell.get tv)) :: cs.collected
        | Empty | Unreachable | Poisoned -> ());
        let st, () = pop_args ctx ~location:loc [| result |] st in
        (* Return the cell: the caller may deliver more values to it (a [try]'s catch
@@ -9072,10 +9078,10 @@ and collect_into ctx loc label ~cs ~r instrs =
           [pop_args] would in check position, leaving the unreachable base. *)
        match st with
        | Cons (loc, tv, Empty) ->
-           cs.collected <- (Some loc, tv) :: cs.collected;
+           cs.collected <- (loc, tv) :: cs.collected;
            (Empty, body')
        | Cons (loc, tv, (Unreachable | Poisoned)) ->
-           cs.collected <- (Some loc, tv) :: cs.collected;
+           cs.collected <- (loc, tv) :: cs.collected;
            (Unreachable, body')
        | Empty -> (Empty, body')
        | (Unreachable | Poisoned) as st -> (st, body')

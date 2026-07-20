@@ -55,7 +55,7 @@ The number of names must match the number of values the initializer provides.
 An annotation is checked against the value bound to that name.
 
   $ wax check bad-type.wax
-  Error: This instruction has type 'i32' but is expected to have type 'i64'.
+  Error: This expression has type 'i32' but is expected to have type 'i64'.
    ──➤  bad-type.wax:7:5
   5 │ 
   6 │ fn f() -> i64 {

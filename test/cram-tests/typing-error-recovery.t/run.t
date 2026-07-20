@@ -119,8 +119,8 @@ mismatching targets still get one report each.
   > }
   > WAX
   $ wax check --error-format short br-table.wax
-  br-table.wax:3:42: error: This instruction has type 'float' but is expected to have type 'i32'.
-  br-table.wax:9:36: error: This instruction has type 'float' but is expected to have type 'i32'.
-  br-table.wax:9:36: error: This instruction has type 'float' but is expected to have type 'i32'.
+  br-table.wax:3:42: error: This expression has type 'float' but is expected to have type 'i32'.
+  br-table.wax:9:36: error: This expression has type 'float' but is expected to have type 'i32'.
+  br-table.wax:9:36: error: This expression has type 'float' but is expected to have type 'i32'.
   br-table.wax:7:5: error: The values reaching this block's exit have no common supertype, so its result type cannot be inferred.
   [128]

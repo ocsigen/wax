@@ -20,7 +20,7 @@ subtype queries terminate (it used to loop forever):
     ·         ^
   2 │ type u = { x: i64 };
   3 │ fn f(a: &t) -> &u { a; }
-  Error: Expecting type '&u' but got type '&t'.
+  Error: This expression has type '&t' but is expected to have type '&u'.
    ──➤  cycle.wax:3:21
   1 │ type t: t = { x: i32 };
   2 │ type u = { x: i64 };

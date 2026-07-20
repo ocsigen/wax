@@ -17,7 +17,7 @@ With no -D, every feasible configuration is validated; the ill-typed `debug`
 branch is reported (reachable only when `debug`):
 
   $ wax check m.wax
-  Error: This instruction has type 'float' but is expected to have type 'i32'.
+  Error: This expression has type 'float' but is expected to have type 'i32'.
    ──➤  m.wax:3:20
   1 │ #[if(debug)]
   2 │ {
@@ -35,7 +35,7 @@ branch is reported (reachable only when `debug`):
 `-D debug=true` selects the ill-typed branch, so the error is unconditional:
 
   $ wax check -D debug=true m.wax
-  Error: This instruction has type 'float' but is expected to have type 'i32'.
+  Error: This expression has type 'float' but is expected to have type 'i32'.
    ──➤  m.wax:3:20
   1 │ #[if(debug)]
   2 │ {

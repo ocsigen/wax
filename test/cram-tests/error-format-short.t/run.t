@@ -7,7 +7,7 @@ unchanged.
 A type error, in short form (still exit 128):
 
   $ wax check --error-format=short bad.wax
-  bad.wax:1:17: error: Expecting type 'i32' but got type 'float'.
+  bad.wax:1:17: error: This expression has type 'float' but is expected to have type 'i32'.
   [128]
 
 A warning (an unused local) carries its severity and its -W name in brackets;

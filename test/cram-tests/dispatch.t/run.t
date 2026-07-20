@@ -75,7 +75,7 @@ Case labels must be distinct:
 The index must be an 'i32':
 
   $ wax err_index.wax -f wat -v
-  Error: This instruction has type 'f64' but is expected to have type 'i32'.
+  Error: This expression has type 'f64' but is expected to have type 'i32'.
    ──➤  err_index.wax:3:18
   1 │ fn g(x: f64) {
   2 │     'out: do {

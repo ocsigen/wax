@@ -7,7 +7,7 @@ A bare string is a [mut i8] byte array:
 
   $ wax check string.wax
   Error:
-    This instruction has type '[mut i8]' but is expected to have type 'i32'.
+    This expression has type '[mut i8]' but is expected to have type 'i32'.
    ──➤  string.wax:2:5
   1 │ fn f() -> i32 {
   2 │     "hi";
@@ -19,7 +19,9 @@ A bare string is a [mut i8] byte array:
 A function declared with an inline signature, referenced as a value:
 
   $ wax check funcref.wax
-  Error: Expecting type 'i32' but got type 'fn(i32) -> i32'.
+  Error:
+    This expression has type 'fn(i32) -> i32' but is expected to have type
+    'i32'.
    ──➤  funcref.wax:6:5
   4 │ 
   5 │ fn f() -> i32 {
@@ -32,7 +34,9 @@ A function declared with an inline signature, referenced as a value:
 A cast to an inline function type [&fn(..)]:
 
   $ wax check cast.wax
-  Error: Expecting type 'i32' but got type 'fn(i32) -> i32'.
+  Error:
+    This expression has type 'fn(i32) -> i32' but is expected to have type
+    'i32'.
    ──➤  cast.wax:4:6
   2 │ 
   3 │ fn f() -> i32 {

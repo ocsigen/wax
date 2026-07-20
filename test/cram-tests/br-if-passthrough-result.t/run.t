@@ -19,7 +19,7 @@ correctly rejected:
   > }
   > WAX
   $ wax -f wasm bad.wax -o /dev/null
-  Error: This instruction has type '&any' but is expected to have type '&i31'.
+  Error: This expression has type '&any' but is expected to have type '&i31'.
    ──➤  bad.wax:5:11
   3 │ fn f(c: i32) -> &any {
   4 │     'l: do {

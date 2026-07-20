@@ -20,7 +20,7 @@ f64 floor — not a semantics-changing `f32.floor`.
 A bare out-of-range f32 binding is a clean type error, not silent invalid output:
 
   $ wax check bind.wax
-  Error: This instruction has type 'f64' but is expected to have type 'f32'.
+  Error: This expression has type 'f64' but is expected to have type 'f32'.
    ──➤  bind.wax:2:30
   1 │ #[export = "g"]
   2 │ fn g() -> f32 { let x: f32 = 1e300; x; }

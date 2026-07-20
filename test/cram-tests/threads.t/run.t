@@ -220,7 +220,7 @@ use instead. A 64-bit access requires an i64 value, and the two cmpxchg values
 must agree on their type.
 
   $ wax check errors.wax
-  Error: Expecting type 'i32' but got type 'i8'.
+  Error: This expression has type 'i8' but is expected to have type 'i32'.
    ──➤  errors.wax:3:5
   1 │ memory mem: i32 [1, 1] shared;
   2 │ fn missing_cast(p: i32) -> i32 {
@@ -248,7 +248,7 @@ must agree on their type.
      ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   10 │ }
   11 │ fn narrow64(p: i32, v: i32) {
-  Error: This instruction has type 'i32' but is expected to have type 'i64'.
+  Error: This expression has type 'i32' but is expected to have type 'i64'.
     ──➤  errors.wax:12:27
   10 │ }
   11 │ fn narrow64(p: i32, v: i32) {

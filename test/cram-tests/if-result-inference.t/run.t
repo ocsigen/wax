@@ -24,7 +24,7 @@ When the type cannot be determined it is reported. The branches must agree; in a
 checked position the offending branch is pointed at:
 
   $ wax check mismatched.wax
-  Error: This instruction has type '&any' but is expected to have type 'i64'.
+  Error: This expression has type '&any' but is expected to have type 'i64'.
    ──➤  mismatched.wax:2:31
   1 │ fn f(c: i32) -> i64 {
   2 │     if c { 0 as i64; } else { null as &any; }

@@ -6,8 +6,7 @@ subtype check but discard its verdict, accepting the module and only rejecting i
 later during lowering.
 
   $ wax check context-typed.wax
-  Error:
-    This instruction has type 'number' but is expected to have type 'v128'.
+  Error: This expression has type 'number' but is expected to have type 'v128'.
    ──➤  context-typed.wax:4:15
   2 │ fn f() -> v128 {
   3 │     'l: do {
@@ -20,7 +19,7 @@ later during lowering.
 The same check applies when the block's result type is written explicitly:
 
   $ wax check annotated.wax
-  Error: This instruction has type 'i64' but is expected to have type 'i32'.
+  Error: This expression has type 'i64' but is expected to have type 'i32'.
    ──➤  annotated.wax:4:16
   2 │ fn g() -> i32 {
   3 │     'l: do i32 {

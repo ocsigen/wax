@@ -20,7 +20,7 @@ unconstrained literal the way the type checker does (int -> i32, float -> f64).
 A type mismatch between the annotation and the initializer is reported.
 
   $ wax --validate bad.wax -f wat
-  Error: This instruction has type 'float' but is expected to have type 'i32'.
+  Error: This expression has type 'float' but is expected to have type 'i32'.
    ──➤  bad.wax:2:18
   1 │ fn f() -> i32 {
   2 │     let x: i32 = 2.5;

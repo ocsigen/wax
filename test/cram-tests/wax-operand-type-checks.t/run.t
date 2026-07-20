@@ -103,7 +103,7 @@ Reading a field that the struct type does not declare is rejected:
 An 'if' condition must be an i32, in both statement and expression position:
 
   $ wax check if-cond-not-i32.wax
-  Error: This instruction has type 'f64' but is expected to have type 'i32'.
+  Error: This expression has type 'f64' but is expected to have type 'i32'.
    ──➤  if-cond-not-i32.wax:1:13
   1 │ fn f() { if 0.0 as f64 { } }
     ·             ^^^^^^^^^^
@@ -111,7 +111,7 @@ An 'if' condition must be an i32, in both statement and expression position:
   [128]
 
   $ wax check if-cond-not-i32-expr.wax
-  Error: This instruction has type 'f64' but is expected to have type 'i32'.
+  Error: This expression has type 'f64' but is expected to have type 'i32'.
    ──➤  if-cond-not-i32-expr.wax:1:20
   1 │ fn f() -> i32 { if 0.0 as f64 => i32 { 0 as i32; } else { 1 as i32; } }
     ·                    ^^^^^^^^^^
@@ -150,7 +150,7 @@ A throw argument must match the tag's parameter type; the caret points at the
 offending argument, not the whole throw:
 
   $ wax check throw-arg-type.wax
-  Error: This instruction has type 'i64' but is expected to have type 'i32'.
+  Error: This expression has type 'i64' but is expected to have type 'i32'.
    ──➤  throw-arg-type.wax:1:30
   1 │ tag t(i32); fn f() { throw t(5 as i64); }
     ·                              ^^^^^^^^
@@ -161,7 +161,7 @@ A branch or return operand whose type does not match the target underlines the
 operand, not the whole branch/return:
 
   $ wax check return-operand-type.wax
-  Error: This instruction has type 'i64' but is expected to have type 'i32'.
+  Error: This expression has type 'i64' but is expected to have type 'i32'.
    ──➤  return-operand-type.wax:1:24
   1 │ fn f() -> i32 { return 0 as i64; }
     ·                        ^^^^^^^^
@@ -169,7 +169,7 @@ operand, not the whole branch/return:
   [128]
 
   $ wax check br-operand-type.wax
-  Error: This instruction has type 'i64' but is expected to have type 'i32'.
+  Error: This expression has type 'i64' but is expected to have type 'i32'.
    ──➤  br-operand-type.wax:1:27
   1 │ fn f() -> i32 'l: { br 'l 0 as i64; }
     ·                           ^^^^^^^^
@@ -201,10 +201,10 @@ A unary operator applied to an operand of the wrong type underlines the
 operator:
 
   $ wax check unop-operand.wax
-  Error: This instruction has type '&eq' but is expected to have type 'number'.
-   ──➤  unop-operand.wax:1:20
+  Error: This expression has type '&eq' but is expected to have type 'number'.
+   ──➤  unop-operand.wax:1:21
   1 │ fn f(x: &eq) { _ = -x; }
-    ·                    ^
+    ·                     ^
   2 │ 
   [128]
 

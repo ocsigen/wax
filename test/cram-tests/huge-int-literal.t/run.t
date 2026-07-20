@@ -10,7 +10,7 @@ AST-mutation fuzzer's edge-value literals.
   > }
   > EOF
   $ wax check big.wax
-  Error: Expecting type 'i64' but got type 'float'.
+  Error: This expression has type 'float' but is expected to have type 'i64'.
    ──➤  big.wax:2:5
   1 │ fn f() -> i64 {
   2 │     18446744073709551616;
