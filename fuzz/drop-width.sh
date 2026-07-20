@@ -9,10 +9,17 @@
 # (`div`/`rem`/`>>`/`<<`/`rot`), its VALUE. Confirmed erasers: `drop`, comparisons,
 # `eqz`, `i32.wrap_i64`, a truncation's source float width, the value operand of a
 # narrow i64 store (`i64.store8/16/32` — its method name carries only the access
-# width), and either arm of a `select` (whose `?:` surface carries no result
-# type, so the arms must be pinned or an interposed eraser cannot reach them).
+# width), either arm of a `select` (whose `?:` surface carries no result type, so
+# the arms must be pinned or an interposed eraser cannot reach them), and a value
+# left on the stack that an unconditional branch (`br`/`br_table`/`return`/
+# `unreachable`) discards (the branch-form analogue of `drop`, emitted as a bare
+# leftover statement with no consumer to pin it).
 # All are invisible to every validity oracle — both the original and the drifted
 # module validate; only execution sees the wrong value / introduced trap.
+# NOTE for maintainers: any new [From_wasm] path that emits a value without
+# routing it through a width-applying consumer (a [pop_width_erased]/[pin_width]
+# pop, or a [drop]/branch leftover pinned at the source) is a new eraser — add it
+# to the enumeration below.
 #
 # The space is small and enumerable, so we enumerate it: each eraser wraps a
 # width-sensitive i64 tree (and the truncations wrap an f32/f64 const), round-trip
@@ -99,6 +106,23 @@ for i in "${!INNER_EXPR[@]}"; do
     "(module (func (export \"f\") (result i32) (i64.eqz $SEL)))"
   add "drop select $OP" "$OP" \
     "(module (func (export \"f\") (drop $SEL)))"
+done
+
+# ---- Unconditional branches discard the values left on the stack below the
+# operands they consume. Those leftovers are emitted as bare statements with no
+# consumer to pin their width — the branch-form analogue of [drop] (which pins
+# via its [_: t = e] annotation). A width-sensitive i64 tree left as such a
+# leftover must keep its width; [From_wasm] pins it in [Stack.push_poly]. ----
+for i in "${!INNER_EXPR[@]}"; do
+  E="${INNER_EXPR[$i]}"; OP="${INNER_OP[$i]}"
+  add "unreachable-leftover $OP" "$OP" \
+    "(module (func (export \"f\") $E unreachable))"
+  add "return-leftover $OP" "$OP" \
+    "(module (func (export \"f\") $E return))"
+  add "br-leftover $OP" "$OP" \
+    "(module (func (export \"f\") (block $E (br 0))))"
+  add "br_table-leftover $OP" "$OP" \
+    "(module (func (export \"f\") (block $E (br_table 0 (i32.const 0)))))"
 done
 
 # ---- Truncation source float width: the op's [as int] cast pins the result, not
