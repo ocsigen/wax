@@ -933,12 +933,6 @@ module Stack = struct
 
   (* Push a numeric value tagged with the width its opcode states. *)
   let push_num width i stack = ((true, width, i) :: stack, ())
-  let push_poly i stack = ((false, None, i) :: stack, ())
-
-  let pop_width_preserved stack =
-    match stack with
-    | (true, _, i) :: rem -> (rem, i)
-    | _ -> (stack, Ast.no_loc Ast.Hole)
 
   (* Wrap [i] in an identity cast to its non-i32 opcode width (see the module
      comment). [None]/[I32] are the re-parse default, so leave the tree as is. *)
@@ -948,6 +942,23 @@ module Stack = struct
     | Some `F32 -> { i with Ast.desc = Ast.Cast (i, Valtype F32) }
     | Some `F64 -> { i with Ast.desc = Ast.Cast (i, Valtype F64) }
     | Some `I32 | None -> i
+
+  (* An unconditional control-flow instruction ([br]/[br_table]/[return]/[become]/
+     [unreachable]/[throw]/…) leaves the values still on the stack — below the
+     operands it consumed — dead: [run] emits them as leftover statements but no
+     consumer ever pops them, so, unlike a value handed to a [pop_width_erased]
+     consumer, nothing pins their opcode width. Pin it here from the stack tag,
+     so a width-sensitive leftover (an [i64.div_u]/[i64.shr_u] whose divisor or
+     shift count is load-bearing) keeps its width instead of re-defaulting to
+     i32 on re-parse — an [i32] op would trap / mask differently. *)
+  let push_poly i stack =
+    let stack = List.map (fun (a, w, e) -> (a, None, pin_width w e)) stack in
+    ((false, None, i) :: stack, ())
+
+  let pop_width_preserved stack =
+    match stack with
+    | (true, _, i) :: rem -> (rem, i)
+    | _ -> (stack, Ast.no_loc Ast.Hole)
 
   (* Pop, pinning the operand's opcode width. Used by single-operand width
      erasers ([drop], [wrap], [promote], [demote]). *)
