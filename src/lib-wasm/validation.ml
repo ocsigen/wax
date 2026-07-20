@@ -4579,7 +4579,12 @@ type lint_val =
   | LPure
 
 let lint_int_value s =
-  Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
+  let s = String.concat "" (String.split_on_char '_' s) in
+  match Int64.of_string_opt s with
+  | Some _ as r -> r
+  (* An unsigned decimal past [2^63] (e.g. a shift count of [18446744073709551615]
+     = -1) overflows a signed parse; read it unsigned so it is still tracked. *)
+  | None -> Int64.of_string_opt ("0u" ^ s)
 
 let lint_float_value s =
   let s = String.concat "" (String.split_on_char '_' s) in
@@ -4591,6 +4596,10 @@ let lint_float_value s =
   if String.length body >= 3 && String.equal (String.sub body 0 3) "nan" then
     Some Float.nan
   else float_of_string_opt s
+
+(* Round an [f64] to the nearest representable [f32] (the [f32.demote_f64] the
+   runtime applies), via the single-precision bit layout. *)
+let round_to_f32 f = Int32.float_of_bits (Int32.bits_of_float f)
 
 (* Whether a trapping (toward-zero) float-to-integer conversion of [f] to the
    given target/signage would trap: NaN/infinite, or out of range. *)
@@ -4864,6 +4873,19 @@ let lint_body ctx instrs =
         let st' = List.fold_left step st operands in
         step st' op
     | Hinted (_, inner) -> step st inner
+    (* Propagate a constant float through a demote/promote so a trapping
+       conversion of an out-of-f32-range constant ([<big> as f32 as i32_u]) is
+       still caught: [f32.demote_f64] rounds to f32, [f64.promote_f32] is exact. *)
+    | F32DemoteF64 -> (
+        match st with
+        | LFloat f :: rest -> LFloat (round_to_f32 f) :: rest
+        | _ :: rest -> LPure :: rest
+        | [] -> [])
+    | F64PromoteF32 -> (
+        match st with
+        | (LFloat _ as v) :: rest -> v :: rest
+        | _ :: rest -> LPure :: rest
+        | [] -> [])
     | _ -> (
         check_op i st;
         recurse i;
