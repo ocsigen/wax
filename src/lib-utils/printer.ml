@@ -191,14 +191,21 @@ module Doc = struct
                   | Space -> fits (avail - 1) rest
                   | Cut -> fits avail rest)))
 
-  let render ~width doc =
-    let b = Buffer.create 4096 in
+  (* Lay [doc] out, emitting the result through [add_string]/[add_char] rather
+     than into a fixed buffer, so the same layout algorithm can either build a
+     string (for [finish], which relays it to a formatter) or write straight to
+     an output channel (the hot path, skipping the intermediate string). *)
+  let render ~width ~add_string ~add_char ~add_substring doc =
     let col = ref 0 in
     let emitted = ref false in
     (* Cap how far breaks indent, so deeply nested code does not march off to
        the right margin (the analogue of Format's [max_indent]); deeper levels
        then pile up at the cap rather than each pushing further right. *)
     let max_indent = max 0 (width - 10) in
+    (* A break's indentation is always [<= max_indent] (see [break_line]), so one
+       string of that many spaces covers every indent: emit a slice of it rather
+       than allocating a fresh [String.make ind ' '] per line. *)
+    let spaces = String.make max_indent ' ' in
     (* A pending line break (indent + blank?) and/or a pending flat separator.
        Deferred until the next text and coalesced — across group boundaries —
        by max strength; a line break supersedes a flat separator. *)
@@ -209,14 +216,14 @@ module Doc = struct
       | Some (ind, blank) ->
           (* Suppress a leading break before any output, like [if started]. *)
           if !emitted then (
-            Buffer.add_char b '\n';
-            if blank then Buffer.add_char b '\n';
-            Buffer.add_string b (String.make ind ' ');
+            add_char '\n';
+            if blank then add_char '\n';
+            add_substring spaces 0 ind;
             col := ind)
       | None -> (
           match !pend_flat with
           | Some s when strength s >= strength Space ->
-              Buffer.add_char b ' ';
+              add_char ' ';
               incr col
           | _ -> ()));
       pend_line := None;
@@ -249,7 +256,7 @@ module Doc = struct
           | Empty -> go rest
           | Text (w, s) ->
               flush ();
-              Buffer.add_string b s;
+              add_string s;
               emitted := true;
               col := !col + w;
               go rest
@@ -291,15 +298,29 @@ module Doc = struct
                   else break_line i false);
               go rest)
     in
-    go [ (0, Brkm, doc) ];
+    go [ (0, Brkm, doc) ]
+
+  (* Fold the builder's recorded items into one document. *)
+  let body st =
+    force_eol st;
+    List.fold_left (fun acc d -> Cat (d, acc)) Empty (top st).items
+
+  (* Lay the recorded document out into a fresh string (for [finish], which then
+     relays it to a formatter). *)
+  let render_string st =
+    let b = Buffer.create 4096 in
+    render ~width:st.width ~add_string:(Buffer.add_string b)
+      ~add_char:(Buffer.add_char b) ~add_substring:(Buffer.add_substring b)
+      (body st);
     Buffer.contents b
 
+  (* Lay the recorded document out straight into [oc] — no intermediate string. *)
+  let render_channel st oc =
+    render ~width:st.width ~add_string:(output_string oc)
+      ~add_char:(output_char oc) ~add_substring:(output_substring oc) (body st)
+
   let finish st =
-    force_eol st;
-    let body =
-      List.fold_left (fun acc d -> Cat (d, acc)) Empty (top st).items
-    in
-    let s = render ~width:st.width body in
+    let s = render_string st in
     (* Emit line by line through the formatter's own newline, so that when [run]
        is called inside an enclosing Format box (e.g. an [@[<2>…@]] wrapping the
        snippet), every line — not just the first — picks up that box's
@@ -352,3 +373,13 @@ let run ?(width = 78) fmt f =
   let c = Doc.create fmt ~width in
   f c;
   Doc.finish c
+
+(* A dummy sink: [run_channel] renders straight to its channel and never writes
+   to the state's formatter (only [finish] does), so a shared no-op one avoids
+   allocating a formatter per call. *)
+let null_fmt = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
+
+let run_channel ?(width = 78) oc f =
+  let c = Doc.create null_fmt ~width in
+  f c;
+  Doc.render_channel c oc

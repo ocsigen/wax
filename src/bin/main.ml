@@ -140,13 +140,15 @@ let fold_module ~fold_mode ~color ~source ast =
         ~source (fun d -> Wax_wasm.Folding.fold d ast)
   | Unfold -> Wax_wasm.Folding.unfold ast
 
+(* Render the module with our own pretty-printer and write it straight to the
+   channel (plus a trailing newline), bypassing [Format]'s token buffering — the
+   old [fprintf "%a@."] relayed the already-rendered string through [Format]
+   line by line, pure overhead on this hot path. *)
 let output_wat ?(tail = []) ~oc ~color ~trivia ast =
-  let print_wat f m =
-    Wax_utils.Printer.run f (fun p ->
-        Wax_wasm.Output.module_ ~color ~out_channel:oc ~tail p ~trivia m)
-  in
-  let fmt = Format.formatter_of_out_channel oc in
-  Format.fprintf fmt "%a@." print_wat ast
+  Wax_utils.Printer.run_channel oc (fun p ->
+      Wax_wasm.Output.module_ ~color ~out_channel:oc ~tail p ~trivia ast);
+  output_char oc '\n';
+  flush oc
 
 (* A formatter that discards everything, for the dry pass that records which
    locations the printer looks up. *)
@@ -247,13 +249,11 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
       ~retarget:(Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
       ctx wax_ast
   in
-  let print_wax f m =
-    Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-        Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
-          ~tail m)
-  in
-  let fmt = Format.formatter_of_out_channel oc in
-  Format.fprintf fmt "%a@." print_wax wax_ast
+  Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
+      Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
+        ~tail wax_ast);
+  output_char oc '\n';
+  flush oc
 
 let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode ~defines ~desugar ~source_map:_ =
@@ -311,13 +311,11 @@ let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d -> Wax_lang.Typing.check ~warn_unused d ast);
   let trivia, tail = wax_trivia ctx ast in
-  let print_wax f m =
-    Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-        Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
-          ~tail m)
-  in
-  let fmt = Format.formatter_of_out_channel oc in
-  Format.fprintf fmt "%a@." print_wax ast
+  Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
+      Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
+        ~tail ast);
+  output_char oc '\n';
+  flush oc
 
 let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
     ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map =
@@ -428,13 +426,11 @@ let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
       ~source:None (fun d -> Wax_lang.Typing.f ~simplify:true d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
-  let print_wax f m =
-    Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-        Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
-          ~trivia:(Hashtbl.create 0) m)
-  in
-  let fmt = Format.formatter_of_out_channel oc in
-  Format.fprintf fmt "%a@." print_wax wax_ast
+  Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
+      Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
+        ~trivia:(Hashtbl.create 0) wax_ast);
+  output_char oc '\n';
+  flush oc
 
 (*** Formats, options, and policy ***)
 

@@ -87,3 +87,7 @@ val vbox : t -> ?skip_space:bool -> ?indent:int -> (unit -> unit) -> unit
 val run : ?width:int -> Format.formatter -> (t -> unit) -> unit
 (** [run ?width fmt f] creates a new printer on the given formatter, runs [f],
     and renders the result. [width] is the target line width (default 78). *)
+
+val run_channel : ?width:int -> out_channel -> (t -> unit) -> unit
+(** Like {!run}, but lays the document out straight into the channel — no
+    intermediate string and no [Format] buffering. The hot output path. *)
