@@ -36,8 +36,10 @@ export async function run(): Promise<void> {
     throw new Error("web: syntax error should have been rejected: " + JSON.stringify(bad));
   }
 
-  // check(): a valid module has no diagnostics; a broken one reports at least one.
-  if (wax.check("fn f() -> i32 { 1; }", []).length !== 0) {
+  // check(): a valid module has no diagnostics; a broken one reports at least
+  // one. (The clean module exports its function so the unused-function lint
+  // does not fire.)
+  if (wax.check("#[export]\nfn f() -> i32 { 1; }", []).length !== 0) {
     throw new Error("web: valid module should have no diagnostics");
   }
   const diags = wax.check("fn bad( {", []);

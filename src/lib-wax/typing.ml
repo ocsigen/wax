@@ -1170,21 +1170,25 @@ module Tbl = struct
      A successful lookup marks the name referenced (for the unused-field lint);
      [resolve] is only ever called to look up a reference, never for a
      declaration (which goes through [add]). *)
+  (* Pick the declaration whose assumption best matches the current one, without
+     recording a use. Shared by [resolve] (which then marks the name used) and
+     [find_no_mark] (which does not). *)
+  let select env x =
+    match entries env x with
+    | [] -> None
+    | [ (_, v) ] -> Some v
+    | l -> (
+        let c = cur env in
+        let pick p = Option.map snd (List.find_opt (fun (c', _) -> p c') l) in
+        match pick (fun c' -> Cond.logical_implies c c') with
+        | Some _ as r -> r
+        | None -> (
+            match pick (fun c' -> Cond.is_satisfiable (Cond.and_ c c')) with
+            | Some _ as r -> r
+            | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
+
   let resolve env x =
-    let r =
-      match entries env x with
-      | [] -> None
-      | [ (_, v) ] -> Some v
-      | l -> (
-          let c = cur env in
-          let pick p = Option.map snd (List.find_opt (fun (c', _) -> p c') l) in
-          match pick (fun c' -> Cond.logical_implies c c') with
-          | Some _ as r -> r
-          | None -> (
-              match pick (fun c' -> Cond.is_satisfiable (Cond.and_ c c')) with
-              | Some _ as r -> r
-              | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
-    in
+    let r = select env x in
     (match r with
     | Some v ->
         Hashtbl.replace env.used x.desc ();
@@ -1211,6 +1215,12 @@ module Tbl = struct
         None
 
   let find_opt env x = resolve env x
+
+  (* Look up a name's binding without counting it as a reference. Used by the
+     typer's own internal lookups (e.g. a function resolving its own declared
+     type while it is being checked) that must not mark the name used, so the
+     unused-field lint still fires on a defined-but-unreferenced function. *)
+  let find_no_mark env x = select env x
 
   let iter env f =
     Hashtbl.iter (fun k l -> List.iter (fun (_, v) -> f k v) l) env.tbl
@@ -11307,7 +11317,10 @@ let rec functions ctx fields =
            } as f) ->
           let*@ func_typ =
             let*@ ty =
-              let*@ _, tname, _ = Tbl.find ctx.diagnostics ctx.functions name in
+              (* Resolve the function's own declared type without marking the
+                 function name used — its definition site is not a reference, so
+                 the unused-field lint can still flag it if nothing calls it. *)
+              let*@ _, tname, _ = Tbl.find_no_mark ctx.functions name in
               Tbl.find ctx.diagnostics ctx.types { name with desc = tname }
             in
             match ty with

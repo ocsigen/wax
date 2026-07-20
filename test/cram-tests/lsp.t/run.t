@@ -79,7 +79,7 @@ header, reads the framed replies back, and prints a compact summary:
   > PY
   initialize: name=wax-lsp hover=True definition=True references=True rename=True codeAction=True
   encoding: utf-16
-  diagnostics: 0
+  diagnostics: 1
   hover: ```wax | i32 | ```
   definition: (1,6)-(1,7)
   references: 2 at (1,6)-(1,7), (2,2)-(2,3)
@@ -154,6 +154,7 @@ documentation. A module with an unused local:
   >                   (d.get("codeDescription") or {}).get("href")))
   > PY
   unused-local: severity=2 tags=[1] doc=https://ocsigen.org/wax/cli.html#warnings
+  unused-field: severity=2 tags=[1] doc=https://ocsigen.org/wax/cli.html#warnings
 
 Diagnostics specialize to the conditional-compilation defines (the editor's
 `wax.define`, mirroring `-D`), read from `initializationOptions` at startup and
@@ -393,7 +394,7 @@ open publishes once, and the three changes collapse to a single publish.
   >                      for d in r["params"]["diagnostics"]])
   > print("publishes:", pubs)
   > PY
-  publishes: [[], ['error']]
+  publishes: [['warning'], ['error', 'warning']]
 
 Rename renames every occurrence of the symbol, but first checks the new name is
 usable and does not change any name's resolution. Renaming the parameter `a`: to

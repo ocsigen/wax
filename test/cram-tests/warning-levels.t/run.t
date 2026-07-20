@@ -7,12 +7,12 @@ By default an unused local is reported as a warning:
   $ wax --validate unused.wax -f wat
   Warning: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
-  1 │ fn f(n: i32) -> i32 {
+  1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
     ·         ^^^^
   3 │     n;
   4 │ }
-  (func $f (param $n i32) (result i32)
+  (func $f (export "f") (param $n i32) (result i32)
     (local $dead i32)
     (local.set $dead (i32.const 5))
     (local.get $n)
@@ -21,7 +21,7 @@ By default an unused local is reported as a warning:
 `-W unused-local=hidden` silences it:
 
   $ wax --validate -W unused-local=hidden unused.wax -f wat
-  (func $f (param $n i32) (result i32)
+  (func $f (export "f") (param $n i32) (result i32)
     (local $dead i32)
     (local.set $dead (i32.const 5))
     (local.get $n)
@@ -30,7 +30,7 @@ By default an unused local is reported as a warning:
 The `unused` group silences it too:
 
   $ wax --validate -W unused=hidden unused.wax -f wat
-  (func $f (param $n i32) (result i32)
+  (func $f (export "f") (param $n i32) (result i32)
     (local $dead i32)
     (local.set $dead (i32.const 5))
     (local.get $n)
@@ -41,7 +41,7 @@ The `unused` group silences it too:
   $ wax --validate -W unused-local=error unused.wax -f wat
   Error: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
-  1 │ fn f(n: i32) -> i32 {
+  1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
     ·         ^^^^
   3 │     n;
@@ -53,7 +53,7 @@ The `unused` group silences it too:
   $ wax --validate -W all=error unused.wax -f wat
   Error: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
-  1 │ fn f(n: i32) -> i32 {
+  1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
     ·         ^^^^
   3 │     n;
@@ -66,12 +66,12 @@ which stay warnings:
   $ wax --validate -W all=error -W unused-local=warning unused.wax -f wat
   Warning: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
-  1 │ fn f(n: i32) -> i32 {
+  1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
     ·         ^^^^
   3 │     n;
   4 │ }
-  (func $f (param $n i32) (result i32)
+  (func $f (export "f") (param $n i32) (result i32)
     (local $dead i32)
     (local.set $dead (i32.const 5))
     (local.get $n)
@@ -83,7 +83,7 @@ promoting it to an error makes the check fail:
   $ wax check unused.wax
   Warning: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
-  1 │ fn f(n: i32) -> i32 {
+  1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
     ·         ^^^^
   3 │     n;
@@ -92,7 +92,7 @@ promoting it to an error makes the check fail:
   $ wax check -W unused-local=error unused.wax
   Error: The local variable 'dead' is never used.
    ──➤  unused.wax:2:9
-  1 │ fn f(n: i32) -> i32 {
+  1 │ #[export = "f"] fn f(n: i32) -> i32 {
   2 │     let dead = 5;
     ·         ^^^^
   3 │     n;
