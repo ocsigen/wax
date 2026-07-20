@@ -60,7 +60,7 @@
     "@vscode/test-web": "^0.0.81",
     "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.24.0",
-    "typescript": "^5.5.0"
+    "typescript": "^7.0.2"
   },
   "contributes": {
     "configurationDefaults": {
