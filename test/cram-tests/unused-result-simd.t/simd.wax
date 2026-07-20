@@ -1,0 +1,5 @@
+#[export = "f"]
+fn f(v: v128) {
+    _ = v.abs_i32x4();
+    _ = v.add_i32x4(v);
+}

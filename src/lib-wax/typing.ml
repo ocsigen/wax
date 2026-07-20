@@ -2975,6 +2975,12 @@ let rec is_effectless (e : _ Ast.instr) =
   | Call ({ desc = StructGet (recv, m); _ }, [ a ])
     when is_pure_binary_method m.desc ->
       is_effectless recv && is_effectless a
+  (* A SIMD vector method on a value ([v.add_i32x4(w)], [v.trunc_sat_f32x4_u()]):
+     every vector op is pure and non-trapping (the trapping SIMD accesses are the
+     [mem.]-path loads/stores, classified separately by [Simd.mem_method]). *)
+  | Call ({ desc = StructGet (recv, m); _ }, args)
+    when Wax_wasm.Simd.classify m.desc <> None ->
+      is_effectless recv && List.for_all is_effectless args
   (* A [v128::…] SIMD constructor or vector op ([v128::i8x16(…)], a lane build)
      is effect-free and non-trapping when its operands are — the trapping SIMD
      memory accesses use the [mem.] path, not [v128::]. *)
