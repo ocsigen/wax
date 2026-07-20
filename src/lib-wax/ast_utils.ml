@@ -185,6 +185,281 @@ let rec map_instr f instr =
   in
   { desc; info = f instr.info }
 
+(* Share-preserving list map: returns [l] itself when [f] leaves every element
+   physically unchanged, allocating a cons cell only where something changed (so
+   an untouched suffix is shared, not rebuilt). Non-tail-recursive like the
+   passes' own list rewriters — the recursion depth is a statement list's length,
+   not the whole tree's. *)
+let rec smart_map f l =
+  match l with
+  | [] -> l
+  | x :: xs ->
+      let y = f x in
+      let ys = smart_map f xs in
+      if y == x && ys == xs then l else y :: ys
+
+let smart_opt f o =
+  match o with
+  | None -> o
+  | Some x ->
+      let y = f x in
+      if y == x then o else Some y
+
+(* Share-preserving rewrite of a block ([block] on its statement list) and of an
+   optional block. Top-level (not closures inside [map_desc]) so they allocate
+   nothing per node — called fully applied, [block] is just passed through. *)
+let smart_block block b =
+  let d = block b.desc in
+  if d == b.desc then b else { b with desc = d }
+
+let smart_block_opt block o =
+  match o with
+  | None -> o
+  | Some b ->
+      let b' = smart_block block b in
+      if b' == b then o else Some b'
+
+(* Structurally rebuild an [instr_desc], rewriting each nested operand with
+   [instr] and each nested statement list with [block], but returning the
+   *original* desc (physically) when nothing changed — so a pass that leaves a
+   subtree untouched allocates nothing for it. Exhaustive over [instr_desc]; a
+   new constructor makes this fail to compile rather than silently skip its
+   children. This is what lets the Wasm→Wax recovery passes (which usually return
+   an unchanged AST) avoid rebuilding the whole tree. The helper calls are fully
+   applied (no per-node closures). *)
+let map_desc ~instr ~block (desc : 'i instr_desc) : 'i instr_desc =
+  match desc with
+  | Block { label; typ; block = b } ->
+      let b' = smart_block block b in
+      if b' == b then desc else Block { label; typ; block = b' }
+  | Loop { label; typ; block = b } ->
+      let b' = smart_block block b in
+      if b' == b then desc else Loop { label; typ; block = b' }
+  | While { label; cond; step; block = b } ->
+      let c = instr cond
+      and s = smart_opt instr step
+      and b' = smart_block block b in
+      if c == cond && s == step && b' == b then desc
+      else While { label; cond = c; step = s; block = b' }
+  | If { label; typ; cond; if_block; else_block } ->
+      let c = instr cond
+      and ib = smart_block block if_block
+      and eb = smart_block_opt block else_block in
+      if c == cond && ib == if_block && eb == else_block then desc
+      else If { label; typ; cond = c; if_block = ib; else_block = eb }
+  | TryTable { label; typ; catches; block = b } ->
+      let b' = smart_block block b in
+      if b' == b then desc else TryTable { label; typ; catches; block = b' }
+  | Try { label; typ; block = b; catches; catch_all } ->
+      let b' = smart_block block b in
+      let ca =
+        smart_map
+          (fun ((t, l) as e) ->
+            let l' = smart_block block l in
+            if l' == l then e else (t, l'))
+          catches
+      in
+      let call = smart_block_opt block catch_all in
+      if b' == b && ca == catches && call == catch_all then desc
+      else Try { label; typ; block = b'; catches = ca; catch_all = call }
+  | TryCatch { label; typ; block = b; arms } ->
+      let b' = smart_block block b in
+      let arms' =
+        smart_map
+          (fun a ->
+            let ab = smart_block block a.arm_body in
+            if ab == a.arm_body then a else { a with arm_body = ab })
+          arms
+      in
+      if b' == b && arms' == arms then desc
+      else TryCatch { label; typ; block = b'; arms = arms' }
+  | Dispatch { index; cases; default; arms } ->
+      let i = instr index in
+      let arms' =
+        smart_map
+          (fun ((l, b) as e) ->
+            let b' = smart_block block b in
+            if b' == b then e else (l, b'))
+          arms
+      in
+      if i == index && arms' == arms then desc
+      else Dispatch { index = i; cases; default; arms = arms' }
+  | Match { scrutinee; arms; default } ->
+      let s = instr scrutinee in
+      let arms' =
+        smart_map
+          (fun ((p, b) as e) ->
+            let b' = smart_block block b in
+            if b' == b then e else (p, b'))
+          arms
+      in
+      let d = smart_block block default in
+      if s == scrutinee && arms' == arms && d == default then desc
+      else Match { scrutinee = s; arms = arms'; default = d }
+  | If_annotation { cond; then_body; else_body } ->
+      let tb = smart_block block then_body
+      and eb = smart_block_opt block else_body in
+      if tb == then_body && eb == else_body then desc
+      else If_annotation { cond; then_body = tb; else_body = eb }
+  | Set (idx, op, v) ->
+      let v' = instr v in
+      if v' == v then desc else Set (idx, op, v')
+  | Tee (idx, v) ->
+      let v' = instr v in
+      if v' == v then desc else Tee (idx, v')
+  | Labelled (l, v) ->
+      let v' = instr v in
+      if v' == v then desc else Labelled (l, v')
+  | Call (t, args) ->
+      let t' = instr t and a' = smart_map instr args in
+      if t' == t && a' == args then desc else Call (t', a')
+  | TailCall (t, args) ->
+      let t' = instr t and a' = smart_map instr args in
+      if t' == t && a' == args then desc else TailCall (t', a')
+  | Cast (v, t) ->
+      let v' = instr v in
+      if v' == v then desc else Cast (v', t)
+  | CastDesc (v, t, d) ->
+      let v' = instr v and d' = instr d in
+      if v' == v && d' == d then desc else CastDesc (v', t, d')
+  | Test (v, t) ->
+      let v' = instr v in
+      if v' == v then desc else Test (v', t)
+  | NonNull v ->
+      let v' = instr v in
+      if v' == v then desc else NonNull v'
+  | Struct (idx, fields) ->
+      let f' =
+        smart_map
+          (fun ((i, v) as e) ->
+            let v' = smart_opt instr v in
+            if v' == v then e else (i, v'))
+          fields
+      in
+      if f' == fields then desc else Struct (idx, f')
+  | StructDesc (d, fields) ->
+      let d' = instr d in
+      let f' =
+        smart_map
+          (fun ((i, v) as e) ->
+            let v' = smart_opt instr v in
+            if v' == v then e else (i, v'))
+          fields
+      in
+      if d' == d && f' == fields then desc else StructDesc (d', f')
+  | StructDefaultDesc d ->
+      let d' = instr d in
+      if d' == d then desc else StructDefaultDesc d'
+  | StructGet (v, idx) ->
+      let v' = instr v in
+      if v' == v then desc else StructGet (v', idx)
+  | GetDescriptor v ->
+      let v' = instr v in
+      if v' == v then desc else GetDescriptor v'
+  | StructSet (v, idx, w) ->
+      let v' = instr v and w' = instr w in
+      if v' == v && w' == w then desc else StructSet (v', idx, w')
+  | Array (idx, len, init) ->
+      let l' = instr len and i' = instr init in
+      if l' == len && i' == init then desc else Array (idx, l', i')
+  | ArrayDefault (idx, len) ->
+      let l' = instr len in
+      if l' == len then desc else ArrayDefault (idx, l')
+  | ArrayFixed (idx, elems) ->
+      let e' = smart_map instr elems in
+      if e' == elems then desc else ArrayFixed (idx, e')
+  | ArraySegment (idx, seg, off, len) ->
+      let o' = instr off and l' = instr len in
+      if o' == off && l' == len then desc else ArraySegment (idx, seg, o', l')
+  | ArrayGet (arr, idx) ->
+      let a' = instr arr and i' = instr idx in
+      if a' == arr && i' == idx then desc else ArrayGet (a', i')
+  | ArraySet (arr, idx, v) ->
+      let a' = instr arr and i' = instr idx and v' = instr v in
+      if a' == arr && i' == idx && v' == v then desc else ArraySet (a', i', v')
+  | BinOp (op, l, r) ->
+      let l' = instr l and r' = instr r in
+      if l' == l && r' == r then desc else BinOp (op, l', r')
+  | UnOp (op, v) ->
+      let v' = instr v in
+      if v' == v then desc else UnOp (op, v')
+  | Let (bindings, body) ->
+      let b' = smart_opt instr body in
+      if b' == body then desc else Let (bindings, b')
+  | Br (label, v) ->
+      let v' = smart_opt instr v in
+      if v' == v then desc else Br (label, v')
+  | Br_if (label, v) ->
+      let v' = instr v in
+      if v' == v then desc else Br_if (label, v')
+  | Br_table (labels, v) ->
+      let v' = instr v in
+      if v' == v then desc else Br_table (labels, v')
+  | Br_on_null (label, v) ->
+      let v' = instr v in
+      if v' == v then desc else Br_on_null (label, v')
+  | Br_on_non_null (label, v) ->
+      let v' = instr v in
+      if v' == v then desc else Br_on_non_null (label, v')
+  | Br_on_cast (label, t, v) ->
+      let v' = instr v in
+      if v' == v then desc else Br_on_cast (label, t, v')
+  | Br_on_cast_fail (label, t, v) ->
+      let v' = instr v in
+      if v' == v then desc else Br_on_cast_fail (label, t, v')
+  | Br_on_cast_desc_eq (label, t, v, d) ->
+      let v' = instr v and d' = instr d in
+      if v' == v && d' == d then desc else Br_on_cast_desc_eq (label, t, v', d')
+  | Br_on_cast_desc_eq_fail (label, t, v, d) ->
+      let v' = instr v and d' = instr d in
+      if v' == v && d' == d then desc
+      else Br_on_cast_desc_eq_fail (label, t, v', d')
+  | Hinted (h, i) ->
+      let i' = instr i in
+      if i' == i then desc else Hinted (h, i')
+  | Throw (idx, args) ->
+      let a' = smart_map instr args in
+      if a' == args then desc else Throw (idx, a')
+  | ThrowRef v ->
+      let v' = instr v in
+      if v' == v then desc else ThrowRef v'
+  | ContNew (ct, v) ->
+      let v' = instr v in
+      if v' == v then desc else ContNew (ct, v')
+  | ContBind (src, dst, args) ->
+      let a' = smart_map instr args in
+      if a' == args then desc else ContBind (src, dst, a')
+  | Suspend (tag, args) ->
+      let a' = smart_map instr args in
+      if a' == args then desc else Suspend (tag, a')
+  | Resume (ct, handlers, args) ->
+      let a' = smart_map instr args in
+      if a' == args then desc else Resume (ct, handlers, a')
+  | ResumeThrow (ct, tag, handlers, args) ->
+      let a' = smart_map instr args in
+      if a' == args then desc else ResumeThrow (ct, tag, handlers, a')
+  | ResumeThrowRef (ct, handlers, args) ->
+      let a' = smart_map instr args in
+      if a' == args then desc else ResumeThrowRef (ct, handlers, a')
+  | Switch (ct, tag, args) ->
+      let a' = smart_map instr args in
+      if a' == args then desc else Switch (ct, tag, a')
+  | On (i, h) ->
+      let i' = instr i in
+      if i' == i then desc else On (i', h)
+  | Return v ->
+      let v' = smart_opt instr v in
+      if v' == v then desc else Return v'
+  | Sequence instrs ->
+      let i' = smart_map instr instrs in
+      if i' == instrs then desc else Sequence i'
+  | Select (cond, t, e) ->
+      let c' = instr cond and t' = instr t and e' = instr e in
+      if c' == cond && t' == t && e' == e then desc else Select (c', t', e')
+  | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+    | Int _ | Float _ | StructDefault _ ) as leaf ->
+      leaf
+
 (* The instructions immediately nested within [i] (its operands and block
    bodies), in no particular evaluation order. A punned struct field ([None]) is
    a leaf and contributes nothing. *)

@@ -2,6 +2,24 @@ val map_instr : ('a -> 'b) -> 'a Ast.instr -> 'b Ast.instr
 (** [map_instr f instr] applies the function [f] to the info field of [instr]
     and recursively applies it to all nested instructions. *)
 
+val smart_map : ('a -> 'a) -> 'a list -> 'a list
+(** Share-preserving [List.map]: returns the input list itself (physically) when
+    [f] leaves every element unchanged ([==]), so an untouched list is not
+    reallocated. *)
+
+val smart_opt : ('a -> 'a) -> 'a option -> 'a option
+(** Share-preserving [Option.map] (see {!smart_map}). *)
+
+val map_desc :
+  instr:('i Ast.instr -> 'i Ast.instr) ->
+  block:('i Ast.instr list -> 'i Ast.instr list) ->
+  'i Ast.instr_desc ->
+  'i Ast.instr_desc
+(** Structurally rebuild an [instr_desc], rewriting each nested operand with
+    [instr] and each nested statement list with [block], but returning the
+    original desc (physically) when nothing changed. Lets a rewrite pass that
+    leaves a subtree untouched allocate nothing for it. *)
+
 val sub_instrs : 'info Ast.instr -> 'info Ast.instr list
 (** [sub_instrs i] is the instructions immediately nested within [i] (its
     operands and block bodies), in no particular order. *)
