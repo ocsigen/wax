@@ -2043,7 +2043,8 @@ let diagnostic_ctx printer =
   let theme = get_theme use_color in
   {
     base =
-      Wax_utils.Styled_printer.create ~printer ~theme ~trivia:(Hashtbl.create 0)
+      Wax_utils.Styled_printer.create ~printer ~theme
+        ~trivia:(Wax_utils.Trivia.empty ())
         ();
     locate = (fun _ -> None);
   }

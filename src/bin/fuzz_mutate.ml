@@ -383,5 +383,5 @@ let () =
   let m' = go_module m in
   let f = Format.std_formatter in
   Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-      Wax_lang.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m');
+      Wax_lang.Output.module_ ~color p ~trivia:(Wax_utils.Trivia.empty ()) m');
   Format.pp_print_flush f ()

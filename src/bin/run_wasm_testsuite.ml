@@ -264,7 +264,7 @@ module WaxParser =
     (Wax_lang.Lexer)
 
 let print_module ~color f m =
-  let trivia = Hashtbl.create 0 in
+  let trivia = Wax_utils.Trivia.empty () in
   Wax_utils.Printer.run f (fun p -> Wax_wasm.Output.module_ p ~color ~trivia m)
 
 let contains_substring s sub =
@@ -451,7 +451,7 @@ let runtest filename _ =
   (* Translation to new syntax *)
   let print_wax ~color f m =
     Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-        Wax_lang.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m)
+        Wax_lang.Output.module_ ~color p ~trivia:(Wax_utils.Trivia.empty ()) m)
   in
   List.iter
     (fun (status, wasm_m, source) ->

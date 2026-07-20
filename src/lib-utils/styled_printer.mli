@@ -12,14 +12,14 @@ type t = {
           own; used to colour an expression printed inside an attribute. Left
           [None] by printers that do not need it. *)
   trivia : Trivia.t;
-  seen : (Ast.location, unit) Hashtbl.t;
-  collect : (Ast.location, unit) Hashtbl.t option;
+  seen : Trivia.locations;
+  collect : Trivia.locations option;
 }
 
 val create :
   printer:Printer.t ->
   theme:Colors.theme ->
-  ?collect:(Ast.location, unit) Hashtbl.t ->
+  ?collect:Trivia.locations ->
   trivia:Trivia.t ->
   unit ->
   t

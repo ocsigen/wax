@@ -23,7 +23,7 @@ let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
    converted nodes carry the source locations). Same logic as [wax_trivia] /
    [wat_trivia] in bin/main.ml. *)
 let collect_trivia ~print ?retarget ctx =
-  let used = Hashtbl.create 256 in
+  let used = Wax_utils.Trivia.create_locations () in
   Wax_utils.Printer.run (null_formatter ()) (fun p -> print p ~collect:used);
   let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
   match retarget with

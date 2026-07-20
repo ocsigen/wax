@@ -72,10 +72,7 @@ val null_formatter : unit -> Format.formatter
    module needs neither language's [Output]. [retarget], when given, rewrites the
    comment delimiters from the source syntax to the target's. *)
 val collect_trivia :
-  print:
-    (Wax_utils.Printer.t ->
-    collect:(Wax_utils.Ast.location, unit) Hashtbl.t ->
-    unit) ->
+  print:(Wax_utils.Printer.t -> collect:Wax_utils.Trivia.locations -> unit) ->
   ?retarget:Wax_utils.Trivia.comment_syntax * Wax_utils.Trivia.comment_syntax ->
   Wax_utils.Trivia.context ->
   Wax_utils.Trivia.t * Wax_utils.Trivia.entry list

@@ -1805,7 +1805,9 @@ let print_stack st =
   Wax_utils.Printer.run Format.err_formatter (fun p ->
       let pp =
         Wax_utils.Styled_printer.create ~printer:p
-          ~theme:Wax_utils.Colors.no_color ~trivia:(Hashtbl.create 0) ()
+          ~theme:Wax_utils.Colors.no_color
+          ~trivia:(Wax_utils.Trivia.empty ())
+          ()
       in
       Wax_utils.Printer.string p "Stack:";
       output_stack pp st);

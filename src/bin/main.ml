@@ -159,20 +159,24 @@ let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
    comment from attaching to a node the printer skips — which would drop it.
    [retarget], when given, rewrites the comment delimiters between formats. *)
 let wat_trivia ?retarget ctx ast =
-  let used = Hashtbl.create 256 in
+  let used = Wax_utils.Trivia.create_locations () in
   Wax_utils.Printer.run (null_formatter ()) (fun p ->
-      Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
+      Wax_wasm.Output.module_ p
+        ~trivia:(Wax_utils.Trivia.empty ())
+        ~collect:used ast);
   let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
   match retarget with
   | None -> (trivia, tail)
   | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
 let wax_trivia ?retarget ctx ast =
-  let used = Hashtbl.create 256 in
+  let used = Wax_utils.Trivia.create_locations () in
   (* Width is irrelevant to the dry pass: it only records which locations the
      printer looks up, and the traversal is the same at any width. *)
   Wax_utils.Printer.run (null_formatter ()) (fun p ->
-      Wax_lang.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
+      Wax_lang.Output.module_ p
+        ~trivia:(Wax_utils.Trivia.empty ())
+        ~collect:used ast);
   let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
   match retarget with
   | None -> (trivia, tail)
@@ -401,7 +405,7 @@ let wasm_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
   let text_ast = fold_module ~fold_mode ~color ~source:None text_ast in
-  let trivia = Hashtbl.create 0 in
+  let trivia = Wax_utils.Trivia.empty () in
   output_wat ~oc ~color:output_color ~trivia text_ast
 
 let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
@@ -428,7 +432,8 @@ let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   in
   Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
       Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
-        ~trivia:(Hashtbl.create 0) wax_ast);
+        ~trivia:(Wax_utils.Trivia.empty ())
+        wax_ast);
   output_char oc '\n';
   flush oc
 

@@ -28,7 +28,7 @@ val module_ :
   ?color:Wax_utils.Colors.flag ->
   ?out_channel:out_channel ->
   ?tail:Wax_utils.Trivia.entry list ->
-  ?collect:(Ast.location, unit) Hashtbl.t ->
+  ?collect:Wax_utils.Trivia.locations ->
   Wax_utils.Printer.t ->
   trivia:Wax_utils.Trivia.t ->
   Ast.location Ast.module_ ->

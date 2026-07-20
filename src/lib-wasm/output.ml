@@ -1370,7 +1370,8 @@ let instr printer i =
   let theme = get_theme use_color in
   format_sexp false 2 false
     {
-      base = Styled.create ~printer ~theme ~trivia:(Hashtbl.create 16) ();
+      base =
+        Styled.create ~printer ~theme ~trivia:(Wax_utils.Trivia.empty ()) ();
       format = Compact;
       indent_level = 2;
     }
@@ -1386,7 +1387,8 @@ let subtype_string t =
         {
           base =
             Styled.create ~printer ~theme:(get_theme false)
-              ~trivia:(Hashtbl.create 16) ();
+              ~trivia:(Wax_utils.Trivia.empty ())
+              ();
           format = Compact;
           indent_level = 2;
         }

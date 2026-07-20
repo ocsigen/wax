@@ -94,7 +94,9 @@ let format_string src =
   | Ok (ast, ctx) ->
       let trivia, tail =
         collect_trivia ctx ~print:(fun p ~collect ->
-            Wax_lang.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect ast)
+            Wax_lang.Output.module_ p
+              ~trivia:(Wax_utils.Trivia.empty ())
+              ~collect ast)
       in
       let buf = Buffer.create (String.length src) in
       let fmt = Format.formatter_of_buffer buf in
@@ -729,8 +731,9 @@ let to_wat_string src =
           let trivia, tail =
             collect_trivia
               ~print:(fun p ~collect ->
-                Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect
-                  wasm_ast)
+                Wax_wasm.Output.module_ p
+                  ~trivia:(Wax_utils.Trivia.empty ())
+                  ~collect wasm_ast)
               ~retarget:
                 (Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
               ctx

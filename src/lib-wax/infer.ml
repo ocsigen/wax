@@ -169,7 +169,9 @@ let output_inferred_type f ty =
   Wax_utils.Printer.run f (fun p ->
       output_inferred_type_styled
         (Wax_utils.Styled_printer.create ~printer:p
-           ~theme:Wax_utils.Colors.no_color ~trivia:(Hashtbl.create 0) ())
+           ~theme:Wax_utils.Colors.no_color
+           ~trivia:(Wax_utils.Trivia.empty ())
+           ())
         ty)
 
 (* [Unknown] (unreachable/branch), [Error] (recovery) and [UnknownRef] (a

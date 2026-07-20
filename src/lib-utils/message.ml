@@ -93,7 +93,7 @@ let render_top sp d =
   Printer.hovbox sp.Styled_printer.printer (fun () -> render_doc sp d)
 
 let styled_printer ~theme printer =
-  Styled_printer.create ~printer ~theme ~trivia:(Hashtbl.create 0) ()
+  Styled_printer.create ~printer ~theme ~trivia:(Trivia.empty ()) ()
 
 let render_into ~theme ~width fmt t =
   Printer.run ~width fmt (fun p -> render_top (styled_printer ~theme p) t)

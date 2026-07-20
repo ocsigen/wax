@@ -10,10 +10,12 @@ let report name source =
   (match ast with
   | None -> print_string "none\n"
   | Some m ->
-      let used = Hashtbl.create 64 in
+      let used = Wax_utils.Trivia.create_locations () in
       let null = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ()) in
       Wax_utils.Printer.run null (fun p ->
-          Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used m);
+          Wax_wasm.Output.module_ p
+            ~trivia:(Wax_utils.Trivia.empty ())
+            ~collect:used m);
       let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
       let buf = Buffer.create 128 in
       let f = Format.formatter_of_buffer buf in

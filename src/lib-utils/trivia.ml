@@ -9,7 +9,31 @@ type associated = {
   after : entry list;
 }
 
-type t = (Ast.location, associated) Hashtbl.t
+(* The trivia tables are keyed by source location and looked up once per printed
+   atom. A polymorphic [Hashtbl] hashes and compares the whole [Ast.location] —
+   including the two filename strings — which dominated output time. Within a
+   single conversion a span is identified by its start/end byte offsets, so key
+   on those two ints: cheap to hash, cheap to compare, no string traversal. *)
+module Loc = struct
+  type t = Ast.location
+
+  let equal (a : t) (b : t) =
+    a.loc_start.Lexing.pos_cnum = b.loc_start.Lexing.pos_cnum
+    && a.loc_end.Lexing.pos_cnum = b.loc_end.Lexing.pos_cnum
+
+  let hash (a : t) = (a.loc_start.Lexing.pos_cnum * 65599) + a.loc_end.pos_cnum
+end
+
+module Tbl = Hashtbl.Make (Loc)
+
+type t = associated Tbl.t
+
+(* A set of source locations — the [collect]/[seen]/[only] tables. Opaque to
+   callers, who only create one and hand it back; all lookups happen here. *)
+type locations = unit Tbl.t
+
+let create_locations () : locations = Tbl.create 16
+let empty () : t = Tbl.create 0
 
 type context = {
   mutable comments : entry list;
@@ -92,9 +116,9 @@ let associate ?only ctx =
   let locations =
     match only with
     | None -> ctx.locations
-    | Some set -> List.filter (fun l -> Hashtbl.mem set l) ctx.locations
+    | Some set -> List.filter (fun l -> Tbl.mem set l) ctx.locations
   in
-  let tbl = Hashtbl.create (List.length locations) in
+  let tbl = Tbl.create (List.length locations) in
   let comments = List.rev ctx.comments in
   let locs =
     List.sort
@@ -242,10 +266,10 @@ let associate ?only ctx =
       let final_after, rem4 =
         match steal_candidate with
         | Some last_child -> (
-            match Hashtbl.find_opt tbl last_child with
+            match Tbl.find_opt tbl last_child with
             | Some assoc ->
                 let stolen = assoc.after in
-                Hashtbl.replace tbl last_child { assoc with after = [] };
+                Tbl.replace tbl last_child { assoc with after = [] };
                 (* A co-terminating last child's own [after] window collapsed to
                    empty (its [upto] reached only to [ecnum lo]); scan on up to
                    this node's [upto] so its real trailing comments aren't
@@ -256,7 +280,7 @@ let associate ?only ctx =
             | None -> get_after (ecnum lo) ~upto rem3)
         | None -> get_after (ecnum lo) ~upto rem3
       in
-      Hashtbl.add tbl arr.(lo) { before; within; after = final_after };
+      Tbl.add tbl arr.(lo) { before; within; after = final_after };
       process_range ~last_upto next_sib hi rem4
   in
   let leftover = process_range ~last_upto:None 0 (n - 1) comments in
@@ -278,17 +302,17 @@ let get ?collect trivia ~seen loc =
   (* A dry pass records every looked-up location into [collect]; the real pass
      then restricts {!associate} to that set. *)
   (match (collect, loc) with
-  | Some set, Some loc -> Hashtbl.replace set loc ()
+  | Some set, Some loc -> Tbl.replace set loc ()
   | _ -> ());
   match loc with
   | None -> dummy_assoc
   | Some loc -> (
-      match Hashtbl.find_opt trivia loc with
+      match Tbl.find_opt trivia loc with
       | None -> dummy_assoc
       | Some assoc ->
-          if Hashtbl.mem seen loc then dummy_assoc
+          if Tbl.mem seen loc then dummy_assoc
           else (
-            Hashtbl.add seen loc ();
+            Tbl.add seen loc ();
             assoc))
 
 (* Cross-format delimiter translation. *)
@@ -352,6 +376,6 @@ let retarget ~src ~dst tbl tail =
       after = List.map conv a.after;
     }
   in
-  let tbl' = Hashtbl.create (Hashtbl.length tbl) in
-  Hashtbl.iter (fun k v -> Hashtbl.add tbl' k (conv_assoc v)) tbl;
+  let tbl' = Tbl.create (Tbl.length tbl) in
+  Tbl.iter (fun k v -> Tbl.add tbl' k (conv_assoc v)) tbl;
   (tbl', List.map conv tail)

@@ -3,8 +3,8 @@ type t = {
   theme : Colors.theme;
   mutable style_override : Colors.style option;
   trivia : Trivia.t;
-  seen : (Ast.location, unit) Hashtbl.t;
-  collect : (Ast.location, unit) Hashtbl.t option;
+  seen : Trivia.locations;
+  collect : Trivia.locations option;
 }
 
 let create ~printer ~theme ?collect ~trivia () =
@@ -13,7 +13,7 @@ let create ~printer ~theme ?collect ~trivia () =
     theme;
     style_override = None;
     trivia;
-    seen = Hashtbl.create 16;
+    seen = Trivia.create_locations ();
     collect;
   }
 

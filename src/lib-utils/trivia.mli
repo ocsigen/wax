@@ -12,10 +12,24 @@ type associated = {
   after : entry list;
 }
 
-type t = (Ast.location, associated) Hashtbl.t
+type t
+(** A location-keyed trivia table (built by {!associate}). *)
 
-val associate :
-  ?only:(Ast.location, unit) Hashtbl.t -> context -> t * entry list
+val empty : unit -> t
+(** An empty trivia table (for a printing pass that carries no comments — e.g. a
+    binary-input conversion, or the dry pass that only populates [collect]). *)
+
+type locations
+(** An opaque set of source locations — the [only]/[collect]/[seen] tables. It
+    keys on the start/end byte offsets only (cheap to hash and compare, no
+    filename-string traversal), which the location-keyed lookup on every printed
+    atom used to be dominated by. Callers only create one with
+    {!create_locations} and pass it back; all lookups happen inside {!Trivia}.
+*)
+
+val create_locations : unit -> locations
+
+val associate : ?only:locations -> context -> t * entry list
 (** [associate ctx] associates trivia to locations. The second component holds
     the leftover comments that no location owns (trailing comments, or every
     comment when there are no locations); the caller prints them as tail trivia.
@@ -58,11 +72,7 @@ val dummy_assoc : associated
 (** The empty association ([before], [within] and [after] all empty). *)
 
 val get :
-  ?collect:(Ast.location, unit) Hashtbl.t ->
-  t ->
-  seen:(Ast.location, unit) Hashtbl.t ->
-  Ast.location option ->
-  associated
+  ?collect:locations -> t -> seen:locations -> Ast.location option -> associated
 (** [get trivia ~seen loc] returns the trivia associated with [loc], with
     de-duplication: it returns {!dummy_assoc} for [None], a missing location, or
     a location already present in [seen]; on the first real hit it records the
