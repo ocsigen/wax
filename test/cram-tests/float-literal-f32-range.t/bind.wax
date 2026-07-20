@@ -1,0 +1,2 @@
+#[export = "g"]
+fn g() -> f32 { let x: f32 = 1e300; x; }

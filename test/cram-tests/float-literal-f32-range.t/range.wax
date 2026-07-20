@@ -1,0 +1,8 @@
+#[export = "in_range"]
+fn in_range() -> f32 { 1.5 as f32; }
+
+#[export = "overflow"]
+fn overflow() -> f32 { 1e300 as f32; }
+
+#[export = "floor_overflow"]
+fn floor_overflow() -> f32 { (1e300).floor() as f32; }

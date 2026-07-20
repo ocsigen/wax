@@ -2792,6 +2792,14 @@ let float_literal_value s =
    applies), via the single-precision bit layout. *)
 let round_to_f32 f = Int32.float_of_bits (Int32.bits_of_float f)
 
+(* The lattice type of a float(-valued) literal [s]: the flexible [Float] (either
+   width, pinned by context) when [s] rounds to a valid f32, else concrete [f64].
+   An out-of-f32-range magnitude must never be pinned to f32 — it would print as
+   an out-of-range [f32.const] — so a later [as f32] lowers to a real [f64->f32]
+   demote instead of folding into the literal. *)
+let float_literal_lattice s =
+  if Wax_wasm.Misc.is_float32 s then Float else Valtype f64_valtype
+
 (* The float value of a constant operand, looking through a leading sign and a
    demote/promote to a float type. The latter matters because a constant [f32]
    has no literal suffix, so the decompiler prints it as [<lit> as f32] — a
@@ -5874,12 +5882,13 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
           if String.starts_with ~prefix:"0x" s then Int64.of_string_opt s
           else Int64.of_string_opt ("0u" ^ s)
         with
-        | None -> Float
+        | None -> float_literal_lattice s
         | Some v when Int64.unsigned_compare v 0xFFFFFFFFL > 0 -> LargeInt
         | Some _ -> Number
       in
       return_expression i desc (Cell.make lattice)
-  | Float _ as desc -> return_expression i desc (Cell.make Float)
+  | Float s as desc ->
+      return_expression i desc (Cell.make (float_literal_lattice s))
   | Cast _ | CastDesc _ | Test _ -> type_cast ctx i
   | Struct _ | StructDefault _ | StructDesc _ | StructDefaultDesc _ | Array _
   | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | String _ ->
