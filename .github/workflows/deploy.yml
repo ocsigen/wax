@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '26'
 
       # The browser playground (docs/src/playground.md) runs the toolchain
       # itself as WebAssembly. Build that bundle here, from the same commit as

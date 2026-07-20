@@ -42,7 +42,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26"
 
       - name: Set up Binaryen
         # Required by wasm_of_ocaml (wasm-opt/wasm-merge); same action and
@@ -88,7 +88,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: ["22", "24"]
+        node: ["22", "26"]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download package tarball
@@ -130,7 +130,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26"
           registry-url: "https://registry.npmjs.org"
 
       # Node 22 ships an npm older than the 11.5.1 that supports trusted
