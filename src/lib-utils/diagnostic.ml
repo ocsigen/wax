@@ -331,10 +331,9 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
       let annotations = get_annotations ~theme ~severity ~location ~related in
       let hunks = get_hunks annotations in
       let rec count_lines s i acc =
-        try
-          let j = String.index_from s i '\n' in
-          count_lines s (j + 1) (acc + 1)
-        with Not_found -> acc + 1
+        match String.index_from s i '\n' with
+        | j -> count_lines s (j + 1) (acc + 1)
+        | exception Not_found -> acc + 1
       in
       let total_lines = count_lines source 0 0 in
       let max_line =

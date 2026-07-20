@@ -3751,12 +3751,12 @@ let rec group_imports fields =
         }
     | _ -> f
   in
-  let rec merge = function
-    | [] -> []
+  let rec merge acc = function
+    | [] -> List.rev acc
     | f :: rest -> (
         match f.Ast.desc with
         | Ast.Import { module_; decl } ->
-            let rec take acc = function
+            let rec take group_acc = function
               | g :: tl
                 when match g.Ast.desc with
                      | Ast.Import { module_ = m2; _ } ->
@@ -3767,8 +3767,8 @@ let rec group_imports fields =
                     | Ast.Import { decl; _ } -> decl
                     | _ -> assert false
                   in
-                  take (d :: acc) tl
-              | tl -> (List.rev acc, tl)
+                  take (d :: group_acc) tl
+              | tl -> (List.rev group_acc, tl)
             in
             let decls, tl = take [ decl ] rest in
             let field =
@@ -3776,10 +3776,10 @@ let rec group_imports fields =
               | [ _ ] -> f
               | _ -> { f with Ast.desc = Ast.Import_group { module_; decls } }
             in
-            field :: merge tl
-        | _ -> f :: merge rest)
+            merge (field :: acc) tl
+        | _ -> merge (f :: acc) rest)
   in
-  merge (List.map recurse fields)
+  merge [] (List.map recurse fields)
 
 let module_ ?(strict_constants = false) ?features diagnostics
     (module_name, fields) =
