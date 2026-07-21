@@ -2537,21 +2537,24 @@ let bound_value_type ctx ~location result_ty =
    When converting from Wasm, the typed AST is rewritten ([ctx.simplify]) to
    drop type annotations that the inferred types make redundant, so the printed
    Wax is not littered with annotations a reader (or a re-parse) would recover
-   anyway. The decision is a "keep-bool": when [check_instruction] types a value
-   against an expected type (the annotation), it returns whether that annotation
-   is load-bearing — i.e. whether omitting it would change what the value
-   re-infers to. The binding/construct site then drops the annotation precisely
-   when [simplify] is on and the keep-bool says it is not needed.
+   anyway. The decision rests on the {!reinfer} value [check_instruction] returns
+   alongside each checked node: what an unannotated binding ([let x = <node>])
+   would re-infer the node to be, standalone. The binding/construct site then
+   drops the annotation precisely when [simplify] is on and that re-inference
+   already equals the annotation ([reinfer_needed] says it is not load-bearing).
 
    The pieces, by where the annotation lives:
-   - a scalar value vs. its annotation: [annotation_needed] (the leaf keep-bool,
-     comparing the value's standalone type to the expected one);
-   - a block/loop/try result type: [block_keep_bool] / [block_keep_needed],
-     with [context_block_typ] / [finalize_inferred] filling an omitted result
-     from context or dropping a redundant declared one;
-   - [is_null_initializer] is the one exception to the "equal type ⇒ drop" rule
-     (a bare [null] re-infers a floating type), and [drop_supertype] the one
-     relaxation (an immutable binding may drop a mere-supertype annotation).
+   - a scalar value vs. its annotation: the leaf [check_instruction] arm returns
+     [Typ] of the value's own snapshot; [reinfer_needed]/[annotation_needed]
+     compare its standalone type to the expected one;
+   - control constructs ([if]/[?:]/block/loop/try) join their sub-nodes'
+     re-inference ([join_reinfer]) so a nested tail reports its own type rather
+     than being read through a cell the expected type flowed into;
+   - a block/loop/try result type of its own: [block_keep_bool] /
+     [block_keep_reinfer], with [context_block_typ] / [finalize_inferred] filling
+     an omitted result from context or dropping a redundant declared one;
+   - [drop_supertype] is the one relaxation (an immutable binding may drop a
+     mere-supertype annotation), applied at the binding site.
    --------------------------------------------------------------------------- *)
 
 (* Whether [i] is a (possibly cast-wrapped) [null].
@@ -2566,10 +2569,14 @@ let bound_value_type ctx ~location result_ty =
    not round-trip. The annotation (or the cast) is what pins the type, so we must
    keep it.
 
-   A cleaner fix would compare against what omitting the annotation actually
-   re-infers to (resolving the floating [null] under the cast to [&?none] rather
-   than reading the cast's concrete type); until then we keep the annotation
-   whenever the initializer is a [null]. *)
+   The keep decision now does exactly compare against what omitting the
+   annotation re-infers to: the [Cast] arm of [check_instruction] reports [Typ]
+   of the floating [&?none] for an elided [null], and the leaf arm the same for a
+   bare one, so the ordinary [reinfer_needed] comparison keeps the annotation
+   without a special case at the binding site. This predicate remains for the two
+   places that still key on the syntactic shape rather than the re-inferred type:
+   [classify_trailing] (routing a trailing [null] through the result) and the
+   [Cast] arm's own guard (deciding whether the cast can be elided). *)
 let rec is_null_initializer (i : _ instr) =
   match i.desc with
   | Null -> true
@@ -2595,12 +2602,24 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
    dropping it narrows the binding to that subtype — sound because nothing
    reassigns it, and a narrower immutable global still satisfies every use (and
    every import) expecting the wider type. The standalone value must therefore
-   only be a *subtype* of the annotation, not equal to it. *)
+   only be a *subtype* of the annotation, not equal to it.
+
+   The one exception: a *bottom* reference ([&?none] and friends), the standalone
+   type of a bare [null]. Narrowing an annotation down to it is not a useful
+   subtype — it drops all type information and changes the emitted [ref.null $t]
+   to [ref.null none] — so a [null] whose annotation is a strict supertype keeps
+   it regardless of [drop_supertype], matching the documented "a null initializer
+   keeps its annotation" rule. Equality still drops ([const g: &?none = null]). *)
 let annotation_needed ?(drop_supertype = false) ctx
     (standalone : inferred_valtype option) expected =
+  let is_bottom_ref (v : inferred_valtype) =
+    match v.typ with
+    | Ref { typ = None_ | NoFunc | NoExtern | NoExn | NoCont; _ } -> true
+    | _ -> false
+  in
   match (standalone, Cell.get expected) with
   | Some v, Valtype b ->
-      if drop_supertype then
+      if drop_supertype && not (is_bottom_ref v) then
         not
           (Wax_wasm.Types.val_subtype (subtyping_info ctx) v.internal b.internal)
       else not (valtype_equal ctx v b)
@@ -3939,50 +3958,87 @@ let rec classify_trailing ctx desc =
   | Hinted (_, i) -> classify_trailing ctx i.desc
   | _ -> (false, false)
 
-(* Whether [i]'s value cannot be typed *at all* without an expected type flowing
-   in — a strictly-uninferrable construction whose type name has been dropped: an
-   array literal, which can name no element type from its contents, or a struct
-   with neither a name nor a field-set that pins one. This is a narrower notion
-   than [classify_trailing]'s [needs_context]: a bare string still resolves (to
-   [<string>]) and a [null] to [&?none], so those merely narrow rather than fail,
-   and the ordinary keep-bool (comparing the value's join to the context) already
-   keeps their annotation when the narrowing would matter. Only the forms here
-   defeat that test — read off a branch cell that resolved solely because the
-   annotation supplied the type, so the join looks redundant when dropping the
-   annotation would in fact leave the construction unable to re-infer. Used by
-   the [if] keep-bool, recursing through the control constructs whose fall-through
-   carries the context down (an [if]'s branches, a block's tail); [classify_trailing]
-   stops at those, reporting them self-resolving, which is right on the block path
-   (a nested block synthesizes through the inferring cell) but not for the [if]
-   keep-bool, which reads the branch result cells directly. *)
-let rec needs_expected_type ctx (i : _ instr) =
-  let tail instrs =
-    match List.rev instrs with
-    | last :: _ -> needs_expected_type ctx last
-    | [] -> false
-  in
-  match i.desc with
-  | Array (None, _, _)
-  | ArrayDefault (None, _)
-  | ArrayFixed (None, _)
-  | ArraySegment (None, _, _, _)
-  | StructDefault None ->
-      true
-  | Struct (None, fields) -> infer_struct_by_fields ctx fields = None
-  | If { if_block; else_block; _ } -> (
-      tail if_block.desc
-      || match else_block with Some b -> tail b.desc | None -> false)
-  | Block { block; _ }
-  | Loop { block; _ }
-  | Try { block; _ }
-  | TryTable { block; _ }
-  | TryCatch { block; _ } ->
-      tail block.desc
-  (* A [?:] threads the expected type into both value branches, as an [if] does;
-     a branch hint is advisory — recurse into what it wraps. *)
-  | Select (_, a, b) -> needs_expected_type ctx a || needs_expected_type ctx b
-  | Hinted (_, inner) -> needs_expected_type ctx inner
-  | _ -> false
+(* The re-inference of a checked node: what an unannotated binding
+   ([let x = <node>]) would infer its initializer to be, standalone — the
+   information a surrounding binding annotation is redundant against.
+   [check_instruction] returns it as its second component (the old keep-bool is
+   [reinfer_needed] applied to it), and the [If]/[Select]/[Block] arms join their
+   sub-nodes' compositionally. That is the fix the keep-bool needed: a nested
+   construct reports its own re-inference upward rather than being read through
+   its result cell, which the expected type has already flowed into — so a tail
+   whose type came from the context no longer looks redundant. *)
+type reinfer =
+  | Diverges
+      (** A [br]/[return]/[unreachable] tail: delivers no value, so it drops out
+          of a join (the sibling arm decides). *)
+  | Uninferrable
+      (** Cannot be typed at all without the annotation — an un-named
+          construction (an array literal, a field-ambiguous struct) whose type
+          name has been dropped. Poisons a join: no sibling can rescue it. *)
+  | Typ of inferred_type Cell.t
+      (** Re-infers to this cell standalone, and safely narrows — an immutable
+          binding may drop a mere-supertype annotation down to it
+          ([drop_supertype]). Holds for scalars (a call, a literal) and
+          constructions that re-infer their type structurally, without a written
+          name (a field-unique struct, a descriptor construction): dropping the
+          annotation then leaves a form that decompiles back to itself.
+
+          A *snapshot* (a fresh copy, taken before any unification the expected
+          type drove), holding the value's still-flexible type so a flexible
+          literal absorbs into a concrete sibling under [join_reinfer] exactly
+          as re-inference would; [join_reinfer] merges it, so it must not be
+          shared with the typed AST. *)
+  | Named of inferred_type Cell.t
+      (** Re-infers to this cell via a *written type name* (an array literal
+          [[t| ..]], a named struct-default) that the surrounding annotation
+          does not itself pin. Such a construction drops its annotation only
+          when the annotation is exactly its type, never by narrowing: narrowing
+          an immutable binding to the (strict-subtype) construction type would
+          make the written name redundant on the next cycle and the
+          decompilation flip between "name, no annotation" and "annotation, no
+          name" — so a strict-supertype annotation is load-bearing for
+          round-trip stability. Same snapshot discipline as [Typ]. *)
+
+(* Snapshot a cell into a fresh, mutation-safe [Typ]. *)
+let reinfer_of_cell ty = Typ (Cell.make (Cell.get ty))
+
+(* Snapshot a cell into a name-dependent [Named]. *)
+let named_reinfer_of_cell ty = Named (Cell.make (Cell.get ty))
+
+(* Join two branches' re-inference (an [if]'s arms, a [?:]'s values, a block's
+   exits): a diverging branch drops out, an uninferrable one poisons the whole,
+   and two typed branches join by [join_value_types] (a failed join is
+   uninferrable). [join_value_types] absorbs a flexible literal into a concrete
+   sibling, so a bare [1] alongside a typed [i64] joins to [i64] — the annotation
+   is then redundant — while two flexible literals stay flexible and re-default
+   the same on re-parse. A join is [Named] (equality-only) when either branch is:
+   if a branch relies on a written name, narrowing the whole would flip it. *)
+let join_reinfer ctx a b =
+  match (a, b) with
+  | Diverges, x | x, Diverges -> x
+  | Uninferrable, _ | _, Uninferrable -> Uninferrable
+  | (Typ ta | Named ta), (Typ tb | Named tb) -> (
+      let named =
+        match (a, b) with Named _, _ | _, Named _ -> true | _ -> false
+      in
+      match join_value_types ctx ta tb with
+      | Some c -> if named then Named c else Typ c
+      | None -> Uninferrable)
+
+(* Whether a binding annotation [expected] is load-bearing given its
+   initializer's re-inference: a diverging/uninferrable initializer keeps it (an
+   unannotated binding could not re-derive the type); a typed one keeps it iff
+   its standalone (re-defaulted) type differs from [expected]. [drop_supertype]
+   loosens the test for an immutable binding to allow narrowing (see
+   [annotation_needed]) — but only for a [Typ]; a [Named] drops only on exact
+   equality, never by narrowing. This derives the old scalar keep-bool from the
+   compositional re-inference. *)
+let reinfer_needed ?(drop_supertype = false) ctx reinfer expected =
+  match reinfer with
+  | Diverges | Uninferrable -> true
+  | Typ c ->
+      annotation_needed ~drop_supertype ctx (standalone_valtype ctx c) expected
+  | Named c -> annotation_needed ctx (standalone_valtype ctx c) expected
 
 (*** The instruction type-checker ***)
 
@@ -4451,9 +4507,8 @@ and descriptor_reftype ctx ~location ~nullable d' =
    before the recursion. *)
 and typed ctx child = hole_child ctx child Fun.id (instruction ctx child)
 
-and typed_check ?drop_supertype ctx expected child =
-  hole_child ctx child fst
-    (check_instruction ?drop_supertype ctx expected child)
+and typed_check ctx expected child =
+  hole_child ctx child fst (check_instruction ctx expected child)
 
 and type_branch ctx i =
   (* The branch instructions: [br], [br_if], [br_table] and the [br_on_*]
@@ -6253,8 +6308,9 @@ and type_let ctx i =
             | Some name -> not (StringSet.mem name.desc ctx.assigned_locals)
             | None -> true
           in
-          let* i', needed =
-            check_instruction ~drop_supertype ctx (valtype_cell ity) i'
+          let* i', reinfer = check_instruction ctx (valtype_cell ity) i' in
+          let needed =
+            reinfer_needed ~drop_supertype ctx reinfer (valtype_cell ity)
           in
           Option.iter
             (fun name ->
@@ -7501,13 +7557,14 @@ and type_simd_free_intrinsic_call ctx i func ns name args =
     return_expression i (Call (callee, args')) (simd_cell TV128))
 
 (* Bidirectional checking mode: type [i] against an [expected] type and report
-   whether the contextual annotation is load-bearing (the keep-bool). A
-   construction literal can fill an omitted type name from [expected] and shed a
-   redundant one; every other expression delegates to [instruction] and reports
-   whether it determined its own type. [expected] is the [Unknown] sentinel when
-   [check_instruction] is entered from [instruction] with no context (synthesis). *)
-and check_instruction ?(drop_supertype = false) ctx expected
-    (i : location instr) =
+   its {!reinfer} — what an unannotated binding would re-infer it to, standalone
+   — so the binding/construct site can decide whether the annotation is
+   load-bearing ([reinfer_needed]). A construction literal can fill an omitted
+   type name from [expected] and shed a redundant one; every other expression
+   delegates to [instruction] and snapshots its own type. [expected] is the
+   [Unknown] sentinel when [check_instruction] is entered from [instruction] with
+   no context (synthesis). *)
+and check_instruction ctx expected (i : location instr) =
   (* The construction's type name: explicit, or inferred from an exact expected
      type; [missing] reports a [cannot_infer_*] error and yields [None]. *)
   let resolve_name ty ~missing =
@@ -7577,6 +7634,38 @@ and check_instruction ?(drop_supertype = false) ctx expected
     | Some (_, def) when Option.is_some def.descriptor ->
         Error.descriptor_allocation_required ctx.diagnostics ~location:i.info
     | _ -> ()
+  in
+  (* The re-inference of a construction node (array / default struct /
+     descriptor construction). It re-infers to its own result standalone when its
+     output still names the type — an emitted array/struct-default *name*, or a
+     descriptor construction whose descriptor [d] pins the type. A name-less form
+     (the name dropped as redundant, or absent, and no descriptor) cannot
+     re-infer without the context, so it is [Uninferrable]. A name-carrying array
+     or struct-default is [Named] (its written name, which a mere-supertype
+     annotation does not pin, is load-bearing for round-trip stability, so the
+     annotation drops only on exact equality); a descriptor construction, which
+     re-infers structurally through [d] with no written name, is a narrowable
+     [Typ]. The [Struct] arm computes its own re-inference inline (field-unique,
+     hence structural and narrowable). *)
+  let construction_reinfer node =
+    let named =
+      match node.desc with
+      | Array (name, _, _)
+      | ArrayDefault (name, _)
+      | ArrayFixed (name, _)
+      | ArraySegment (name, _, _, _)
+      | StructDefault name ->
+          Option.is_some name
+      | _ -> false
+    in
+    match standalone_valtype ctx (expression_type ctx node) with
+    | Some _ when named -> named_reinfer_of_cell (expression_type ctx node)
+    | Some _ -> (
+        match node.desc with
+        | StructDesc _ | StructDefaultDesc _ ->
+            reinfer_of_cell (expression_type ctx node)
+        | _ -> Uninferrable)
+    | None -> Uninferrable
   in
   match i.desc with
   | Struct (ty, fields) ->
@@ -7677,14 +7766,15 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let*! result = construction_result typ in
             return_expression i (Struct (emitted, List.rev fields')) result
       in
-      (* The outer binding annotation is redundant when the fields alone
-         re-infer this exact type — [field_match] names [node]'s own result heap
-         type, so the bare [{..}] re-resolves to it — and the annotation names
-         that identical type (so dropping it neither widens it nor changes its
-         nullability). Read back from [node] rather than the branch-local [typ],
-         so the keep-bool needs no mutable cell to escape the [let*!] arms.
-         Mirrors the scalar keep-bool [annotation_needed]; the drop itself stays
-         gated on [simplify] at the binding sites. *)
+      (* What a bare [{..}] re-infers to: when the fields alone name this exact
+         type — [field_match] names [node]'s own result heap type — the bare
+         construction re-resolves to it standalone, so it reports [Typ] of its own
+         result and the binding site compares that to its annotation ([let x: T =
+         {..}] drops the [: T] when [T] is that type). When the fields are
+         ambiguous a name-less [{..}] cannot re-infer at all, so it is
+         [Uninferrable] and any surrounding annotation is load-bearing. Read the
+         result back from [node] rather than the branch-local [typ], so no mutable
+         cell need escape the [let*!] arms. *)
       let standalone = standalone_valtype ctx (expression_type ctx node) in
       let fields_pin_result =
         match (field_match, standalone) with
@@ -7694,9 +7784,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       return
         ( node,
-          if fields_pin_result then
-            annotation_needed ~drop_supertype ctx standalone expected
-          else true )
+          if fields_pin_result then reinfer_of_cell (expression_type ctx node)
+          else Uninferrable )
   | StructDefault ty ->
       let* node =
         match
@@ -7717,7 +7806,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let*! result = construction_result typ in
             return_expression i (StructDefault emitted) result
       in
-      return (node, true)
+      return (node, construction_reinfer node)
   | StructDesc (d, fields) ->
       (* [{ descriptor(d) | fields }] lowers to [struct.new_desc], which pushes
          the field values then the descriptor on top. But the descriptor's type
@@ -7814,7 +7903,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
         let st1, node = type_body { st with pending = front_pending } in
         let st2 = fold_operand ctx d d { st1 with pending = [] } in
         replay ();
-        (st2, (node, true))
+        (st2, (node, construction_reinfer node))
   | StructDefaultDesc d ->
       let* d, target =
         descriptor_target ctx ~location:i.info ~nullable:false d
@@ -7834,7 +7923,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let*! result = construction_result typ in
             return_expression i (StructDefaultDesc d) result
       in
-      return (node, true)
+      return (node, construction_reinfer node)
   | Array (ty, i1, i2) ->
       let* node =
         match
@@ -7869,7 +7958,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let*! result = construction_result typ in
             return_expression i (Array (emitted, i1', i2')) result
       in
-      return (node, true)
+      return (node, construction_reinfer node)
   | ArrayDefault (ty, n) ->
       let* node =
         match
@@ -7890,7 +7979,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let*! result = construction_result typ in
             return_expression i (ArrayDefault (emitted, n')) result
       in
-      return (node, true)
+      return (node, construction_reinfer node)
   | ArrayFixed (ty, instrs) ->
       let* node =
         match
@@ -7932,7 +8021,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let*! result = construction_result typ in
             return_expression i (ArrayFixed (emitted, List.rev instrs')) result
       in
-      return (node, true)
+      return (node, construction_reinfer node)
   | ArraySegment (ty, seg, off, len) ->
       let* node =
         match
@@ -7966,7 +8055,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let*! result = construction_result typ in
             return_expression i (ArraySegment (emitted, seg, off', len')) result
       in
-      return (node, true)
+      return (node, construction_reinfer node)
   | String (ty, s) ->
       (* A string builds a byte array. Its natural type is the built-in
          [<string>] ([mut i8]); it adopts a different array type only when the
@@ -8029,10 +8118,15 @@ and check_instruction ?(drop_supertype = false) ctx expected
         let*! result = construction_result typ in
         return_expression i (String (emitted, s)) result
       in
+      (* A bare string re-infers to its natural [<string>] type (or the emitted
+         non-default name resolves the same); it never fails to type, so it
+         reports [Typ] of that natural type and the binding site drops a
+         redundant annotation exactly as before. *)
       return
         ( node,
-          annotation_needed ~drop_supertype ctx string_valtype_natural expected
-        )
+          match string_valtype_natural with
+          | Some iv -> Typ (valtype_cell iv)
+          | None -> Uninferrable )
   | Cast (e, typ) when is_null_initializer e ->
       let* i' = instruction ctx i in
       (* A cast of [null] is redundant when the checking context already
@@ -8063,7 +8157,18 @@ and check_instruction ?(drop_supertype = false) ctx expected
         else i'
       in
       if has_expectation expected then check_type ctx i' expected;
-      return (i', true)
+      (* The elided form is a bare [null], which re-infers the *floating* [&?none]
+         (and would lower to [ref.null none]) — not the type the cast pinned — so
+         report that: a surrounding annotation stays load-bearing (its join with a
+         concrete sibling still rescues it, per [join_reinfer]). A cast kept in the
+         output re-infers its own pinned type. This discharges what
+         [is_null_initializer] used to special-case at the binding sites. *)
+      let reinfer =
+        match i'.desc with
+        | Null -> Typ (valtype_cell (ref_none_valtype ~nullable:true))
+        | _ -> reinfer_of_cell (expression_type ctx i')
+      in
+      return (i', reinfer)
   | If { label; typ; cond; if_block; else_block } when has_expectation expected
     ->
       (* The checking context supplies a result type. Drop a redundant [=> T]
@@ -8071,8 +8176,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
          — then re-parse recovers it from the same source (a function's [-> T],
          a typed binding, a call argument), so nothing is lost or loosened. On
          re-parse the annotation is absent, so fill the result type back in from
-         [expected] for [to_wasm]. A [br] to the if's own label is fine: its
-         value is checked against the result like the branch tails. *)
+         [expected] for [to_wasm]. A [br] to the if's own label delivers a value
+         to its exit like the branch tails, but that value is invisible to the
+         per-branch re-inference below (a branch ending in such a [br] reads as
+         [Diverges]); see [label_delivers] for how the annotation is kept for it. *)
       let* cond' = instruction ctx cond in
       check_type ctx cond' i32_cell;
       if Array.length typ.params > 0 then
@@ -8088,24 +8195,26 @@ and check_instruction ?(drop_supertype = false) ctx expected
           | _ -> expected
       in
       let results = [| result_cell |] in
-      let if_block' =
-        {
-          if_block with
-          desc = block ctx i.info label [||] results results if_block.desc;
-        }
+      (* Each branch reports its own fall-through re-inference (see
+         [block_with_keep]); the if's is their join. *)
+      let if_desc, if_reinfer =
+        block_with_keep ctx i.info label [||] results results if_block.desc
       in
-      let else_block' =
+      let if_block' = { if_block with desc = if_desc } in
+      let else_block', else_reinfer =
         match else_block with
         | Some b ->
-            Some
-              {
-                b with
-                desc = block ctx i.info label [||] results results b.desc;
-              }
+            let else_desc, else_reinfer =
+              block_with_keep ctx i.info label [||] results results b.desc
+            in
+            (Some { b with desc = else_desc }, else_reinfer)
         | None ->
             if not (missing_else_ok ctx [||] results) then
               Error.if_without_else ctx.diagnostics ~location:i.info;
-            None
+            (* No else: the missing branch delivers no value, so it drops out of
+               the join and the [then] branch decides (recovery for what is
+               already an [if_without_else] error). *)
+            (None, Diverges)
       in
       (* The if's result (its annotation, or [expected] when omitted) must fit
          the context — catches e.g. an [=> i64] if where [i32] is expected. *)
@@ -8126,61 +8235,33 @@ and check_instruction ?(drop_supertype = false) ctx expected
         else typ
       in
       (* The caller's binding annotation (e.g. [let x: T = ..]) is redundant iff
-         the branches alone infer exactly [expected] — i.e. an unannotated [let]
-         would re-infer it. Read each branch's fall-through type (its lub) and
-         compare; a branch that diverges contributes none.
+         an unannotated [let] would re-infer it — i.e. iff the join of the
+         branches' own re-inference already equals it (decided at the binding
+         site by [reinfer_needed]). Reading each branch's re-inference upward,
+         rather than its result cell (which the annotation flowed into), is what
+         makes a context-typed tail — a flexible literal, a nested [if], a bare
+         [null] rescued by a sibling — no longer look spuriously redundant.
 
-         A bare [null] tail is the exception: dropping the annotation left it a
-         bare [null] (its pinning cast was elided against [expected]), and its
-         cell still reads that pinned type — but on re-parse it re-infers the
-         *floating* [&?none] (and lowers to [ref.null none], not [ref.null t]), so
-         contribute that instead. Then a lone [null] arm still drops the
-         annotation when a sibling arm pins the concrete type (their join is that
-         type), while all-[null] arms correctly keep it (their join is [&?none]).
-         Mirrors [is_null_initializer], which keeps the annotation of a bare-[null]
-         binding for the same reason. *)
-      let none_ref = internalize ctx (Ref { nullable = true; typ = None_ }) in
-      let branch_last b =
-        match List.rev b with
-        | last :: _ -> (
-            match last.desc with
-            | Ast.Null -> none_ref
-            | _ -> ( match fst last.info with [| c |] -> Some c | _ -> None))
-        | [] -> None
+         A value delivered by a [br] to the if's own label also reaches the exit
+         but is invisible to the fall-through join above ([from_wasm] does emit
+         this — a [br 0] inside an [if (result T)] round-trips to [br 'l ..]).
+         Its re-inference is not tracked, and reading its resolved cell would miss
+         an un-named construction whose name was dropped because the label pinned
+         the type (it would recompile only under the annotation). So keep the
+         annotation whenever the if's label was branched to: [ctx.used_labels]
+         records the label's definition site when [branch_target] resolved a [br]
+         to it, and the label is unique and in scope only within these branches.
+         Conservative (it keeps even for an inferrable delivery), but a [br] to an
+         [if]'s own label is rare in decompiled code, and this never wrongly
+         drops. *)
+      let label_delivers =
+        match label with
+        | Some l -> IntSet.mem l.info.loc_start.pos_cnum !(ctx.used_labels)
+        | None -> false
       in
-      let contents_lub =
-        match
-          ( branch_last if_block'.desc,
-            match else_block' with Some b -> branch_last b.desc | None -> None
-          )
-        with
-        | Some a, Some b -> join_value_types ctx a b
-        | (Some _ as r), None | None, (Some _ as r) -> r
-        | None, None -> None
-      in
-      (* A branch whose tail value takes its type solely from [expected] (an
-         un-named construction — see [needs_expected_type]) makes the annotation
-         load-bearing regardless of the lub: dropping it leaves that construction
-         unable to re-infer its type. *)
-      let branch_needs_expected b =
-        match List.rev b with
-        | last :: _ -> needs_expected_type ctx last
-        | [] -> false
-      in
-      let needed =
-        branch_needs_expected if_block'.desc
-        || (match else_block' with
-          | Some b -> branch_needs_expected b.desc
-          | None -> false)
-        ||
-        match contents_lub with
-        | Some v -> (
-            match
-              (standalone_valtype ctx v, standalone_valtype ctx expected)
-            with
-            | Some a, Some b -> not (valtype_equal ctx a b)
-            | _ -> true)
-        | None -> true
+      let reinfer =
+        if label_delivers then Uninferrable
+        else join_reinfer ctx if_reinfer else_reinfer
       in
       let* node =
         return_statement i
@@ -8194,16 +8275,18 @@ and check_instruction ?(drop_supertype = false) ctx expected
              })
           results
       in
-      return (node, needed)
+      return (node, reinfer)
   (* A [do]/[loop]/[try]/[try_table] block in a checking context need not
      annotate its own result: thread [expected] in as the result type so a
      redundant annotation drops (on [simplify]) and re-parse recovers it from the
      same context ([context_result_cell] / [context_block_typ]). Branches to the
      block's own label, and (for [try]) the catch handlers, are checked against
-     [expected] like the fall-through value. The keep-bool is conservatively
-     [true]: unlike an [if], the value may arrive via a branch the cheap
-     fall-through test would miss, so a surrounding binding annotation is kept —
-     safe, at worst occasionally redundant. *)
+     [expected] like the fall-through value. The block's re-inference (for a
+     surrounding binding annotation) is the join of every value reaching its exit
+     — the fall-through plus branched/caught values, all collected by
+     [block_keep_bool] — or, when its own result annotation survives in the
+     output, that annotation (the block pins its type itself); see
+     [block_keep_reinfer]. *)
   | Block { label; typ; block = { desc = instrs; _ } as blkloc }
     when has_expectation expected ->
       if Array.length typ.params > 0 then
@@ -8213,7 +8296,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
         block_keep_bool ctx i.info label ~result:result_cell
           ~br_params:[| result_cell |] instrs
       in
-      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
+      let kept_annotation =
+        typ.results <> [||]
+        && not
+             (ctx.simplify
+             && block_result_redundant ctx typ ~expected ~result_cell)
+      in
+      let reinfer =
+        block_keep_reinfer ctx ~loc:i.info ~result:result_cell ~kept_annotation
+          r
+      in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ =
         context_block_typ ctx ~keyword:"do" i.info.loc_start
@@ -8224,7 +8316,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
           (Block { label; typ; block = { blkloc with desc = instrs' } })
           [| result_cell |]
       in
-      return (node, needed)
+      return (node, reinfer)
   | Loop { label; typ; block = { desc = instrs; _ } as blkloc }
     when has_expectation expected ->
       if Array.length typ.params > 0 then
@@ -8238,7 +8330,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
         block_keep_bool ctx i.info label ~result:result_cell ~br_params:[||]
           instrs
       in
-      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
+      let kept_annotation =
+        typ.results <> [||]
+        && not
+             (ctx.simplify
+             && block_result_redundant ctx typ ~expected ~result_cell)
+      in
+      let reinfer =
+        block_keep_reinfer ctx ~loc:i.info ~result:result_cell ~kept_annotation
+          r
+      in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ =
         context_block_typ ctx ~keyword:"loop" i.info.loc_start
@@ -8249,7 +8350,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
           (Loop { label; typ; block = { blkloc with desc = instrs' } })
           [| result_cell |]
       in
-      return (node, needed)
+      return (node, reinfer)
   | TryTable { label; typ; block = { desc = body; _ } as blkloc; catches }
     when has_expectation expected ->
       if Array.length typ.params > 0 then
@@ -8262,7 +8363,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
           ~br_params:[| result_cell |] body
       in
       check_trytable_catches ctx catches;
-      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
+      let kept_annotation =
+        typ.results <> [||]
+        && not
+             (ctx.simplify
+             && block_result_redundant ctx typ ~expected ~result_cell)
+      in
+      let reinfer =
+        block_keep_reinfer ctx ~loc:i.info ~result:result_cell ~kept_annotation
+          r
+      in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ =
         context_block_typ ctx ~keyword:"try" i.info.loc_start
@@ -8274,7 +8384,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
              { label; typ; block = { blkloc with desc = body' }; catches })
           [| result_cell |]
       in
-      return (node, needed)
+      return (node, reinfer)
   | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
     when has_expectation expected ->
       assert (typ.params = [||]);
@@ -8290,7 +8400,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
       let catches, catch_all =
         type_try_catches ctx i label ~results:[| r |] catches catch_all
       in
-      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
+      let kept_annotation =
+        typ.results <> [||]
+        && not
+             (ctx.simplify
+             && block_result_redundant ctx typ ~expected ~result_cell)
+      in
+      let reinfer =
+        block_keep_reinfer ctx ~loc:i.info ~result:result_cell ~kept_annotation
+          r
+      in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ =
         context_block_typ ctx ~keyword:"try" i.info.loc_start
@@ -8308,17 +8427,18 @@ and check_instruction ?(drop_supertype = false) ctx expected
              })
           [| result_cell |]
       in
-      return (node, needed)
+      return (node, reinfer)
   | Select (i1, i2, i3) when has_expectation expected ->
       (* The expression form of an annotated [if]: push the context's [expected]
          type into both value branches, so a construction there can drop its
          type name (re-parse re-pushes it through this same arm); the condition
          [i1] is an [i32]. The branches are evaluated before the condition, as in
-         synthesis. The keep-bool is the disjunction of the branches' — the
-         surrounding binding annotation is load-bearing iff a branch relied on it
-         (e.g. to drop a name, or because its own type differs from [expected]). *)
-      let* i2', needed2 = typed_check ~drop_supertype ctx expected i2 in
-      let* i3', needed3 = typed_check ~drop_supertype ctx expected i3 in
+         synthesis. Like an [if], the [?:]'s re-inference is the join of its two
+         value branches' (via [join_reinfer]) — so a bare [null] alongside a typed
+         sibling gains the same precision the [if] arm has (the join rescues it),
+         rather than the coarser disjunction of per-branch keep-bools. *)
+      let* i2', reinf2 = typed_check ctx expected i2 in
+      let* i3', reinf3 = typed_check ctx expected i3 in
       let* i1' = typed ctx i1 in
       check_type ctx i1' i32_cell;
       (* The result is the branches' join, not [expected]: each branch is already
@@ -8333,33 +8453,30 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | None -> expected
       in
       let* node = return_expression i (Select (i1', i2', i3')) ty in
-      return (node, needed2 || needed3)
+      return (node, join_reinfer ctx reinf2 reinf3)
   | Hinted (h, inner) ->
       (* The hint is advisory: check the wrapped branch against the same
          expectation — so a trailing hinted [if] still receives the context's
          result type and can drop a redundant annotation — and carry the result
-         and keep-bool through unchanged. *)
-      let* inner', needed =
-        check_instruction ~drop_supertype ctx expected inner
-      in
+         and re-inference through unchanged. *)
+      let* inner', reinfer = check_instruction ctx expected inner in
       let* node = return_statement i (Hinted (h, inner')) (fst inner'.info) in
-      return (node, needed)
+      return (node, reinfer)
   | _ ->
       let* i' = instruction ctx i in
-      (* Capture the value's own standalone-resolved type BEFORE [check_type]
-           mutates the cell, then decide whether the annotation is load-bearing
-           (see [annotation_needed]). *)
-      let standalone = standalone_valtype ctx (expression_type ctx i') in
-      let needed = annotation_needed ~drop_supertype ctx standalone expected in
+      (* Snapshot the value's own type BEFORE [check_type] mutates the cell: this
+         is what an unannotated binding would re-infer it to. Held flexible so a
+         join with a concrete sibling absorbs it (see [reinfer_of_cell]). *)
+      let reinfer = reinfer_of_cell (expression_type ctx i') in
       if has_expectation expected then check_type ctx i' expected;
-      return (i', needed)
+      return (i', reinfer)
 
 (* Run [check_instruction] in statement (empty-stack) position, mirroring the expression
    bridge in [toplevel_instruction]'s default arm: pop the hole operands off the
-   stack into the parameter list, run [check_instruction] on them, and surface its keep-bool.
-   Used for an annotated global initializer (a constant expression). *)
-and check_toplevel ?(drop_supertype = false) ctx expected i =
-  with_holes ctx i (fun () -> check_instruction ~drop_supertype ctx expected i)
+   stack into the parameter list, run [check_instruction] on them, and surface its
+   re-inference. Used for an annotated global initializer (a constant expression). *)
+and check_toplevel ctx expected i =
+  with_holes ctx i (fun () -> check_instruction ctx expected i)
 
 (* Type call arguments. When the callee's parameter types are known and the
    arity matches, check each argument against its parameter (so a struct/array
@@ -8885,7 +9002,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let lowered =
         Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default ~arms
       in
-      let* typed = block_contents ctx [||] lowered in
+      let* typed, _ = block_contents ctx [||] lowered in
       let index', arms' = rebuild_dispatch typed arms in
       return_statement i
         (Dispatch { index = index'; cases; default; arms = arms' })
@@ -8906,7 +9023,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
           ~default
       in
-      let* typed = block_contents ctx [||] lowered in
+      let* typed, _ = block_contents ctx [||] lowered in
       let arms', default', scrut_opt =
         (* On an erroneous scrutinee the typed lowering may not peel apart into
            the expected block nesting; recover with empty arm/default bodies (the
@@ -9100,8 +9217,16 @@ and type_try_catches ctx i label ~results catches catch_all =
   (catches, catch_all)
 
 and block_contents ctx results l =
+  (* Alongside the typed body, report the trailing value's re-inference for a
+     caller that keeps it ([block_with_keep] / [block_keep_bool]): [Some r] when
+     this function itself produced the fall-through value by routing the trailing
+     instruction through [check_instruction] (the [Empty] case below, where the
+     pushed cell is the coerced result and so hides the natural type); [None]
+     otherwise, leaving the caller to snapshot the fall-through off the stack (the
+     value came from an earlier instruction, or was synthesized and pushed at its
+     own natural type). *)
   match l with
-  | [] -> return []
+  | [] -> return ([], None)
   (* A trailing instruction that produces the block's single value is routed
      through [check_instruction] (against the result type) rather than synthesized,
      so the result type flows into it: a nested block's own result annotation then
@@ -9123,10 +9248,12 @@ and block_contents ctx results l =
                result cell is a [Collecting] one: checking this trailing value
                against it would discard it ([has_expectation] is false). Instead
                synthesize the value — a nested block runs its own inference — and
-               push its type, to be collected by the enclosing block. *)
+               push its type, to be collected by the enclosing block. The pushed
+               cell is the value's own natural type, so the caller can snapshot it
+               ([None]). *)
             let* i' = with_holes ctx i (fun () -> instruction ctx i) in
             let* () = push_results ~loc:i.info (fst i'.info) in
-            return [ i' ]
+            return ([ i' ], None)
         | Empty ->
             (* The stack is empty, so this trailing instruction must produce the
                 block's value: a construction literal (incl. a string) or null
@@ -9136,10 +9263,12 @@ and block_contents ctx results l =
                 [check_instruction] has already validated the value against [results.(0)]
                 (reporting any mismatch once), so push the result type itself
                 rather than the value's own type — that keeps the block's
-                [pop_args] from reporting the same mismatch a second time. *)
-            let* i', _ = check_toplevel ctx results.(0) i in
+                [pop_args] from reporting the same mismatch a second time. The
+                pushed cell is that coerced result, so surface the value's own
+                re-inference ([Some]) for the caller instead. *)
+            let* i', reinfer = check_toplevel ctx results.(0) i in
             let* () = push_results ~loc:i.info results in
-            return [ i' ]
+            return ([ i' ], Some reinfer)
         | Cons _ | Unreachable | Poisoned ->
             (* The block's value is already on the stack, produced by an earlier
                 instruction (or the code is unreachable / the stack poisoned);
@@ -9148,7 +9277,7 @@ and block_contents ctx results l =
                 [check_instruction]. *)
             let* i' = toplevel_instruction ctx i in
             let* () = push_results ~loc:i.info (fst i'.info) in
-            return [ i' ])
+            return ([ i' ], None))
           st
   | i :: r ->
       fun st ->
@@ -9172,38 +9301,62 @@ and block_contents ctx results l =
                 ]
         | _ -> ());
         let st_after, () = push_results ~loc:i.info (fst i'.info) st_after in
-        let st_after, r' = block_contents ctx results r st_after in
-        (st_after, merge_let_tuple ctx i' r')
+        (* The fall-through is the tail's; propagate its re-inference. *)
+        let st_after, (r', reinfer) = block_contents ctx results r st_after in
+        (st_after, (merge_let_tuple ctx i' r', reinfer))
 
-and block ctx loc label params results br_params block =
+(* Like [block] but also report the fall-through value's re-inference — what an
+   unannotated [let x = <block>] would re-infer it to, standalone — for the [if]
+   arm's per-branch join. Two sources feed it: the routed trailing instruction's
+   own re-inference ([block_contents] returns [Some]), else a snapshot of the
+   top-of-stack cell before [pop_args] coerces it to the result (the fall-through
+   came from an earlier instruction). A branch that delivers no value ([Empty] /
+   [Unreachable] / [Poisoned] at the exit) [Diverges], dropping out of the join.
+   A value branched to the block's own label is not seen here (it is not on the
+   exit stack) — [block_keep_bool] collects those for the block forms; the [if]
+   arm reads only fall-throughs, sound because [from_wasm] never emits a [br] to
+   an [if]'s own label carrying an uninferrable value (see IF-KEEP-BOOL.md). *)
+and block_with_keep ctx loc label params results br_params body =
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* () = push_results ~loc params in
-     let* block' =
+     let* body', reinf_opt =
        block_contents
          { ctx with control_types = (label, br_params) :: ctx.control_types }
-         results block
+         results body
      in
-     let* () = pop_args ctx `Output ~location:loc results in
-     return block')
+     fun st ->
+       let keep =
+         match reinf_opt with
+         | Some r -> r
+         | None -> (
+             match st with
+             | Cons (_, tv, _) -> reinfer_of_cell tv
+             | Empty | Unreachable | Poisoned -> Diverges)
+       in
+       let st, () = pop_args ctx `Output ~location:loc results st in
+       (st, (body', keep)))
+
+and block ctx loc label params results br_params body =
+  fst (block_with_keep ctx loc label params results br_params body)
 
 (* Like [block] for a paramless block checked against a single [result] type, but
-   also report whether the surrounding binding annotation is needed — i.e. would
-   [let x = <block>] (no annotation) re-infer a different type? It is *not* needed
-   exactly when the value the block produces already has type [result] on its
-   own, without the context forcing it. The block's value is the join of the
-   values reaching its exit, all of which are checked to be subtypes of [result];
-   so when the fall-through's own natural type is already [result], that join is
-   [result] regardless of any value branched to the block's label — and the
-   annotation is redundant. Read the fall-through's natural type off the stack,
-   unconstrained, before [pop_args] coerces it to [result], and compare
-   ([annotation_needed], as the leaf [check_instruction] arm does). Stay conservative
-   (needed) only when the trailing instruction is a construction — routed through
-   [result] to resolve a context-pinned type name, which hides its natural type. A
-   trailing nested block is instead synthesized (routed through the inferring cell)
-   so its type joins like any other exit value. Returns the typed body and that
-   keep-bool. *)
+   collect every value reaching its exit — the fall-through plus values branched
+   to its label — at their natural types into a [Collecting] cell, so
+   [block_keep_reinfer] can later read the block's own re-inference (the join of
+   those, when the block's result annotation is not itself kept). The trailing
+   instruction needs care: one that resolves its own type joins like any other
+   exit value (route it through the inferring cell — it synthesizes), but one that
+   needs the context to pin its type must be routed through the concrete [result],
+   which hides its natural type, so the annotation stays load-bearing for it. A
+   nested block always resolves itself; a struct does iff its fields name a unique
+   type ([infer_struct_by_fields]) — then it synthesizes the same with or without
+   the context, so route it through the cell; a field-ambiguous struct needs the
+   context to pin its type (a named one still relies on it to drop its redundant
+   name), so keep the annotation. (Only structs are field-checked here; other
+   constructions stay conservative.) Returns the typed body and the [Collecting]
+   cell for [block_keep_reinfer]. *)
 and block_keep_bool ctx loc label ~result ~br_params body =
-  (* The keep-bool is decided from every value reaching the exit: the fall-through
+  (* The re-inference is decided from every value reaching the exit: the fall-through
      plus values branched to the label, collected at their natural types into [cs]
      (the branch-target [r] is a [Collecting] cell), then joined. The trailing
      instruction needs care: one that resolves its own type joins like any other
@@ -9232,7 +9385,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
      a construction or leaf is checked against the concrete result. *)
   let result_routing = if trailing_nested_block then r else result in
   with_empty_stack ctx ~location:loc ~kind:Block
-    (let* block' =
+    (let* block', _ =
        block_contents
          { ctx with control_types = (label, br) :: ctx.control_types }
          [| result_routing |] body
@@ -9246,26 +9399,45 @@ and block_keep_bool ctx loc label ~result ~br_params body =
        | Empty | Unreachable | Poisoned -> ());
        let st, () = pop_args ctx `Output ~location:loc [| result |] st in
        (* Return the cell: the caller may deliver more values to it (a [try]'s catch
-          handlers) before [block_keep_needed] reads the join. Every value reaching
+          handlers) before [block_keep_reinfer] reads the join. Every value reaching
           the exit is already validated against [result] — the fall-through by
           [pop_args], the branched/caught values per-delivery as they were
-          collected — so the join only decides the keep-bool. *)
+          collected — so the join only decides the re-inference. *)
        (st, (block', r)))
 
-(* The keep-bool for a checked block typed by [block_keep_bool]: keep the
-   annotation when a delivery relied on it ([cs.needed] — a trailing construction,
-   or a [resume] handler that read the cell) or the join of the values reaching the
-   exit differs from the context type [result]. Read after any extra deliveries
-   (a [try]'s catch handlers) have been collected. *)
-and block_keep_needed ctx ~loc ~result r =
-  match Cell.get r with
-  | Collecting cs -> (
-      cs.needed
-      ||
-      match join_collected ctx ~location:loc cs.collected with
-      | Some j -> annotation_needed ctx (standalone_valtype ctx j) result
-      | None -> true)
-  | _ -> true
+(* The re-inference of a checked block typed by [block_keep_bool] — what an
+   unannotated [let x = <block>] would re-infer it to. When the block's own result
+   annotation survives in the output ([kept_annotation]) it pins its type itself,
+   so the block re-infers to [result] regardless of its contents. Otherwise the
+   annotation is dropped/omitted and the block re-infers from its contents: the
+   join of every value reaching the exit (the fall-through plus branched/caught
+   values collected into [cs]). A delivery that relied on the context ([cs.needed]
+   — a trailing construction, or a [resume] handler that read the cell) cannot be
+   re-derived, so it is [Uninferrable]; a body that delivers nothing [Diverges].
+   Read after any extra deliveries (a [try]'s catch handlers) have been collected. *)
+and block_keep_reinfer ctx ~loc ~result ~kept_annotation r =
+  (* The re-inference from the block's contents: the join of every value reaching
+     its exit. Always computed — [join_collected] reports a genuine exit-type
+     mismatch (values with no common supertype) as a side effect, which must fire
+     regardless of the keep decision — but discarded below when the block's own
+     annotation is kept (it then pins the type itself). *)
+  let contents_reinfer =
+    match Cell.get r with
+    | Collecting cs -> (
+        if cs.needed then Uninferrable
+        else
+          match join_collected ctx ~location:loc cs.collected with
+          | Some j -> reinfer_of_cell j
+          | None -> Diverges)
+    | _ -> Uninferrable
+  in
+  (* A kept [=> T] is a *written* result annotation the surrounding context does
+     not pin, so — like a [Named] construction — the block re-infers to it only by
+     exact equality, never by narrowing: narrowing an immutable outer binding down
+     to a kept block result would flip the decompilation between "outer
+     annotation, no block result" and "block result, no outer annotation" on the
+     next cycle. *)
+  if kept_annotation then named_reinfer_of_cell result else contents_reinfer
 
 (* From the [inferred] result of an inferring block (already joined across an
    [if]'s branches) and the source [typ], produce the result-type cells for the
@@ -9476,7 +9648,7 @@ and fresh_collecting ?(needed = false) declared =
    calls it once per branch with a shared cell so both branches' exits join. *)
 and collect_into ctx loc label ~cs ~r instrs =
   with_empty_stack ctx ~location:loc ~kind:Block
-    (let* body' =
+    (let* body', _ =
        block_contents
          { ctx with control_types = (label, [| r |]) :: ctx.control_types }
          [| r |] instrs
@@ -9993,14 +10165,13 @@ let rec globals ctx fields =
             | Some annot -> (
                 (* Type the initializer in checking mode against the annotation,
                    mirroring a [let] binding: an omitted struct/array name is
-                   inferred from it, and the keep-bool decides whether the
-                   annotation is redundant (dropped only when converting from
-                   Wasm, and never for a [null] whose bare form would re-infer a
-                   floating type — see [is_null_initializer]). An immutable
-                   ([const]) global additionally drops an annotation that is a
-                   mere supertype of the initializer's type ([drop_supertype]),
-                   narrowing the global to that subtype — sound since nothing
-                   reassigns it (see [annotation_needed]). *)
+                   inferred from it, and its re-inference ([reinfer_needed])
+                   decides whether the annotation is redundant (dropped only when
+                   converting from Wasm). An immutable ([const]) global
+                   additionally drops an annotation that is a mere supertype of
+                   the initializer's type ([drop_supertype]), narrowing the global
+                   to that subtype — sound since nothing reassigns it (see
+                   [annotation_needed]). *)
                 match internalize_valtype ctx annot with
                 | None ->
                     let def' =
@@ -10012,15 +10183,19 @@ let rec globals ctx fields =
                     (* Type the initializer before registering the global, so a
                        self-reference (an initializer mentioning this global) is
                        still reported as an unknown name. *)
-                    let def', needed =
+                    let def', reinfer =
                       with_empty_stack ctx ~location:def.info ~kind:Expression
-                        (check_toplevel ~drop_supertype:(not mut) ctx
-                           (valtype_cell ity) def)
+                        (check_toplevel ctx (valtype_cell ity) def)
                     in
                     Tbl.add ctx.diagnostics ctx.globals name (mut, Some ity);
-                    let redundant =
-                      (not needed) && not (is_null_initializer def')
+                    (* A [null] initializer no longer needs a special case: the
+                       [Cast]/leaf arms report its floating [&?none] re-inference,
+                       so [reinfer_needed] keeps the annotation on its own. *)
+                    let needed =
+                      reinfer_needed ~drop_supertype:(not mut) ctx reinfer
+                        (valtype_cell ity)
                     in
+                    let redundant = not needed in
                     (* Offer dropping the redundant annotation as a quick fix for
                        hand-written Wax, exactly as a [let] binding does; the
                        [simplify] drop below is the Wasm->Wax mirror. *)
@@ -10191,7 +10366,7 @@ let rec functions ctx fields =
           if ctx.warn_unused then List.iter (Typing_lint.lint_source ctx) body;
           let body =
             with_empty_stack ctx ~location ~kind:Function
-              (let* body = block_contents ctx return_types body in
+              (let* body, _ = block_contents ctx return_types body in
                let* () = pop_args ctx `Output ~location return_types in
                return body)
           in
