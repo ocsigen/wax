@@ -25,7 +25,13 @@ let rec fold_instr f acc (i : 'info instr) =
   (* The remaining variants carry no nested instruction. *)
   | _ -> acc
 
-and fold_instrs f acc l = List.fold_left (fold_instr f) acc l
+and fold_instrs f acc l =
+  (* Explicit recursion, not [List.fold_left (fold_instr f)]: this runs once per
+     nested instruction list, and the partial application [(fold_instr f)] would
+     allocate a closure on every call. *)
+  match l with
+  | [] -> acc
+  | i :: r -> fold_instrs f (fold_instr f acc i) r
 
 let iter_instr f i = fold_instr (fun () i -> f i) () i
 

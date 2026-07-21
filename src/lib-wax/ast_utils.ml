@@ -1,189 +1,169 @@
 open Ast
 
-let rec map_instr f instr =
-  let desc =
-    match instr.desc with
-    | Block { label; typ; block } ->
-        Block
-          {
-            label;
-            typ;
-            block = { block with desc = List.map (map_instr f) block.desc };
-          }
-    | Loop { label; typ; block } ->
-        Loop
-          {
-            label;
-            typ;
-            block = { block with desc = List.map (map_instr f) block.desc };
-          }
-    | While { label; cond; step; block } ->
-        While
-          {
-            label;
-            cond = map_instr f cond;
-            step = Option.map (map_instr f) step;
-            block = { block with desc = List.map (map_instr f) block.desc };
-          }
-    | If { label; typ; cond; if_block; else_block } ->
-        If
-          {
-            label;
-            typ;
-            cond = map_instr f cond;
-            if_block =
-              { if_block with desc = List.map (map_instr f) if_block.desc };
-            else_block =
-              Option.map
-                (fun b -> { b with desc = List.map (map_instr f) b.desc })
-                else_block;
-          }
-    | TryTable { label; typ; block; catches } ->
-        TryTable
-          {
-            label;
-            typ;
-            block = { block with desc = List.map (map_instr f) block.desc };
-            catches;
-          }
-    | Try { label; typ; block; catches; catch_all } ->
-        Try
-          {
-            label;
-            typ;
-            block = { block with desc = List.map (map_instr f) block.desc };
-            catches =
-              List.map
-                (fun (tag, block) ->
-                  (tag, { block with desc = List.map (map_instr f) block.desc }))
-                catches;
-            catch_all =
-              Option.map
-                (fun b -> { b with desc = List.map (map_instr f) b.desc })
-                catch_all;
-          }
-    | TryCatch { label; typ; block; arms } ->
-        TryCatch
-          {
-            label;
-            typ;
-            block = { block with desc = List.map (map_instr f) block.desc };
-            arms =
-              List.map
-                (fun a ->
-                  {
-                    a with
-                    arm_body =
-                      {
-                        a.arm_body with
-                        desc = List.map (map_instr f) a.arm_body.desc;
-                      };
-                  })
-                arms;
-          }
-    | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
-      | Int _ | Float _ | StructDefault _ ) as x ->
-        x
-    | Set (idx, op, v) -> Set (idx, op, map_instr f v)
-    | Tee (idx, v) -> Tee (idx, map_instr f v)
-    | Labelled (l, v) -> Labelled (l, map_instr f v)
-    | Call (target, args) ->
-        Call (map_instr f target, List.map (map_instr f) args)
-    | TailCall (target, args) ->
-        TailCall (map_instr f target, List.map (map_instr f) args)
-    | Cast (v, t) -> Cast (map_instr f v, t)
-    | CastDesc (v, t, d) -> CastDesc (map_instr f v, t, map_instr f d)
-    | Test (v, t) -> Test (map_instr f v, t)
-    | NonNull v -> NonNull (map_instr f v)
-    | Struct (idx, fields) ->
-        Struct
-          (idx, List.map (fun (i, v) -> (i, Option.map (map_instr f) v)) fields)
-    | StructDesc (d, fields) ->
-        StructDesc
-          ( map_instr f d,
-            List.map (fun (i, v) -> (i, Option.map (map_instr f) v)) fields )
-    | StructDefaultDesc d -> StructDefaultDesc (map_instr f d)
-    | StructGet (v, idx) -> StructGet (map_instr f v, idx)
-    | GetDescriptor v -> GetDescriptor (map_instr f v)
-    | StructSet (v, idx, w) -> StructSet (map_instr f v, idx, map_instr f w)
-    | Array (idx, len, init) -> Array (idx, map_instr f len, map_instr f init)
-    | ArrayDefault (idx, len) -> ArrayDefault (idx, map_instr f len)
-    | ArrayFixed (idx, elems) -> ArrayFixed (idx, List.map (map_instr f) elems)
-    | ArraySegment (idx, seg, off, len) ->
-        ArraySegment (idx, seg, map_instr f off, map_instr f len)
-    | ArrayGet (arr, idx) -> ArrayGet (map_instr f arr, map_instr f idx)
-    | ArraySet (arr, idx, val_) ->
-        ArraySet (map_instr f arr, map_instr f idx, map_instr f val_)
-    | BinOp (op, l, r) -> BinOp (op, map_instr f l, map_instr f r)
-    | UnOp (op, v) -> UnOp (op, map_instr f v)
-    | Let (bindings, body) -> Let (bindings, Option.map (map_instr f) body)
-    | Br (label, v) -> Br (label, Option.map (map_instr f) v)
-    | Br_if (label, v) -> Br_if (label, map_instr f v)
-    | Hinted (h, i) -> Hinted (h, map_instr f i)
-    | On (i, h) -> On (map_instr f i, h)
-    | Br_table (labels, v) -> Br_table (labels, map_instr f v)
-    | Dispatch { index; cases; default; arms } ->
-        Dispatch
-          {
-            index = map_instr f index;
-            cases;
-            default;
-            arms =
-              List.map
-                (fun (l, body) ->
-                  (l, { body with desc = List.map (map_instr f) body.desc }))
-                arms;
-          }
-    | Match { scrutinee; arms; default } ->
-        Match
-          {
-            scrutinee = map_instr f scrutinee;
-            arms =
-              List.map
-                (fun (pat, body) ->
-                  (pat, { body with desc = List.map (map_instr f) body.desc }))
-                arms;
-            default =
-              { default with desc = List.map (map_instr f) default.desc };
-          }
-    | Br_on_null (label, v) -> Br_on_null (label, map_instr f v)
-    | Br_on_non_null (label, v) -> Br_on_non_null (label, map_instr f v)
-    | Br_on_cast (label, t, v) -> Br_on_cast (label, t, map_instr f v)
-    | Br_on_cast_fail (label, t, v) -> Br_on_cast_fail (label, t, map_instr f v)
-    | Br_on_cast_desc_eq (label, t, v, d) ->
-        Br_on_cast_desc_eq (label, t, map_instr f v, map_instr f d)
-    | Br_on_cast_desc_eq_fail (label, t, v, d) ->
-        Br_on_cast_desc_eq_fail (label, t, map_instr f v, map_instr f d)
-    | Throw (idx, args) -> Throw (idx, List.map (map_instr f) args)
-    | ThrowRef v -> ThrowRef (map_instr f v)
-    | ContNew (ct, v) -> ContNew (ct, map_instr f v)
-    | ContBind (src, dst, args) ->
-        ContBind (src, dst, List.map (map_instr f) args)
-    | Suspend (tag, args) -> Suspend (tag, List.map (map_instr f) args)
-    | Resume (ct, handlers, args) ->
-        Resume (ct, handlers, List.map (map_instr f) args)
-    | ResumeThrow (ct, tag, handlers, args) ->
-        ResumeThrow (ct, tag, handlers, List.map (map_instr f) args)
-    | ResumeThrowRef (ct, handlers, args) ->
-        ResumeThrowRef (ct, handlers, List.map (map_instr f) args)
-    | Switch (ct, tag, args) -> Switch (ct, tag, List.map (map_instr f) args)
-    | Return v -> Return (Option.map (map_instr f) v)
-    | Sequence instrs -> Sequence (List.map (map_instr f) instrs)
-    | Select (cond, t, e) ->
-        Select (map_instr f cond, map_instr f t, map_instr f e)
-    | If_annotation { cond; then_body; else_body } ->
-        If_annotation
-          {
-            cond;
-            then_body =
-              { then_body with desc = List.map (map_instr f) then_body.desc };
-            else_body =
-              Option.map
-                (fun b -> { b with desc = List.map (map_instr f) b.desc })
-                else_body;
-          }
+let map_instr f instr =
+  let rec go instr =
+    let desc =
+      match instr.desc with
+      | Block { label; typ; block } ->
+          Block
+            { label; typ; block = { block with desc = List.map go block.desc } }
+      | Loop { label; typ; block } ->
+          Loop
+            { label; typ; block = { block with desc = List.map go block.desc } }
+      | While { label; cond; step; block } ->
+          While
+            {
+              label;
+              cond = go cond;
+              step = Option.map go step;
+              block = { block with desc = List.map go block.desc };
+            }
+      | If { label; typ; cond; if_block; else_block } ->
+          If
+            {
+              label;
+              typ;
+              cond = go cond;
+              if_block = { if_block with desc = List.map go if_block.desc };
+              else_block =
+                Option.map
+                  (fun b -> { b with desc = List.map go b.desc })
+                  else_block;
+            }
+      | TryTable { label; typ; block; catches } ->
+          TryTable
+            {
+              label;
+              typ;
+              block = { block with desc = List.map go block.desc };
+              catches;
+            }
+      | Try { label; typ; block; catches; catch_all } ->
+          Try
+            {
+              label;
+              typ;
+              block = { block with desc = List.map go block.desc };
+              catches =
+                List.map
+                  (fun (tag, block) ->
+                    (tag, { block with desc = List.map go block.desc }))
+                  catches;
+              catch_all =
+                Option.map
+                  (fun b -> { b with desc = List.map go b.desc })
+                  catch_all;
+            }
+      | TryCatch { label; typ; block; arms } ->
+          TryCatch
+            {
+              label;
+              typ;
+              block = { block with desc = List.map go block.desc };
+              arms =
+                List.map
+                  (fun a ->
+                    {
+                      a with
+                      arm_body =
+                        { a.arm_body with desc = List.map go a.arm_body.desc };
+                    })
+                  arms;
+            }
+      | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+        | Int _ | Float _ | StructDefault _ ) as x ->
+          x
+      | Set (idx, op, v) -> Set (idx, op, go v)
+      | Tee (idx, v) -> Tee (idx, go v)
+      | Labelled (l, v) -> Labelled (l, go v)
+      | Call (target, args) -> Call (go target, List.map go args)
+      | TailCall (target, args) -> TailCall (go target, List.map go args)
+      | Cast (v, t) -> Cast (go v, t)
+      | CastDesc (v, t, d) -> CastDesc (go v, t, go d)
+      | Test (v, t) -> Test (go v, t)
+      | NonNull v -> NonNull (go v)
+      | Struct (idx, fields) ->
+          Struct (idx, List.map (fun (i, v) -> (i, Option.map go v)) fields)
+      | StructDesc (d, fields) ->
+          StructDesc (go d, List.map (fun (i, v) -> (i, Option.map go v)) fields)
+      | StructDefaultDesc d -> StructDefaultDesc (go d)
+      | StructGet (v, idx) -> StructGet (go v, idx)
+      | GetDescriptor v -> GetDescriptor (go v)
+      | StructSet (v, idx, w) -> StructSet (go v, idx, go w)
+      | Array (idx, len, init) -> Array (idx, go len, go init)
+      | ArrayDefault (idx, len) -> ArrayDefault (idx, go len)
+      | ArrayFixed (idx, elems) -> ArrayFixed (idx, List.map go elems)
+      | ArraySegment (idx, seg, off, len) ->
+          ArraySegment (idx, seg, go off, go len)
+      | ArrayGet (arr, idx) -> ArrayGet (go arr, go idx)
+      | ArraySet (arr, idx, val_) -> ArraySet (go arr, go idx, go val_)
+      | BinOp (op, l, r) -> BinOp (op, go l, go r)
+      | UnOp (op, v) -> UnOp (op, go v)
+      | Let (bindings, body) -> Let (bindings, Option.map go body)
+      | Br (label, v) -> Br (label, Option.map go v)
+      | Br_if (label, v) -> Br_if (label, go v)
+      | Hinted (h, i) -> Hinted (h, go i)
+      | On (i, h) -> On (go i, h)
+      | Br_table (labels, v) -> Br_table (labels, go v)
+      | Dispatch { index; cases; default; arms } ->
+          Dispatch
+            {
+              index = go index;
+              cases;
+              default;
+              arms =
+                List.map
+                  (fun (l, body) ->
+                    (l, { body with desc = List.map go body.desc }))
+                  arms;
+            }
+      | Match { scrutinee; arms; default } ->
+          Match
+            {
+              scrutinee = go scrutinee;
+              arms =
+                List.map
+                  (fun (pat, body) ->
+                    (pat, { body with desc = List.map go body.desc }))
+                  arms;
+              default = { default with desc = List.map go default.desc };
+            }
+      | Br_on_null (label, v) -> Br_on_null (label, go v)
+      | Br_on_non_null (label, v) -> Br_on_non_null (label, go v)
+      | Br_on_cast (label, t, v) -> Br_on_cast (label, t, go v)
+      | Br_on_cast_fail (label, t, v) -> Br_on_cast_fail (label, t, go v)
+      | Br_on_cast_desc_eq (label, t, v, d) ->
+          Br_on_cast_desc_eq (label, t, go v, go d)
+      | Br_on_cast_desc_eq_fail (label, t, v, d) ->
+          Br_on_cast_desc_eq_fail (label, t, go v, go d)
+      | Throw (idx, args) -> Throw (idx, List.map go args)
+      | ThrowRef v -> ThrowRef (go v)
+      | ContNew (ct, v) -> ContNew (ct, go v)
+      | ContBind (src, dst, args) -> ContBind (src, dst, List.map go args)
+      | Suspend (tag, args) -> Suspend (tag, List.map go args)
+      | Resume (ct, handlers, args) -> Resume (ct, handlers, List.map go args)
+      | ResumeThrow (ct, tag, handlers, args) ->
+          ResumeThrow (ct, tag, handlers, List.map go args)
+      | ResumeThrowRef (ct, handlers, args) ->
+          ResumeThrowRef (ct, handlers, List.map go args)
+      | Switch (ct, tag, args) -> Switch (ct, tag, List.map go args)
+      | Return v -> Return (Option.map go v)
+      | Sequence instrs -> Sequence (List.map go instrs)
+      | Select (cond, t, e) -> Select (go cond, go t, go e)
+      | If_annotation { cond; then_body; else_body } ->
+          If_annotation
+            {
+              cond;
+              then_body = { then_body with desc = List.map go then_body.desc };
+              else_body =
+                Option.map
+                  (fun b -> { b with desc = List.map go b.desc })
+                  else_body;
+            }
+    in
+    { desc; info = f instr.info }
   in
-  { desc; info = f instr.info }
+  go instr
 
 (* Share-preserving list map: returns [l] itself when [f] leaves every element
    physically unchanged, allocating a cons cell only where something changed (so
