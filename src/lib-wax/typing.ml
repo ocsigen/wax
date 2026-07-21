@@ -5609,7 +5609,7 @@ and type_cast ctx i =
               | Signedtype { typ = `F64; _ } -> F64
               | Valtype _ | Functype _ -> assert false))
       in
-      let () =
+      let cast_failed =
         match target_valtype with
         | Some _ when cont_target ->
             (* Accepted exactly when it is a provable no-op — the cases
@@ -5621,10 +5621,14 @@ and type_cast ctx i =
                ascription pins). NOT the general [cast] castability check
                below, which admits runtime downcasts. *)
             if not (subtype ctx ty' ty) then
-              Error.cont_cast_not_ascription ctx.diagnostics ~location:i.info
+              Error.cont_cast_not_ascription ctx.diagnostics ~location:i.info;
+            false
         | Some t ->
-            if not (cast ctx ty' t) then
-              Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) ty'
+            if cast ctx ty' t then false
+            else begin
+              Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) ty';
+              true
+            end
         | None -> (
             match typ with
             | Signedtype { typ = target; signage; _ } -> (
@@ -5642,13 +5646,26 @@ and type_cast ctx i =
                       ~extend:
                         (match w with
                         | `W8 -> ".extend8_s()"
-                        | `W16 -> ".extend16_s()")
+                        | `W16 -> ".extend16_s()");
+                    false
                 | _ ->
-                    if not (signed_cast ctx ty' target) then
+                    if signed_cast ctx ty' target then false
+                    else begin
                       Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
-                        ty')
+                        ty';
+                      true
+                    end)
             | Valtype _ | Functype _ -> assert false)
       in
+      (* Poison the result of a failed cast (or one whose operand a prior failed
+         cast already poisoned) with [Error]. A chain of casts each anchors its
+         "cannot be cast" error at the shared leftmost operand location, so
+         without this a single unlowerable operand reports one identical error
+         per cast in the chain; [Error] is castable to anything ([cast] /
+         [signed_cast] return [true] for it), so only the first failure is
+         reported and the rest are absorbed. *)
+      if cast_failed || (match ty'_natural with Error -> true | _ -> false) then
+        Cell.set ty Error;
       (* Lint the cast against its operand's natural type (snapshotted before
          [cast] above concretised it to the target). Skipped for from-Wasm input
          ([simplify]), whose casts are compiler-inserted and whose redundant ones

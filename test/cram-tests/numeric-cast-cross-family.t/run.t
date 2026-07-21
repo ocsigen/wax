@@ -16,11 +16,6 @@ A committed float cast to an integer with a plain cast (no signedness):
   1 │ fn f() { (1.0 + 2.0) as i32; }
     ·           ^^^^^^^^^
   2 │ 
-  Error: This value remains on the stack.
-   ──➤  a.wax:1:10
-  1 │ fn f() { (1.0 + 2.0) as i32; }
-    ·          ^^^^^^^^^^^^^^^^^^
-  2 │ 
   [128]
 
 A committed integer cast to a float with a plain cast:
@@ -31,11 +26,6 @@ A committed integer cast to a float with a plain cast:
    ──➤  b.wax:1:11
   1 │ fn f() { (5 & 3) as f32; }
     ·           ^^^^^
-  2 │ 
-  Error: This value remains on the stack.
-   ──➤  b.wax:1:10
-  1 │ fn f() { (5 & 3) as f32; }
-    ·          ^^^^^^^^^^^^^^
   2 │ 
   [128]
 
