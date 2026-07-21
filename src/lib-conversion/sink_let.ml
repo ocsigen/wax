@@ -5,27 +5,39 @@ open Ast
    every other identifier (labels, tags, types, fields, functions...) lives in a
    different namespace, so we only treat those three as uses. The remaining
    cases simply recurse into sub-instructions. *)
+(* [in_list]/[in_opt] used to be closures allocated afresh on every [occurs]
+   call — two allocations per instruction visited, on the hottest conversion
+   helper. Hoisted to top-level recursive functions taking [name] explicitly:
+   [occurs_list] is a hand-written recursion (no [List.exists] closure either),
+   so the common recursive path allocates nothing. *)
 let rec occurs name i =
-  let in_list l = List.exists (occurs name) l in
-  let in_opt o = match o with Some i -> occurs name i | None -> false in
   match i.desc with
   | Get id -> String.equal id.desc name
   | Tee (id, e) -> String.equal id.desc name || occurs name e
   | Set (id, _, e) -> String.equal id.desc name || occurs name e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      in_list block.desc
+      occurs_list name block.desc
   | While { cond; step; block; _ } ->
-      occurs name cond || in_opt step || in_list block.desc
+      occurs name cond || occurs_opt name step || occurs_list name block.desc
   | If { cond; if_block; else_block; _ } -> (
-      occurs name cond || in_list if_block.desc
-      || match else_block with Some b -> in_list b.desc | None -> false)
+      occurs name cond
+      || occurs_list name if_block.desc
+      ||
+      match else_block with
+      | Some b -> occurs_list name b.desc
+      | None -> false)
   | Try { block; catches; catch_all; _ } -> (
-      in_list block.desc
-      || List.exists (fun (_, b) -> in_list b.desc) catches
-      || match catch_all with Some b -> in_list b.desc | None -> false)
+      occurs_list name block.desc
+      || List.exists (fun (_, b) -> occurs_list name b.desc) catches
+      ||
+      match catch_all with
+      | Some b -> occurs_list name b.desc
+      | None -> false)
   | TryCatch { block; arms; _ } ->
-      in_list block.desc || List.exists (fun a -> in_list a.arm_body.desc) arms
-  | Call (t, args) | TailCall (t, args) -> occurs name t || in_list args
+      occurs_list name block.desc
+      || List.exists (fun a -> occurs_list name a.arm_body.desc) arms
+  | Call (t, args) | TailCall (t, args) ->
+      occurs name t || occurs_list name args
   | Labelled (_, e)
   | Cast (e, _)
   | Test (e, _)
@@ -69,21 +81,30 @@ let rec occurs name i =
   | Switch (_, _, l)
   | Throw (_, l)
   | Sequence l ->
-      in_list l
+      occurs_list name l
   | Dispatch { index; arms; _ } ->
-      occurs name index || List.exists (fun (_, b) -> in_list b.desc) arms
+      occurs name index
+      || List.exists (fun (_, b) -> occurs_list name b.desc) arms
   | Match { scrutinee; arms; default } ->
       occurs name scrutinee
-      || List.exists (fun (_, b) -> in_list b.desc) arms
-      || in_list default.desc
-  | Let (_, body) -> in_opt body
-  | Br (_, o) | Return o -> in_opt o
+      || List.exists (fun (_, b) -> occurs_list name b.desc) arms
+      || occurs_list name default.desc
+  | Let (_, body) -> occurs_opt name body
+  | Br (_, o) | Return o -> occurs_opt name o
   | If_annotation { then_body; else_body; _ } -> (
-      in_list then_body.desc
-      || match else_body with Some b -> in_list b.desc | None -> false)
+      occurs_list name then_body.desc
+      ||
+      match else_body with
+      | Some b -> occurs_list name b.desc
+      | None -> false)
   | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       false
+
+and occurs_list name l =
+  match l with [] -> false | i :: r -> occurs name i || occurs_list name r
+
+and occurs_opt name o = match o with Some i -> occurs name i | None -> false
 
 (* A struct-literal field. A punned field [{x}] ([None]) is an implicit [Get] of
    the like-named local, so it references [name] exactly when [name] is that
@@ -91,7 +112,7 @@ let rec occurs name i =
 and field_occurs name (fn, e) =
   match e with Some e -> occurs name e | None -> String.equal fn.desc name
 
-let list_occurs name l = List.exists (occurs name) l
+let list_occurs = occurs_list
 let bare_let (name, typ) = no_loc (Let ([ (Some name, Some typ) ], None))
 
 let init_let (name, typ) e info =
