@@ -1,0 +1,5 @@
+#[export = "int_mul0"]
+fn int_mul0(x: i32) -> i32 { x * 0; }
+
+#[export = "float_mul0"]
+fn float_mul0(x: f32) -> f32 { x * 0; }

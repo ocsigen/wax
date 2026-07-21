@@ -646,6 +646,21 @@ let lint_redundant ctx op l r =
         | _ -> false)
     | None -> false
   in
+  (* A concrete float operand, or a float literal not yet pinned to a width.
+     These identities and absorptions hold only for integer arithmetic — a float
+     [0.0 * x] is NaN when [x] is NaN or an infinity, and [-0.0 + 0.0] is [+0.0],
+     so neither result is constant or effect-free. The Wasm validator likewise
+     runs these checks only for integer binops ([check_int_binop] is reached only
+     from [BinOp (I32 _)]/[BinOp (I64 _)]), so gating on non-float here keeps the
+     two linters in parity. *)
+  let is_float e =
+    match expression_type_opt e with
+    | Some c -> (
+        match Cell.get c with
+        | Valtype { internal = F32 | F64; _ } | Float -> true
+        | _ -> false)
+    | None -> false
+  in
   let no_effect () =
     Error.redundant_operation ctx.diagnostics ~location:op.info
       (Wax_utils.Message.text "This operation has no effect on its result.")
@@ -655,7 +670,8 @@ let lint_redundant ctx op l r =
       Wax_utils.Message.(
         (text "This operation always yields" ++ int64 v) ^^ text ".")
   in
-  match op.desc with
+  if is_float l || is_float r then ()
+  else match op.desc with
   | Add when is0 l || is0 r -> no_effect () (* x + 0 *)
   | (Sub | Shl | Shr _) when is0 r -> no_effect () (* x - 0, x << 0 *)
   | Mul when is1 l || is1 r -> no_effect () (* x * 1 *)
