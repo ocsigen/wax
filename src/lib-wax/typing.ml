@@ -5707,7 +5707,7 @@ and type_cast ctx i =
          per cast in the chain; [Error] is castable to anything ([cast] /
          [signed_cast] return [true] for it), so only the first failure is
          reported and the rest are absorbed. *)
-      if cast_failed || (match ty'_natural with Error -> true | _ -> false) then
+      if cast_failed || match ty'_natural with Error -> true | _ -> false then
         Cell.set ty Error;
       (* Lint the cast against its operand's natural type (snapshotted before
          [cast] above concretised it to the target). Skipped for from-Wasm input
@@ -10215,8 +10215,7 @@ let rec functions ctx fields =
                 let n = name.desc in
                 if
                   (not
-                     (IntSet.mem name.info.loc_start.pos_cnum
-                        !(ctx.used_labels)))
+                     (IntSet.mem name.info.loc_start.pos_cnum !(ctx.used_labels)))
                   && not (String.length n > 0 && n.[0] = '_')
                 then Error.unused_label ctx.diagnostics ~location:name.info name)
               (List.rev ctx.label_decls)

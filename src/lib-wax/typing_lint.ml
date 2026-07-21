@@ -671,21 +671,22 @@ let lint_redundant ctx op l r =
         (text "This operation always yields" ++ int64 v) ^^ text ".")
   in
   if is_float l || is_float r then ()
-  else match op.desc with
-  | Add when is0 l || is0 r -> no_effect () (* x + 0 *)
-  | (Sub | Shl | Shr _) when is0 r -> no_effect () (* x - 0, x << 0 *)
-  | Mul when is1 l || is1 r -> no_effect () (* x * 1 *)
-  | Div (Some _) when is1 r -> no_effect () (* x / 1 *)
-  | (Or | Xor) when is0 l || is0 r -> no_effect () (* x | 0, x ^ 0 *)
-  | (And | Or) when identical_operands l r -> no_effect () (* x & x, x | x *)
-  | Mul when is0 l || is0 r -> always 0L (* x * 0 *)
-  | And when is0 l || is0 r -> always 0L (* x & 0 *)
-  | Rem _ when is1 r -> always 0L (* x % 1 *)
-  | Xor when identical_operands l r -> always 0L (* x ^ x (integer bitwise) *)
-  (* [x - x] is 0 only for integers: a float [x - x] is NaN when [x] is NaN or
+  else
+    match op.desc with
+    | Add when is0 l || is0 r -> no_effect () (* x + 0 *)
+    | (Sub | Shl | Shr _) when is0 r -> no_effect () (* x - 0, x << 0 *)
+    | Mul when is1 l || is1 r -> no_effect () (* x * 1 *)
+    | Div (Some _) when is1 r -> no_effect () (* x / 1 *)
+    | (Or | Xor) when is0 l || is0 r -> no_effect () (* x | 0, x ^ 0 *)
+    | (And | Or) when identical_operands l r -> no_effect () (* x & x, x | x *)
+    | Mul when is0 l || is0 r -> always 0L (* x * 0 *)
+    | And when is0 l || is0 r -> always 0L (* x & 0 *)
+    | Rem _ when is1 r -> always 0L (* x % 1 *)
+    | Xor when identical_operands l r -> always 0L (* x ^ x (integer bitwise) *)
+    (* [x - x] is 0 only for integers: a float [x - x] is NaN when [x] is NaN or
      an infinity, so the result is not a constant. *)
-  | Sub when identical_operands l r && is_int l -> always 0L
-  | _ -> ()
+    | Sub when identical_operands l r && is_int l -> always 0L
+    | _ -> ()
 
 (* A branch, loop, or [select] condition that is a constant literal, so it
    always takes the same path. [is_while] excludes the idiomatic infinite loop
