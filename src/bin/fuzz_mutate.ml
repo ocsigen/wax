@@ -14,6 +14,10 @@
    - swap a binary/unary operator, or a binop's two operands;
    - retype a cast target;
    - replace a numeric literal with an edge value (0, maxints, 2^31, NaN, ...);
+   - rename a [let] binding to a name its own initializer reads, manufacturing a
+     shadow of an outer binding whose initializer references it (the corpus,
+     decompiled from Wasm, never shadows — every name is unique — so this is the
+     only way to reach the source-level scoping/renaming paths in To_wasm);
    - on a statement list: swap two, delete one, or duplicate one.
    They keep the program parseable but change its meaning or types, so the fuzzer
    hunts for what must never happen on ANY input: a crash in the parser/typer, or
@@ -147,6 +151,70 @@ let mutate_fields loc (fields : (ident * location instr option) list) =
             if k = d then (nm, Some { desc = Hole; info = loc }) else (nm, v))
           fields
 
+(* The local/global names an expression *reads* (its [Get]s), gathered so a
+   [let] can be renamed to one of them — see the [Let] case in [mutate_node].
+   A structural walk of the value-carrying forms; exotic ones fall through to
+   [[]], which only lowers yield, never breaks the reprint. *)
+let rec get_names_in (i : location instr) : string list =
+  let opt = function Some e -> get_names_in e | None -> [] in
+  let all l = List.concat_map get_names_in l in
+  let block (b : (location instr list, location) annotated) = all b.desc in
+  match i.desc with
+  | Get id -> [ id.desc ]
+  | BinOp (_, a, b) -> get_names_in a @ get_names_in b
+  | UnOp (_, e)
+  | Cast (e, _)
+  | Test (e, _)
+  | NonNull e
+  | GetDescriptor e
+  | Labelled (_, e)
+  | Tee (_, e)
+  | StructGet (e, _)
+  | ThrowRef e
+  | Hinted (_, e)
+  | Br_if (_, e)
+  | Br_table (_, e)
+  | Br_on_null (_, e)
+  | Br_on_non_null (_, e)
+  | Br_on_cast (_, _, e)
+  | Br_on_cast_fail (_, _, e)
+  | ContNew (_, e)
+  | Set (_, _, e) ->
+      get_names_in e
+  | Select (a, b, c) -> get_names_in a @ get_names_in b @ get_names_in c
+  | Call (f, args) | TailCall (f, args) -> get_names_in f @ all args
+  | Throw (_, l)
+  | Suspend (_, l)
+  | ContBind (_, _, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l)
+  | Sequence l
+  | ArrayFixed (_, l) ->
+      all l
+  | Array (_, a, b)
+  | ArraySegment (_, _, a, b)
+  | Br_on_cast_desc_eq (_, _, a, b)
+  | Br_on_cast_desc_eq_fail (_, _, a, b) ->
+      get_names_in a @ get_names_in b
+  | ArrayDefault (_, e) | StructDefaultDesc e -> get_names_in e
+  | ArrayGet (a, b) -> get_names_in a @ get_names_in b
+  | ArraySet (a, b, c) -> get_names_in a @ get_names_in b @ get_names_in c
+  | StructSet (e, _, v) -> get_names_in e @ get_names_in v
+  | Return e | Br (_, e) | Let (_, e) -> opt e
+  | Struct (_, fields) -> List.concat_map (fun (_, v) -> opt v) fields
+  | StructDesc (d, fields) ->
+      get_names_in d @ List.concat_map (fun (_, v) -> opt v) fields
+  | If { cond; if_block; else_block; _ } ->
+      get_names_in cond @ block if_block
+      @ Option.fold ~none:[] ~some:block else_block
+  | Block { block = b; _ } | Loop { block = b; _ } | TryTable { block = b; _ }
+    ->
+      block b
+  | While { cond; step; block = b; _ } -> get_names_in cond @ opt step @ block b
+  | _ -> []
+
 let mutate_node (i : location instr) : location instr =
   (* Replacing a value with a hole [_] feeds the type checker's hole handling in
      any position the walk reaches (a struct field, a match scrutinee, a call
@@ -181,6 +249,18 @@ let mutate_node (i : location instr) : location instr =
           else Set (id, None, e)
       | Set (id, None, e) when next () mod 2 = 0 ->
           Set (id, Some { desc = pick compound_binops; info = e.info }, e)
+      (* Rename a named [let] to an identifier its own initializer reads: the new
+         binding then shadows whatever that name resolved to (a parameter or an
+         enclosing local), and its initializer references it — the exact shape
+         To_wasm must lower with the initializer in the *outer* scope. Keep the
+         initializer verbatim (only one site mutates), so the [Get] of the
+         reused name is preserved. *)
+      | Let ((Some first, ty) :: rest, Some init) -> (
+          match get_names_in init with
+          | [] -> graft ()
+          | names ->
+              let n = pick (Array.of_list names) in
+              Let ((Some { first with desc = n }, ty) :: rest, Some init))
       | _ -> graft ()
   in
   { i with desc }
