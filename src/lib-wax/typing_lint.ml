@@ -194,35 +194,43 @@ let rec is_effectless (e : _ Ast.instr) =
    resulting by-name set is exact; a stray name collision could only keep an
    annotation, never wrongly drop one. *)
 let rec collect_assigned_locals acc i =
-  let in_list acc l = List.fold_left collect_assigned_locals acc l in
-  let in_opt acc o =
-    match o with Some i -> collect_assigned_locals acc i | None -> acc
-  in
   match i.desc with
   | Set (id, _, e) | Tee (id, e) ->
       collect_assigned_locals (StringSet.add id.desc acc) e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      in_list acc block.desc
+      collect_assigned_locals_list acc block.desc
   | While { cond; step; block; _ } ->
       let acc = collect_assigned_locals acc cond in
       let acc =
         Option.fold ~none:acc ~some:(collect_assigned_locals acc) step
       in
-      in_list acc block.desc
+      collect_assigned_locals_list acc block.desc
   | If { cond; if_block; else_block; _ } ->
-      let acc = in_list (collect_assigned_locals acc cond) if_block.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
-  | Try { block; catches; catch_all; _ } ->
-      let acc = in_list acc block.desc in
       let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
+        collect_assigned_locals_list
+          (collect_assigned_locals acc cond)
+          if_block.desc
       in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
+      Option.fold ~none:acc
+        ~some:(fun b -> collect_assigned_locals_list acc b.desc)
+        else_block
+  | Try { block; catches; catch_all; _ } ->
+      let acc = collect_assigned_locals_list acc block.desc in
+      let acc =
+        List.fold_left
+          (fun acc (_, b) -> collect_assigned_locals_list acc b.desc)
+          acc catches
+      in
+      Option.fold ~none:acc
+        ~some:(fun b -> collect_assigned_locals_list acc b.desc)
+        catch_all
   | TryCatch { block; arms; _ } ->
-      let acc = in_list acc block.desc in
-      List.fold_left (fun acc a -> in_list acc a.arm_body.desc) acc arms
+      let acc = collect_assigned_locals_list acc block.desc in
+      List.fold_left
+        (fun acc a -> collect_assigned_locals_list acc a.arm_body.desc)
+        acc arms
   | Call (t, args) | TailCall (t, args) ->
-      in_list (collect_assigned_locals acc t) args
+      collect_assigned_locals_list (collect_assigned_locals acc t) args
   | Cast (e, _)
   | Test (e, _)
   | NonNull e
@@ -277,23 +285,27 @@ let rec collect_assigned_locals acc i =
   | Switch (_, _, l)
   | Throw (_, l)
   | Sequence l ->
-      in_list acc l
+      collect_assigned_locals_list acc l
   | Dispatch { index; arms; _ } ->
       List.fold_left
-        (fun acc (_, b) -> in_list acc b.desc)
+        (fun acc (_, b) -> collect_assigned_locals_list acc b.desc)
         (collect_assigned_locals acc index)
         arms
   | Match { scrutinee; arms; default } ->
       let acc = collect_assigned_locals acc scrutinee in
       let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc arms
+        List.fold_left
+          (fun acc (_, b) -> collect_assigned_locals_list acc b.desc)
+          acc arms
       in
-      in_list acc default.desc
-  | Let (_, body) -> in_opt acc body
-  | Br (_, o) | Return o -> in_opt acc o
+      collect_assigned_locals_list acc default.desc
+  | Let (_, body) -> collect_assigned_locals_opt acc body
+  | Br (_, o) | Return o -> collect_assigned_locals_opt acc o
   | If_annotation { then_body; else_body; _ } ->
-      let acc = in_list acc then_body.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
+      let acc = collect_assigned_locals_list acc then_body.desc in
+      Option.fold ~none:acc
+        ~some:(fun b -> collect_assigned_locals_list acc b.desc)
+        else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       acc
@@ -304,34 +316,48 @@ let rec collect_assigned_locals acc i =
    constructs also contribute their own label. The [dispatch]/[match] arm labels
    are branch targets, not declarations, so they are not collected. Mirrors the
    case coverage of {!collect_assigned_locals}. *)
+
+and collect_assigned_locals_list acc l =
+  List.fold_left collect_assigned_locals acc l
+
+and collect_assigned_locals_opt acc o =
+  match o with Some i -> collect_assigned_locals acc i | None -> acc
+
 let rec collect_labels acc (i : _ Ast.instr) =
-  let in_list acc l = List.fold_left collect_labels acc l in
-  let in_opt acc o =
-    match o with Some i -> collect_labels acc i | None -> acc
-  in
   let add acc label = match label with Some l -> l :: acc | None -> acc in
   match i.desc with
   | Block { label; block; _ }
   | Loop { label; block; _ }
   | TryTable { label; block; _ } ->
-      in_list (add acc label) block.desc
+      collect_labels_list (add acc label) block.desc
   | While { label; cond; step; block; _ } ->
       let acc = collect_labels (add acc label) cond in
       let acc = Option.fold ~none:acc ~some:(collect_labels acc) step in
-      in_list acc block.desc
+      collect_labels_list acc block.desc
   | If { label; cond; if_block; else_block; _ } ->
-      let acc = in_list (collect_labels (add acc label) cond) if_block.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
-  | Try { label; block; catches; catch_all; _ } ->
-      let acc = in_list (add acc label) block.desc in
       let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
+        collect_labels_list (collect_labels (add acc label) cond) if_block.desc
       in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
+      Option.fold ~none:acc
+        ~some:(fun b -> collect_labels_list acc b.desc)
+        else_block
+  | Try { label; block; catches; catch_all; _ } ->
+      let acc = collect_labels_list (add acc label) block.desc in
+      let acc =
+        List.fold_left
+          (fun acc (_, b) -> collect_labels_list acc b.desc)
+          acc catches
+      in
+      Option.fold ~none:acc
+        ~some:(fun b -> collect_labels_list acc b.desc)
+        catch_all
   | TryCatch { label; block; arms; _ } ->
-      let acc = in_list (add acc label) block.desc in
-      List.fold_left (fun acc a -> in_list acc a.arm_body.desc) acc arms
-  | Call (t, args) | TailCall (t, args) -> in_list (collect_labels acc t) args
+      let acc = collect_labels_list (add acc label) block.desc in
+      List.fold_left
+        (fun acc a -> collect_labels_list acc a.arm_body.desc)
+        acc arms
+  | Call (t, args) | TailCall (t, args) ->
+      collect_labels_list (collect_labels acc t) args
   | Set (_, _, e)
   | Tee (_, e)
   | Labelled (_, e)
@@ -355,10 +381,10 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | ContNew (_, e) ->
       collect_labels acc e
   | Struct (_, fields) ->
-      List.fold_left (fun acc (_, e) -> in_opt acc e) acc fields
+      List.fold_left (fun acc (_, e) -> collect_labels_opt acc e) acc fields
   | StructDesc (d, fields) ->
       List.fold_left
-        (fun acc (_, e) -> in_opt acc e)
+        (fun acc (_, e) -> collect_labels_opt acc e)
         (collect_labels acc d) fields
   | CastDesc (e1, _, e2)
   | Br_on_cast_desc_eq (_, _, e1, e2)
@@ -380,22 +406,26 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | Switch (_, _, l)
   | Throw (_, l)
   | Sequence l ->
-      in_list acc l
+      collect_labels_list acc l
   | Dispatch { index; arms; _ } ->
       List.fold_left
-        (fun acc (_, b) -> in_list acc b.desc)
+        (fun acc (_, b) -> collect_labels_list acc b.desc)
         (collect_labels acc index) arms
   | Match { scrutinee; arms; default } ->
       let acc = collect_labels acc scrutinee in
       let acc =
-        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc arms
+        List.fold_left
+          (fun acc (_, b) -> collect_labels_list acc b.desc)
+          acc arms
       in
-      in_list acc default.desc
-  | Let (_, body) -> in_opt acc body
-  | Br (_, o) | Return o -> in_opt acc o
+      collect_labels_list acc default.desc
+  | Let (_, body) -> collect_labels_opt acc body
+  | Br (_, o) | Return o -> collect_labels_opt acc o
   | If_annotation { then_body; else_body; _ } ->
-      let acc = in_list acc then_body.desc in
-      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
+      let acc = collect_labels_list acc then_body.desc in
+      Option.fold ~none:acc
+        ~some:(fun b -> collect_labels_list acc b.desc)
+        else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       acc
@@ -411,6 +441,12 @@ let rec collect_labels acc (i : _ Ast.instr) =
    [!], the descriptor cast, [array.new_data]/[array.new_elem], [unreachable],
    calls, assignments, throws, and stack-switching — but not plain casts (a
    [ref.cast] is diagnosed by [cast-always-fails] instead). *)
+
+and collect_labels_list acc l = List.fold_left collect_labels acc l
+
+and collect_labels_opt acc o =
+  match o with Some i -> collect_labels acc i | None -> acc
+
 let rec find_eager_hazard (e : _ Ast.instr) =
   let ( <|> ) o f = match o with Some _ -> o | None -> f () in
   let descend l =

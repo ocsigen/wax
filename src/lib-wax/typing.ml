@@ -11076,34 +11076,33 @@ let project_module (m : inferred_module_annotation Ast.module_) :
 (*** Conditional compilation and entry points ***)
 
 let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
-  let any = List.exists instr_has_conditional in
-  let opt = Option.fold ~none:false ~some:instr_has_conditional in
   match i.desc with
   | If_annotation _ -> true
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      any block.desc
+      ihc_list block.desc
   | While { cond; step; block; _ } ->
       instr_has_conditional cond
       || Option.fold ~none:false ~some:instr_has_conditional step
-      || any block.desc
+      || ihc_list block.desc
   | If { cond; if_block; else_block; _ } ->
-      instr_has_conditional cond || any if_block.desc
-      || Option.fold ~none:false ~some:(fun b -> any b.desc) else_block
+      instr_has_conditional cond || ihc_list if_block.desc
+      || Option.fold ~none:false ~some:(fun b -> ihc_list b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
-      any block.desc
-      || List.exists (fun (_, l) -> any l.desc) catches
-      || Option.fold ~none:false ~some:(fun b -> any b.desc) catch_all
+      ihc_list block.desc
+      || List.exists (fun (_, l) -> ihc_list l.desc) catches
+      || Option.fold ~none:false ~some:(fun b -> ihc_list b.desc) catch_all
   | TryCatch { block; arms; _ } ->
-      any block.desc || List.exists (fun a -> any a.arm_body.desc) arms
-  | Sequence l -> any l
-  | ArrayFixed (_, l) -> any l
+      ihc_list block.desc
+      || List.exists (fun a -> ihc_list a.arm_body.desc) arms
+  | Sequence l -> ihc_list l
+  | ArrayFixed (_, l) -> ihc_list l
   | Dispatch { index; arms; _ } ->
       instr_has_conditional index
-      || List.exists (fun (_, body) -> any body.desc) arms
+      || List.exists (fun (_, body) -> ihc_list body.desc) arms
   | Match { scrutinee; arms; default } ->
       instr_has_conditional scrutinee
-      || List.exists (fun (_, body) -> any body.desc) arms
-      || any default.desc
+      || List.exists (fun (_, body) -> ihc_list body.desc) arms
+      || ihc_list default.desc
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)
@@ -11111,8 +11110,8 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | ResumeThrowRef (_, _, l)
   | Switch (_, _, l)
   | Throw (_, l) ->
-      any l
-  | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || any l
+      ihc_list l
+  | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || ihc_list l
   (* A punned field ([None]) is a [Get] and carries no conditional. *)
   | Struct (_, l) ->
       List.exists
@@ -11157,10 +11156,13 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | ThrowRef i
   | ContNew (_, i) ->
       instr_has_conditional i
-  | Let (_, i) | Br (_, i) | Return i -> opt i
+  | Let (_, i) | Br (_, i) | Return i -> ihc_opt i
   | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       false
+
+and ihc_list l = List.exists instr_has_conditional l
+and ihc_opt o = Option.fold ~none:false ~some:instr_has_conditional o
 
 let field_has_conditional (f : (_ modulefield, _) annotated) =
   match f.desc with
