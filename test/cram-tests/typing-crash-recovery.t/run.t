@@ -96,13 +96,13 @@ is not separately reported:
   > WAX
 
   $ wax check extra-field-hole.wax
-  Error: Expecting 1 value(s) from the stack, but there are 0.
+  Error: This structure provides 2 field(s) but 1 was/were expected.
    ──➤  extra-field-hole.wax:2:15
   1 │ type p = { a: i32 };
   2 │ const g: &p = { a: 1, zzz: _ };
     ·               ^^^^^^^^^^^^^^^^
   3 │ 
-  Error: This structure provides 2 field(s) but 1 was/were expected.
+  Error: Expecting 1 value(s) from the stack, but there are 0.
    ──➤  extra-field-hole.wax:2:15
   1 │ type p = { a: i32 };
   2 │ const g: &p = { a: 1, zzz: _ };

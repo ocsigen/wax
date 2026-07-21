@@ -9,5 +9,5 @@ MODE=struct) via the reference differential.
 
   $ wax check bad.wasm
   File "bad.wasm", line 1, characters 43-45:
-  Error: The function '$b' is not declared as referenceable (ref.func).
+  Error: The function '$b' is not declared as referenceable ('ref.func').
   [128]

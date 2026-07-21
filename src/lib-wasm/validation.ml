@@ -346,6 +346,14 @@ let source_of_valtype (ty : valtype) : source_type =
 
 (*** Diagnostics ***)
 
+let loc_last_char (loc : Ast.location) =
+  let loc_end = loc.Ast.loc_end in
+  {
+    loc with
+    Ast.loc_start =
+      { loc_end with Lexing.pos_cnum = loc_end.Lexing.pos_cnum - 1 };
+  }
+
 module Error = struct
   open Wax_utils
   module D = Diagnostic
@@ -357,6 +365,7 @@ module Error = struct
      coloured and quoted ['…'] when it is not. Its text is produced by the
      [Format] [print_*] printers above and emitted as one styled atom. *)
   let text = Message.text
+  let kw = Message.code
   let ( ++ ) = Message.( ++ )
   let ( ^^ ) = Message.( ^^ )
 
@@ -509,8 +518,15 @@ module Error = struct
          ++ styp table_source
       ^^ text ".")
 
-  let duplicate_local context ~location name =
+  let duplicate_local context ~location ~prev_loc name =
     report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously defined here";
+          };
+        ]
       (text "The local" ++ ident name ++ text "is already defined.")
 
   let type_mismatch context ~location ~provided_source ~expected_source =
@@ -526,9 +542,10 @@ module Error = struct
 
   let br_on_non_null_no_ref context ~location =
     report context ~location ~severity:Error
-      (text
-         "Type mismatch: br_on_non_null requires the target label to end in a \
-          reference type, but it has no result types.")
+      (text "Type mismatch:" ++ kw "br_on_non_null"
+      ++ text
+           "requires the target label to end in a reference type, but it has \
+            no result types.")
 
   let select_type_mismatch context ~location ~loc1 ~source1 ~loc2 ~source2 =
     (* Point a caret at each branch value (when its push site is known),
@@ -548,11 +565,13 @@ module Error = struct
        types in the message so they are not lost. *)
     let message =
       if List.length related = 2 then
-        text
-          "Type mismatch: both branches of a select should have the same type."
+        text "Type mismatch: both branches of a"
+        ++ kw "select"
+        ++ text "should have the same type."
       else
-        text
-          "Type mismatch: both branches of a select should have the same type."
+        text "Type mismatch: both branches of a"
+        ++ kw "select"
+        ++ text "should have the same type."
         ++ text "Here, they have type"
         ++ styp source1 ++ text "and" ++ styp source2
         ^^ text "."
@@ -571,10 +590,26 @@ module Error = struct
       report context ~location ~severity:Error
         (text "Type mismatch: the stack is empty (a value is missing).")
 
-  let non_empty_stack context ~location render =
+  (* The counted variant of [empty_stack], for a pop whose caller knows how
+     many values the construct takes ([pop_args]): say how many were expected
+     and how many were there (the Wax typer's [short_stack]). *)
+  let short_stack context kind ~location ~actual ~expected =
+    let values =
+      match kind with `Input -> "argument(s)" | `Output -> "returned value(s)"
+    in
     if D.in_recovery context then ()
     else
       report context ~location ~severity:Error
+        (text "Type mismatch: expecting"
+         ++ Message.int expected ++ text values
+         ++ text "from the stack, but there are"
+         ++ Message.int actual
+        ^^ text ".")
+
+  let non_empty_stack context ~location render =
+    if D.in_recovery context then ()
+    else
+      report context ~location:(loc_last_char location) ~severity:Error
         (text "Type mismatch: unexpected values left on the stack:"
         ^^ Message.raw render)
 
@@ -610,15 +645,30 @@ module Error = struct
      ++ sources provided_source ++ text "but type" ++ sources expected_source
      ++ text "was expected.")
 
-  let argument_type_mismatch context ~location ~descr ~provided_source
+  (* [nth] names the mismatching position when several values are compared
+     ([None] for a single value, where it would only be noise). *)
+  let argument_type_mismatch context ~location ~descr ~nth ~provided_source
       ~expected_source =
+    let position =
+      match nth with
+      | Some n -> text "for value" ++ Message.int n
+      | None -> Message.empty
+    in
     report context ~location ~severity:Error
       (text "Type mismatch:" ++ text descr ++ text "provides type"
-     ++ styp provided_source ++ text "but type" ++ styp expected_source
-     ++ text "was expected.")
+     ++ styp provided_source ++ position ++ text "but type"
+     ++ styp expected_source ++ text "was expected.")
 
-  let branch_parameter_count_mismatch context ~location label len label' len' =
+  let branch_parameter_count_mismatch context ~location ~default_loc label len
+      label' len' =
     report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = default_loc;
+            message = text "default branch target here";
+          };
+        ]
       (text "Type mismatch: the default branch target"
       ++ index label ++ text "expects" ++ Message.int len
       ++ text "parameters, while branch target"
@@ -652,10 +702,15 @@ module Error = struct
       ((text "The lane index should be less than" ++ Message.int max_lane)
       ^^ text ".")
 
-  let inline_function_type_mismatch context ~location _ =
-    (*ZZZ print expected type *)
+  let inline_function_type_mismatch context ~location (f : functype) =
     report context ~location ~severity:Error
-      (text "The inline function type does not match the type definition.")
+      (text
+         "The inline function type does not match the type definition, whose \
+          parameters are"
+       ++ sources (Array.map source_of_valtype f.params)
+       ++ text "and results are"
+       ++ sources (Array.map source_of_valtype f.results)
+      ^^ text ".")
 
   let constant_expression_required context ~location =
     report context ~location ~severity:Error
@@ -691,12 +746,26 @@ module Error = struct
       (text "The" ++ text kind
       ++ text "maximum size should be larger than the minimal size.")
 
-  let duplicated_export context ~location name =
+  let duplicated_export context ~location ~prev_loc name =
     report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously exported here";
+          };
+        ]
       ((text "There is already an export of name" ++ str name) ^^ text ".")
 
-  let import_after_definition context ~location kind =
+  let import_after_definition context ~location ~prev_loc kind =
     report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "first definition here";
+          };
+        ]
       (text "This import is after a" ++ text kind ++ text "definition.")
 
   let supertype_mismatch context ~location =
@@ -740,7 +809,8 @@ module Error = struct
 
   let select_result_count context ~location =
     report context ~location ~severity:Error
-      (text "A typed select must be annotated with exactly one result type.")
+      (text "A typed" ++ kw "select"
+      ++ text "must be annotated with exactly one result type.")
 
   let non_nullable_table_type context ~location =
     report context ~location ~severity:Error
@@ -867,15 +937,24 @@ module Error = struct
         [
           {
             Wax_utils.Diagnostic.location = select;
-            message = text "This 'select' evaluates both of its operands.";
+            message =
+              text "This" ++ kw "select"
+              ++ text "evaluates both of its operands.";
           };
         ]
       (text
          "This operation is evaluated even when the condition selects the \
           other operand.")
 
-  let index_already_bound context ~location kind index =
+  let index_already_bound context ~location ~prev_loc kind index =
     report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously bound here";
+          };
+        ]
       (text "The" ++ text kind ++ text "index" ++ ident index.Ast.desc
      ++ text "is already bound.")
 
@@ -990,8 +1069,10 @@ module Error = struct
 
   let ref_func_inaccessible context ~location idx =
     report context ~location ~severity:Error
-      (text "The function" ++ index idx
-      ++ text "is not declared as referenceable (ref.func).")
+      ((text "The function" ++ index idx
+        ++ text "is not declared as referenceable ("
+       ^^ kw "ref.func")
+      ^^ text ").")
 
   let non_constant_global context ~location idx =
     report context ~location ~severity:Error
@@ -1003,8 +1084,15 @@ module Error = struct
     report context ~location ~severity:Error
       (text "The start function must have no parameters and no results.")
 
-  let multiple_start context ~location =
+  let multiple_start context ~location ~prev_loc =
     report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "other start function here";
+          };
+        ]
       (text "A module can have at most one start function.")
 end
 
@@ -1577,7 +1665,7 @@ type module_context = {
   (* Each element segment carries its interned reference type and the source
      reference type from its declaration, to name a mismatched element type. *)
   elem : (reftype * source_type) Sequence.t;
-  exports : (string, unit) Hashtbl.t;
+  exports : (string, Ast.location) Hashtbl.t;
   refs : (int, unit) Hashtbl.t;
   (* Function / global indices referenced anywhere (a call, [ref.func], a
      [global.get]/[global.set], an export, or the start function) — the marks the
@@ -1837,7 +1925,7 @@ let non_null_source (source : source_type) : source_type =
   | Inline_ref _ as source -> source
   | _ -> assert false
 
-let pop ctx loc ~expected_source ty st =
+let pop ctx loc ?arity ~expected_source ty st =
   let mismatch location source =
     match location with
     | Some location ->
@@ -1860,7 +1948,18 @@ let pop ctx loc ~expected_source ty st =
       if not ok then mismatch location source;
       (r, ())
   | Empty ->
-      Error.empty_stack ctx.modul.diagnostics ~location:loc;
+      (* With an arity context ([pop_args]) the counts are known: report how
+         many values the construct takes and how many were there — the results
+         of a block or function are anchored at its closing token. A lone pop
+         keeps the plain report. *)
+      (match arity with
+      | Some (kind, current, expected) ->
+          Error.short_stack ctx.modul.diagnostics kind
+            ~location:
+              (match kind with `Input -> loc | `Output -> loc_last_char loc)
+            ~actual:(expected - current - 1)
+            ~expected
+      | None -> Error.empty_stack ctx.modul.diagnostics ~location:loc);
       (Unreachable, ())
 
 (* Pop a value whose expected type has no user-written source form — a builtin,
@@ -1977,16 +2076,24 @@ let get_local ctx ?(initialize = false) i =
    fully-unknown [Bot] (a polymorphic, unreachable stack) is treated as non-null
    — the most precise choice, like [Bot_ref] — and a non-reference operand (a
    reported error) is treated as nullable rather than crashing. *)
-let convert_operand_nullable ctx loc entry ~typ =
+let convert_operand_nullable ctx loc (entry, entry_loc) ~typ =
   match entry with
   | Bot -> false
   | Bot_ref -> false
   | Val (ty, source) -> (
       let expected = Ref { nullable = true; typ } in
-      if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
-        Error.type_mismatch ctx.modul.diagnostics ~location:loc
-          ~provided_source:source
-          ~expected_source:(source_of_valtype expected);
+      (if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
+         (* As in [pop]: blame the value where it was pushed when that is
+            known, with the conversion as the consumer. *)
+         match entry_loc with
+         | Some location ->
+             Error.instruction_type_mismatch ctx.modul.diagnostics ~location
+               ~consumer:(Some loc) ~provided_source:source
+               ~expected_source:(source_of_valtype expected)
+         | None ->
+             Error.type_mismatch ctx.modul.diagnostics ~location:loc
+               ~provided_source:source
+               ~expected_source:(source_of_valtype expected));
       match ty with Ref { nullable; _ } -> nullable | _ -> true)
 
 let is_defaultable ty =
@@ -2064,14 +2171,17 @@ let blocktype ctx (ty : Ast.Text.blocktype option) =
       let+@ t = valtype ctx.modul.diagnostics ctx.modul.types ty in
       ([||], [| t |], [||], [| Plain ty |])
 
-let pop_args ctx loc ~source args =
+let pop_args ctx ?(kind = `Input) loc ~source args =
+  let len = Array.length args in
   let rec loop i =
     if i < 0 then return ()
     else
-      let* () = pop ctx loc ~expected_source:source.(i) args.(i) in
+      let* () =
+        pop ctx loc ~arity:(kind, i, len) ~expected_source:source.(i) args.(i)
+      in
       loop (i - 1)
   in
-  loop (Array.length args - 1)
+  loop (len - 1)
 
 (* [sink] (default [true]) records each pushed result at the instruction span
    [loc] for the editor type sink. A {e single} result cell also carries [loc] as
@@ -2186,6 +2296,7 @@ let compare_types ctx ~location ~descr ~provided_source ~expected_source
         let e = expected.(i) in
         if not (Types.val_subtype ctx.subtyping_info p e) then
           Error.argument_type_mismatch ctx.diagnostics ~location ~descr
+            ~nth:(if Array.length provided > 1 then Some (i + 1) else None)
             ~provided_source:provided_source.(i)
             ~expected_source:expected_source.(i))
       provided
@@ -2860,7 +2971,8 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
                   let len' = Array.length params in
                   if len <> len' then
                     Error.branch_parameter_count_mismatch ctx.modul.diagnostics
-                      ~location:loc idx len idx' len'
+                      ~location:idx'.Ast.info ~default_loc:idx.Ast.info idx len
+                      idx' len'
                   else ignore (pop_args ctx loc ~source:param_source params st))
               (idx :: lst))
       in
@@ -3026,7 +3138,10 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let* _ = pop_any ctx loc in
       push ~source:src_ty2 (Some loc) (Ref ty2)
   | Return ->
-      let* () = pop_args ctx loc ~source:ctx.return_source ctx.return_types in
+      let* () =
+        pop_args ctx ~kind:`Output loc ~source:ctx.return_source
+          ctx.return_types
+      in
       unreachable
   | Call idx -> (
       let*! ty, _, sign, _ = get_function ctx idx in
@@ -3085,7 +3200,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           let param_source, result_source = functype_sources sign in
           record (Some idx.info) (Signature (param_source, result_source));
           let* () = pop_args ctx loc ~source:param_source params in
-          compare_types ctx.modul ~location:loc ~descr:"this tail call"
+          compare_types ctx.modul ~location:idx.info ~descr:"this tail call"
             ~provided_source:result_source ~expected_source:ctx.return_source
             ~provided:results ~expected:ctx.return_types ();
           unreachable)
@@ -3100,7 +3215,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           (Ref { nullable = true; typ = Type type_idx })
       in
       let* () = pop_args ctx loc ~source:param_source params in
-      compare_types ctx.modul ~location:loc ~descr:"this tail call"
+      compare_types ctx.modul ~location:idx.info ~descr:"this tail call"
         ~provided_source:result_source ~expected_source:ctx.return_source
         ~provided:results ~expected:ctx.return_types ();
       unreachable
@@ -3126,9 +3241,15 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
             in
             let* () = pop_address ctx loc typ.limits in
             let* () = pop_args ctx loc ~source:param_source params in
-            compare_types ctx.modul ~location:loc ~descr:"this tail call"
-              ~provided_source:result_source ~expected_source:ctx.return_source
-              ~provided:results ~expected:ctx.return_types ();
+            (* Anchor at the typeuse's type index (the callee type as written)
+               when there is one; an inline-only typeuse keeps the whole
+               instruction. *)
+            compare_types ctx.modul
+              ~location:
+                (match fst tu with Some tidx -> tidx.Ast.info | None -> loc)
+              ~descr:"this tail call" ~provided_source:result_source
+              ~expected_source:ctx.return_source ~provided:results
+              ~expected:ctx.return_types ();
             unreachable)
   | Drop ->
       let* _ = pop_any ctx loc in
@@ -3894,11 +4015,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc F32 in
       push_known (Some loc) F64
   | ExternConvertAny ->
-      let* tt, _ = pop_any ctx loc in
+      let* tt = pop_any ctx loc in
       let nullable = convert_operand_nullable ctx loc tt ~typ:Any in
       push_known (Some loc) (Ref { nullable; typ = Extern })
   | AnyConvertExtern ->
-      let* tt, _ = pop_any ctx loc in
+      let* tt = pop_any ctx loc in
       let nullable = convert_operand_nullable ctx loc tt ~typ:Extern in
       push_known (Some loc) (Ref { nullable; typ = Any })
   | Folded (i, l) ->
@@ -3987,7 +4108,7 @@ and block ctx loc label ~used ~param_source ~result_source ~br_source ~params
          }
          block
      in
-     pop_args ctx loc ~source:result_source (*ZZZ More precise loc*) results)
+     pop_args ctx ~kind:`Output loc ~source:result_source results)
 
 (*** Constant expressions ***)
 
@@ -4205,9 +4326,11 @@ let add_type d ctx ty =
 let register_exports ctx lst =
   List.iter
     (fun (name : Ast.Text.name) ->
-      if Hashtbl.mem ctx.exports name.desc then
-        Error.duplicated_export ctx.diagnostics ~location:name.info name
-      else Hashtbl.add ctx.exports name.desc ())
+      match Hashtbl.find_opt ctx.exports name.desc with
+      | Some prev_loc ->
+          Error.duplicated_export ctx.diagnostics ~location:name.info ~prev_loc
+            name
+      | None -> Hashtbl.add ctx.exports name.desc name.info)
     lst
 
 let limits ctx kind
@@ -5199,7 +5322,8 @@ let functions ?(warn_unused = true) ctx fields =
           in
           with_empty_stack ctx.modul field.info
             (let* () = instructions ctx instrs in
-             pop_args ctx field.info (*ZZZ*) ~source:return_source return_types);
+             pop_args ctx ~kind:`Output field.info ~source:return_source
+               return_types);
           (* A named local whose name starts with [_] is intentionally unused;
              unnamed locals are always reported. *)
           if warn_unused then
@@ -5324,9 +5448,11 @@ let check_syntax ctx lst =
   let datas = Hashtbl.create 16 in
   let check_unbound tbl kind id =
     let>@ id : Ast.Text.name = id in
-    if Hashtbl.mem tbl id.desc then
-      Error.index_already_bound ctx.diagnostics ~location:id.info kind id
-    else Hashtbl.add tbl id.desc ()
+    match Hashtbl.find_opt tbl id.desc with
+    | Some prev_loc ->
+        Error.index_already_bound ctx.diagnostics ~location:id.info ~prev_loc
+          kind id
+    | None -> Hashtbl.add tbl id.desc id.info
   in
   let iter_instrs f instrs =
     List.iter (Ast_utils.iter_instr (fun i -> f i.Ast.desc)) instrs
@@ -5380,9 +5506,11 @@ let check_syntax ctx lst =
     List.iter
       (fun id ->
         let*? id : Ast.Text.name = id in
-        if Hashtbl.mem seen id.desc then
-          Error.duplicate_local ctx.diagnostics ~location:id.Ast.info id.desc
-        else Hashtbl.add seen id.desc ())
+        match Hashtbl.find_opt seen id.desc with
+        | Some prev_loc ->
+            Error.duplicate_local ctx.diagnostics ~location:id.Ast.info
+              ~prev_loc id.desc
+        | None -> Hashtbl.add seen id.desc id.Ast.info)
       (param_ids @ local_ids)
   in
   let check_import id (desc : Ast.Text.importdesc) =
@@ -5446,8 +5574,9 @@ let check_syntax ctx lst =
         match field.Ast.desc with Ast.Text.Start _ -> true | _ -> false)
       lst
   with
-  | _ :: second :: _ ->
+  | first :: second :: _ ->
       Error.multiple_start ctx.diagnostics ~location:second.Ast.info
+        ~prev_loc:first.Ast.info
   | _ -> ()
 
 let validate_configuration ?(warn_unused = true)
@@ -5740,16 +5869,17 @@ let check_import_order diagnostics fields =
     (List.fold_left
        (fun can_import (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
          match (can_import, field.desc) with
-         | Some previous, (Import _ | Import_group1 _ | Import_group2 _) ->
+         | ( Some (previous, prev_loc),
+             (Import _ | Import_group1 _ | Import_group2 _) ) ->
              Error.import_after_definition diagnostics ~location:field.info
-               previous;
+               ~prev_loc previous;
              can_import
-         | None, Func _ -> Some "function"
-         | None, Memory _ -> Some "memory"
-         | None, Table _ -> Some "table"
-         | None, Tag _ -> Some "tag"
-         | None, Global _ -> Some "global"
-         | None, String_global _ -> Some "string"
+         | None, Func _ -> Some ("function", field.info)
+         | None, Memory _ -> Some ("memory", field.info)
+         | None, Table _ -> Some ("table", field.info)
+         | None, Tag _ -> Some ("tag", field.info)
+         | None, Global _ -> Some ("global", field.info)
+         | None, String_global _ -> Some ("string", field.info)
          | ( Some _,
              (Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _)
            )

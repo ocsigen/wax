@@ -176,9 +176,10 @@ module Error = struct
     (* Like [unbound_name], suppress this in error-recovery mode: a stack
        underflow while type-checking a best-effort AST is usually a cascade from
        a value-producing construct dropped at a sync boundary, not a real
-       mistake. Both callers ([pop_any]/[pop]) recover with [Error]/[()], so
-       nothing downstream cascades; genuine underflows in intact code still
-       surface on a clean re-check once the syntax errors are fixed. *)
+       mistake. The reporters ([pop], and [report_missing_hole]/[with_holes]
+       for a hole) recover with [Error]/[()], so nothing downstream cascades;
+       genuine underflows in intact code still surface on a clean re-check once
+       the syntax errors are fixed. *)
     let values =
       match kind with
       | `Input -> "argument(s)"
@@ -340,12 +341,26 @@ module Error = struct
     report context ~location
       (text "The start function must have no parameters and no results.")
 
-  let multiple_start context ~location =
+  let multiple_start context ~location ~prev_loc =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "other start function here";
+          };
+        ]
       (text "A module can have at most one start function.")
 
-  let multiple_module context ~location =
+  let multiple_module context ~location ~prev_loc =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "other name annotation here";
+          };
+        ]
       (text "A module can have at most one name annotation.")
 
   let unknown_annotation context ~location name =
@@ -368,8 +383,15 @@ module Error = struct
        ++ text name
       ^^ text ".")
 
-  let multiple_import context ~location =
+  let multiple_import context ~location ~prev_loc =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "other import-name annotation here";
+          };
+        ]
       (text "An import can have at most one import-name annotation.")
 
   let final_supertype context ~location x =
@@ -494,6 +516,24 @@ module Error = struct
             match the inferred result exactly; add a result annotation to the \
             block.")
 
+  (* Two targets of the same [br_table] take different numbers of values;
+     [first] is the reference target (the first bound one). *)
+  let branch_arity_mismatch context ~location ~first_loc first ~expected
+      ~provided =
+    report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = first_loc;
+            message = text "other branch target here";
+          };
+        ]
+      (text "This branch target expects"
+      ++ Message.int provided
+      ++ text "value(s), while branch target"
+      ++ name first ++ text "expects" ++ Message.int expected
+      ++ text "value(s).")
+
   let name_already_bound context ~location ~prev_loc kind x =
     report context ~location
       ~related:
@@ -547,8 +587,15 @@ module Error = struct
        ++ text role
       ^^ text ".")
 
-  let duplicated_field context ~location x =
+  let duplicated_field context ~location ~prev_loc x =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "other field here";
+          };
+        ]
       ((text "Several fields have the same name" ++ name x) ^^ text ".")
 
   let splice_without_supertype context ~location =
@@ -564,8 +611,15 @@ module Error = struct
       ++ text " can only inherit fields from a struct supertype;"
       ++ name x ++ text "is not a struct.")
 
-  let duplicated_parameter context ~location x =
+  let duplicated_parameter context ~location ~prev_loc x =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "other parameter here";
+          };
+        ]
       ((text "Several parameters have the same name" ++ name x) ^^ text ".")
 
   let constant_expression_required context ~location =
@@ -647,8 +701,15 @@ module Error = struct
     report ?hint:(did_you_mean suggestions) context ~location
       ((text "Unknown argument label" ++ name x) ^^ text ".")
 
-  let duplicate_argument_label context ~location x =
+  let duplicate_argument_label context ~location ~prev_loc x =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously given here";
+          };
+        ]
       (text "The argument label" ++ name x ++ text "is given several times.")
 
   let positional_argument_after_label context ~location =
@@ -1066,11 +1127,13 @@ let check_unique_param_names d params =
          match fst p.desc with
          | None -> s
          | Some name ->
-             if StringSet.mem name.desc s then
-               Error.duplicated_parameter d ~location:name.info name;
-             StringSet.add name.desc s)
-       StringSet.empty params
-      : StringSet.t)
+             (match List.assoc_opt name.desc s with
+             | Some prev_loc ->
+                 Error.duplicated_parameter d ~location:name.info ~prev_loc name
+             | None -> ());
+             (name.desc, name.info) :: s)
+       [] params
+      : (string * location) list)
 
 let muttype f d ctx { mut; typ } =
   let+@ typ = f d ctx typ in
@@ -1141,14 +1204,16 @@ let comptype d (ctx : type_context) (ty : comptype) : Nz.comptype option =
       let+@ ty = n_functype d ctx ty in
       (Func ty : Nz.comptype)
   | Struct fields ->
-      let _ : StringSet.t =
+      let _ : (string * location) list =
         Array.fold_left
           (fun s field ->
             let name, _ = field.desc in
-            if StringSet.mem name.desc s then
-              Error.duplicated_field d ~location:name.info name;
-            StringSet.add name.desc s)
-          StringSet.empty fields
+            (match List.assoc_opt name.desc s with
+            | Some prev_loc ->
+                Error.duplicated_field d ~location:name.info ~prev_loc name
+            | None -> ());
+            (name.desc, name.info) :: s)
+          [] fields
       in
       let+@ fields =
         array_map_opt (fun field -> n_fieldtype d ctx (snd field.desc)) fields
@@ -1917,25 +1982,48 @@ let ( let*! ) e f =
 
 (* Pop the top operand's type. An [Unreachable] (polymorphic) stack yields a
    fresh [Unknown] and consumes nothing; [Empty] is a genuine stack underflow.
-   An underflow turns the stack unreachable (mirroring the Wasm validator's
-   [pop_any]), so one missing value is reported once rather than once per
-   subsequent pop. *)
-let pop_any ctx i current expected st =
+   No diagnostic is emitted here: the placeholder cell is recorded in
+   [ctx.missing_holes] with the counts, so the hole that ends up consuming it
+   reports the underflow at its own location ([report_missing_hole]) — sparing
+   the caller any knowledge of how the pending values are distributed — and
+   [with_holes] covers a placeholder that recovery drops. An underflow turns
+   the stack unreachable (mirroring the Wasm validator's [pop_any]), so one
+   missing value is tracked once rather than once per subsequent pop. *)
+let pop_any ctx batch current expected st =
   match st with
   | Unreachable -> (st, Cell.make Unknown)
-  | Poisoned -> (st, Cell.make Error)
+  | Poisoned ->
+      let cell = Cell.make Error in
+      (* Poisoned by this very run's underflow (below): this value is missing
+         too, so track it under the same batch — the report lands on the FIRST
+         hole without a value. A stack poisoned before this run keeps plain,
+         silent placeholders. *)
+      (match !batch with
+      | Some b -> ctx.missing_holes := (cell, b) :: !(ctx.missing_holes)
+      | None -> ());
+      (st, cell)
   | Cons (_, ty, r) -> (r, ty)
   | Empty ->
-      (* FIXME: point to the hole *)
-      Error.short_stack ctx.diagnostics `Holes ~location:i.info ~actual:current
-        ~expected;
-      (Poisoned, Cell.make Error)
+      let cell = Cell.make Error in
+      let b =
+        {
+          hole_reported = false;
+          hole_actual = current;
+          hole_expected = expected;
+        }
+      in
+      batch := Some b;
+      ctx.missing_holes := (cell, b) :: !(ctx.missing_holes);
+      (Poisoned, cell)
 
-let pop_many ctx i count =
+(* Pop [count] pending values, returning them together with the underflow
+   batch, if one occurred (for [with_holes]'s fallback report). *)
+let pop_many ctx count =
+  let batch = ref None in
   let rec loop n accu =
-    if n = count then return accu
+    if n = count then return (accu, batch)
     else
-      let* ty = pop_any ctx i n count in
+      let* ty = pop_any ctx batch n count in
       loop (n + 1) (ty :: accu)
   in
   loop 0 []
@@ -2943,6 +3031,23 @@ let pop_parameter st =
   | x :: r -> ({ st with pending = r }, x)
   | [] -> (st, Cell.make Error)
 
+(* Report the underflow behind the value a hole just consumed, if it was one of
+   the placeholders [pop_any] recorded: the report points at the hole itself,
+   the most precise anchor for a missing value. One report per underflow — the
+   batch is marked, and [with_holes] falls back to the whole expression only
+   when the placeholder never reached a hole (a recovery path). *)
+let report_missing_hole ctx ~location ty =
+  match List.find_opt (fun (cell, _) -> cell == ty) !(ctx.missing_holes) with
+  | Some (_, batch) ->
+      ctx.missing_holes :=
+        List.filter (fun (cell, _) -> cell != ty) !(ctx.missing_holes);
+      if not batch.hole_reported then begin
+        batch.hole_reported <- true;
+        Error.short_stack ctx.diagnostics `Holes ~location
+          ~actual:batch.hole_actual ~expected:batch.hole_expected
+      end
+  | None -> ()
+
 let _print_arg_stack f l =
   Format.pp_print_list
     ~pp_sep:(fun f () -> Format.fprintf f "@ ")
@@ -3407,20 +3512,24 @@ let take_labels ctx ~allowed labelled =
           (Wax_utils.Spell_check.f (fun f -> List.iter f allowed) l.desc)
         l;
       (seen, acc))
-    else if StringSet.mem l.desc seen then (
-      Error.duplicate_argument_label ctx.diagnostics ~location:l.info l;
-      (seen, acc))
     else
-      match e.Ast.desc with
-      | Ast.Int _ -> (StringSet.add l.desc seen, (l.desc, e) :: acc)
-      | _ ->
-          (* Report it and drop the pair, so [check_memarg] (which would also
-             fail to read it as a literal) does not report it again. *)
-          Error.integer_literal_required ctx.diagnostics
-            ~location:(snd e.Ast.info);
-          (StringSet.add l.desc seen, acc)
+      match List.assoc_opt l.desc seen with
+      | Some prev_loc ->
+          Error.duplicate_argument_label ctx.diagnostics ~location:l.info
+            ~prev_loc l;
+          (seen, acc)
+      | None -> (
+          match e.Ast.desc with
+          | Ast.Int _ -> ((l.desc, l.info) :: seen, (l.desc, e) :: acc)
+          | _ ->
+              (* Report it and drop the pair, so [check_memarg] (which would
+                 also fail to read it as a literal) does not report it
+                 again. *)
+              Error.integer_literal_required ctx.diagnostics
+                ~location:(snd e.Ast.info);
+              ((l.desc, l.info) :: seen, acc))
   in
-  let _, acc = List.fold_left take (StringSet.empty, []) labelled in
+  let _, acc = List.fold_left take ([], []) labelled in
   fun name -> List.assoc_opt name acc
 
 (* The [lane]/[align]/[offset] immediates of a memory access with [nstack]
@@ -4061,11 +4170,21 @@ let fold_operand ctx child node st =
    check runs inline ([hole_child]); the final expression state is discarded (a
    leftover pending is a recovery-only artefact, see [pop_parameter]). *)
 let with_holes ctx i build =
-  let* pending = pop_many ctx i (count_holes i) in
-  (* [build ()] is forced only here, after [pop_many], so a stack underflow it
-     reports is queued before any diagnostic the typer emits eagerly (before its
-     first monadic step). *)
+  let* pending, batch = pop_many ctx (count_holes i) in
   let _st, r = build () { pending; value_loc = None; reported = false } in
+  (* An underflow placeholder normally reaches a hole, which reports it at its
+     own location ([report_missing_hole]); when recovery dropped it instead,
+     report here, against the whole expression. *)
+  (match !batch with
+  | Some b ->
+      ctx.missing_holes :=
+        List.filter (fun (_, b') -> b' != b) !(ctx.missing_holes);
+      if not b.hole_reported then begin
+        b.hole_reported <- true;
+        Error.short_stack ctx.diagnostics `Holes ~location:i.info
+          ~actual:b.hole_actual ~expected:b.hole_expected
+      end
+  | None -> ());
   return r
 
 (* A [match] scrutinee, [dispatch] index or [while] condition is evaluated inside
@@ -4116,6 +4235,7 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
       return_expression i desc (Cell.make Error)
   | Hole ->
       let* ty = pop_parameter in
+      report_missing_hole ctx ~location:i.info ty;
       return_expression i Hole ty
   | Null -> return_expression i Null (Cell.make Null)
   | Get _ | Set _ | Tee _ -> type_variable_access ctx i
@@ -4375,7 +4495,7 @@ and type_branch ctx i =
           labels
       in
       (match List.find_opt (fun (_, bound, _) -> bound) targets with
-      | Some (_, _, first) ->
+      | Some (first_label, _, first) ->
           let len = Array.length first in
           let seen = Hashtbl.create 8 in
           List.iter
@@ -4383,7 +4503,8 @@ and type_branch ctx i =
               if bound && not (Hashtbl.mem seen label.desc) then begin
                 Hashtbl.add seen label.desc ();
                 if Array.length params <> len then
-                  Error.value_count_mismatch ctx.diagnostics ~location:i.info
+                  Error.branch_arity_mismatch ctx.diagnostics
+                    ~location:label.info ~first_loc:first_label.info first_label
                     ~expected:len ~provided:(Array.length params);
                 check_subtypes ctx ~location:loc types params
               end)
@@ -5023,7 +5144,7 @@ and type_cont_method_call ctx i ~handlers recv meth args =
         | [ t ] -> (Some t, rest)
         | t :: dup :: _ ->
             Error.duplicate_argument_label ctx.diagnostics ~location:dup.info
-              { dup with desc = "tag" };
+              ~prev_loc:t.info { dup with desc = "tag" };
             (Some t, rest)
         | [] ->
             Error.switch_needs_tag ctx.diagnostics ~location:i.info;
@@ -6200,7 +6321,7 @@ and type_exception ctx i =
            l'
        in
        if List.length provided <> Array.length types then
-         Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+         Error.operand_count_mismatch ctx.diagnostics ~location:tag.info
            ~expected:(Array.length types) ~provided:(List.length provided)
        else
          List.iteri
@@ -7035,7 +7156,7 @@ and type_array_method_recovery ctx i func recv meth args =
   let* args' = instructions ctx args in
   let expected = match meth.desc with "fill" -> 3 | _ -> 4 in
   if List.length args' <> expected then
-    Error.operand_count_mismatch ctx.diagnostics ~location:i.info ~expected
+    Error.operand_count_mismatch ctx.diagnostics ~location:func.info ~expected
       ~provided:(List.length args');
   return_statement i
     (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))
@@ -7083,8 +7204,8 @@ and type_binary_intrinsic_call ctx i func i1 meth op args =
          leaves): report it, but still produce the method node with the receiver
          typed — its result is the receiver's type — so recovery keeps the call
          (editor features like signature help see it). *)
-      Error.operand_count_mismatch ctx.diagnostics ~location:i.info ~expected:1
-        ~provided:(List.length args');
+      Error.operand_count_mismatch ctx.diagnostics ~location:func.info
+        ~expected:1 ~provided:(List.length args');
       return_expression i (call args') (expression_type ctx i1')
 
 and type_unary_intrinsic_call ctx i func recv meth =
@@ -7178,7 +7299,7 @@ and type_simd_vector_op_call ctx i func recv meth args =
   let nstack_extra = List.length op.operands - 1 in
   let nargs = List.length args' in
   if nargs <> nimm + nstack_extra then
-    Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+    Error.operand_count_mismatch ctx.diagnostics ~location:func.info
       ~expected:(nimm + nstack_extra) ~provided:nargs;
   check_type ctx recv' (simd_cell (List.hd op.operands));
   let lane_bound =
@@ -8266,8 +8387,8 @@ and type_indirect_call ctx i i' l =
             (match param_types with
             | Some param_types when Array.length param_types <> List.length l'
               ->
-                Error.operand_count_mismatch ctx.diagnostics ~location:i.info
-                  ~expected:(Array.length param_types)
+                Error.operand_count_mismatch ctx.diagnostics
+                  ~location:(snd i'.info) ~expected:(Array.length param_types)
                   ~provided:(List.length l')
             | _ -> ());
             let*! returned_types =
@@ -9972,6 +10093,7 @@ let rec functions ctx fields =
                   (fun k _ s -> StringSet.add k s)
                   !locals StringSet.empty;
               (* Fresh per-function tracking of declared and read locals. *)
+              missing_holes = ref [];
               unresolved_label = ref false;
               read_locals = ref StringSet.empty;
               local_decls = ref [];
@@ -10332,6 +10454,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       tags = Tbl.make (Namespace.make ~links cond) "tag";
       locals = StringMap.empty;
       warn_unused;
+      missing_holes = ref [];
       unresolved_label = ref false;
       read_locals = ref StringSet.empty;
       local_decls = ref [];
@@ -10431,7 +10554,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   (* The conditions under which a [#[start]] has been seen; like [exports], a
      second start clashes only when its condition can hold at the same time. *)
   let starts = ref [] in
-  let module_seen = ref false in
+  let module_seen = ref None in
   (* The Wax name a bare [#[export]] reuses as its export name. *)
   let field_name field =
     match field.desc with
@@ -10496,16 +10619,21 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
         | "start", _ ->
             (* A module may name at most one start function per configuration;
                starts in mutually exclusive branches are fine. *)
-            if
-              List.exists
-                (fun g -> Cond.is_satisfiable (Cond.and_ g cond))
-                !starts
-            then Error.multiple_start diagnostics ~location;
-            starts := cond :: !starts
-        | "module", _ ->
+            (match
+               List.find_opt
+                 (fun (g, _) -> Cond.is_satisfiable (Cond.and_ g cond))
+                 !starts
+             with
+            | Some (_, prev_loc) ->
+                Error.multiple_start diagnostics ~location ~prev_loc
+            | None -> ());
+            starts := (cond, location) :: !starts
+        | "module", _ -> (
             (* A module may carry at most one name annotation. *)
-            if !module_seen then Error.multiple_module diagnostics ~location
-            else module_seen := true
+            match !module_seen with
+            | Some prev_loc ->
+                Error.multiple_module diagnostics ~location ~prev_loc
+            | None -> module_seen := Some location)
         | _ -> ())
       attributes
   in
@@ -10546,11 +10674,12 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       | None -> ()
     end;
     (match List.filter (fun (k, _, _) -> k = "import") decl.desc.attributes with
-    | _ :: (_, value, _) :: _ ->
-        let location =
-          match value with Some v -> v.info | None -> decl.info
+    | (_, first_value, _) :: (_, value, _) :: _ ->
+        let attr_location value =
+          match value with Some (v : _ instr) -> v.info | None -> decl.info
         in
-        Error.multiple_import diagnostics ~location
+        Error.multiple_import diagnostics ~location:(attr_location value)
+          ~prev_loc:(attr_location first_value)
     | _ -> ());
     (* An imported memory/table still has size limits to validate, the same as
        a defined one. *)

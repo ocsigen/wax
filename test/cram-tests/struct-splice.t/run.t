@@ -82,6 +82,7 @@ A delta field that repeats an inherited name is a duplicate:
   Error: Several fields have the same name 'a'.
    ──➤  -:2:22
   1 │ type base = open { a: i32 };
+    ·                    ^ other field here
   2 │ type t: base = { .., a: i32 };
     ·                      ^
   3 │ 

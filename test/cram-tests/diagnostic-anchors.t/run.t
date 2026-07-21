@@ -16,8 +16,8 @@ the two reports are distinct and point at the offending arm.
   >       (else))))
   > WAT
   $ wax check --error-format short if-arms.wat
-  if-arms.wat:5:7: error: Type mismatch: the stack is empty (a value is missing).
-  if-arms.wat:6:8: error: Type mismatch: the stack is empty (a value is missing).
+  if-arms.wat:5:12: error: Type mismatch: expecting 1 returned value(s) from the stack, but there are 0.
+  if-arms.wat:6:12: error: Type mismatch: expecting 1 returned value(s) from the stack, but there are 0.
   [128]
 
 The same module in binary form: the decoder gives each arm its byte-offset
@@ -25,8 +25,8 @@ span, so the two reports stay distinct there too (they were both anchored at
 the `if` opcode's offset before).
 
   $ wax check --error-format short if-empty-arms.wasm
-  if-empty-arms.wasm:1:29: error: Type mismatch: the stack is empty (a value is missing).
-  if-empty-arms.wasm:1:30: error: Type mismatch: the stack is empty (a value is missing).
+  if-empty-arms.wasm:1:28: error: Type mismatch: expecting 1 returned value(s) from the stack, but there are 0.
+  if-empty-arms.wasm:1:29: error: Type mismatch: expecting 1 returned value(s) from the stack, but there are 0.
   [128]
 
 A bare `select` on two reference operands reports each operand at its own
@@ -137,10 +137,23 @@ turns the stack unreachable, as in the Wasm validator).
   > }
   > WAX
   $ wax check --error-format short holes.wax
-  holes.wax:2:5: error: Expecting 2 value(s) from the stack, but there are 0.
   holes.wax:2:17: error: This expression occurs before a hole '_'.
+  holes.wax:2:29: error: Expecting 2 value(s) from the stack, but there are 0.
   holes.wax:2:29: error: Only number literals are allowed here.
   holes.wax:2:50: error: Only number literals are allowed here.
+  [128]
+
+The underflow points at the first hole without a value — following the hole
+slices, so a struct literal written out of declared field order anchors at the
+hole of the first declared field (here [x], written second), which is the one
+left without a value:
+
+  $ cat > holes-reorder.wax <<'WAX'
+  > type S = { x: i32, y: f64 };
+  > fn g() -> &S { 2.0; {S| y: _, x: _}; }
+  > WAX
+  $ wax check --error-format short holes-reorder.wax
+  holes-reorder.wax:2:34: error: Expecting 2 value(s) from the stack, but there are 1.
   [128]
 
 Calling a zero-value expression reports "an expression is expected" once, not

@@ -99,6 +99,7 @@ positional argument after a labelled one, and a non-constant payload:
    8 │ fn c(p: i32) -> i32 {
    9 │     m.load32(p, offset: 4, offset: 5);
      ·                            ^^^^^^
+     ·                 ^^^^^^ previously given here
   10 │ }
   11 │ fn d(v: v128) -> i32 {
   Error:

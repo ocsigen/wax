@@ -130,6 +130,12 @@ type type_context = {
 (** The module-wide type space and its memoised subtyping info (see the field
     comments in [typing_env.ml]). *)
 
+type missing_batch = {
+  mutable hole_reported : bool;
+  hole_actual : int;
+  hole_expected : int;
+}
+
 type module_context = {
   diagnostics : Wax_utils.Diagnostic.context;
   warn_unused : bool;
@@ -150,6 +156,7 @@ type module_context = {
   mutable locals : (Infer.inferred_valtype option * Ast.location) StringMap.t;
   mutable initialized_locals : StringSet.t;
   mutable deferred_uninit : Ast.ident list ref list;
+  missing_holes : (Infer.inferred_type Infer.Cell.t * missing_batch) list ref;
   unresolved_label : bool ref;
   read_locals : StringSet.t ref;
   local_decls : Ast.ident list ref;

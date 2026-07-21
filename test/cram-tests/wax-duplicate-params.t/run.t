@@ -7,6 +7,7 @@ an explicit type definition, and a tag declaration.
    ──➤  func.wax:1:14
   1 │ fn f(x: i32, x: i32) { }
     ·              ^
+    ·      ^ other parameter here
   2 │ 
   [128]
 
@@ -15,6 +16,7 @@ an explicit type definition, and a tag declaration.
    ──➤  type.wax:1:21
   1 │ type T = fn(a: i32, a: f64);
     ·                     ^
+    ·             ^ other parameter here
   2 │ 
   [128]
 
@@ -23,5 +25,6 @@ an explicit type definition, and a tag declaration.
    ──➤  tag.wax:1:17
   1 │ tag foo(p: i32, p: i32);
     ·                 ^
+    ·         ^ other parameter here
   2 │ 
   [128]

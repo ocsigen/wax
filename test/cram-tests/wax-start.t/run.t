@@ -27,6 +27,7 @@ A module may have at most one start function:
   Error: A module can have at most one start function.
    ──➤  two-starts.wax:2:1
   1 │ #[start] fn f() {}
+    · ^^^^^^^^^^^^^^^^^^ other start function here
   2 │ #[start] fn g() {}
     · ^^^^^^^^^^^^^^^^^^
   3 │ 

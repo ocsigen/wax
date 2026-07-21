@@ -163,3 +163,96 @@ call, itself a hazard), so a resume in a `?:` branch is flagged:
     ·                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ This '?:' evaluates both branches (it compiles to a 'select').
   4 │ 
   Hint: Use an 'if' expression to evaluate only the chosen branch.
+
+An operand-count error on a method, intrinsic, throw or indirect call
+underlines the callee (the tag name, the receiver.method part, or the callee
+expression), not the whole call with its arguments:
+
+  $ cat > arity.wax <<'WAX'
+  > tag exc(i32);
+  > fn f() { throw exc(1, 2); }
+  > type arr = [mut i32];
+  > fn g(a: &arr) { a.fill(); }
+  > fn h(x: f32) -> f32 { x.min(); }
+  > fn v(v: v128) -> i32 { v.extract_lane_i32x4(); }
+  > type F = fn(i32);
+  > fn k(c: &F) { c(); }
+  > WAX
+
+  $ wax check arity.wax
+  Error: This instruction expects 1 operand(s) but 2 was/were provided.
+   ──➤  arity.wax:2:16
+  1 │ tag exc(i32);
+  2 │ fn f() { throw exc(1, 2); }
+    ·                ^^^
+  3 │ type arr = [mut i32];
+  4 │ fn g(a: &arr) { a.fill(); }
+  Error: This instruction expects 3 operand(s) but 0 was/were provided.
+   ──➤  arity.wax:4:17
+  2 │ fn f() { throw exc(1, 2); }
+  3 │ type arr = [mut i32];
+  4 │ fn g(a: &arr) { a.fill(); }
+    ·                 ^^^^^^
+  5 │ fn h(x: f32) -> f32 { x.min(); }
+  6 │ fn v(v: v128) -> i32 { v.extract_lane_i32x4(); }
+  Error: This instruction expects 1 operand(s) but 0 was/were provided.
+   ──➤  arity.wax:5:23
+  3 │ type arr = [mut i32];
+  4 │ fn g(a: &arr) { a.fill(); }
+  5 │ fn h(x: f32) -> f32 { x.min(); }
+    ·                       ^^^^^
+  6 │ fn v(v: v128) -> i32 { v.extract_lane_i32x4(); }
+  7 │ type F = fn(i32);
+  Error: This instruction expects 1 operand(s) but 0 was/were provided.
+   ──➤  arity.wax:6:24
+  4 │ fn g(a: &arr) { a.fill(); }
+  5 │ fn h(x: f32) -> f32 { x.min(); }
+  6 │ fn v(v: v128) -> i32 { v.extract_lane_i32x4(); }
+    ·                        ^^^^^^^^^^^^^^^^^^^^
+  7 │ type F = fn(i32);
+  8 │ fn k(c: &F) { c(); }
+  Error: This instruction expects 1 operand(s) but 0 was/were provided.
+   ──➤  arity.wax:8:15
+  6 │ fn v(v: v128) -> i32 { v.extract_lane_i32x4(); }
+  7 │ type F = fn(i32);
+  8 │ fn k(c: &F) { c(); }
+    ·               ^
+  9 │ 
+  [128]
+
+A br_table whose targets take different numbers of values is anchored at the
+mismatching label, pointing back at the other target:
+
+  $ cat > brt.wax <<'WAX'
+  > fn f(x: i32) -> i32 {
+  >     'a: do i32 {
+  >         'b: do {
+  >             1;
+  >             br_table ['b, else 'a] x;
+  >         }
+  >         2;
+  >     };
+  > }
+  > WAX
+
+  $ wax check brt.wax
+  Error:
+    This branch target expects 1 value(s), while branch target 'b' expects 0
+    value(s).
+   ──➤  brt.wax:5:32
+  3 │         'b: do {
+  4 │             1;
+  5 │             br_table ['b, else 'a] x;
+    ·                                ^^
+    ·                       ^^ other branch target here
+  6 │         }
+  7 │         2;
+  Error: This instruction provides 0 value(s) but 1 was/were expected.
+   ──➤  brt.wax:5:36
+  3 │         'b: do {
+  4 │             1;
+  5 │             br_table ['b, else 'a] x;
+    ·                                    ^
+  6 │         }
+  7 │         2;
+  [128]

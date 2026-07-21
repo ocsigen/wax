@@ -1,0 +1,8 @@
+rec {
+    type ft1 = fn(&?ct2) -> i32;
+    type ct1 = cont ft1;
+    type ft2 = fn(i32) -> i32;
+    type ct2 = cont ft2;
+}
+tag e() -> i32;
+fn sw(k: &?ct1) -> i32 { k.switch(tag: e, tag: e); }

@@ -6,7 +6,9 @@ the reference (via [typeuse]) but the result sources from the inline signature
 both resolve the reference first, so it is rejected cleanly:
 
   $ wax check mismatch.wat
-  Error: The inline function type does not match the type definition.
+  Error:
+    The inline function type does not match the type definition, whose
+    parameters are '[]' and results are '[i32 i32]'.
    ──➤  mismatch.wat:3:15
   1 │ (module
   2 │   (type $t (func (result i32 i32)))

@@ -141,6 +141,20 @@ continuation types:
   9 │ 
   [128]
 
+A repeated `tag:` immediate is reported at the second one, pointing back at the
+first:
+
+  $ wax check switch-dup-tag.wax
+  Error: The argument label 'tag' is given several times.
+   ──➤  switch-dup-tag.wax:8:48
+  6 │ }
+  7 │ tag e() -> i32;
+  8 │ fn sw(k: &?ct1) -> i32 { k.switch(tag: e, tag: e); }
+    ·                                                ^
+    ·                                        ^ previously given here
+  9 │ 
+  [128]
+
 Well-formed stack-switching code passes (a null cast to a nullable continuation
 reference lowers to ref.null, so it is allowed; a switch whose continuation's
 last parameter is itself a continuation type validates):

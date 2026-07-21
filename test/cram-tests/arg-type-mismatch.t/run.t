@@ -8,11 +8,11 @@ A tail call whose callee returns more results than the enclosing function:
   Error:
     Type mismatch: this tail call provides type '[i32 i32]' but type '[i32]' was
     expected.
-   ──➤  return_call_arity.wat:4:6
+   ──➤  return_call_arity.wat:4:18
   2 │   (func $callee (result i32 i32) (i32.const 1) (i32.const 2))
   3 │   (func $caller (result i32)
   4 │     (return_call $callee)))
-    ·      ^^^^^^^^^^^^^^^^^^^
+    ·                  ^^^^^^^
   5 │ 
   [128]
 
@@ -22,11 +22,11 @@ A tail call whose result type does not match the enclosing function:
   Error:
     Type mismatch: this tail call provides type 'f64' but type 'i32' was
     expected.
-   ──➤  return_call_type.wat:4:6
+   ──➤  return_call_type.wat:4:18
   2 │   (func $callee (result f64) (f64.const 1))
   3 │   (func $caller (result i32)
   4 │     (return_call $callee)))
-    ·      ^^^^^^^^^^^^^^^^^^^
+    ·                  ^^^^^^^
   5 │ 
   [128]
 

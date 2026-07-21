@@ -76,6 +76,7 @@ A module may carry at most one name:
   Error: A module can have at most one name annotation.
    ──➤  dup.wax:2:1
   1 │ #![module = "a"]
+    · ^^^^^^^^^^^^^^^^ other name annotation here
   2 │ #![module = "b"]
     · ^^^^^^^^^^^^^^^^
   3 │ fn f() {}

@@ -47,6 +47,7 @@ An import can have at most one import-name annotation:
    ──➤  two-imports.wax:1:39
   1 │ import "a" #[import = "b"] #[import = "c"] fn f();
     ·                                       ^^^
+    ·                       ^^^ other import-name annotation here
   2 │ 
   [128]
 

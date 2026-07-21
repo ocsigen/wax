@@ -330,11 +330,11 @@ A tail call's result list is named from the callee's declared results:
   Error:
     Type mismatch: this tail call provides type '(ref $t)' but type 'i32' was
     expected.
-   ──➤  return_call_result.wat:5:6
+   ──➤  return_call_result.wat:5:18
   3 │   (func $g (result (ref $t)) (unreachable))
   4 │   (func (result i32)
   5 │     (return_call $g)))
-    ·      ^^^^^^^^^^^^^^
+    ·                  ^^
   6 │ 
   [128]
 
@@ -451,4 +451,51 @@ shows that type's signature inline rather than a meaningless index:
   4 │     (ref.func $f)))
     ·      ^^^^^^^^^^^
   5 │ 
+  [128]
+
+A br_table whose targets take different numbers of values is anchored at the
+mismatching label, with the default target marked:
+
+  $ wax --validate br_table_arity.wat -o out.wat
+  Error:
+    Type mismatch: the default branch target '$a' expects 1 parameters, while
+    branch target '$b' expects 0 parameters.
+   ──➤  br_table_arity.wat:6:19
+  4 │       (block $b
+  5 │         (i32.const 1)
+  6 │         (br_table $b $a (local.get 0)))
+    ·                   ^^
+    ·                      ^^ default branch target here
+  7 │       (i32.const 2))))
+  8 │ 
+  [128]
+
+An extern.convert_any operand of the wrong type is blamed where the value was
+pushed, with the conversion marked as the consumer:
+
+  $ wax --validate convert_operand.wat -o out.wat
+  Error:
+    Type mismatch: this produces a value of type 'i32', but type
+    '(ref null any)' is expected.
+   ──➤  convert_operand.wat:3:26
+  1 │ (module
+  2 │   (func (param i32) (result (ref null extern))
+  3 │     (extern.convert_any (local.get 0))))
+    ·                          ^^^^^^^^^^^
+    ·      ^^^^^^^^^^^^^^^^^^ expected here
+  4 │ 
+  [128]
+
+A call with too few values on the stack reports how many arguments it takes
+and how many were there:
+
+  $ wax --validate call_underflow.wat -o out.wat
+  Error:
+    Type mismatch: expecting 2 argument(s) from the stack, but there are 1.
+   ──➤  call_underflow.wat:3:24
+  1 │ (module
+  2 │   (func $g (param i32 i64))
+  3 │   (func (i64.const 1) (call $g)))
+    ·                        ^^^^^^^
+  4 │ 
   [128]

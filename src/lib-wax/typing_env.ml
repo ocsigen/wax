@@ -174,6 +174,16 @@ type type_context = {
          queries always see the current type space. Read via [subtyping_info]. *)
 }
 
+(* One pending-value underflow ([pop_many] on an empty stack): the counts to
+   report, and whether they have been. The placeholder cell recorded alongside
+   it in [missing_holes] lets the hole that consumes it report the underflow at
+   its own location. *)
+type missing_batch = {
+  mutable hole_reported : bool;
+  hole_actual : int;
+  hole_expected : int;
+}
+
 type module_context = {
   (* --- Diagnostics and whole-run configuration --- *)
   diagnostics : Wax_utils.Diagnostic.context;
@@ -251,6 +261,12 @@ type module_context = {
          into the innermost (head) collector instead of erroring, to be re-checked
          against the true state at the operand's emission slot. Empty outside such
          an operand, so a read then reports immediately. *)
+  missing_holes : (inferred_type Cell.t * missing_batch) list ref;
+      (* The placeholder cell of each pending-value underflow ([pop_many] on an
+         empty stack), with its counts: the hole that consumes the cell reports
+         the underflow at its own location ([report_missing_hole] in the typer);
+         [with_holes] reports against the whole expression if recovery drops
+         the cell instead. Reset per function. *)
   unresolved_label : bool ref;
       (* Whether a branch in the current function failed to resolve its label
          (reported by [branch_target]). While set, a value-shape complaint

@@ -3,7 +3,7 @@ don't, the validator points a caret at each branch value, labelled with its
 type, rather than only at the `select` keyword:
 
   $ wax check sel.wat
-  Error: Type mismatch: both branches of a select should have the same type.
+  Error: Type mismatch: both branches of a 'select' should have the same type.
    ──➤  sel.wat:3:12
   1 │ (module
   2 │   (func (param i32)

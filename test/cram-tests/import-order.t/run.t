@@ -6,6 +6,7 @@ main validation path enforces this, so the CLI rejects a misplaced import:
    ──➤  after_func.wat:3:3
   1 │ (module
   2 │   (func $f)
+    ·    ^^^^^^^^ first definition here
   3 │   (import "m" "g" (func $g)))
     ·   ^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │ 
