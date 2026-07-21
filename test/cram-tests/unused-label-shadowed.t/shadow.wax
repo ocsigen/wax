@@ -1,0 +1,8 @@
+#[export = "f"]
+fn f() {
+    'l: do {
+        'l: do {
+            br 'l;
+        }
+    }
+}

@@ -115,6 +115,7 @@ let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
   | _ -> ()
 
 module StringSet = Set.Make (String)
+module IntSet = Set.Make (Int)
 module StringMap = Map.Make (String)
 
 (* The option let-operators (the [@] suffix denotes "optional"): [let*@] binds
@@ -283,9 +284,13 @@ type module_context = {
   local_decls : ident list ref;
       (* The [let]-bound locals declared in the current function, in declaration
          order, so an unread one can be reported as unused. Reset per function. *)
-  used_labels : StringSet.t ref;
-      (* Names of block labels branched to so far in the current function
-         (marked by [branch_target]). A [ref] so a branch nested in a block
+  used_labels : IntSet.t ref;
+      (* Source offsets ([loc_start.pos_cnum]) of the block-label DECLARATIONS
+         branched to so far in the current function (marked by [branch_target],
+         which resolves each branch to its specific binding). Keyed by the
+         binding's offset rather than its name so a shadowing inner label of the
+         same name does not mask an unused outer one (the Wasm validator likewise
+         tracks usage per control frame). A [ref] so a branch nested in a block
          propagates to the function level. Reset per function. *)
   deferred_lints : (unit -> unit) list ref;
       (* Lints that must read a result cell only once typing has pinned it (the

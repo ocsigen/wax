@@ -84,6 +84,7 @@ val record_reference :
     self-referential definitions). *)
 
 module StringSet : Set.S with type elt = string
+module IntSet : Set.S with type elt = int
 module StringMap : Map.S with type key = string
 
 val ( let*@ ) : 'a option -> ('a -> 'b option) -> 'b option
@@ -160,7 +161,7 @@ type module_context = {
   unresolved_label : bool ref;
   read_locals : StringSet.t ref;
   local_decls : Ast.ident list ref;
-  used_labels : StringSet.t ref;
+  used_labels : IntSet.t ref;
   deferred_lints : (unit -> unit) list ref;
   label_decls : Ast.ident list;
   assigned_locals : StringSet.t;

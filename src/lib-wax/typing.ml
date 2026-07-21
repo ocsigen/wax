@@ -2201,7 +2201,8 @@ let branch_target ctx label =
         ctx.unresolved_label := true;
         [||]
     | (Some label', res) :: _ when label.desc = label'.desc ->
-        ctx.used_labels := StringSet.add label.desc !(ctx.used_labels);
+        ctx.used_labels :=
+          IntSet.add label'.info.loc_start.pos_cnum !(ctx.used_labels);
         record_reference ctx.resolve_links label.info [ label'.info ];
         res
     | _ :: rem -> find rem label
@@ -10099,7 +10100,7 @@ let rec functions ctx fields =
               local_decls = ref [];
               (* Fresh per-function tracking of branched-to labels, and the
                  labels declared in the body (collected once, up front). *)
-              used_labels = ref StringSet.empty;
+              used_labels = ref IntSet.empty;
               label_decls = List.fold_left Typing_lint.collect_labels [] body;
               (* Locals a later assignment writes, collected up front so a
                  fused [let]'s drop can spot a write-once binding (linear: one
@@ -10139,7 +10140,9 @@ let rec functions ctx fields =
               (fun name ->
                 let n = name.desc in
                 if
-                  (not (StringSet.mem n !(ctx.used_labels)))
+                  (not
+                     (IntSet.mem name.info.loc_start.pos_cnum
+                        !(ctx.used_labels)))
                   && not (String.length n > 0 && n.[0] = '_')
                 then Error.unused_label ctx.diagnostics ~location:name.info name)
               (List.rev ctx.label_decls)
@@ -10458,7 +10461,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       unresolved_label = ref false;
       read_locals = ref StringSet.empty;
       local_decls = ref [];
-      used_labels = ref StringSet.empty;
+      used_labels = ref IntSet.empty;
       deferred_lints = ref [];
       label_decls = [];
       assigned_locals = StringSet.empty;
