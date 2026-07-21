@@ -11,19 +11,26 @@
 # validator's dead-code / principal-typing arms (Bot/Bot_ref), the class behind
 # the extern.convert_any/any.convert_extern unreachable over-rejection.
 #
-# A boundary is "before an instruction line inside a (func ...) body". wax's
-# unfolded printer gives one instruction per line, indented, never starting
-# with '(' (block headers, else/end included — all are instruction boundaries),
-# while every non-instruction line ((local ...), (func ... headers, module
-# fields, closing parens) starts with '(' or ')' or is at column 0. Global and
-# segment initializers are ALSO printed unfolded, so the func tracking matters:
-# inserting into a constant expression would genuinely invalidate the module.
-
-/^\(func([ (]|$)/ { in_func = 1 }
-/^\)/             { in_func = 0 }
-
+# A boundary is "before an instruction line at a (func ...) body level". wax's
+# unfolded printer gives one instruction per line, indented, never starting with
+# '(' (block headers, else/end included — all are instruction boundaries), while
+# every non-instruction line ((local ...), (func ... headers, module fields,
+# closing parens) starts with '(' or ')' or is at column 0.
+#
+# Track paren depth and the func body level so the boundary is a genuine body
+# instruction, excluding two look-alikes that would make the mutant invalid
+# rather than dead-code-extended:
+#   - a constant initializer's body: `(global i32 <expr>)` / a segment offset is
+#     also unfolded, so its instruction lines sit at the same indent as a func
+#     body. A single-line `(func $f)` balances on its own line, so paren depth
+#     (not a line-start heuristic) is what keeps `in_func` from leaking into a
+#     following `(global ...)`.
+#   - a wrapped signature: a long `(param ...)` / `(result ...)` prints one
+#     valtype per line, deeper than the body, so gate on the exact body depth.
+BEGIN { depth = 0 }
 {
-  if (in_func && $0 ~ /^[ \t]+[^ \t()]/) {
+  start_depth = depth
+  if (in_func && start_depth == body_level && $0 ~ /^[ \t]+[^ \t()]/) {
     if (count) n++
     else if (nb++ == k) {
       indent = $0; sub(/[^ \t].*$/, "", indent)
@@ -31,6 +38,11 @@
     }
   }
   if (!count) print
+  # A func opens at module level; its body instructions sit one paren deep.
+  if ($0 ~ /^\(func([ (]|$)/) { in_func = 1; body_level = start_depth + 1 }
+  opens = $0; closes = $0
+  depth += gsub(/\(/, "", opens) - gsub(/\)/, "", closes)
+  if (in_func && depth <= 0) in_func = 0
 }
 
 END { if (count) print n + 0 }
