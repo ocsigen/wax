@@ -92,10 +92,13 @@ const uses = [];
         prev !== "." && prev !== ":" && prev !== "'" && prev !== "&" &&
         prevWord !== "fn"
       )
-        uses.push({ start: i, len: word.length, repl: FRESH });
+        // A call: the callee's signature — hence its arity — is unknown once
+        // unbound, so recovery cannot keep the stack aligned for the hole
+        // operands that follow (see fault-locality.sh's [call] handling).
+        uses.push({ start: i, len: word.length, repl: FRESH, kind: "call" });
       // Construction name: `{T| ...}` / `[T| ...]`.
       else if ((prev === "{" || prev === "[") && src[k] === "|")
-        uses.push({ start: i, len: word.length, repl: FRESH });
+        uses.push({ start: i, len: word.length, repl: FRESH, kind: "type" });
       i = j;
       continue;
     }
@@ -110,7 +113,7 @@ const uses = [];
     const tok = m[2];
     if (!tok.startsWith("'")) continue; // e.g. `br_table` with numeric depths
     const start = m.index + m[0].length - tok.length + 1; // skip the quote
-    uses.push({ start, len: tok.length - 1, repl: FRESH });
+    uses.push({ start, len: tok.length - 1, repl: FRESH, kind: "label" });
   }
 }
 uses.sort((a, b) => a.start - b.start);
@@ -121,7 +124,10 @@ if (countMode) {
   const u = uses[FAULT];
   const line = src.slice(0, u.start).split("\n").length;
   process.stdout.write(src.slice(0, u.start) + u.repl + src.slice(u.start + u.len));
-  process.stderr.write(String(line) + "\n");
+  // Emit "<line> <kind>": the fault line for the locality check, and the fault
+  // kind so the oracle can skip the (unachievable) locality check for an
+  // unknown-arity fault.
+  process.stderr.write(String(line) + " " + u.kind + "\n");
 } else {
   process.stdout.write(src); // out of range: unchanged
 }

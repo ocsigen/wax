@@ -169,7 +169,18 @@ fuzz_one() {
   fi
   for f in "${picks[@]}"; do
     FAULT="$f" node "$mut" "$in" >"$m" 2>"$p.line" || continue
-    fl="$(cat "$p.line")"; [ -n "$fl" ] || continue
+    # The mutator emits "<line> [kind]": the fault line, and (Wax only) the fault
+    # kind. An unknown-arity fault — a call (unknown signature), a construction
+    # of an unbound type (unknown fields), or a branch to an unbound label
+    # (unknown carried values) — cannot keep the stack aligned for the hole ([_])
+    # operands that follow, so a secondary error away from the fault line is an
+    # inherent recovery artifact, not a locality bug. The locality check stays
+    # for a known-arity fault (e.g. a plain variable/global read) and for the Wat
+    # path (no kind emitted).
+    read -r fl kind <"$p.line" || true
+    [ -n "$fl" ] || continue
+    unknown_arity=
+    case "$kind" in call | type | label) unknown_arity=1 ;; esac
     r="$(classify_wax check --error-format short "$m")"
     case "$r" in
       crash:*)
@@ -185,7 +196,7 @@ fuzz_one() {
     errs="$(grep -E '^[^ ]+:[0-9]+:[0-9]+: error: ' "$ERRLOG" || true)"
     nerr=0; [ -n "$errs" ] && nerr="$(printf '%s\n' "$errs" | wc -l)"
     away="$(printf '%s\n' "$errs" | awk -F: -v l="$fl" 'NF > 2 && $2 != l' || true)"
-    if [ -n "$away" ]; then
+    if [ -n "$away" ] && [ -z "$unknown_arity" ]; then
       mkdir -p "$FINDINGS"; cp "$m" "$FINDINGS/fault-$n-$f.$ext"
       out+="$(finding LOCALITY HIGH "$(basename "$in") fault $f (line $fl)" \
         "error away from the fault line: $(head -1 <<<"$away") (saved fuzz/fault-findings/fault-$n-$f.$ext)" \
