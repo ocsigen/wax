@@ -828,8 +828,15 @@ module Error = struct
   let expected_ref context ~location =
     report context ~location (text "Expected reference.")
 
-  let dispatch_duplicate_arm context ~location x =
+  let dispatch_duplicate_arm context ~location ~prev_loc x =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "other arm here";
+          };
+        ]
       ((text "This dispatch has several cases named" ++ name x) ^^ text ".")
 end
 
@@ -6189,9 +6196,12 @@ and type_block_construct ctx i =
       let rec check_dups seen = function
         | [] -> ()
         | (l, _) :: r ->
-            if List.exists (fun s -> s = l.desc) seen then
-              Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info l;
-            check_dups (l.desc :: seen) r
+            (match List.assoc_opt l.desc seen with
+            | Some prev_loc ->
+                Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info
+                  ~prev_loc l
+            | None -> ());
+            check_dups ((l.desc, l.info) :: seen) r
       in
       check_dups [] arms;
       let index, _ =
@@ -8586,9 +8596,12 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let rec check_dups seen = function
         | [] -> ()
         | (l, _) :: r ->
-            if List.exists (fun s -> s = l.desc) seen then
-              Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info l;
-            check_dups (l.desc :: seen) r
+            (match List.assoc_opt l.desc seen with
+            | Some prev_loc ->
+                Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info
+                  ~prev_loc l
+            | None -> ());
+            check_dups ((l.desc, l.info) :: seen) r
       in
       check_dups [] arms;
       let index, _ =

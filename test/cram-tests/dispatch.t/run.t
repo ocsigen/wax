@@ -64,7 +64,10 @@ Case labels must be distinct:
   $ wax err_dup.wax -f wat -v
   Error: This dispatch has several cases named 'a'.
    ──➤  err_dup.wax:5:9
+  1 │ fn g(x: i32) {
+  2 │     dispatch x ['a, 'b, else 'a] {
   3 │         'a: { return; }
+    ·         ^^ other arm here
   4 │         'b: { return; }
   5 │         'a: { return; }
     ·         ^^
