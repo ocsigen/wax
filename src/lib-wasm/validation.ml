@@ -1708,6 +1708,12 @@ type ctx = {
      (rather than a snapshot field like [initialized_locals]) so a read inside a
      block propagates up to the function level. *)
   used_locals : IntSet.t ref;
+  (* Indices of locals whose declared type failed to resolve (an unbound type
+     index, already reported at the declaration). Such a local is poisoned: a
+     [local.get] pushes the bottom reference and a [local.set]/[local.tee]
+     accepts any operand, so a use does not cascade a second, spurious type
+     mismatch against the recovery dummy type. *)
+  poisoned_locals : IntSet.t;
   (* Named block labels declared in this function, each with the [bool ref] its
      control frame carries. A label whose flag is still unset once the body has
      been validated was never branched to and is reported as unused. *)
@@ -2069,6 +2075,14 @@ let get_local ctx ?(initialize = false) i =
       Error.uninitialized_local ctx.modul.diagnostics ~location:i.info i
   end;
   l
+
+(* Whether local [i] resolves to a poisoned local (declared with a type that did
+   not resolve). Uses the same resolved index [get_local] tracks; a use of such
+   a local is treated as the bottom reference to avoid cascading a second error. *)
+let local_is_poisoned ctx i =
+  match Sequence.get_index_opt ctx.locals i with
+  | Some idx -> IntSet.mem idx ctx.poisoned_locals
+  | None -> false
 
 (* The result nullability of [extern.convert_any] / [any.convert_extern], which
    propagate the operand's nullability. The operand must be a reference in the
@@ -3308,18 +3322,29 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           pop_known ctx loc I32)
   | LocalGet i ->
       let*! ty, source = get_local ctx i in
-      push ~source (Some loc) ty
+      (* A poisoned local (unresolved declared type) pushes the bottom reference
+         rather than the recovery dummy, so a consumer does not report a second
+         mismatch against it. *)
+      if local_is_poisoned ctx i then push_bot_ref (Some loc)
+      else push ~source (Some loc) ty
   | LocalSet i ->
       let*! ty, source = get_local ~initialize:true ctx i in
       (* Give the identifier the local's type, so hover over [$x] shows it even
          though [local.set] itself leaves nothing on the stack. *)
       record (Some i.info) (Pushed source);
-      pop ctx loc ~expected_source:source ty
+      if local_is_poisoned ctx i then
+        let* _ = pop_any ctx loc in
+        return ()
+      else pop ctx loc ~expected_source:source ty
   | LocalTee i ->
       let*! ty, source = get_local ~initialize:true ctx i in
       record (Some i.info) (Pushed source);
-      let* () = pop ctx loc ~expected_source:source ty in
-      push ~source (Some loc) ty
+      if local_is_poisoned ctx i then
+        let* _ = pop_any ctx loc in
+        push_bot_ref (Some loc)
+      else
+        let* () = pop ctx loc ~expected_source:source ty in
+        push ~source (Some loc) ty
   | GlobalGet idx ->
       let*! ty, source = get_global ctx idx in
       push ~source (Some loc) ty.typ
@@ -4191,6 +4216,7 @@ let constant_expression ctx ~location ~expected_source ty expr =
          modul = ctx;
          initialized_locals = IntSet.empty;
          used_locals = ref IntSet.empty;
+         poisoned_locals = IntSet.empty;
          label_decls = ref [];
        }
      in
@@ -5287,12 +5313,18 @@ let functions ?(warn_unused = true) ctx fields =
              as (index, optional name, declaration location) so an unread one
              can be reported as unused after the body is validated. *)
           let declared_locals = ref [] in
+          let poisoned_locals = ref IntSet.empty in
           List.iter
             (fun e ->
               let id, typ = e.Ast.desc in
               let typ' =
                 match valtype ctx.diagnostics ctx.types typ with
-                | None -> (* Dummy value *) Ref { nullable = true; typ = Any }
+                | None ->
+                    (* The declared type did not resolve (already reported).
+                       Poison this local so a use does not cascade a second
+                       mismatch against the dummy; the dummy value is unused. *)
+                    poisoned_locals := IntSet.add !i !poisoned_locals;
+                    Ref { nullable = true; typ = Any }
                 | Some typ -> typ
               in
               if is_defaultable typ' then
@@ -5317,6 +5349,7 @@ let functions ?(warn_unused = true) ctx fields =
               modul = ctx;
               initialized_locals = !initialized_locals;
               used_locals = ref IntSet.empty;
+              poisoned_locals = !poisoned_locals;
               label_decls = ref [];
             }
           in
