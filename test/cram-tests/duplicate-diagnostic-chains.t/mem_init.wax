@@ -1,0 +1,6 @@
+#[export = "f"]
+memory m: i64 [1, 1];
+data d = "\x01";
+fn f(x: i64) -> i32 {
+    m.init(d, 0, 0, 1).init(d, 0, 0, 1)(x) as i32_u;
+}

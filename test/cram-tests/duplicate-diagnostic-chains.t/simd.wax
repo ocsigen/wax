@@ -1,0 +1,2 @@
+#[export = "f"]
+fn f(x: i32) -> i32 { x.extract_lane_i32x4(0).extract_lane_s_i16x8(7); }

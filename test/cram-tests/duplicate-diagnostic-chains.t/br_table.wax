@@ -1,0 +1,7 @@
+#[export = "f"]
+fn f() {
+    _ = 'l: do f32 {
+        _ = 'l_2: do f32 { unreachable; br_table [ 'l_2, 'l, else 'l ] _; };
+        0x0p+0;
+    };
+}

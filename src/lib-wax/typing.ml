@@ -2416,11 +2416,14 @@ let expression_type ctx i =
   match typ with
   | [| ty |] -> ty
   | _ ->
-      (* Once per span: several consumers may query the same node (see the
-         [not_expression_reported] field). *)
-      let key =
-        (location.loc_start.Lexing.pos_cnum, location.loc_end.Lexing.pos_cnum)
-      in
+      (* Once per rendered diagnostic: several consumers may query the same node,
+         and nested value-less expressions share a start column (e.g. the inner
+         and outer of [a.m().m()], both value-less), so a full-span key would let
+         two identical "returns N values" errors print at the same location. Key
+         on the rendered position (start column) and the reported count — exactly
+         what the diagnostic shows — so a genuine second error with a different
+         count still surfaces (see the [not_expression_reported] field). *)
+      let key = (location.loc_start.Lexing.pos_cnum, Array.length typ) in
       if not (Hashtbl.mem ctx.not_expression_reported key) then (
         Hashtbl.add ctx.not_expression_reported key ();
         (* An unresolved label in this function makes the value shape
@@ -4498,16 +4501,29 @@ and type_branch ctx i =
       (match List.find_opt (fun (_, bound, _) -> bound) targets with
       | Some (first_label, _, first) ->
           let len = Array.length first in
+          (* The count of values the [br_table] itself provides is a single fact,
+             checked once against the reference arity: a per-target check (via
+             [check_subtypes] below) would repeat an identical "provides N but M
+             expected" report for every distinct target. *)
+          if Array.length types <> len then
+            Error.value_count_mismatch ctx.diagnostics ~location:i.info
+              ~expected:len ~provided:(Array.length types);
           let seen = Hashtbl.create 8 in
           List.iter
             (fun (label, bound, params) ->
               if bound && not (Hashtbl.mem seen label.desc) then begin
                 Hashtbl.add seen label.desc ();
+                (* A target whose arity disagrees with the reference one — a
+                   distinct fact per target, so reported here. *)
                 if Array.length params <> len then
                   Error.branch_arity_mismatch ctx.diagnostics
                     ~location:label.info ~first_loc:first_label.info first_label
                     ~expected:len ~provided:(Array.length params);
-                check_subtypes ctx ~location:loc types params
+                (* Type-check the provided values against this target only when
+                   the counts line up (the count mismatch is already reported
+                   once, above). *)
+                if Array.length types = Array.length params then
+                  check_subtypes ctx ~location:loc types params
               end)
             targets
       | None -> ());
@@ -7319,7 +7335,20 @@ and type_simd_vector_op_call ctx i func recv meth args =
   if nargs <> nimm + nstack_extra then
     Error.operand_count_mismatch ctx.diagnostics ~location:func.info
       ~expected:(nimm + nstack_extra) ~provided:nargs;
-  check_type ctx recv' (simd_cell (List.hd op.operands));
+  (* Check the receiver, and poison the result on failure (below). A chained
+     lane op [x.extract_lane_i32x4(0).extract_lane_s_i16x8(7)] anchors each
+     receiver mismatch at the shared leftmost operand, so without poisoning both
+     the inner receiver (x) and the outer receiver (the inner call's result)
+     report an identical error at the same location. *)
+  let recv_ty = expression_type ctx recv' in
+  let recv_expected = simd_cell (List.hd op.operands) in
+  let recv_ok = subtype ctx recv_ty recv_expected in
+  if not recv_ok then
+    Error.expression_type_mismatch ctx.diagnostics ~location:(snd recv'.info)
+      ~provided:recv_ty ~expected:recv_expected;
+  let recv_poisoned =
+    (not recv_ok) || match Cell.get recv_ty with Error -> true | _ -> false
+  in
   let lane_bound =
     match op.imm with
     | No_imm -> None
@@ -7354,7 +7383,8 @@ and type_simd_vector_op_call ctx i func recv meth args =
           check_type ctx a (simd_cell (List.nth op.operands operand)))
     args';
   let result =
-    match op.result with Some t -> [| simd_cell t |] | None -> [||]
+    if recv_poisoned then [| Cell.make Error |]
+    else match op.result with Some t -> [| simd_cell t |] | None -> [||]
   in
   return_statement i
     (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))

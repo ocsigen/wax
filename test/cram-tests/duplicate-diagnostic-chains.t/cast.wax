@@ -1,0 +1,2 @@
+#[export = "f"]
+fn f(x: i32) -> i32 { x as f32_u as f32_u as f32_u; }
