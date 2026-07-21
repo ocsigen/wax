@@ -118,7 +118,7 @@ The default arm is required (like a `dispatch`'s `else`):
 The scrutinee must be a reference:
 
   $ wax err_scrut.wax -f wat -v
-  Error: A reference type is expected here.
+  Error: Expected reference.
    ──➤  err_scrut.wax:2:11
   1 │ fn g(x: i32) {
   2 │     match x {

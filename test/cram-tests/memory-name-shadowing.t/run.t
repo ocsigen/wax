@@ -37,7 +37,7 @@ of silently using the memory behind the local's back:
   > EOF
 
   $ wax check shadow.wax
-  Error: Expected struct type.
+  Error: Expected struct.
    ──➤  shadow.wax:4:5
   2 │ fn f() -> i32 {
   3 │     let m: i32 = 0;

@@ -26,7 +26,7 @@ receiver is rejected there:
   > EOF
 
   $ wax check fill.wax
-  Error: Expected array type.
+  Error: Expected array.
    ──➤  fill.wax:3:5
   1 │ #[export = "f"]
   2 │ fn f(x: &none) {

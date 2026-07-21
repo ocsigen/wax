@@ -223,6 +223,15 @@ module Error = struct
   let expected_array_type context ~location =
     report context ~location (text "Expected array type.")
 
+  let expected_struct context ~location =
+    report context ~location (text "Expected struct.")
+
+  let expected_array context ~location =
+    report context ~location (text "Expected array.")
+
+  let expected_func context ~location =
+    report context ~location (text "Expected function.")
+
   (* An operation (a call, a field/array access, …) needs its operand's concrete
      type to be compiled, but the operand's type is unknown: it was taken off the
      polymorphic stack of unreachable or branch-terminated code. This is the
@@ -811,7 +820,7 @@ module Error = struct
       (text "A string building an [i16] array must be a valid Unicode string.")
 
   let expected_ref context ~location =
-    report context ~location (text "A reference type is expected here.")
+    report context ~location (text "Expected reference.")
 
   let dispatch_duplicate_arm context ~location x =
     report context ~location
@@ -5635,8 +5644,7 @@ and type_aggregate_access ctx i =
                   Error.method_needs_parentheses ctx.diagnostics
                     ~location:field.info field.desc
                 else
-                  Error.expected_struct_type ctx.diagnostics
-                    ~location:(snd i'.info);
+                  Error.expected_struct ctx.diagnostics ~location:(snd i'.info);
                 None)
         (* Leave a receiver that already failed to type alone (its error is
            reported elsewhere): keep the access with an error result type rather
@@ -5657,7 +5665,7 @@ and type_aggregate_access ctx i =
               field.desc;
             None
         | _ ->
-            Error.expected_struct_type ctx.diagnostics ~location:(snd i'.info);
+            Error.expected_struct ctx.diagnostics ~location:(snd i'.info);
             None
       in
       return_expression i (StructGet (i', field)) ty
@@ -5685,7 +5693,7 @@ and type_aggregate_access ctx i =
             Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
             Some (Cell.make Error)
         | _ ->
-            Error.expected_struct_type ctx.diagnostics ~location:(snd i'.info);
+            Error.expected_struct ctx.diagnostics ~location:(snd i'.info);
             None
       in
       return_expression i (GetDescriptor i') ty
@@ -5731,7 +5739,7 @@ and type_aggregate_access ctx i =
             Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
             None
         | _ ->
-            Error.expected_struct_type ctx.diagnostics ~location:i1.info;
+            Error.expected_struct ctx.diagnostics ~location:i1.info;
             None
       in
       let* i2' =
@@ -5772,7 +5780,7 @@ and type_aggregate_access ctx i =
           Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
           return_expression i (ArrayGet (i1', i2')) (Cell.make Error)
       | _ ->
-          Error.expected_array_type ctx.diagnostics ~location:i1.info;
+          Error.expected_array ctx.diagnostics ~location:i1.info;
           return_expression i (ArrayGet (i1', i2')) (Cell.make Error))
   (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
   | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
@@ -5834,7 +5842,7 @@ and type_aggregate_access ctx i =
           return_statement i (ArraySet (i1', i2', i3')) [||]
       | _ ->
           let* i3' = typed ctx i3 in
-          Error.expected_array_type ctx.diagnostics ~location:i1.info;
+          Error.expected_array ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||])
   | _ -> assert false (* only invoked on a struct/array access *)
 
@@ -6854,7 +6862,7 @@ and type_array_fill_call ctx i func a meth j v n =
          reference (its array type cannot be resolved), so the operation cannot
          be compiled. *)
       Error.unknown_operand_type ctx.diagnostics ~location:a.info
-  | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
+  | _ -> Error.expected_array ctx.diagnostics ~location:a.info);
   return_statement i
     (Call
        ( { desc = StructGet (a', meth); info = ([||], func.info) },
@@ -6891,7 +6899,7 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
         Error.immutable ctx.diagnostics ~location:a1.info "array";
       if not (storage_subtype ctx typ'.typ typ.typ) then
         Error.incompatible_array_elements ctx.diagnostics ~location:a2.info
-  | _ -> Error.expected_array_type ctx.diagnostics ~location:a1.info);
+  | _ -> Error.expected_array ctx.diagnostics ~location:a1.info);
   return_statement i
     (Call
        ( { desc = StructGet (a1', meth); info = ([||], func.info) },
@@ -6929,7 +6937,7 @@ and type_array_init_call ctx i func a meth arg1 rest =
              a reference (its array type cannot be resolved), so the operation
              cannot be compiled. *)
           Error.unknown_operand_type ctx.diagnostics ~location:a.info
-      | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
+      | _ -> Error.expected_array ctx.diagnostics ~location:a.info);
       let seg' = { desc = Get seg; info = ([||], sinfo) } in
       return_statement i
         (Call
@@ -7020,7 +7028,7 @@ and type_unary_intrinsic_call ctx i func recv meth =
         match def.typ with
         | Array _ -> Some i32_cell
         | Struct _ | Func _ | Cont _ ->
-            Error.expected_array_type ctx.diagnostics ~location:(snd recv'.info);
+            Error.expected_array ctx.diagnostics ~location:(snd recv'.info);
             None)
     (* [array.len] accepts any subtype of [(ref null array)]: the abstract
        array, a bare [null], and the bottom reference [&none] (which is below
@@ -8180,7 +8188,7 @@ and type_indirect_call ctx i i' l =
         Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
         return_statement i (Call (i', l')) [| Cell.make Error |]
     | _ ->
-        Error.expected_func_type ctx.diagnostics ~location:(snd i'.info);
+        Error.expected_func ctx.diagnostics ~location:(snd i'.info);
         return_statement i (Call (i', l')) [| Cell.make Error |]
   in
   let st1, node = type_body { st with pending = front_pending } in
