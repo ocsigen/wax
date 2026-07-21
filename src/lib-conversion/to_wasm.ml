@@ -201,17 +201,16 @@ let typeuse typ sign =
 
 (*** Expression and receiver helpers ***)
 
-(* Raised when an instruction's type is unknown ([None]). After type-checking
-   succeeds this only happens in unreachable (dead) code — a value taken off the
-   polymorphic stack. The instruction cannot be translated (e.g. [array.get]
-   needs a concrete type) but is never executed, so [instruction] catches this
-   and emits [unreachable] in its place. *)
-exception Dead_code
-
+(* The type an instruction leaves on the stack. A missing type ([None]) would
+   mean a value the type checker never pinned — after successful type checking
+   that cannot happen at a site whose translation needs the type: a polymorphic
+   value taken off the [Unreachable] stack of dead code is pinned to the type
+   that consumes it (see {!Typing.subtype}), and a value with genuinely no
+   determinable type is rejected in typing. So [None] here is an internal
+   inconsistency, handled like the multi-value case below. *)
 let expr_type i =
   match i.info with
   | [| Some t |], _ -> t
-  | [| None |], _ -> raise Dead_code
   | _ ->
       print_instr i;
       assert false
@@ -702,17 +701,10 @@ let neg_int_const_fits bits s =
 
 (*** The instruction converter ***)
 
-let rec instruction ret ctx i : location Text.instr list =
-  let _, loc = i.info in
-  (* An instruction whose translation needs a type we don't have ([Dead_code])
-     can only be unreachable code (type-checking has already succeeded); emit
-     [unreachable] for it, which is valid and never executed. *)
-  try instruction_desc ret ctx i with Dead_code -> folded loc Unreachable []
-
 (* Lower a struct literal's field values in the type's declared field order.
    [fields] maps names to values; a punned field ([None], written [{x}]) lowers
    as [Get x] of the like-named local/global/function. *)
-and struct_field_args ret ctx field_names fields =
+let rec struct_field_args ret ctx field_names fields =
   let field_map =
     List.fold_left
       (fun acc (name, instr) -> StringMap.add name.desc (name, instr) acc)
@@ -726,7 +718,7 @@ and struct_field_args ret ctx field_names fields =
           instruction ret ctx { desc = Get name; info = ([||], name.info) })
     field_names
 
-and instruction_desc ret ctx i : location Text.instr list =
+and instruction ret ctx i : location Text.instr list =
   let _, loc = i.info in
   match i.desc with
   | Block { label; typ; block = body } ->
@@ -1243,7 +1235,7 @@ and instruction_desc ret ctx i : location Text.instr list =
          instruction becomes its [return_call*] form. An intrinsic operation
          cannot be a tail call, so it is instead evaluated and its result
          returned. *)
-      let code = instruction_desc ret ctx { i with desc = Call (f, args) } in
+      let code = instruction ret ctx { i with desc = Call (f, args) } in
       match code with
       | [ ({ desc = Text.Folded (inner, ops); _ } as node) ] -> (
           let return_desc : _ Text.instr_desc option =

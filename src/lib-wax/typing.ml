@@ -1611,7 +1611,7 @@ let rec resolve_declared ty =
    numeric use of it is rejected). None of the three appears on the right
    because expected types always come from a real declaration, annotation or
    instruction signature — hence the [assert]. *)
-let rec subtype ?location ctx ty ty' =
+let rec subtype ?location ?(pin = true) ctx ty ty' =
   let ity = Cell.get ty in
   let ity' = Cell.get ty' in
   match (ity, ity') with
@@ -1631,7 +1631,7 @@ let rec subtype ?location ctx ty ty' =
              [ty], so record a snapshot of its natural type first — the keep-bool
              decision compares that pre-validation type against the annotation. *)
           st.collected <- (location, Cell.make ity) :: st.collected;
-          subtype ?location ctx ty d
+          subtype ?location ~pin ctx ty d
       | None ->
           (* No annotation under test, so nothing here resolves [ty]: record the
              live cell. When the join later settles the block's result to a
@@ -1675,12 +1675,29 @@ let rec subtype ?location ctx ty ty' =
   | LargeInt, (Null | Valtype _) ->
       false
   | (Int8 | Int16), _ | _, (Int8 | Int16) -> false
+  | Unknown, (Valtype _ as t) ->
+      (* A polymorphic value (a hole taken off the [Unreachable] stack of dead
+         code) genuinely takes whatever concrete type consumes it: pin it, so
+         [To_wasm] sees a definite type instead of [None] — which it can only
+         lower as [unreachable], dropping the enclosing instruction. The
+         universal-bottom counterpart of the [UnknownRef] reference pin below,
+         and of [join_value_types]'s pin of an [Unknown] block exit. Not pinned
+         under [~pin:false] (a [br_table], whose one value is checked against
+         several targets of legitimately different types — pinning it to the
+         first would wrongly reject the rest); it stays [Unknown] and [To_wasm]
+         passes the hole through the polymorphic stack unchanged. *)
+      if pin then Cell.set ty t;
+      true
   | (Unknown | Error), _ -> true
   | UnknownRef, (Valtype { internal = Ref _; _ } as t) ->
       (* The bottom reference is a subtype of every reference; pin it to the
          hierarchy it is checked against, so it resolves to a concrete type in
-         that hierarchy rather than the default any-hierarchy [&none]. *)
-      Cell.set ty t;
+         that hierarchy rather than the default any-hierarchy [&none]. Not
+         pinned under [~pin:false] for the same [br_table] reason as [Unknown]
+         above: a bottom reference reaching targets of different reference types
+         (a [&func] and a [&t] label) is a subtype of each, so pinning it to the
+         first-checked one would reject the others. *)
+      if pin then Cell.set ty t;
       true
   | _, (Unknown | Error | UnknownRef) -> assert false
   | UnknownRef, _ -> false
@@ -2432,19 +2449,26 @@ let expression_type ctx i =
           Error.not_an_expression ctx.diagnostics ~location (Array.length typ));
       Cell.make Error
 
-let check_subtype ctx ~location ty' ty =
+let check_subtype ?(pin = true) ctx ~location ty' ty =
   (* Pass [location] so that, when [ty] is an inferring block result, the value
      is recorded with its branch site (see [Collecting]). *)
-  if not (subtype ~location ctx ty' ty) then
+  if not (subtype ~location ~pin ctx ty' ty) then
     Error.expression_type_mismatch ctx.diagnostics ~location ~provided:ty'
       ~expected:ty
 
-let check_subtypes ctx ~location types' types =
+(* [~pin:false] checks the subtypes without resolving a polymorphic left-hand
+   value against the (single) right-hand type — for a [br_table], whose one set
+   of values is checked against every target label, so pinning a bottom value to
+   the first target's type would wrongly reject a later, differently-typed one
+   (see {!subtype}). *)
+let check_subtypes ?(pin = true) ctx ~location types' types =
   if Array.length types' <> Array.length types then
     Error.value_count_mismatch ctx.diagnostics ~location
       ~expected:(Array.length types) ~provided:(Array.length types')
   else
-    Array.iter2 (fun ty' ty -> check_subtype ctx ~location ty' ty) types' types
+    Array.iter2
+      (fun ty' ty -> check_subtype ~pin ctx ~location ty' ty)
+      types' types
 
 let check_type ctx i ty =
   let ty' = expression_type ctx i in
@@ -4521,9 +4545,12 @@ and type_branch ctx i =
                     ~expected:len ~provided:(Array.length params);
                 (* Type-check the provided values against this target only when
                    the counts line up (the count mismatch is already reported
-                   once, above). *)
+                   once, above). [~pin:false]: the same values are checked
+                   against every target, so a polymorphic (bottom) value must
+                   not be pinned to one target's type — it is a subtype of each
+                   legitimately-different target (see {!check_subtypes}). *)
                 if Array.length types = Array.length params then
-                  check_subtypes ctx ~location:loc types params
+                  check_subtypes ~pin:false ctx ~location:loc types params
               end)
             targets
       | None -> ());
