@@ -11573,8 +11573,13 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   apply_declared_features diagnostics features fields;
-  check_let_bindings diagnostics fields;
-  if not (List.exists field_has_conditional fields) then
+  (* [check_let_bindings] reports a [let] binding inside an [(@if)] branch, which
+     can only exist when the module has a conditional; gate it on that so a
+     conditional-free module (the common case) skips a whole-module walk. The
+     same predicate then selects the type-checking path. *)
+  let has_conditional = List.exists field_has_conditional fields in
+  if has_conditional then check_let_bindings diagnostics fields;
+  if not has_conditional then
     type_configuration ~warn_unused ~suggest ~resolve_links ~pun_spans
       ~member_completions ~features ~simplify diagnostics fields
   else begin
@@ -11604,8 +11609,9 @@ let check ?(warn_unused = false) ?(suggest = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   apply_declared_features diagnostics features fields;
-  check_let_bindings diagnostics fields;
-  if not (List.exists field_has_conditional fields) then
+  let has_conditional = List.exists field_has_conditional fields in
+  if has_conditional then check_let_bindings diagnostics fields;
+  if not has_conditional then
     ignore
       (type_configuration ~build:false ~warn_unused ~suggest ~features
          ~simplify:false diagnostics fields
