@@ -5033,7 +5033,7 @@ and type_cont_construct_call ctx i func ns name args =
       match args' with
       | [ f' ] -> finish_cont_new ctx i ns f'
       | _ ->
-          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:func.info
             ~expected:1 ~provided:(List.length args');
           recover ())
   | "bind" -> (
@@ -5042,11 +5042,12 @@ and type_cont_construct_call ctx i func ns name args =
           let*! src = cont_operand_type ctx c' in
           finish_cont_bind ctx i src ns args'
       | [] ->
-          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:func.info
             ~expected:1 ~provided:0;
           recover ())
   | _ ->
-      Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+      Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
+        name.desc;
       recover ()
 
 and type_arith ctx i =
@@ -7164,14 +7165,15 @@ and type_simd_free_intrinsic_call ctx i func ns name args =
   let callee = { desc = Path (ns, name); info = ([||], func.info) } in
   let* args' = instructions ctx args in
   if not (Simd.is_free_intrinsic full) then (
-    Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+    Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
+      name.desc;
     return_expression i (Call (callee, args')) (Cell.make Error))
   else (
     (match Simd.const_shape_of_name full with
     | Some shape ->
         let arity = Simd.const_arity shape in
         if List.length args' <> arity then
-          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:func.info
             ~expected:arity ~provided:(List.length args');
         (* Each lane of an integer shape must fit its width, accepting both the
          signed and unsigned range [-2^(b-1), 2^b-1] (so an i8 lane is
@@ -7236,7 +7238,7 @@ and type_simd_free_intrinsic_call ctx i func ns name args =
            theirs, so an under/over-application is rejected here rather than
            slipping through to an unrelated stack error during lowering. *)
         if List.length args' <> 3 then
-          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:func.info
             ~expected:3 ~provided:(List.length args');
         List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
     return_expression i (Call (callee, args')) (simd_cell TV128))
@@ -8353,7 +8355,7 @@ and type_path_intrinsic_call ctx i func ns name args =
   | "atomic" when name.desc = "fence" ->
       let* args' = instructions ctx args in
       if args' <> [] then
-        Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+        Error.operand_count_mismatch ctx.diagnostics ~location:func.info
           ~expected:0 ~provided:(List.length args');
       return_statement i
         (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
@@ -8367,7 +8369,8 @@ and type_path_intrinsic_call ctx i func ns name args =
       type_cont_construct_call ctx i func ns name args
   | _ ->
       let* args' = instructions ctx args in
-      Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+      Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
+        name.desc;
       return_expression i
         (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
         (Cell.make Error)
@@ -8386,7 +8389,8 @@ and type_wide_arith_call ctx i func ns name args =
   in
   match arity with
   | None ->
-      Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+      Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
+        name.desc;
       (* Recover with two [Error] results (the arity every wide-arithmetic
          intrinsic has), so a typo does not cascade into a value-count error. *)
       return_statement i
@@ -8394,7 +8398,7 @@ and type_wide_arith_call ctx i func ns name args =
         [| Cell.make Error; Cell.make Error |]
   | Some n ->
       if List.length args' <> n then
-        Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+        Error.operand_count_mismatch ctx.diagnostics ~location:func.info
           ~expected:n ~provided:(List.length args');
       List.iter (fun a -> check_type ctx a i64_cell) args';
       return_statement i

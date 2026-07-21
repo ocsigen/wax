@@ -202,7 +202,7 @@ at their arities. Operand counts follow from the inferred types.
   18 │ 
   19 │ // T:: members exist only on continuation types, and only new/bind
   20 │ fn unknown_member(c: &k) -> &k { k::renew(c); }
-     ·                                  ^^^^^^^^^^^
+     ·                                  ^^^^^^^^
   21 │ 
   22 │ // arity of the constructors is checked
   Error: This instruction expects 1 operand(s) but 0 was/were provided.
@@ -210,7 +210,7 @@ at their arities. Operand counts follow from the inferred types.
   21 │ 
   22 │ // arity of the constructors is checked
   23 │ fn wrong_arity() -> &k { k::new(); }
-     ·                          ^^^^^^^^
+     ·                          ^^^^^^
   24 │ 
   25 │ // the operand count follows from the inferred types
   Error: This instruction expects 1 operand(s) but 2 was/were provided.

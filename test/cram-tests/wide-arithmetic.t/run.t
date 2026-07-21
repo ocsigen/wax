@@ -51,7 +51,7 @@ An unknown member of the [i64] namespace is rejected.
    ──➤  bad-name.wax:2:5
   1 │ fn f(a: i64, b: i64) -> (i64, i64) {
   2 │     i64::add256(a, b);
-    ·     ^^^^^^^^^^^^^^^^^
+    ·     ^^^^^^^^^^^
   3 │ }
   4 │ 
   [128]
@@ -63,7 +63,7 @@ Passing the wrong number of operands is a value-count mismatch.
    ──➤  bad-arity.wax:2:5
   1 │ fn f(a_lo: i64, a_hi: i64) -> (i64, i64) {
   2 │     i64::add128(a_lo, a_hi);
-    ·     ^^^^^^^^^^^^^^^^^^^^^^^
+    ·     ^^^^^^^^^^^
   3 │ }
   4 │ 
   [128]
