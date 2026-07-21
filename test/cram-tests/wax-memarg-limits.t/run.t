@@ -84,6 +84,7 @@ A module may not export the same name twice:
   Error: There is already an export of name 'a'.
    ──➤  dup-export.wax:2:12
   1 │ #[export = "a"]
+    ·            ^^^ previously exported here
   2 │ #[export = "a"]
     ·            ^^^
   3 │ fn a() {}

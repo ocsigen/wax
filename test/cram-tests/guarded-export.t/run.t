@@ -66,6 +66,7 @@ but a guarded export overlapping an unconditional one does:
   Error: There is already an export of name 'e'.
    ──➤  dup.wax:3:12
   1 │ #[export = "e", if(portable)]
+    ·            ^^^ previously exported here
   2 │ fn a(v: &eq) -> &eq { v; }
   3 │ #[export = "e"]
     ·            ^^^

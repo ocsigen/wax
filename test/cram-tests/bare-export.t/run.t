@@ -22,7 +22,9 @@ The bare form participates in duplicate-export detection under the reused name.
   $ wax check dup.wax
   Error: There is already an export of name 'add'.
    ──➤  dup.wax:4:12
+  1 │ #[export]
   2 │ fn add(a: i32, b: i32) -> i32 { a + b; }
+    ·    ^^^ previously exported here
   3 │ 
   4 │ #[export = "add"]
     ·            ^^^^^

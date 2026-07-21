@@ -479,8 +479,15 @@ module Error = struct
             match the inferred result exactly; add a result annotation to the \
             block.")
 
-  let name_already_bound context ~location kind x =
+  let name_already_bound context ~location ~prev_loc kind x =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously bound here";
+          };
+        ]
       (text "A" ++ text kind ++ text "named" ++ name x
      ++ text "is already bound.")
 
@@ -666,8 +673,15 @@ module Error = struct
   let shared_memory_without_max context ~location =
     report context ~location (text "A shared memory must have a maximum size.")
 
-  let duplicated_export context ~location name =
+  let duplicated_export context ~location ~prev_loc name =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously exported here";
+          };
+        ]
       ((text "There is already an export of name" ++ kw name) ^^ text ".")
 
   (* A cast to a continuation type that is not a provable no-op: continuations
@@ -822,14 +836,15 @@ module Namespace = struct
 
   let register d ns kind x =
     (match conflict ns x with
-    | Some (kind', _, _) -> Error.name_already_bound d ~location:x.info kind' x
+    | Some (kind', prev_loc, _) ->
+        Error.name_already_bound d ~location:x.info ~prev_loc kind' x
     | None -> ());
     Hashtbl.replace ns.tbl x.desc ((kind, x.info, !(ns.cond)) :: entries ns x)
 
   let exists d ns x =
     match conflict ns x with
-    | Some (kind', _, _) ->
-        Error.name_already_bound d ~location:x.info kind' x;
+    | Some (kind', prev_loc, _) ->
+        Error.name_already_bound d ~location:x.info ~prev_loc kind' x;
         true
     | None -> false
 end
@@ -10358,12 +10373,15 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
                 let guards =
                   Option.value ~default:[] (Hashtbl.find_opt exports name)
                 in
-                if
-                  List.exists
-                    (fun g -> Cond.is_satisfiable (Cond.and_ g cond))
-                    guards
-                then Error.duplicated_export diagnostics ~location name;
-                Hashtbl.replace exports name (cond :: guards))
+                (match
+                   List.find_opt
+                     (fun (g, _) -> Cond.is_satisfiable (Cond.and_ g cond))
+                     guards
+                 with
+                | Some (_, prev_loc) ->
+                    Error.duplicated_export diagnostics ~location ~prev_loc name
+                | None -> ());
+                Hashtbl.replace exports name ((cond, location) :: guards))
               entry
         | "start", _ ->
             (* A module may name at most one start function per configuration;
