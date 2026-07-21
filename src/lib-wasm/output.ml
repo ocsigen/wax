@@ -156,6 +156,31 @@ let rec format_sexp in_block depth first ctx s =
                             l)))
             l)
 
+(* The dry pass that feeds {!Trivia.associate}'s [only] set needs just the set
+   of locations [format_sexp] would look up. [format_sexp] visits every node of
+   the [sexp] tree exactly once and probes each node's [loc] via [get_trivia], so
+   that set is precisely the [loc] fields present in the tree. Walk the tree to
+   gather them directly, skipping the whole layout engine a discarded
+   [format_sexp] run would otherwise drive — the dry pass used to be nearly as
+   costly as the real emit. *)
+let rec collect_locs set s =
+  let add = function Some loc -> Trivia.mark set loc | None -> () in
+  match s with
+  | Atom { loc; _ } -> add loc
+  | List (loc, l) | Vertical_block (loc, l) ->
+      add loc;
+      List.iter (collect_locs set) l
+  | Block { loc; l; _ } ->
+      add loc;
+      List.iter (collect_locs set) l
+  | Structured_block (loc, l) ->
+      add loc;
+      List.iter
+        (function
+          | Delimiter d -> collect_locs set d
+          | Contents l -> List.iter (collect_locs set) l)
+        l
+
 let atom ~style ?loc s = Atom { loc; len = None; style; s }
 let keyword ?loc s = atom ~style:Keyword ?loc s
 let instruction ?loc s = atom ~style:Instruction ?loc s
@@ -1335,20 +1360,17 @@ let rec modulefield f =
 
 (*** Entry points ***)
 
-let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
-    (id, fields) =
-  (* [collect] marks the dry trivia-collection traversal; time the real emit
-     only, so a single "output" timing is reported. *)
-  Wax_utils.Debug.timed_if (collect = None) "output" @@ fun () ->
-  let use_color = should_use_color ~color ~out_channel in
-  let theme = get_theme use_color in
-  let ctx =
-    {
-      base = Styled.create ~printer ~theme ?collect ~trivia ();
-      format = Hybrid;
-      indent_level = 2;
-    }
-  in
+(* The pretty-printer's intermediate [sexp] tree, laid out once. Building it for
+   a large module allocates heavily, so a caller that needs both the dry
+   trivia-collection pass and the real emit builds it a single time with
+   {!prepare} and drives both passes off the result — rather than rebuilding it
+   for each, which used to dominate the WAT output path. [top_depth] is the
+   initial [format_sexp] depth (1 for an unnamed [(module …)] laid out as a
+   [Vertical_block], 0 otherwise). *)
+type document = { sexp : sexp; top_depth : int }
+
+let prepare (id, fields) =
+  Wax_utils.Debug.timed "layout" @@ fun () ->
   let sexp =
     (* Top-level fields are laid out strictly one per line. *)
     if id = None then Vertical_block (None, List.map modulefield fields)
@@ -1357,13 +1379,36 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
         (block ~transparent:true (keyword "module" :: opt_id id)
         :: List.map modulefield fields)
   in
-  format_sexp false (if id = None then 1 else 0) false ctx sexp;
+  { sexp; top_depth = (if id = None then 1 else 0) }
+
+(* Dry pass: record the looked-up locations without laying anything out. *)
+let collect { sexp; _ } set = collect_locs set sexp
+
+let emit ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
+    { sexp; top_depth } =
+  Wax_utils.Debug.timed "output" @@ fun () ->
+  let use_color = should_use_color ~color ~out_channel in
+  let theme = get_theme use_color in
+  let ctx =
+    {
+      base = Styled.create ~printer ~theme ~trivia ();
+      format = Hybrid;
+      indent_level = 2;
+    }
+  in
+  format_sexp false top_depth false ctx sexp;
   (* Comments owned by no location (trailing comments, or the whole file for an
      empty module) are printed last so they are not dropped. Blank lines at the
      very end are dropped (end-of-file whitespace), but blank lines separating
      tail comments are kept. *)
   let tail = Trivia.drop_trailing_blank_lines tail in
   print_trivia ctx tail
+
+let module_ ?color ?out_channel ?(tail = []) ?collect:used printer ~trivia m =
+  let doc = prepare m in
+  match used with
+  | Some set -> collect doc set
+  | None -> emit ?color ?out_channel ~tail printer ~trivia doc
 
 let instr printer i =
   let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in

@@ -42,6 +42,7 @@ type t = associated Tbl.t
 type locations = unit Tbl.t
 
 let create_locations () : locations = Tbl.create 16
+let mark (set : locations) loc = Tbl.replace set loc ()
 let empty () : t = Tbl.create 0
 
 type context = {

@@ -144,34 +144,34 @@ let fold_module ~fold_mode ~color ~source ast =
    channel (plus a trailing newline), bypassing [Format]'s token buffering — the
    old [fprintf "%a@."] relayed the already-rendered string through [Format]
    line by line, pure overhead on this hot path. *)
-let output_wat ?(tail = []) ~oc ~color ~trivia ast =
+let output_wat ?(tail = []) ~oc ~color ~trivia doc =
   Wax_utils.Printer.run_channel oc (fun p ->
-      Wax_wasm.Output.module_ ~color ~out_channel:oc ~tail p ~trivia ast);
+      Wax_wasm.Output.emit ~color ~out_channel:oc ~tail p ~trivia doc);
   output_char oc '\n';
   flush oc
 
-(* A formatter that discards everything, for the dry pass that records which
-   locations the printer looks up. *)
-
-(* Build the trivia for printing [ast], restricting the association to the
-   locations the printer actually emits (collected by a dry pass). This keeps a
-   comment from attaching to a node the printer skips — which would drop it.
-   [retarget], when given, rewrites the comment delimiters between formats. *)
-let wat_trivia ?retarget ctx ast =
+(* Build the trivia for printing [doc], restricting the association to the
+   locations the printer actually emits. [Output.collect] gathers them by walking
+   the already-laid-out [doc] — no separate print pass, so the [sexp] tree is
+   built once (in [prepare]) and shared with the real emit rather than rebuilt.
+   This keeps a comment from attaching to a node the printer skips — which would
+   drop it. [retarget], when given, rewrites the comment delimiters between
+   formats. *)
+let wat_trivia ?retarget ctx doc =
   let used = Wax_utils.Trivia.create_locations () in
-  Wax_utils.Printer.run_discard (fun p ->
-      Wax_wasm.Output.module_ p
-        ~trivia:(Wax_utils.Trivia.empty ())
-        ~collect:used ast);
+  Wax_wasm.Output.collect doc used;
   let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
   match retarget with
   | None -> (trivia, tail)
   | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
+(* The Wax printer streams straight from the AST (no intermediate tree to
+   share), so its dry pass is a discarded print traversal — no double tree-build
+   to eliminate, unlike the Wat path's {!wat_trivia}. Width is irrelevant to the
+   dry pass: it only records which locations the printer looks up, and the
+   traversal is the same at any width. *)
 let wax_trivia ?retarget ctx ast =
   let used = Wax_utils.Trivia.create_locations () in
-  (* Width is irrelevant to the dry pass: it only records which locations the
-     printer looks up, and the traversal is the same at any width. *)
   Wax_utils.Printer.run_discard (fun p ->
       Wax_lang.Output.module_ p
         ~trivia:(Wax_utils.Trivia.empty ())
@@ -215,8 +215,9 @@ let wat_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     if desugar then desugar_wat ~color ~source:(Some text) ast else ast
   in
   let ast = fold_module ~fold_mode ~color ~source:(Some text) ast in
-  let trivia, tail = wat_trivia ctx ast in
-  output_wat ~oc ~color:output_color ~trivia ~tail ast
+  let doc = Wax_wasm.Output.prepare ast in
+  let trivia, tail = wat_trivia ctx doc in
+  output_wat ~oc ~color:output_color ~trivia ~tail doc
 
 let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map:_ =
@@ -295,12 +296,13 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   (* Typing and conversion preserve the source Wax locations, so the source
      trivia (keyed by those locations) maps onto the converted Wasm nodes;
      rewrite the comment delimiters from Wax to Wat syntax. *)
+  let doc = Wax_wasm.Output.prepare wasm_ast in
   let trivia, tail =
     wat_trivia
       ~retarget:(Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
-      ctx wasm_ast
+      ctx doc
   in
-  output_wat ~oc ~color:output_color ~trivia ~tail wasm_ast
+  output_wat ~oc ~color:output_color ~trivia ~tail doc
 
 let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map:_ =
@@ -405,7 +407,7 @@ let wasm_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
       ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
   let text_ast = fold_module ~fold_mode ~color ~source:None text_ast in
   let trivia = Wax_utils.Trivia.empty () in
-  output_wat ~oc ~color:output_color ~trivia text_ast
+  output_wat ~oc ~color:output_color ~trivia (Wax_wasm.Output.prepare text_ast)
 
 let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode:_ ~defines:_ ~desugar:_ ~source_map:_ =

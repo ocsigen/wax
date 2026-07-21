@@ -29,6 +29,11 @@ type locations
 
 val create_locations : unit -> locations
 
+val mark : locations -> Ast.location -> unit
+(** [mark set loc] records [loc] in [set]. Lets a caller build the [only] set by
+    walking the document it is about to print, instead of driving a discarded
+    dry print pass whose only effect is the same {!val:get}-time [collect]. *)
+
 val associate : ?only:locations -> context -> t * entry list
 (** [associate ctx] associates trivia to locations. The second component holds
     the leftover comments that no location owns (trailing comments, or every
