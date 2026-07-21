@@ -59,7 +59,7 @@ An unknown member of the [i64] namespace is rejected.
 Passing the wrong number of operands is a value-count mismatch.
 
   $ wax check bad-arity.wax
-  Error: This instruction provides 2 value(s) but 4 was/were expected.
+  Error: This instruction expects 4 operand(s) but 2 was/were provided.
    ──➤  bad-arity.wax:2:5
   1 │ fn f(a_lo: i64, a_hi: i64) -> (i64, i64) {
   2 │     i64::add128(a_lo, a_hi);

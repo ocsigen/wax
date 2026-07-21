@@ -65,13 +65,13 @@ stack error during lowering:
   > WAX
 
   $ wax check bitselect.wax
-  Error: This instruction provides 2 value(s) but 3 was/were expected.
+  Error: This instruction expects 3 operand(s) but 2 was/were provided.
    ──➤  bitselect.wax:1:42
   1 │ fn few(a: v128, b: v128) -> v128 { a; b; v128::bitselect(_, _); }
     ·                                          ^^^^^^^^^^^^^^^^^^^^^
   2 │ fn many(a: v128, b: v128, c: v128, d: v128) -> v128 {
   3 │   a; b; c; d; v128::bitselect(_, _, _, _);
-  Error: This instruction provides 4 value(s) but 3 was/were expected.
+  Error: This instruction expects 3 operand(s) but 4 was/were provided.
    ──➤  bitselect.wax:3:15
   1 │ fn few(a: v128, b: v128) -> v128 { a; b; v128::bitselect(_, _); }
   2 │ fn many(a: v128, b: v128, c: v128, d: v128) -> v128 {

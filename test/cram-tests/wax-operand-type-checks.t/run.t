@@ -138,7 +138,7 @@ that yields no value (here a call to a function with no results) is reported
 rather than crashing:
 
   $ wax check br-if-void-operand.wax
-  Error: This instruction provides 0 value(s) but 1 was/were expected.
+  Error: This instruction expects 1 operand(s) but 0 was/were provided.
    ──➤  br-if-void-operand.wax:2:38
   1 │ fn g() { }
   2 │ fn f() { 'count: loop { br_if 'count g(); } }

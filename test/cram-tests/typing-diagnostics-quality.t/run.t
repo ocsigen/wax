@@ -87,7 +87,7 @@ on the surplus argument (it used to read a non-literal extra as an immediate):
   > WAX
 
   $ wax check memarg.wax
-  Error: This instruction provides 2 value(s) but 1 was/were expected.
+  Error: This instruction expects 1 operand(s) but 2 was/were provided.
    ──➤  memarg.wax:2:31
   1 │ memory mem0: i32 [1];
   2 │ fn f(p: i32, q: i32) -> i32 { mem0.load32(p, q); }

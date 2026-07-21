@@ -205,7 +205,7 @@ at their arities. Operand counts follow from the inferred types.
      ·                                  ^^^^^^^^^^^
   21 │ 
   22 │ // arity of the constructors is checked
-  Error: This instruction provides 0 value(s) but 1 was/were expected.
+  Error: This instruction expects 1 operand(s) but 0 was/were provided.
     ──➤  surface-errors.wax:23:26
   21 │ 
   22 │ // arity of the constructors is checked
@@ -213,7 +213,7 @@ at their arities. Operand counts follow from the inferred types.
      ·                          ^^^^^^^^
   24 │ 
   25 │ // the operand count follows from the inferred types
-  Error: This instruction provides 2 value(s) but 1 was/were expected.
+  Error: This instruction expects 1 operand(s) but 2 was/were provided.
     ──➤  surface-errors.wax:26:32
   24 │ 
   25 │ // the operand count follows from the inferred types

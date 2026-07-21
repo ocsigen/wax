@@ -303,6 +303,12 @@ module Error = struct
       ++ Message.int provided ++ text "value(s) but" ++ Message.int expected
       ++ text "was/were expected.")
 
+  let operand_count_mismatch context ~location ~expected ~provided =
+    report context ~location
+      (text "This instruction expects"
+      ++ Message.int expected ++ text "operand(s) but" ++ Message.int provided
+      ++ text "was/were provided.")
+
   let invalid_method_receiver context ~location ty =
     report context ~location
       ((text "This operation cannot be applied to a value of type" ++ typ ty)
@@ -2626,7 +2632,7 @@ let check_operands ctx ~location l expected =
     (* With the type immediates inferred from the receiver, a wrong operand
        count is no longer caught as an immediate/operand mismatch; report it
        as an arity error. *)
-    Error.value_count_mismatch ctx.diagnostics ~location
+    Error.operand_count_mismatch ctx.diagnostics ~location
       ~expected:(Array.length expected) ~provided:(List.length l)
 
 (* A missing else branch behaves like an empty one: it leaves the block
@@ -2944,7 +2950,8 @@ let split_on_last_type ctx ~location i =
   let a = fst i.info in
   let len = Array.length a in
   if len = 0 then (
-    Error.value_count_mismatch ctx.diagnostics ~location ~expected:1 ~provided:0;
+    Error.operand_count_mismatch ctx.diagnostics ~location ~expected:1
+      ~provided:0;
     (Cell.make Error, [||]))
   else (a.(len - 1), Array.sub a 0 (len - 1))
 
@@ -3431,7 +3438,7 @@ let mem_immediates ctx ~location ~example ~nstack ~has_lane find positional =
          extra
   in
   (if nargs < nstack then
-     Error.value_count_mismatch ctx.diagnostics ~location ~expected:nstack
+     Error.operand_count_mismatch ctx.diagnostics ~location ~expected:nstack
        ~provided:nargs
    else
      match extra with
@@ -3441,8 +3448,8 @@ let mem_immediates ctx ~location ~example ~nstack ~has_lane find positional =
            Error.positional_memory_immediate ctx.diagnostics
              ~location:(snd a.Ast.info) ~example
          else
-           Error.value_count_mismatch ctx.diagnostics ~location ~expected:nstack
-             ~provided:nargs);
+           Error.operand_count_mismatch ctx.diagnostics ~location
+             ~expected:nstack ~provided:nargs);
   let pick name k =
     match find name with
     | Some e -> Some e
@@ -5026,7 +5033,7 @@ and type_cont_construct_call ctx i func ns name args =
       match args' with
       | [ f' ] -> finish_cont_new ctx i ns f'
       | _ ->
-          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
             ~expected:1 ~provided:(List.length args');
           recover ())
   | "bind" -> (
@@ -5035,7 +5042,7 @@ and type_cont_construct_call ctx i func ns name args =
           let*! src = cont_operand_type ctx c' in
           finish_cont_bind ctx i src ns args'
       | [] ->
-          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
             ~expected:1 ~provided:0;
           recover ())
   | _ ->
@@ -6134,7 +6141,7 @@ and type_exception ctx i =
            l'
        in
        if List.length provided <> Array.length types then
-         Error.value_count_mismatch ctx.diagnostics ~location:i.info
+         Error.operand_count_mismatch ctx.diagnostics ~location:i.info
            ~expected:(Array.length types) ~provided:(List.length provided)
        else
          List.iteri
@@ -6966,7 +6973,7 @@ and type_array_method_recovery ctx i func recv meth args =
   let* args' = instructions ctx args in
   let expected = match meth.desc with "fill" -> 3 | _ -> 4 in
   if List.length args' <> expected then
-    Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected
+    Error.operand_count_mismatch ctx.diagnostics ~location:i.info ~expected
       ~provided:(List.length args');
   return_statement i
     (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))
@@ -7014,7 +7021,7 @@ and type_binary_intrinsic_call ctx i func i1 meth op args =
          leaves): report it, but still produce the method node with the receiver
          typed — its result is the receiver's type — so recovery keeps the call
          (editor features like signature help see it). *)
-      Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:1
+      Error.operand_count_mismatch ctx.diagnostics ~location:i.info ~expected:1
         ~provided:(List.length args');
       return_expression i (call args') (expression_type ctx i1')
 
@@ -7109,7 +7116,7 @@ and type_simd_vector_op_call ctx i func recv meth args =
   let nstack_extra = List.length op.operands - 1 in
   let nargs = List.length args' in
   if nargs <> nimm + nstack_extra then
-    Error.value_count_mismatch ctx.diagnostics ~location:i.info
+    Error.operand_count_mismatch ctx.diagnostics ~location:i.info
       ~expected:(nimm + nstack_extra) ~provided:nargs;
   check_type ctx recv' (simd_cell (List.hd op.operands));
   let lane_bound =
@@ -7164,7 +7171,7 @@ and type_simd_free_intrinsic_call ctx i func ns name args =
     | Some shape ->
         let arity = Simd.const_arity shape in
         if List.length args' <> arity then
-          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
             ~expected:arity ~provided:(List.length args');
         (* Each lane of an integer shape must fit its width, accepting both the
          signed and unsigned range [-2^(b-1), 2^b-1] (so an i8 lane is
@@ -7229,7 +7236,7 @@ and type_simd_free_intrinsic_call ctx i func ns name args =
            theirs, so an under/over-application is rejected here rather than
            slipping through to an unrelated stack error during lowering. *)
         if List.length args' <> 3 then
-          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+          Error.operand_count_mismatch ctx.diagnostics ~location:i.info
             ~expected:3 ~provided:(List.length args');
         List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
     return_expression i (Call (callee, args')) (simd_cell TV128))
@@ -8169,7 +8176,7 @@ and type_indirect_call ctx i i' l =
             (match param_types with
             | Some param_types when Array.length param_types <> List.length l'
               ->
-                Error.value_count_mismatch ctx.diagnostics ~location:i.info
+                Error.operand_count_mismatch ctx.diagnostics ~location:i.info
                   ~expected:(Array.length param_types)
                   ~provided:(List.length l')
             | _ -> ());
@@ -8346,8 +8353,8 @@ and type_path_intrinsic_call ctx i func ns name args =
   | "atomic" when name.desc = "fence" ->
       let* args' = instructions ctx args in
       if args' <> [] then
-        Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:0
-          ~provided:(List.length args');
+        Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+          ~expected:0 ~provided:(List.length args');
       return_statement i
         (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
         [||]
@@ -8387,8 +8394,8 @@ and type_wide_arith_call ctx i func ns name args =
         [| Cell.make Error; Cell.make Error |]
   | Some n ->
       if List.length args' <> n then
-        Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:n
-          ~provided:(List.length args');
+        Error.operand_count_mismatch ctx.diagnostics ~location:i.info
+          ~expected:n ~provided:(List.length args');
       List.iter (fun a -> check_type ctx a i64_cell) args';
       return_statement i
         (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
