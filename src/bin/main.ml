@@ -551,6 +551,9 @@ let convert input_file output_file input_format_opt output_format_opt validate
   (* A source map relates a wasm binary's byte offsets to source positions, so
      it is only meaningful for wasm output. Reject it for text output rather
      than silently discarding it (the text emitters ignore it). *)
+  if source_map && input_format = Wasm then
+    usage_error
+      "--source-map is not supported when the source is a wasm binary file";
   if source_map && output_format <> Wasm then
     usage_error "--source-map is only supported for wasm output";
   if source_map && output_file = None then

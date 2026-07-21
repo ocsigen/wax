@@ -49,3 +49,9 @@ leaves it nowhere to go; that is rejected too:
   $ wax decl.wax -f wasm --source-map > /dev/null
   --source-map requires an output file
   [123]
+
+A source map is not supported when the input is a wasm binary file:
+
+  $ wax decl.wasm -f wasm -o decl2.wasm --source-map
+  --source-map is not supported when the source is a wasm binary file
+  [123]
