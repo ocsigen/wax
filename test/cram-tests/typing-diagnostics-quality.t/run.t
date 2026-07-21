@@ -247,12 +247,4 @@ mismatching label, pointing back at the other target:
     ·                       ^^ other branch target here
   6 │         }
   7 │         2;
-  Error: This instruction provides 0 value(s) but 1 was/were expected.
-   ──➤  brt.wax:5:36
-  3 │         'b: do {
-  4 │             1;
-  5 │             br_table ['b, else 'a] x;
-    ·                                    ^
-  6 │         }
-  7 │         2;
   [128]
