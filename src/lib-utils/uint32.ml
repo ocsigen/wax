@@ -8,7 +8,15 @@ let of_string s =
     Format.eprintf "Unsigned int overflow: %s@." s;
     raise e
 
-let to_string s = Printf.sprintf "%lu" s
+(* [Printf.sprintf "%lu"] runs the [camlinternalFormat] interpreter on every
+   call — a heavy per-call allocation, and this renders every index/constant in
+   the output. A non-negative [Int32] already reads as its unsigned self, so the
+   overwhelmingly common case (indices, offsets, small constants) takes the
+   lightweight [Int32.to_string] primitive; only a top-bit-set value (unsigned
+   >= 2^31, rare) needs the format interpreter. *)
+let to_string s =
+  if Int32.compare s 0l >= 0 then Int32.to_string s else Printf.sprintf "%lu" s
+
 let of_int i = Int32.of_int i
 
 let to_int i =

@@ -8,7 +8,14 @@ let of_string s =
     Format.eprintf "Unsigned int overflow: %s@." s;
     raise e
 
-let to_string s = Printf.sprintf "%Lu" s
+(* Avoid [Printf.sprintf "%Lu"], whose [camlinternalFormat] interpreter is a
+   heavy per-call allocation on this output-rendering path. A non-negative
+   [Int64] already reads as its unsigned self via the lightweight [Int64.to_string]
+   primitive; only a top-bit-set value (unsigned >= 2^63, rare) needs the format
+   interpreter. *)
+let to_string s =
+  if Int64.compare s 0L >= 0 then Int64.to_string s else Printf.sprintf "%Lu" s
+
 let of_int i = Int64.of_int i
 
 (* Every caller must first bound the value so it is known to fit an OCaml [int]
