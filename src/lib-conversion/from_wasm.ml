@@ -1435,7 +1435,12 @@ let label_targeted ?self (instrs : _ Src.instr list) =
     | Num n -> Uint32.to_int n = depth
     | Id name -> self = Some name
   in
-  let rec any depth instrs = List.exists (one depth) instrs
+  (* Explicit recursion rather than [List.exists (one depth)]: [any] is called
+     once per (nested) block, so a partial-application closure here allocated on
+     every block — the hottest allocation in [modulefield]. *)
+  let rec any depth = function
+    | [] -> false
+    | i :: rest -> one depth i || any depth rest
   and one depth (i : _ Src.instr) =
     match i.desc with
     | Br i
