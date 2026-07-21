@@ -1765,14 +1765,20 @@ and instruction_desc ret ctx i : location Text.instr list =
             | None -> (
                 match expr_opt_valtype body with Some t -> t | None -> I32)
           in
+          (* Reserve the (possibly renamed) local and declare it now, keeping the
+             declaration order unchanged, but bring the name into scope only
+             *after* the initializer is lowered: a reference to [name] inside the
+             initializer must still resolve to the outer binding it shadows (as
+             the type checker scopes it), not to this new local. *)
           let wasm_name = Namespace.add ctx.namespace name.desc in
-          ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
           ctx.allocated_locals :=
             (Some { name with desc = wasm_name }, valtype ty)
             :: !(ctx.allocated_locals);
+          let code = instruction ret ctx body in
+          ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
           folded loc
             (Text.LocalSet (with_loc name.info (Text.Id wasm_name)))
-            (instruction ret ctx body)
+            code
       | None -> folded loc Text.Drop (instruction ret ctx body))
   | Let (decls, Some body) ->
       (* Multi-value initializer: evaluate it once, leaving one value per name

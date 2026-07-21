@@ -1,0 +1,13 @@
+// A `let` that shadows a parameter: the initializer must still read the
+// outer binding, even after To_wasm renames the new local to avoid the
+// wasm-level name collision.
+fn f(x: i32) -> i32 {
+  let x: i32 = x + 1;
+  x;
+}
+
+// The shadowed name appears in an `if` condition inside the initializer.
+fn g(x: i32) -> i32 {
+  let x: i32 = if x { 10; } else { 20; };
+  x;
+}
