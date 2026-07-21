@@ -320,6 +320,25 @@ let get_hunks annotations =
   merge ranges |> List.map (fun (s, e) -> (max 1 s, e))
 
 let modern = true
+let line_starts_cache = ref ("", [||])
+
+let get_line_starts source =
+  let cached_source, cached_array = !line_starts_cache in
+  if source == cached_source then cached_array
+  else
+    let len = String.length source in
+    let starts = ref [ 0 ] in
+    let i = ref 0 in
+    while !i < len do
+      match String.index_from source !i '\n' with
+      | j ->
+          starts := (j + 1) :: !starts;
+          i := j + 1
+      | exception Not_found -> i := len
+    done;
+    let array = Array.of_list (List.rev !starts) in
+    line_starts_cache := (source, array);
+    array
 
 let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
     ~location ~severity ?warning ?hint ?edit ?(related = []) msg =
@@ -330,15 +349,12 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
   | Human ->
       let annotations = get_annotations ~theme ~severity ~location ~related in
       let hunks = get_hunks annotations in
-      let rec count_lines s i acc =
-        match String.index_from s i '\n' with
-        | j -> count_lines s (j + 1) (acc + 1)
-        | exception Not_found -> acc + 1
+      let line_starts = get_line_starts source in
+      let total_lines = Array.length line_starts in
+      let max_hunk_line =
+        List.fold_left (fun acc (_, e) -> max acc e) 0 hunks
       in
-      let total_lines = count_lines source 0 0 in
-      let max_line =
-        List.fold_left (fun acc (_, e) -> max acc e) 0 hunks |> min total_lines
-      in
+      let max_line = min max_hunk_line total_lines in
       let gutter_width = max 1 (String.length (string_of_int max_line)) in
       let gutter_padding = String.make gutter_width ' ' in
       let filename = location.Ast.loc_start.Lexing.pos_fname in
@@ -378,11 +394,12 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
       let curr_pos = ref 0 in
       let curr_line = ref 1 in
       let seek line =
-        while !curr_line < line do
-          let eol = find_eol source !curr_pos in
-          curr_pos := min (String.length source) (eol + 1);
-          incr curr_line
-        done
+        if line <= total_lines then (
+          curr_pos := line_starts.(line - 1);
+          curr_line := line)
+        else (
+          curr_pos := String.length source;
+          curr_line := total_lines + 1)
       in
       let total_hunks = List.length hunks in
       List.iteri
