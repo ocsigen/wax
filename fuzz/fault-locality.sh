@@ -202,7 +202,12 @@ fuzz_one() {
         "error away from the fault line: $(head -1 <<<"$away") (saved fuzz/fault-findings/fault-$n-$f.$ext)" \
         "FAULT=$f node $mut $in >m.$ext; wax check --error-format short m.$ext")"$'\n'
       printf F >&2
-    elif [ "$nerr" -gt "$MAX_ERRORS" ]; then
+    elif [ "$nerr" -gt "$MAX_ERRORS" ] && [ -z "$unknown_arity" ]; then
+      # BLOWUP is the same secondary-error concern as LOCALITY, just past the
+      # count threshold — so it is likewise inherent for an unknown-arity fault
+      # (the positional hole cascade's length is program-dependent) and skipped
+      # for those. SILENT (no error at all) still fires: an unknown-arity fault
+      # must still produce at least the unbound-reference error.
       mkdir -p "$FINDINGS"; cp "$m" "$FINDINGS/fault-$n-$f.$ext"
       out+="$(finding BLOWUP REVIEW "$(basename "$in") fault $f (line $fl)" \
         "$nerr errors for one fault (saved fuzz/fault-findings/fault-$n-$f.$ext)" \

@@ -77,7 +77,9 @@ const uses = [];
       while (k < n && (src[k] === " " || src[k] === "\t")) k++;
       // The previous non-space character: excludes `.name(` (method),
       // `::name(` and `x: name (` (a type annotation, e.g. the import /
-      // explicit-type form `fn f: T (…)`), `&name(`, `'name(`.
+      // explicit-type form `fn f: T (…)`), `&name(`, `'name(`, and `&?name (`
+      // (a nullable ref type in e.g. `br_on_cast 'l &?T (…)`, whose `?` is the
+      // only context an identifier follows a `?`) — a type, not a callee.
       let e = i - 1;
       while (e >= 0 && /[ \t\n]/.test(src[e])) e--;
       const prev = e >= 0 ? src[e] : "";
@@ -90,7 +92,7 @@ const uses = [];
       if (
         src[k] === "(" && !KEYWORDS.has(word) &&
         prev !== "." && prev !== ":" && prev !== "'" && prev !== "&" &&
-        prevWord !== "fn"
+        prev !== "?" && prevWord !== "fn"
       )
         // A call: the callee's signature — hence its arity — is unknown once
         // unbound, so recovery cannot keep the stack aligned for the hole
