@@ -3334,46 +3334,38 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
 
 (*** Implicit type elaboration and name registration ***)
 
-(* Structural equality on function types, ignoring parameter names and source
-   locations. Used to replicate the WAT type-use abbreviation, where an inline
-   signature reuses an identical existing type rather than minting a new one. *)
-let rec valtype_eq ctx (a : Src.valtype) (b : Src.valtype) =
-  match (a, b) with
-  | I32, I32 | I64, I64 | F32, F32 | F64, F64 | V128, V128 -> true
-  | Ref x, Ref y -> x.nullable = y.nullable && heaptype_eq ctx x.typ y.typ
-  | (I32 | I64 | F32 | F64 | V128 | Ref _), _ -> false
-
-and heaptype_eq ctx (a : Src.heaptype) (b : Src.heaptype) =
-  match (a, b) with
-  | Type i, Type j -> (
-      (* A numeric [(type N)] and a symbolic [(type $s)] naming the *same*
-         declared type must compare equal: resolve each reference to its
-         canonical type name first. Comparing the raw [Num]/[Id] forms would
-         miss the match, so [elaborate_implicit_types] would mint a spurious
-         implicit type for an inline signature that merely duplicates a declared
-         one, shifting every later numeric type reference. A reference that does
-         not resolve to a declared name (e.g. one pointing at an implicit type,
-         which carries no name here) falls back to raw structural comparison. *)
-      let canon (k : Src.idx) =
-        match Sequence.get ctx.types k with
-        | { Ast.desc = name; _ } -> Some name
-        | exception (Unresolved_reference _ | Numeric_ref_in_conditional _) ->
-            None
-      in
-      match (canon i, canon j) with
-      | Some s, Some t -> String.equal s t
-      | _ -> i.Ast.desc = j.Ast.desc)
-  | _ -> a = b
-
-let functype_eq ctx (a : Src.functype) (b : Src.functype) =
-  let valtypes a = List.map (fun p -> snd p.Ast.desc) (Array.to_list a) in
-  Array.length a.params = Array.length b.params
-  && Array.length a.results = Array.length b.results
-  && List.for_all2 (valtype_eq ctx) (valtypes a.params) (valtypes b.params)
-  && List.for_all2 (valtype_eq ctx) (Array.to_list a.results)
-       (Array.to_list b.results)
-
 let empty_functype : Src.functype = { params = [||]; results = [||] }
+
+(* A hashable key identifying a function type up to the structural equality the
+   WAT type-use abbreviation needs — parameter names and source locations
+   ignored — so [elaborate_implicit_types] can dedup inline signatures against
+   the known types with a hashtable set rather than an O(n) scan (which, run per
+   inline signature, was quadratic and re-resolved references on every compare).
+
+   Each parameter and result value type is keyed structurally, except a
+   [(type …)] reference, which is resolved to its canonical type name first: a
+   numeric [(type N)] and a symbolic [(type $s)] naming the *same* declared type
+   must key equal, or a duplicate inline signature would mint a spurious implicit
+   type and shift every later numeric type reference. A reference that does not
+   resolve to a declared name (e.g. one pointing at an implicit type, which
+   carries no name here) falls back to its raw index form. *)
+let functype_key ctx (ft : Src.functype) =
+  let heaptype_key (h : Src.heaptype) =
+    match h with
+    | Type i -> (
+        match Sequence.get ctx.types i with
+        | { Ast.desc = name; _ } -> `Named name
+        | exception (Unresolved_reference _ | Numeric_ref_in_conditional _) ->
+            `Raw i.Ast.desc)
+    | h -> `Other h
+  in
+  let valtype_key (v : Src.valtype) =
+    match v with
+    | Ref { nullable; typ } -> `Ref (nullable, heaptype_key typ)
+    | v -> `Scalar v
+  in
+  ( Array.map (fun p -> valtype_key (snd p.Ast.desc)) ft.params,
+    Array.map valtype_key ft.results )
 
 (* Populate [ctx.implicit_types] with the function types the WAT text format
    synthesises from inline [(param)]/[(result)] signatures. Explicit type
@@ -3386,10 +3378,12 @@ let empty_functype : Src.functype = { params = [||]; results = [||] }
    references are allowed); there the index space is unambiguous. *)
 let elaborate_implicit_types ctx fields =
   let next = ref 0 in
-  (* Known function types by index, explicit ones first, then minted implicit
-     ones, used to decide whether an inline signature needs a fresh index. *)
-  let known = ref [] in
-  let record ft = known := (Uint32.of_int !next, ft) :: !known in
+  (* Keys of the function types seen so far — explicit ones first, then minted
+     implicit ones — used to decide whether an inline signature duplicates one
+     already known (in which case it mints no fresh index). A set of keys, not a
+     list scanned with [functype_eq], keeps this linear. *)
+  let seen : (_, unit) Hashtbl.t = Hashtbl.create 64 in
+  let record ft = Hashtbl.replace seen (functype_key ctx ft) () in
   (* Phase 1: explicit type definitions, in source order. *)
   List.iter
     (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
@@ -3411,10 +3405,10 @@ let elaborate_implicit_types ctx fields =
     | Some _ -> () (* references an existing type; mints nothing *)
     | None ->
         let ft = Option.value sign ~default:empty_functype in
-        if not (List.exists (fun (_, ft') -> functype_eq ctx ft ft') !known)
-        then (
+        let key = functype_key ctx ft in
+        if not (Hashtbl.mem seen key) then (
           Hashtbl.replace ctx.implicit_types (Uint32.of_int !next) ft;
-          record ft;
+          Hashtbl.replace seen key ();
           incr next)
   in
   let blocktype = function Some (Src.Typeuse tu) -> consider tu | _ -> () in
