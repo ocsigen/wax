@@ -30,42 +30,54 @@ let is_void (t : functype) = t.params = [||] && t.results = [||]
 (* Whether any branch within [i] targets the label [name] — a "continue" to a
    recovered loop, which forces the label to be kept. *)
 let rec refs_instr name (i : location instr) : bool =
-  let any = List.exists (refs_instr name) in
-  let opt = function Some x -> refs_instr name x | None -> false in
-  let lab (l : label) = String.equal l.desc name in
   match i.desc with
-  | Br (l, e) -> lab l || opt e
-  | Br_if (l, e) -> lab l || refs_instr name e
-  | Br_table (ls, e) -> List.exists lab ls || refs_instr name e
+  | Br (l, e) -> String.equal l.desc name || refs_opt name e
+  | Br_if (l, e) -> String.equal l.desc name || refs_instr name e
+  | Br_table (ls, e) ->
+      List.exists (fun l -> String.equal l.desc name) ls || refs_instr name e
   | Hinted (_, e) | On (e, _) -> refs_instr name e
-  | Br_on_null (l, e) | Br_on_non_null (l, e) -> lab l || refs_instr name e
+  | Br_on_null (l, e) | Br_on_non_null (l, e) ->
+      String.equal l.desc name || refs_instr name e
   | Br_on_cast (l, _, e) | Br_on_cast_fail (l, _, e) ->
-      lab l || refs_instr name e
+      String.equal l.desc name || refs_instr name e
   | Br_on_cast_desc_eq (l, _, e, d) | Br_on_cast_desc_eq_fail (l, _, e, d) ->
-      lab l || refs_instr name e || refs_instr name d
+      String.equal l.desc name || refs_instr name e || refs_instr name d
   | Dispatch { index; cases; default; arms } ->
-      lab default || List.exists lab cases || refs_instr name index
-      || List.exists (fun (_, b) -> any b.desc) arms
+      String.equal default.desc name
+      || List.exists (fun l -> String.equal l.desc name) cases
+      || refs_instr name index
+      || List.exists (fun (_, b) -> refs_instrs name b.desc) arms
   | Match { scrutinee; arms; default } ->
       refs_instr name scrutinee
-      || List.exists (fun (_, b) -> any b.desc) arms
-      || any default.desc
+      || List.exists (fun (_, b) -> refs_instrs name b.desc) arms
+      || refs_instrs name default.desc
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      any block.desc
+      refs_instrs name block.desc
   | While { cond; step; block; _ } ->
-      refs_instr name cond || opt step || any block.desc
+      refs_instr name cond || refs_opt name step || refs_instrs name block.desc
   | If { cond; if_block; else_block; _ } -> (
-      refs_instr name cond || any if_block.desc
-      || match else_block with Some b -> any b.desc | None -> false)
+      refs_instr name cond
+      || refs_instrs name if_block.desc
+      ||
+      match else_block with
+      | Some b -> refs_instrs name b.desc
+      | None -> false)
   | Try { block; catches; catch_all; _ } -> (
-      any block.desc
-      || List.exists (fun (_, b) -> any b.desc) catches
-      || match catch_all with Some b -> any b.desc | None -> false)
+      refs_instrs name block.desc
+      || List.exists (fun (_, b) -> refs_instrs name b.desc) catches
+      ||
+      match catch_all with
+      | Some b -> refs_instrs name b.desc
+      | None -> false)
   | TryCatch { block; arms; _ } ->
-      any block.desc || List.exists (fun a -> any a.arm_body.desc) arms
+      refs_instrs name block.desc
+      || List.exists (fun a -> refs_instrs name a.arm_body.desc) arms
   | If_annotation { then_body; else_body; _ } -> (
-      any then_body.desc
-      || match else_body with Some b -> any b.desc | None -> false)
+      refs_instrs name then_body.desc
+      ||
+      match else_body with
+      | Some b -> refs_instrs name b.desc
+      | None -> false)
   | Set (_, _, e)
   | Tee (_, e)
   | Labelled (_, e)
@@ -80,10 +92,10 @@ let rec refs_instr name (i : location instr) : bool =
   | ThrowRef e
   | ContNew (_, e) ->
       refs_instr name e
-  | Call (a, l) | TailCall (a, l) -> refs_instr name a || any l
-  | Struct (_, fs) -> List.exists (fun (_, e) -> opt e) fs
+  | Call (a, l) | TailCall (a, l) -> refs_instr name a || refs_instrs name l
+  | Struct (_, fs) -> List.exists (fun (_, e) -> refs_opt name e) fs
   | StructDesc (d, fs) ->
-      refs_instr name d || List.exists (fun (_, e) -> opt e) fs
+      refs_instr name d || List.exists (fun (_, e) -> refs_opt name e) fs
   | CastDesc (a, _, b)
   | StructSet (a, _, b)
   | Array (_, a, b)
@@ -102,13 +114,18 @@ let rec refs_instr name (i : location instr) : bool =
   | Switch (_, _, l)
   | Throw (_, l)
   | Sequence l ->
-      any l
-  | Let (_, e) | Return e -> opt e
+      refs_instrs name l
+  | Let (_, e) | Return e -> refs_opt name e
   | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       false
 
-let refs_list name l = List.exists (refs_instr name) l
+and refs_instrs name l =
+  match l with [] -> false | i :: r -> refs_instr name i || refs_instrs name r
+
+and refs_opt name = function Some x -> refs_instr name x | None -> false
+
+let refs_list = refs_instrs
 
 (* Whether the (already-rewritten) body of void loop [l] still references [l]
    after dropping its back-edge, with [cond] the loop's recovered test. *)
@@ -119,7 +136,6 @@ let keep_label l cond body =
    report [false], which only makes the induction-step heuristic in [fold_loop]
    fire less often, never wrongly. *)
 let rec reads_var name (i : location instr) : bool =
-  let any = List.exists (reads_var name) in
   match i.desc with
   | Get id -> String.equal id.desc name
   | BinOp (_, a, b) | ArrayGet (a, b) -> reads_var name a || reads_var name b
@@ -133,14 +149,24 @@ let rec reads_var name (i : location instr) : bool =
   | On (e, _) ->
       reads_var name e
   | Select (a, b, c) -> reads_var name a || reads_var name b || reads_var name c
-  | Call (f, args) | TailCall (f, args) -> reads_var name f || any args
+  | Call (f, args) | TailCall (f, args) ->
+      reads_var name f || reads_var_list name args
   | Tee (id, e) -> String.equal id.desc name || reads_var name e
   | Set (id, _, e) -> String.equal id.desc name || reads_var name e
-  | Block { block; _ } | Loop { block; _ } -> any block.desc
+  | Block { block; _ } | Loop { block; _ } -> reads_var_list name block.desc
   | If { cond; if_block; else_block; _ } -> (
-      reads_var name cond || any if_block.desc
-      || match else_block with Some b -> any b.desc | None -> false)
+      reads_var name cond
+      || reads_var_list name if_block.desc
+      ||
+      match else_block with
+      | Some b -> reads_var_list name b.desc
+      | None -> false)
   | _ -> false
+
+and reads_var_list name l =
+  match l with
+  | [] -> false
+  | i :: r -> reads_var name i || reads_var_list name r
 
 (* Fold an already-rewritten void [loop] labelled [l] into a [while] when its
    body is the leading-test shape, else leave it a [loop]. *)

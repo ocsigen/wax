@@ -155,8 +155,6 @@ let first_use_index name l =
    failing that, "not read first" — decides. *)
 let rec first_access name i =
   let fst2 a b = match a with Some _ -> a | None -> b in
-  let fl l = first_access_list name l in
-  let fo = function Some e -> first_access name e | None -> None in
   let agree a b =
     match (a, b) with Some x, Some y when x = y -> Some x | _ -> None
   in
@@ -169,24 +167,35 @@ let rec first_access name i =
       fst2 (first_access name e)
         (if String.equal id.desc name then Some `Write else None)
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      fl block.desc
+      first_access_list name block.desc
   | While { cond; step; block; _ } ->
       (* One iteration reads [cond], then the body, then the step. *)
-      fst2 (first_access name cond) (fst2 (fl block.desc) (fo step))
+      fst2 (first_access name cond)
+        (fst2 (first_access_list name block.desc) (first_access_opt name step))
   | If { cond; if_block; else_block; _ } ->
       fst2 (first_access name cond)
-        (agree (fl if_block.desc)
-           (match else_block with Some b -> fl b.desc | None -> None))
+        (agree
+           (first_access_list name if_block.desc)
+           (match else_block with
+           | Some b -> first_access_list name b.desc
+           | None -> None))
   | Try { block; catches; catch_all; _ } ->
-      fst2 (fl block.desc)
+      fst2
+        (first_access_list name block.desc)
         (List.fold_left
-           (fun acc (_, b) -> agree acc (fl b.desc))
-           (match catch_all with Some b -> fl b.desc | None -> None)
+           (fun acc (_, b) -> agree acc (first_access_list name b.desc))
+           (match catch_all with
+           | Some b -> first_access_list name b.desc
+           | None -> None)
            catches)
   | TryCatch { block; arms; _ } ->
-      fst2 (fl block.desc)
-        (List.fold_left (fun acc a -> agree acc (fl a.arm_body.desc)) None arms)
-  | Call (t, args) | TailCall (t, args) -> fst2 (fl args) (first_access name t)
+      fst2
+        (first_access_list name block.desc)
+        (List.fold_left
+           (fun acc a -> agree acc (first_access_list name a.arm_body.desc))
+           None arms)
+  | Call (t, args) | TailCall (t, args) ->
+      fst2 (first_access_list name args) (first_access name t)
   | Labelled (_, e)
   | Cast (e, _)
   | Test (e, _)
@@ -232,10 +241,12 @@ let rec first_access name i =
   | Switch (_, _, l)
   | Throw (_, l)
   | Sequence l ->
-      fl l
+      first_access_list name l
   | Dispatch { index; arms; _ } ->
       fst2 (first_access name index)
-        (List.fold_left (fun acc (_, b) -> agree acc (fl b.desc)) None arms)
+        (List.fold_left
+           (fun acc (_, b) -> agree acc (first_access_list name b.desc))
+           None arms)
   | Match { scrutinee; arms; default } ->
       (* The scrutinee is evaluated first; the arms and default are the
          (mutually exclusive) runtime-dependent alternatives, so commit only
@@ -243,13 +254,17 @@ let rec first_access name i =
       fst2
         (first_access name scrutinee)
         (List.fold_left
-           (fun acc (_, b) -> agree acc (fl b.desc))
-           (fl default.desc) arms)
-  | Let (_, body) -> fo body
-  | Br (_, o) | Return o -> fo o
+           (fun acc (_, b) -> agree acc (first_access_list name b.desc))
+           (first_access_list name default.desc)
+           arms)
+  | Let (_, body) -> first_access_opt name body
+  | Br (_, o) | Return o -> first_access_opt name o
   | If_annotation { then_body; else_body; _ } ->
-      agree (fl then_body.desc)
-        (match else_body with Some b -> fl b.desc | None -> None)
+      agree
+        (first_access_list name then_body.desc)
+        (match else_body with
+        | Some b -> first_access_list name b.desc
+        | None -> None)
   | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       None
@@ -258,6 +273,10 @@ and first_access_list name l =
   List.fold_left
     (fun acc i -> match acc with Some _ -> acc | None -> first_access name i)
     None l
+
+and first_access_opt name = function
+  | Some e -> first_access name e
+  | None -> None
 
 (* First access to [name] across a struct literal's fields, in evaluation order.
    A punned field [{x}] ([None]) is an implicit [Get] of the like-named local. *)
