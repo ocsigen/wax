@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-052ca919.js";
+            window.path_to_searchindex_js = "searchindex-a08e4b61.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e20ab12e.js"></script>
@@ -4901,8 +4901,8 @@ whether the consumer supports the proposal.</li>
 <li>
 <p><strong><code>--source-map</code></strong></p>
 <ul>
-<li>Generate a source map file alongside the output file and insert a <code>sourceMappingURL</code> custom section. Only valid with wasm output (<code>-f wasm</code>) to a file;
-requesting one for wat or wax output, or when outputting to <code>stdout</code>, is an error.</li>
+<li>Generate a source map file alongside the output file and insert a <code>sourceMappingURL</code> custom section. Only valid with wasm output (<code>-f wasm</code>) to a file, when the source is a text file (not a Wasm binary).
+Requesting one for wat or wax output, when the source is a Wasm binary, or when outputting to <code>stdout</code>, is an error.</li>
 </ul>
 </li>
 <li>
@@ -5099,7 +5099,7 @@ in the repository (one directory per editor, each with a README).</p>
 </thead>
 <tbody>
 <tr><td><code>0</code></td><td>Success. For <code>check</code> / <code>format --check</code>, also means every file passed.</td></tr>
-<tr><td><code>123</code></td><td>A <strong>usage</strong> error: an invalid combination of flags (e.g. <code>--source-map</code> with text output, or binary output to a terminal), or a <code>format --check</code> run that found files needing formatting.</td></tr>
+<tr><td><code>123</code></td><td>A <strong>usage</strong> error: an invalid combination of flags (e.g. <code>--source-map</code> with text output or binary input, or binary output to a terminal), or a <code>format --check</code> run that found files needing formatting.</td></tr>
 <tr><td><code>124</code></td><td>A command-line parse error: an unknown flag or a bad option value (reported by the argument parser).</td></tr>
 <tr><td><code>125</code></td><td>An internal error (an uncaught exception).</td></tr>
 <tr><td><code>128</code></td><td>The input was <strong>rejected by a diagnostic</strong>: a parse, validation, or type error, or a malformed wasm binary. This is also the status of a <code>check</code> run that found any problem.</td></tr>
