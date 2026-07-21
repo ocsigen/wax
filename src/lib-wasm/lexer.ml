@@ -804,6 +804,19 @@ let token ctx =
   in
   (f, start_override)
 
+(* Whether [s] is a bare [$id] identifier: a non-empty run of [idchar]. Rendered
+   for every printed identifier ({!Output.id_string}) and every candidate name,
+   so it must not allocate — a byte scan replaces the old
+   [Sedlexing.Utf8.from_string] + [match%sedlex], which built a fresh lexbuf per
+   call. Every [idchar] is ASCII, so a byte ≥ 0x80 simply fails the class. *)
 let is_valid_identifier s =
-  let buf = Sedlexing.Utf8.from_string s in
-  match%sedlex buf with Plus idchar, eof -> true | _ -> false
+  let is_idchar = function
+    | '0' .. '9' | 'A' .. 'Z' | 'a' .. 'z' -> true
+    | '!' | '#' | '$' | '%' | '&' | '\'' | '*' | '+' | '-' | '.' | '/' | ':'
+    | '<' | '=' | '>' | '?' | '@' | '\\' | '^' | '_' | '`' | '|' | '~' ->
+        true
+    | _ -> false
+  in
+  let n = String.length s in
+  let rec go i = i >= n || (is_idchar s.[i] && go (i + 1)) in
+  n > 0 && go 0
