@@ -52,6 +52,7 @@ dune build src/bin/main.exe src/bin/fuzz_gen.exe src/bin/fuzz_recover.exe 2>&1 |
 run cast-lattice.sh
 run drop-width.sh
 run num-id-fuzz.sh
+run "COUNT=$count" annot-fuzz.sh
 run cond-fromwasm-fuzz.sh
 run wax-lower-fuzz.sh
 run stress.sh

@@ -55,8 +55,9 @@ fuzz/diff-validate.sh [count] [bytes]         # differential validation vs the s
 fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatures
 
 # Wax *source* side (compile direction: parser, type checker, to_wasm):
-fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smith modules
+fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smith modules + authorial hand-written wax
 fuzz/mutate-wax.sh [count]       # AST-mutate the wax seeds + check them (needs wasm-tools)
+fuzz/annot-fuzz.sh               # ADD type annotations to valid wax + round-trip: a dropped load-bearing annotation breaks it (the IF-KEEP-BOOL class); COUNT=N
 fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec reference (no wasm-tools)
 fuzz/type-fuzz.sh                # type-check GENERATED hand-written-style wax (fuzz_gen); COUNT=N
 fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast lattice
@@ -97,7 +98,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
 `validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`,
-`fault-locality.sh`, `num-id-fuzz.sh`, `cond-fromwasm-fuzz.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -161,13 +162,46 @@ Everything above starts from *wasm* and runs `wasm → wax → wasm`. That barel
 exercises the *compile* direction — the Wax parser, type checker and `to_wasm` —
 on anything the decompiler would not itself emit. Two scripts close that gap:
 
-* `wax-corpus.sh` builds the `.wax` seed set in `fuzz/corpus-wax/valid/` by
-  decompiling, with wax itself, both the valid wasm corpus (small, curated
-  spec-suite modules) and a batch of `wasm-tools smith` modules (default 1000 at
-  8192 seed bytes — tens to hundreds of lines, far more intertwined, so the
-  mutator explores deep code rather than only tiny snippets). Every seed is
-  valid, type-correct Wax (wax's own output). `run.sh fuzz/corpus-wax` sweeps it,
-  exercising the `wax → wat/wax/wasm` directions and the wax round-trip (oracle 6).
+* `wax-corpus.sh` builds the `.wax` seed set in `fuzz/corpus-wax/valid/` from
+  three sources. The first two are decompiled, with wax itself, from the valid
+  wasm corpus (small, curated spec-suite modules) and a batch of `wasm-tools
+  smith` modules (default 1000 at 8192 seed bytes — tens to hundreds of lines,
+  far more intertwined, so the mutator explores deep code rather than only tiny
+  snippets); every such seed is valid, type-correct Wax (wax's own output). But
+  wax's output is a *fixed point of the wasm→wax simplify pass*, so a decompiled
+  seed can never carry the type annotations that pass would drop — it exhibits no
+  dropped-annotation round-trip bug because its annotations were already dropped
+  when it was produced. The third source closes that gap: **authorial**
+  (hand-written) Wax (skip with `AUTHORIAL=0`), copied verbatim so it keeps its
+  explicit annotations — every `.wax` fixture under `test/cram-tests/`, the
+  ```wax code blocks in `docs/src/examples.md`, and `infer.wax` at the repo root,
+  each kept only if a plain `wax check` accepts it (the corpus contract is
+  EXPECT=valid; deliberate negative fixtures and files needing `-D`/`-X` are
+  skipped). These are named `authorial-*` so triage can tell them from decompiled
+  seeds. `run.sh fuzz/corpus-wax` sweeps the whole set, exercising the
+  `wax → wat/wax/wasm` directions and the wax round-trip (oracle 6).
+
+* `annot-fuzz.sh` is the guard aimed squarely at the dropped-annotation class
+  (`IF-KEEP-BOOL.md`) that the decompiler-seeded corpus and wasm-smith
+  structurally miss. Dropping a type annotation on the wasm→wax decompile is
+  sound only if re-inference recovers the same type; so for any Wax the checker
+  accepts, *adding* an annotation the checker also accepts must never break the
+  round-trip. It is a guess-and-filter mutator: for each seed it inserts `: T`
+  at unannotated binding sites (`let x =`, `_ =`) and `=> T` at `if`/`do` result
+  positions — candidate types are the primitives, the abstract reference forms
+  (`&?any`/`&?extern`/…) and a ref to each type the module declares (`&t`/`&?t`)
+  — then *filters* to the mutants `wax check` accepts and round-trips each
+  (`wax → wasm → wax → wasm`). A decompile-recompile failure (or a wasm-tools
+  rejection) is a **HIGH `ROUNDTRIP`**: the checker accepted an annotation the
+  simplify pass then dropped as redundant though it was load-bearing. Built-in
+  seeds embed the wax forms of the two live repros (`seed-if-flexible-i64`,
+  `seed-if-flexible-arith-i64`, `seed-if-nested-null`) plus a fixed-case control,
+  so the guard has teeth with no corpus built; corpus candidates are sampled
+  deterministically to a `COUNT` budget by a hash of `SEED` + the candidate
+  identity. wax-only for the core failure; wasm-tools adds the validity checks
+  when present. Failing mutants are saved under `fuzz/annot-findings/` with a
+  runnable repro. (The two repros are LIVE bugs, so this guard currently FAILS —
+  it gates the upcoming typing fix.)
 * `mutate-wax.sh` is the AST mutation fuzzer. The `fuzz_mutate` tool
   (`src/bin/fuzz_mutate.ml`) parses a `.wax` seed and mutates one AST node —
   graft another subexpression from the same program in its place, swap a
@@ -573,6 +607,7 @@ same modules decompiled to Wax, so no separate wax corpus is needed.
 | `VALIDATOR_DIFF`| REVIEW | For untagged input, `wax check`'s verdict matches `wasm-tools validate`. |
 | `DIAG_DUP`      | REVIEW | A rejection never repeats a diagnostic line (`--error-format short`, located lines): a location+message duplicate means two passes both reported one broken construct. |
 | `ROUNDTRIP`     | HIGH   | `x → wax → wasm` recompiles and validates; and for a wax input, `wax → wasm → wax → wasm` re-validates (the two directions compose). |
+| `STRUCT_DRIFT`  | HIGH   | For a wax input whose round-trip binaries both validate, their load-bearing structure (masked `ref.null` heaptypes, `(local …)` widths, `iNN/fNN.const` widths) is unchanged — a diff is the silent type-drift flavor of a dropped load-bearing annotation. |
 | `IDEMPOTENCE`   | REVIEW | `format(format(x)) == format(x)` textually. |
 
 Each finding line is tab-separated: `FINDING  category  severity  input  detail
@@ -586,6 +621,13 @@ locals, dedups/renumbers types and rewrites the name section, so two
 semantically-equal binaries differ textually. The round-trip oracle therefore
 checks *validity* of the recompiled binary, not byte/text identity. True
 behavioural equivalence belongs in the execution oracles below.
+
+(Oracle 6 does add a *restricted* structural compare — `STRUCT_DRIFT` — but only
+between `rt1 = wax → wasm` and `rt2 = wax → wasm → wax → wasm`, which come from
+the *same* wax encoder one decompile apart, and only over a name-stripped,
+index-masked bag of the load-bearing tokens. That is a different comparison from
+the oracle-5 one above, where the two sides come from different encode paths and
+the renumbering makes a full textual compare meaningless.)
 
 ## Differential validation (`diff-validate.sh`)
 

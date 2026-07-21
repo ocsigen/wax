@@ -29,7 +29,11 @@
 #                   (canonicalised with `wasm-tools print`). Tests the whole
 #                   decompile+recompile path's fidelity.
 #   6. Wax round-trip — for a wax input, wax -> wasm -> wax -> wasm must still
-#                   validate (the dual of 5: tests both directions compose).
+#                   validate (the dual of 5: tests both directions compose); and
+#                   when both binaries validate, their LOAD-BEARING structure
+#                   (masked ref.null heaptypes, local widths, const widths) must
+#                   match — a diff is the silent type-drift flavor of a dropped
+#                   annotation (STRUCT_DRIFT).
 #   7. Under-reject — if `check` accepts a text module, converting it to another
 #                   format must not then reject it (a typer too lenient for what
 #                   lowering requires).
@@ -110,6 +114,63 @@ width_op_histogram() {
         }' \
     | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl\b|i(32|64)\.trunc_f(32|64)_[su]\b' \
     | sort | uniq -c
+}
+
+# Sorted bag of the LOAD-BEARING structural tokens of a binary, for the oracle-6
+# structural compare (below). rt1 and rt2 there both come from wax's own encoder
+# one decompile apart, so — unlike oracle 5, where local reordering and type
+# renumbering make a textual compare useless — their structure should match. A
+# diff is the SILENT type-drift flavor of the dropped-annotation bug
+# (IF-KEEP-BOOL.md): a decompile+recompile that still validates but changed the
+# module's types (a `ref.null $t` that re-inferred to `ref.null none`, an unused
+# i64 local retyped i32).
+#
+# The name section is stripped first (`strip --all`), since wax legitimately
+# rewrites it; concrete type indices are then masked (`ref.null 5` -> `ref.null
+# #`, and every `(local (ref …))`/shorthand-ref -> `REF`) so the residual
+# type-dedup/renumber churn — the dominant benign diff — cancels, while the
+# drift signal survives: `ref.null #` still differs from the abstract `ref.null
+# none`, and a `(local i64)` from a `(local i32)`. A benign nullability
+# tightening on a local (`(ref null $t)` -> `(ref $t)`, both masked to REF) is
+# deliberately not flagged. TYPE-SECTION entries are excluded: dedup/renumber/
+# minting churn there is pure noise, and the same drift shows through the
+# masked local/ref.null/const tokens where it is actually reachable. Measured
+# false-positive-free over the wax corpus + authorial seeds (0 diffs / 428
+# both-valid round-trips); fires on the nested-null repro. Returns non-zero (so
+# the caller skips) if the reference cannot strip/print the argument.
+roundtrip_struct_bag() {
+  local s="$WORK/rt_strip.wasm"
+  "$WASM_TOOLS" strip --all "$1" -o "$s" 2>/dev/null || return 1
+  "$WASM_TOOLS" print "$s" 2>/dev/null | awk '
+      { line = $0; gsub(/\(;[^)]*;\)/, "", line) }
+      # local declarations: mask reference types (index + nullability), keep
+      # primitive widths (i32/i64/f32/f64/v128) literal.
+      line ~ /^[[:space:]]*\(local[[:space:])]/ {
+        t = line
+        gsub(/\(ref[^)]*\)/, "REF", t)
+        gsub(/(null|any|eq|i31|struct|array|func|extern|nofunc|noextern)ref/, "REF", t)
+        gsub(/[[:space:]]+/, " ", t); sub(/^ +/, "", t); sub(/ +$/, "", t)
+        print "LOCAL " t
+      }
+      # ref.null operands: mask a concrete type index to #, keep the abstract
+      # heaptype keyword (none/any/func/…) — the drift is concrete<->abstract.
+      { s2 = line
+        while (match(s2, /ref\.null [A-Za-z0-9_]+/)) {
+          op = substr(s2, RSTART, RLENGTH); sub(/ref\.null /, "", op)
+          if (op ~ /^[0-9]+$/) op = "#"
+          print "REFNULL " op
+          s2 = substr(s2, RSTART + RLENGTH)
+        }
+      }
+      # numeric const opcode WIDTHS (i64.const vs i32.const is load-bearing).
+      { s3 = line
+        while (match(s3, /(i32|i64|f32|f64)\.const/)) {
+          op = substr(s3, RSTART, RLENGTH); sub(/\.const/, "", op)
+          print "CONST " op
+          s3 = substr(s3, RSTART + RLENGTH)
+        }
+      }' \
+    | sort
 }
 
 # ---- 1. Crash sweep: convert to every target format, with and without -v. ----
@@ -371,6 +432,17 @@ if [ "$FMT" = wax ]; then
       finding ROUNDTRIP HIGH "$IN" \
         "wax->wasm->wax->wasm is rejected by wasm-tools: $(head -1 "$WORK/rt2.wasm.err")" \
         "$(repro "${c1[@]}") && $(repro "${dc[@]}") && $(repro "${c2[@]}") && wasm-tools validate --features all $WORK/rt2.wasm"
+    elif b1="$(roundtrip_struct_bag "$WORK/rt1.wasm")" \
+         && b2="$(roundtrip_struct_bag "$WORK/rt2.wasm")" \
+         && [ "$b1" != "$b2" ]; then
+      # Both binaries validate, but the decompile+recompile changed the
+      # load-bearing structure — the SILENT type-drift flavor of the
+      # dropped-annotation bug (see roundtrip_struct_bag). A dropped `let x: t`
+      # whose initializer re-infers a different type still recompiles here, so
+      # the validity checks above miss it; only this bag comparison sees it.
+      finding STRUCT_DRIFT HIGH "$IN" \
+        "wax->wasm->wax changed load-bearing structure though both validate (ref.null/local/const bag differs)" \
+        "$(repro "${c1[@]}") && $(repro "${dc[@]}") && $(repro "${c2[@]}") && diff <(wasm-tools strip --all $WORK/rt1.wasm -o - | wasm-tools print) <(wasm-tools strip --all $WORK/rt2.wasm -o - | wasm-tools print)"
     fi
   fi
 fi
