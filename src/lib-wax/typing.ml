@@ -3766,18 +3766,24 @@ let match_scrut_reftype ctx scrut' =
    type the surrounding context must pin (an ambiguous/named/default struct, an
    array, a string, a [null] cast, or a [?:] with such a branch): it is checked
    against the result, so a surrounding result annotation is load-bearing.
-   [self_resolving] resolves its own type (a nested block with no parameters, or
-   a struct named unambiguously by its fields). Anything else — a plain
-   statement, a parameterized block, a scalar [?:] — sets neither; a block then
-   types it on the statement path rather than against its result. *)
+   [self_resolving] resolves its own type (a nested block with no parameters, a
+   struct named unambiguously by its fields, or a descriptor construction, whose
+   type the descriptor pins). Anything else — a plain statement, a parameterized
+   block, a scalar [?:] — sets neither; a block then types it on the statement
+   path rather than against its result. *)
 let rec classify_trailing ctx desc =
   match desc with
-  | Struct (_, fields) | StructDesc (_, fields) -> (
+  | Struct (_, fields) -> (
       match infer_struct_by_fields ctx fields with
       | Some _ -> (false, true)
       | None -> (true, false))
-  | StructDefault _ | StructDefaultDesc _ | Array _ | ArrayDefault _
-  | ArrayFixed _ | ArraySegment _ | String _ ->
+  (* A descriptor construction ([{descriptor(d) | ..}], [descriptor(d)::default])
+     takes its type from the descriptor [d], not the surrounding context, and
+     carries no droppable type name — so it resolves its own type regardless of
+     whether its fields are unique, unlike the plain [Struct] above. *)
+  | StructDesc _ | StructDefaultDesc _ -> (false, true)
+  | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _
+  | String _ ->
       (true, false)
   | If { typ; _ }
   | Block { typ; _ }
@@ -3795,6 +3801,51 @@ let rec classify_trailing ctx desc =
   (* A branch hint is advisory: classify the wrapped branch itself. *)
   | Hinted (_, i) -> classify_trailing ctx i.desc
   | _ -> (false, false)
+
+(* Whether [i]'s value cannot be typed *at all* without an expected type flowing
+   in — a strictly-uninferrable construction whose type name has been dropped: an
+   array literal, which can name no element type from its contents, or a struct
+   with neither a name nor a field-set that pins one. This is a narrower notion
+   than [classify_trailing]'s [needs_context]: a bare string still resolves (to
+   [<string>]) and a [null] to [&?none], so those merely narrow rather than fail,
+   and the ordinary keep-bool (comparing the value's join to the context) already
+   keeps their annotation when the narrowing would matter. Only the forms here
+   defeat that test — read off a branch cell that resolved solely because the
+   annotation supplied the type, so the join looks redundant when dropping the
+   annotation would in fact leave the construction unable to re-infer. Used by
+   the [if] keep-bool, recursing through the control constructs whose fall-through
+   carries the context down (an [if]'s branches, a block's tail); [classify_trailing]
+   stops at those, reporting them self-resolving, which is right on the block path
+   (a nested block synthesizes through the inferring cell) but not for the [if]
+   keep-bool, which reads the branch result cells directly. *)
+let rec needs_expected_type ctx (i : _ instr) =
+  let tail instrs =
+    match List.rev instrs with
+    | last :: _ -> needs_expected_type ctx last
+    | [] -> false
+  in
+  match i.desc with
+  | Array (None, _, _)
+  | ArrayDefault (None, _)
+  | ArrayFixed (None, _)
+  | ArraySegment (None, _, _, _)
+  | StructDefault None ->
+      true
+  | Struct (None, fields) -> infer_struct_by_fields ctx fields = None
+  | If { if_block; else_block; _ } -> (
+      tail if_block.desc
+      || match else_block with Some b -> tail b.desc | None -> false)
+  | Block { block; _ }
+  | Loop { block; _ }
+  | Try { block; _ }
+  | TryTable { block; _ }
+  | TryCatch { block; _ } ->
+      tail block.desc
+  (* A [?:] threads the expected type into both value branches, as an [if] does;
+     a branch hint is advisory — recurse into what it wraps. *)
+  | Select (_, a, b) -> needs_expected_type ctx a || needs_expected_type ctx b
+  | Hinted (_, inner) -> needs_expected_type ctx inner
+  | _ -> false
 
 (*** The instruction type-checker ***)
 
@@ -7881,11 +7932,24 @@ and check_instruction ?(drop_supertype = false) ctx expected
       (* The caller's binding annotation (e.g. [let x: T = ..]) is redundant iff
          the branches alone infer exactly [expected] — i.e. an unannotated [let]
          would re-infer it. Read each branch's fall-through type (its lub) and
-         compare; a branch that diverges contributes none. *)
+         compare; a branch that diverges contributes none.
+
+         A bare [null] tail is the exception: dropping the annotation left it a
+         bare [null] (its pinning cast was elided against [expected]), and its
+         cell still reads that pinned type — but on re-parse it re-infers the
+         *floating* [&?none] (and lowers to [ref.null none], not [ref.null t]), so
+         contribute that instead. Then a lone [null] arm still drops the
+         annotation when a sibling arm pins the concrete type (their join is that
+         type), while all-[null] arms correctly keep it (their join is [&?none]).
+         Mirrors [is_null_initializer], which keeps the annotation of a bare-[null]
+         binding for the same reason. *)
+      let none_ref = internalize ctx (Ref { nullable = true; typ = None_ }) in
       let branch_last b =
         match List.rev b with
         | last :: _ -> (
-            match fst last.info with [| c |] -> Some c | _ -> None)
+            match last.desc with
+            | Ast.Null -> none_ref
+            | _ -> ( match fst last.info with [| c |] -> Some c | _ -> None))
         | [] -> None
       in
       let contents_lub =
@@ -7898,7 +7962,21 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | (Some _ as r), None | None, (Some _ as r) -> r
         | None, None -> None
       in
+      (* A branch whose tail value takes its type solely from [expected] (an
+         un-named construction — see [needs_expected_type]) makes the annotation
+         load-bearing regardless of the lub: dropping it leaves that construction
+         unable to re-infer its type. *)
+      let branch_needs_expected b =
+        match List.rev b with
+        | last :: _ -> needs_expected_type ctx last
+        | [] -> false
+      in
       let needed =
+        branch_needs_expected if_block'.desc
+        || (match else_block' with
+          | Some b -> branch_needs_expected b.desc
+          | None -> false)
+        ||
         match contents_lub with
         | Some v -> (
             match
