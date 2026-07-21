@@ -433,10 +433,14 @@ parity_excl='precedence|eager-select|naming-conflict|reserved-word-rename|genera
 # under-specified literal ([{}]) in the decompiled wax hides that from the typer,
 # while the lowered wat exposes the concrete operand to the validator — so a
 # one-sided fire on such a program is a decompiler-representation artifact, not a
-# linter gap. They stay compared on hole-free wax (where a genuine gap surfaces:
-# both linters agree on hand-written Wax), and are dropped only when the wax form
-# below contains a hole or an empty struct literal.
-value_lints='shift-count-overflow|constant-trap|constant-condition|tautological-comparison|redundant-operation|cast-always-fails|unused-result'
+# linter gap. [unused-label] joins them: a hole marks decompiled code, which
+# carries dead branches (a [br_on_null 'l _] after an unconditional [br]) that
+# count as a use of the label on the wax side but are dropped by lowering (dead
+# code is not preserved), so the lowered wat sees the label unused. They stay
+# compared on hole-free wax (where a genuine gap surfaces: both linters agree on
+# hand-written Wax), and are dropped only when the wax form below contains a hole
+# or an empty struct literal.
+value_lints='shift-count-overflow|constant-trap|constant-condition|tautological-comparison|redundant-operation|cast-always-fails|unused-result|unused-label'
 lint_codes() { # $1 = file; $2 = exclusion regex (extended-regex, whole-line)
   timeout -k 5 "$TIMEOUT" "$WAX" check -W all=warning \
     --error-format json "$1" 2>&1 >/dev/null \
