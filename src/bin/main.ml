@@ -882,6 +882,10 @@ let format_conv =
            ("wax", "Wax language");
          ])
     ~parser:(fun s -> Result.map_error (fun (`Msg m) -> m) (format_of_string s))
+      (* cmdliner's [Arg.Conv ~pp] requires a [Format.formatter] printer; this is
+       the only [Format] surface left. Keep every such shim to a single
+       [Format.pp_print_string] of the value's string form (build the string
+       with [Printf.sprintf] when needed) — no [Format] layout. *)
     ~pp:(fun ppf f -> Format.pp_print_string ppf (string_of_format f))
     ()
 
@@ -1033,10 +1037,11 @@ let define_option =
       | Error e -> Error (`Msg e)
     in
     let print ppf ((name, v) : string * Wax_wasm.Cond_specialize.value) =
-      match v with
-      | Bool b -> Format.fprintf ppf "%s=%b" name b
-      | Version (a, b, c) -> Format.fprintf ppf "%s=%d.%d.%d" name a b c
-      | String s -> Format.fprintf ppf "%s=%s" name s
+      Format.pp_print_string ppf
+        (match v with
+        | Bool b -> Printf.sprintf "%s=%b" name b
+        | Version (a, b, c) -> Printf.sprintf "%s=%d.%d.%d" name a b c
+        | String s -> Printf.sprintf "%s=%s" name s)
     in
     Arg.conv (parse, print)
   in
@@ -1147,7 +1152,7 @@ let warn_option =
         | Displayed -> "warning"
         | Error -> "error"
       in
-      Format.fprintf ppf "%s=%s" name level
+      Format.pp_print_string ppf (Printf.sprintf "%s=%s" name level)
     in
     Arg.Conv.make ~docv:"NAME=LEVEL" ~completion:warn_completion ~parser:parse
       ~pp:print ()
@@ -1184,8 +1189,9 @@ let feature_option =
     Arg.Conv.make ~docv:"NAME" ~completion:feature_completion
       ~parser:Wax_utils.Feature.parse_spec
       ~pp:(fun ppf ((t, b) : Wax_utils.Feature.t * bool) ->
-        Format.fprintf ppf "%s=%s" (Wax_utils.Feature.name t)
-          (if b then "on" else "off"))
+        Format.pp_print_string ppf
+          (Printf.sprintf "%s=%s" (Wax_utils.Feature.name t)
+             (if b then "on" else "off")))
       ()
   in
   Arg.(

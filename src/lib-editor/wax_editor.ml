@@ -98,14 +98,11 @@ let format_string src =
               ~trivia:(Wax_utils.Trivia.empty ())
               ~collect ast)
       in
-      let buf = Buffer.create (String.length src) in
-      let fmt = Format.formatter_of_buffer buf in
-      let print_wax f m =
-        Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-            Wax_lang.Output.module_ p ~trivia ~tail m)
+      let printed =
+        Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+            Wax_lang.Output.module_ p ~trivia ~tail ast)
       in
-      Format.fprintf fmt "%a@." print_wax ast;
-      Ok (Buffer.contents buf)
+      Ok (printed ^ "\n")
 
 (* One parse + type-check of a Wax buffer, shared by [check] (which wants the
    diagnostics) and [hover] (which wants the typed tree). Parse with panic-mode
@@ -161,7 +158,7 @@ let analyze_uncached src =
       (* [f_infer] may abort mid-pass; the diagnostics it collected up to that
          point still stand (as with [check] before), so read [d] regardless. It
          emits the same diagnostics as [f]/[check] but keeps the inference cells
-         (which hover renders via [Infer.output_inferred_type]) and, given a
+         (which hover renders via [Infer.inferred_type_string]) and, given a
          sink, records the use -> definition references go-to-definition needs. *)
       let links = ref [] in
       let puns = ref [] in
@@ -297,8 +294,7 @@ let code_actions ?(encoding = UTF16) src defines (start_line, start_char)
             Some (d.message, edit)
           else None)
 
-let cell_to_string cell =
-  Format.asprintf "%a" Wax_lang.Infer.output_inferred_type cell
+let cell_to_string cell = Wax_lang.Infer.inferred_type_string cell
 
 (* A node's result types as a tooltip string, or [None] when there is nothing
    worth showing: a statement (no value) and a fully unknown / error node (every
@@ -306,7 +302,7 @@ let cell_to_string cell =
    than popping up [()] or [any]. Otherwise it is the bare type for a single
    value and a parenthesized tuple for several. Types render the way diagnostics
    do — flexible literals as [number]/[int], unresolved as [any], anonymous
-   composite types inline — via [output_inferred_type]. *)
+   composite types inline — via [inferred_type_string]. *)
 let render_result_types
     (tys : Wax_lang.Infer.inferred_type Wax_lang.Infer.Cell.t array) =
   match Array.to_list tys with
@@ -324,12 +320,9 @@ let render_hover_target ~name = function
       cell_to_string (Wax_lang.Infer.valtype_cell ity)
   | Wax_lang.Typing.Type_def st ->
       let field = Wax_lang.Ast.no_loc (Wax_lang.Ast.no_loc name, st) in
-      let buf = Buffer.create 64 in
-      let fmt = Format.formatter_of_buffer buf in
-      Wax_utils.Printer.run ~width:Wax_lang.Output.width fmt (fun p ->
-          Wax_lang.Output.subtype p field);
-      Format.pp_print_flush fmt ();
-      String.trim (Buffer.contents buf)
+      String.trim
+        (Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+             Wax_lang.Output.subtype p field))
 
 (* Hover types (Wax only). Reads the cell-annotated tree [analyze] built (every
    node's [info] is the inference cells for the values it leaves on the stack,
@@ -738,15 +731,12 @@ let to_wat_string src =
                 (Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
               ctx
           in
-          let buf = Buffer.create (String.length src) in
-          let fmt = Format.formatter_of_buffer buf in
-          let print_wat f m =
-            Wax_utils.Printer.run f (fun p ->
+          let printed =
+            Wax_utils.Printer.run_string (fun p ->
                 Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p ~trivia
-                  ~tail m)
+                  ~tail wasm_ast)
           in
-          Format.fprintf fmt "%a@." print_wat wasm_ast;
-          Ok (Buffer.contents buf)
+          Ok (printed ^ "\n")
       with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
 
 let import_kind_str (k : Wax_lang.Ast.import_kind) =
@@ -853,13 +843,7 @@ let wax_keywords = Wax_conversion.Namespace.reserved_words
 (* Render a declaration's type / signature for a completion item's detail,
    straight from the parsed AST (no typing). A wide margin keeps it on one
    line. *)
-let render_wax f =
-  let buf = Buffer.create 32 in
-  let fmt = Format.formatter_of_buffer buf in
-  Wax_utils.Printer.run ~width:1_000_000 fmt f;
-  Format.pp_print_flush fmt ();
-  Buffer.contents buf
-
+let render_wax f = Wax_utils.Printer.run_string ~width:1_000_000 f
 let render_valtype vt = render_wax (fun p -> Wax_lang.Output.valtype p vt)
 let render_typedef entry = render_wax (fun p -> Wax_lang.Output.subtype p entry)
 

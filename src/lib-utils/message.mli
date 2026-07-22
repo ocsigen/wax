@@ -71,10 +71,9 @@ val enumerate : ?conj:string -> t list -> t
 (** ["a, b or c"] — join with commas and [conj] (default ["or"]) before the last
     item. Used for did-you-mean lists. *)
 
-val render_into :
-  theme:Colors.theme -> width:int -> Format.formatter -> t -> unit
-(** Emit [t] onto [fmt], laid out through the shared pretty-printer at [width]
-    using [theme]. *)
+val render : theme:Colors.theme -> Printer.t -> t -> unit
+(** Emit [t] into the given printer using [theme], as a greedy fill box that
+    reflows at the enclosing layout's width. *)
 
 val to_plain_string : t -> string
 (** Render at effectively-infinite width with {!Colors.no_color}, returning a

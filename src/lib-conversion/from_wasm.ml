@@ -720,9 +720,8 @@ let collapse_splices ctx (rt : Ast.rectype) : Ast.rectype =
      carry a location, so print the reconstructed Wax type and compare that. *)
   let same_type (a : Ast.fieldtype) (b : Ast.fieldtype) =
     let s (ft : Ast.fieldtype) =
-      Format.asprintf "%t" (fun f ->
-          Wax_utils.Printer.run f (fun pp ->
-              Wax_lang.Output.storagetype pp ft.typ))
+      Wax_utils.Printer.run_string (fun pp ->
+          Wax_lang.Output.storagetype pp ft.typ)
     in
     a.mut = b.mut && String.equal (s a) (s b)
   in

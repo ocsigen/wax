@@ -263,9 +263,30 @@ module WaxParser =
     (Wax_lang.Parser_messages)
     (Wax_lang.Lexer)
 
-let print_module ~color f m =
+let module_string ~color m =
   let trivia = Wax_utils.Trivia.empty () in
-  Wax_utils.Printer.run f (fun p -> Wax_wasm.Output.module_ p ~color ~trivia m)
+  Wax_utils.Printer.run_string (fun p ->
+      Wax_wasm.Output.module_ p ~color ~trivia m)
+
+(* Lay out a headed failure report as a Printer [hvbox]: the header, a soft
+   break, then the pre-laid-out module/wax dump re-emitted line by line (its
+   embedded newlines become hard breaks). A single-line body that fits joins the
+   header; anything else puts the header on its own line with the body under the
+   box's 2-column hanging indent. *)
+let report_headed ~out header body =
+  let rendered =
+    Wax_utils.Printer.run_string (fun p ->
+        Wax_utils.Printer.hvbox p ~indent:2 (fun () ->
+            Wax_utils.Printer.string p (header ^ ":");
+            Wax_utils.Printer.space p ();
+            List.iteri
+              (fun i l ->
+                if i > 0 then Wax_utils.Printer.newline p ();
+                Wax_utils.Printer.string p l)
+              (String.split_on_char '\n' body)))
+  in
+  output_string out (rendered ^ "\n");
+  flush out
 
 let contains_substring s sub =
   let n = String.length s and m = String.length sub in
@@ -280,16 +301,13 @@ let contains_substring s sub =
    whether to print it and how to check it against the expected reason. *)
 let parse_binary ~color ?filename txt =
   let buf = Buffer.create 256 in
-  let output = Format.formatter_of_buffer buf in
   match
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
-      ~source:None ~exit:false ~output (fun d ->
-        Wax_wasm.Wasm_parser.module_ d ?filename txt)
+      ~source:None ~exit:false ~output:(Wax_utils.Diagnostic.buffer_sink buf)
+      (fun d -> Wax_wasm.Wasm_parser.module_ d ?filename txt)
   with
   | m -> Ok m
-  | exception Wax_utils.Diagnostic.Aborted ->
-      Format.pp_print_flush output ();
-      Error (Buffer.contents buf)
+  | exception Wax_utils.Diagnostic.Aborted -> Error (Buffer.contents buf)
 
 let runtest filename _ =
   let quiet = not !all_errors in
@@ -312,13 +330,13 @@ let runtest filename _ =
         | ((`Valid | `Invalid _) as status), `Binary txt -> (
             match parse_binary ~color ~filename txt with
             | Error rendered ->
-                Format.eprintf "Parsing failed unexpectedly: %s@.%s"
+                Printf.eprintf "Parsing failed unexpectedly: %s\n%!%s"
                   (String.escaped txt) rendered;
                 None
             | Ok binary_ast ->
                 let m = Wax_wasm.Binary_to_text.module_ binary_ast in
                 (*
-            Format.eprintf "%a@." (print_module ~color:!color) m;
+            Printf.eprintf "%s\n%!" (module_string ~color:!color m);
 *)
                 Some (status, m, None))
         | `Malformed _, `Parsed _ -> assert false
@@ -332,11 +350,12 @@ let runtest filename _ =
                     ~palette:Wax_utils.Colors.wat_theme ~source:(Some txt)
                     (fun d -> Wax_wasm.Validation.f ~warn_unused:false d ast);
                   if false then
-                    Format.printf "@[<2>Result:@ %a@]@." (print_module ~color)
-                      ast)
+                    report_headed ~out:stdout "Result"
+                      (module_string ~color ast))
             in
             if ok then
-              Format.eprintf "Parsing should have failed (%s): %s@." reason txt;
+              Printf.eprintf "Parsing should have failed (%s): %s\n%!" reason
+                txt;
             None
         | `Malformed reason, `Binary txt -> (
             match parse_binary ~color ~filename txt with
@@ -345,10 +364,10 @@ let runtest filename _ =
                    diagnostic, and flag it when our message does not match the
                    spec's expected reason. *)
                 if not quiet then (
-                  Format.eprintf "%s" rendered;
+                  Printf.eprintf "%s" rendered;
                   if not (contains_substring rendered reason) then
-                    Format.eprintf
-                      "  message diverges from expected reason: %s@." reason);
+                    Printf.eprintf
+                      "  message diverges from expected reason: %s\n%!" reason);
                 None
             | Ok binary_ast ->
                 let ast = Wax_wasm.Binary_to_text.module_ binary_ast in
@@ -359,12 +378,12 @@ let runtest filename _ =
                         (fun d ->
                           Wax_wasm.Validation.f ~warn_unused:false d ast);
                       if false then
-                        Format.printf "@[<2>Result:@ %a@]@."
-                          (print_module ~color) ast)
+                        report_headed ~out:stdout "Result"
+                          (module_string ~color ast))
                 in
                 if ok then
-                  Format.eprintf "Parsing should have failed (%s): %s@." reason
-                    (String.escaped txt);
+                  Printf.eprintf "Parsing should have failed (%s): %s\n%!"
+                    reason (String.escaped txt);
                 None))
       lst
   in
@@ -372,7 +391,7 @@ let runtest filename _ =
   let lst' =
     List.map
       (fun (status, m, _) ->
-        let text = Format.asprintf "%a@." (print_module ~color:Never) m in
+        let text = module_string ~color:Never m ^ "\n" in
         if false then print_flushed text;
         ( status,
           ModuleParser.parse_from_string ~color ~filename text |> fst,
@@ -390,7 +409,7 @@ let runtest filename _ =
           | `Valid -> (
               if false then (
                 prerr_endline " BEFORE";
-                Format.eprintf "@[%a@]@." (print_module ~color) m
+                Printf.eprintf "%s\n%!" (module_string ~color m)
                 (*if false then prerr_endline (String.escaped text)*));
               let temp, out_channel =
                 Filename.open_temp_file ~mode:[ Open_binary ] "temp" ".wasm"
@@ -402,14 +421,14 @@ let runtest filename _ =
               Sys.remove temp;
               match parse_binary ~color text with
               | Error rendered ->
-                  Format.eprintf "Reparsing serialized binary failed:@.%s"
+                  Printf.eprintf "Reparsing serialized binary failed:\n%!%s"
                     rendered;
                   None
               | Ok binary_ast ->
                   let m = Wax_wasm.Binary_to_text.module_ binary_ast in
                   if false then (
                     prerr_endline "AFTER ";
-                    Format.eprintf "@[%a@]@." (print_module ~color) m);
+                    Printf.eprintf "%s\n%!" (module_string ~color m));
                   Some (status, m, None)))
         lst
   in
@@ -420,7 +439,7 @@ let runtest filename _ =
     (fun (status, m, source) ->
       match (status, m) with
       | `Valid, m ->
-          if false then Format.eprintf "@[%a@]@." (print_module ~color) m;
+          if false then Printf.eprintf "%s\n%!" (module_string ~color m);
           Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
             ~source (fun d -> Wax_wasm.Validation.f ~warn_unused:false d m)
       | `Invalid reason, m ->
@@ -431,16 +450,18 @@ let runtest filename _ =
                    compared (validation [exit]s at the first error, so we cannot
                    capture and check it in the parent the way we do for malformed
                    binaries). *)
-                if not quiet then Format.eprintf "Expected reason: %s@." reason;
+                if not quiet then
+                  Printf.eprintf "Expected reason: %s\n%!" reason;
                 Wax_utils.Diagnostic.run ~color
                   ~palette:Wax_utils.Colors.wat_theme ~source (fun d ->
                     Wax_wasm.Validation.f ~warn_unused:false d m);
                 if false then
-                  Format.printf "@[<2>Result:@ %a@]@." (print_module ~color) m)
+                  report_headed ~out:stdout "Result" (module_string ~color m))
           in
           if ok then
-            Format.eprintf "@[<2>Validation should have failed (%s):@ %a@]@."
-              reason (print_module ~color) m)
+            report_headed ~out:stderr
+              (Printf.sprintf "Validation should have failed (%s)" reason)
+              (module_string ~color m))
     (lst @ lst' @ lst'');
   (* The translation phase keeps every valid variant, but only the original
      copy of each invalid module: the reparsed variants would just repeat the
@@ -449,8 +470,8 @@ let runtest filename _ =
     lst @ List.filter (fun (status, _, _) -> status = `Valid) lst' @ lst''
   in
   (* Translation to new syntax *)
-  let print_wax ~color f m =
-    Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+  let wax_string ~color m =
+    Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
         Wax_lang.Output.module_ ~color p ~trivia:(Wax_utils.Trivia.empty ()) m)
   in
   List.iter
@@ -479,14 +500,14 @@ let runtest filename _ =
             | `Valid -> prerr_endline (Printexc.to_string e))
         | exception e ->
             prerr_endline (Printexc.to_string e);
-            if false then Format.eprintf "@[%a@]@." (print_module ~color) wasm_m
+            if false then Printf.eprintf "%s\n%!" (module_string ~color wasm_m)
         | m -> (
             match status with
             | `Invalid reason ->
                 (* The wasm module is invalid; after translating it to wax,
                    printing and reparsing, wax type-checking should reject it
                    too. *)
-                let text = Format.asprintf "%a@." (print_wax ~color:Never) m in
+                let text = wax_string ~color:Never m ^ "\n" in
                 let ok =
                   in_child_process ~quiet (fun () ->
                       let m', _ctx =
@@ -496,11 +517,13 @@ let runtest filename _ =
                         ~palette:Wax_utils.Colors.wax_theme ~source:(Some text)
                         (fun d -> Wax_lang.Typing.check d m'))
                 in
-                if ok then
-                  Format.eprintf
-                    "@[<2>Wax type-checking should have failed (%s):@ %a@]@,\
-                     @[<2>from wasm:@ %a@]@."
-                    reason (print_wax ~color) m (print_module ~color) wasm_m
+                if ok then (
+                  report_headed ~out:stderr
+                    (Printf.sprintf "Wax type-checking should have failed (%s)"
+                       reason)
+                    (wax_string ~color m);
+                  report_headed ~out:stderr "from wasm"
+                    (module_string ~color wasm_m))
             | `Valid ->
                 let ok =
                   in_child_process (fun () ->
@@ -531,12 +554,12 @@ let runtest filename _ =
                                 Wax_wasm.Validation.f ~warn_unused:false d m'))
                       in
                       if not ok then (
-                        Format.eprintf "@[%a@]@." (print_module ~color) m';
-                        Format.eprintf "@[%a@]@." (print_wax ~color)
-                          (Wax_lang.Typing.erase_types m)))
+                        Printf.eprintf "%s\n%!" (module_string ~color m');
+                        Printf.eprintf "%s\n%!"
+                          (wax_string ~color (Wax_lang.Typing.erase_types m))))
                 in
-                if not ok then Format.eprintf "@[%a@]@." (print_wax ~color) m;
-                let text = Format.asprintf "%a@." (print_wax ~color:Never) m in
+                if not ok then Printf.eprintf "%s\n%!" (wax_string ~color m);
+                let text = wax_string ~color:Never m ^ "\n" in
                 let ok =
                   in_child_process (fun () ->
                       let m', _ctx =
@@ -553,9 +576,9 @@ let runtest filename _ =
                         if not ok then
                           if false then prerr_endline "(after parsing)"
                           else (
-                            Format.eprintf "@[%a@]@." (print_wax ~color) m';
+                            Printf.eprintf "%s\n%!" (wax_string ~color m');
                             prerr_endline "===";
-                            Format.eprintf "@[%a@]@." (print_wax ~color) m))
+                            Printf.eprintf "%s\n%!" (wax_string ~color m)))
                 in
                 if not ok then
                   if true then prerr_endline "(parsing)" else print_flushed text
@@ -564,7 +587,7 @@ let runtest filename _ =
 
 let output path s =
   if s <> "" then (
-    Format.printf "%s==== %s ====%s@."
+    Printf.printf "%s==== %s ====%s\n%!"
       (match !color with Always -> Wax_utils.Colors.Ansi.grey | _ -> "")
       path
       (match !color with Always -> Wax_utils.Colors.Ansi.reset | _ -> "");

@@ -39,10 +39,29 @@ let get_theme ?(color = Colors.Auto) ?(palette = Colors.wax_theme) () =
       body;
     }
 
-let with_style color g f x =
-  let pr_color f c = Format.pp_print_as f 0 c in
-  Format.fprintf f "%a%a%a" pr_color color g x pr_color
-    (if color = "" then "" else Colors.Ansi.reset)
+(* A destination for rendered diagnostics. Replaces the [Format.formatter] the
+   renderer used to write into: two consumers need a non-stderr sink (the
+   spec-test harness captures into a [Buffer]; the diagnostics test writes
+   stdout). *)
+type sink = { write : string -> unit; flush : unit -> unit }
+
+let channel_sink oc = { write = output_string oc; flush = (fun () -> flush oc) }
+let buffer_sink b = { write = Buffer.add_string b; flush = (fun () -> ()) }
+
+(* Emit one physical line and flush. The old renderer ended every [Format.fprintf]
+   in [@.] (newline + flush); flushing per line here preserves that granularity,
+   so stdout/stderr interleaving in cram tests and child-process capture is
+   unchanged. *)
+let line sink s =
+  sink.write (s ^ "\n");
+  sink.flush ()
+
+(* Wrap [s] in [color]'s ANSI escape (reset after), or return it unchanged when
+   the theme is uncoloured ([color = ""]). Pure string composition: a header's
+   colour contributes no display width, matching the old zero-width
+   [Format.pp_print_as f 0] emission, since every alignment is computed from the
+   plain text. *)
+let with_style color s = if color = "" then s else color ^ s ^ Colors.Ansi.reset
 
 type label = { location : Ast.location; message : Message.t }
 type severity = Error | Warning | Suggestion
@@ -135,8 +154,7 @@ let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
           ]
       | None -> [])
   in
-  Format.pp_print_string output (Yojson.Safe.to_string obj);
-  Format.pp_print_newline output ()
+  line output (Yojson.Safe.to_string obj)
 
 (* Emit one diagnostic as a single [file:line:col: severity: message] line
    (gcc/rustc "short" style), for editors whose error parser is line-based
@@ -163,28 +181,38 @@ let output_error_short ~output ~location ~severity ?warning msg =
   in
   let p = location.Ast.loc_start in
   if p = Lexing.dummy_pos then
-    Format.fprintf output "%s: %s%s@." sev (one_line msg) suffix
+    line output (Printf.sprintf "%s: %s%s" sev (one_line msg) suffix)
   else
-    Format.fprintf output "%s:%d:%d: %s: %s%s@." p.Lexing.pos_fname
-      p.Lexing.pos_lnum
-      (p.Lexing.pos_cnum - p.Lexing.pos_bol + 1)
-      sev (one_line msg) suffix
+    line output
+      (Printf.sprintf "%s:%d:%d: %s: %s%s" p.Lexing.pos_fname p.Lexing.pos_lnum
+         (p.Lexing.pos_cnum - p.Lexing.pos_bol + 1)
+         sev (one_line msg) suffix)
 
-(* The width to lay a message body out at: honor the formatter's margin, less
-   the 2-column hanging indent of the enclosing "@[<2> … @]" box. *)
-let msg_width output = max 20 (Format.pp_get_margin output () - 2)
+let render_body ~theme p m = Message.render ~theme:theme.body p m
 
-let render_body ~theme output m =
-  Message.render_into ~theme:theme.body ~width:(msg_width output) output m
+(* Lay out a headed diagnostic as a Printer [hvbox]: the styled header (emitted
+   at its plain text's width — the colour is zero-width), a soft break, then the
+   [body] emitter. A body that fits joins the header on one line; anything else
+   (too wide, or containing a hard break) puts the header on its own line with
+   the body under the box's 2-column hanging indent. The laid-out block is
+   re-emitted through [line], keeping the flush-per-line granularity. *)
+let headed sink ~header_plain ~header_styled body =
+  let rendered =
+    Printer.run_string (fun p ->
+        Printer.hvbox p ~indent:2 (fun () ->
+            Printer.string_as p (String.length header_plain) header_styled;
+            Printer.space p ();
+            body p))
+  in
+  List.iter (line sink) (String.split_on_char '\n' rendered)
 
-let print_hint ?(output = Format.err_formatter) ~theme hint =
+let print_hint ?(output = channel_sink stderr) ~theme hint =
   match hint with
   | None -> ()
   | Some m ->
-      Format.fprintf output "@[<2>%a:@ %t@]@."
-        (with_style theme.hint_header (fun f () -> Format.fprintf f "Hint"))
-        ()
-        (fun f -> render_body ~theme f m)
+      headed output ~header_plain:"Hint:"
+        ~header_styled:(with_style theme.hint_header "Hint" ^ ":")
+        (fun p -> render_body ~theme p m)
 
 (* Render a machine-applicable [edit] as a "help"-style line, describing the
    rewrite in prose (e.g. [Help: insert ';']). Only shown for an unnamed [Error]
@@ -196,7 +224,7 @@ let print_hint ?(output = Format.err_formatter) ~theme hint =
    in typing.ml), so surfacing the raw edit text there would be redundant. The
    machine form travels in JSON for every severity regardless (see
    [output_error_json]). *)
-let print_fix ?(output = Format.err_formatter) ~theme ~severity ?warning edit =
+let print_fix ?(output = channel_sink stderr) ~theme ~severity ?warning edit =
   match (severity, warning, edit) with
   | Error, None, Some { edit_location; new_text } ->
       let action =
@@ -207,12 +235,12 @@ let print_fix ?(output = Format.err_formatter) ~theme ~severity ?warning edit =
         else if new_text = "" then "remove this"
         else Printf.sprintf "replace with '%s'" new_text
       in
-      Format.fprintf output "@[<2>%a:@ %s@]@."
-        (with_style theme.hint_header (fun f () -> Format.fprintf f "Help"))
-        () action
+      headed output ~header_plain:"Help:"
+        ~header_styled:(with_style theme.hint_header "Help" ^ ":")
+        (fun p -> Printer.string p action)
   | _ -> ()
 
-let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity
+let output_error_no_loc ?(output = channel_sink stderr) ~theme ~severity
     ?warning ~hint msg =
   (* A named warning's name is appended to the header as [ [name]], as in the
      "short" format and as clang/eslint do — including a warning promoted to
@@ -222,19 +250,19 @@ let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity
     | Some w -> Printf.sprintf " [%s]" (Warning.name w)
     | None -> ""
   in
-  Format.fprintf output "@[<2>%a%s:@ %t@]@."
-    (match severity with
-    | Error ->
-        with_style theme.error_header (fun f () -> Format.fprintf f "Error")
-    | Warning ->
-        with_style theme.warning_header (fun f () -> Format.fprintf f "Warning")
-    | Suggestion ->
-        with_style theme.hint_header (fun f () -> Format.fprintf f "Suggestion"))
-    () name_suffix
-    (fun f -> render_body ~theme f msg);
+  let word, color =
+    match severity with
+    | Error -> ("Error", theme.error_header)
+    | Warning -> ("Warning", theme.warning_header)
+    | Suggestion -> ("Suggestion", theme.hint_header)
+  in
+  headed output
+    ~header_plain:(word ^ name_suffix ^ ":")
+    ~header_styled:(with_style color word ^ name_suffix ^ ":")
+    (fun p -> render_body ~theme p msg);
   print_hint ~output ~theme hint
 
-let output_error_no_source ?(output = Format.err_formatter) ~theme
+let output_error_no_source ?(output = channel_sink stderr) ~theme
     ~location:{ Ast.loc_start; loc_end } ~severity ?warning ?hint msg =
   let start_line = loc_start.Lexing.pos_lnum in
   let end_line = loc_end.Lexing.pos_lnum in
@@ -246,12 +274,14 @@ let output_error_no_source ?(output = Format.err_formatter) ~theme
   let e_cnum = loc_end.Lexing.pos_cnum in
   let end_col = e_cnum - e_bol in
   if start_line = end_line then
-    Format.fprintf output "File \"%s\", line %d, characters %d-%d:@." filename
-      start_line start_col end_col
+    line output
+      (Printf.sprintf "File \"%s\", line %d, characters %d-%d:" filename
+         start_line start_col end_col)
   else
-    Format.fprintf output
-      "File \"%s\", line %d, character %d to line %d, character %d:@." filename
-      start_line start_col end_line end_col;
+    line output
+      (Printf.sprintf
+         "File \"%s\", line %d, character %d to line %d, character %d:" filename
+         start_line start_col end_line end_col);
   output_error_no_loc ~output ~theme ~severity ?warning ~hint msg
 
 type annotation = {
@@ -340,7 +370,7 @@ let get_line_starts source =
     line_starts_cache := (source, array);
     array
 
-let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
+let output_error_with_source ?(output = channel_sink stderr) ~theme ~source
     ~location ~severity ?warning ?hint ?edit ?(related = []) msg =
   match !global_format with
   | Json ->
@@ -365,13 +395,9 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
       in
       output_error_no_loc ~output ~theme ~severity ?warning ~hint:None msg;
       if modern then
-        Format.fprintf output "%a %a@."
-          (with_style theme.line_numbers (fun f () ->
-               Format.fprintf f "%s──➤" gutter_padding))
-          ()
-          (fun f () ->
-            Format.fprintf f " %s:%d:%d" filename start_line (start_col + 1))
-          ();
+        line output
+          (with_style theme.line_numbers (gutter_padding ^ "──➤")
+          ^ Printf.sprintf "  %s:%d:%d" filename start_line (start_col + 1));
       let find_eol text start_pos =
         try String.index_from text start_pos '\n'
         with Not_found -> String.length text
@@ -384,12 +410,9 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
           (content, line_end)
       in
       let print_line ?(gutter_char = "│") header contents =
-        Format.fprintf output "%a %a@."
-          (with_style theme.line_numbers (fun f () ->
-               Format.fprintf f "%a %a" header ()
-                 (fun f () -> Format.pp_print_as f 1 gutter_char)
-                 ()))
-          () contents ()
+        line output
+          (with_style theme.line_numbers (header ^ " " ^ gutter_char)
+          ^ " " ^ contents)
       in
       let curr_pos = ref 0 in
       let curr_line = ref 1 in
@@ -405,12 +428,8 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
       List.iteri
         (fun i (s_line, e_line) ->
           if i > 0 then
-            Format.fprintf output "%a %s@."
-              (with_style theme.line_numbers (fun f () ->
-                   Format.fprintf f "%s %a" gutter_padding
-                     (fun f () -> Format.pp_print_as f 1 "·")
-                     ()))
-              () "...";
+            line output
+              (with_style theme.line_numbers (gutter_padding ^ " ·") ^ " ...");
           seek s_line;
           while !curr_line <= min e_line total_lines do
             let is_last_line =
@@ -419,8 +438,8 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
             let raw_content, next_eol = get_line_info source !curr_pos in
             let display_content = Unicode.expand_tabs raw_content in
             print_line
-              (fun f () -> Format.fprintf f "%*d" gutter_width !curr_line)
-              (fun f () -> Format.fprintf f "%s" display_content);
+              (Printf.sprintf "%*d" gutter_width !curr_line)
+              display_content;
             let line_annotations =
               List.filter
                 (fun a ->
@@ -460,25 +479,20 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
                     (0, Unicode.terminal_width part)
                   else (0, Unicode.terminal_width raw_content + 1)
                 in
-                print_line ~gutter_char
-                  (fun f () -> Format.fprintf f "%s" gutter_padding)
-                  (fun f () ->
-                    Format.fprintf f "%*s%a" visual_start ""
-                      (with_style a.color (fun f () ->
-                           let underline = String.make (max 1 visual_len) '^' in
-                           Format.fprintf f "%s" underline))
-                      ();
-                    match a.label with
-                    | Some m when is_end ->
-                        (* Labels are short; render flattened (no colour of their
-                           own) so they sit on the caret's line in the caret
-                           colour, not nested inside body ANSI. *)
-                        Format.fprintf f " ";
-                        with_style a.color
-                          (fun f () ->
-                            Format.pp_print_string f (Message.to_plain_string m))
-                          f ()
-                    | _ -> ()))
+                let underline =
+                  with_style a.color (String.make (max 1 visual_len) '^')
+                in
+                let label =
+                  match a.label with
+                  | Some m when is_end ->
+                      (* Labels are short; render flattened (no colour of their
+                         own) so they sit on the caret's line in the caret
+                         colour, not nested inside body ANSI. *)
+                      " " ^ with_style a.color (Message.to_plain_string m)
+                  | _ -> ""
+                in
+                print_line ~gutter_char gutter_padding
+                  (String.make visual_start ' ' ^ underline ^ label))
               line_annotations;
             curr_pos := min (String.length source) (next_eol + 1);
             incr curr_line
@@ -487,7 +501,7 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
       print_hint ~output ~theme hint;
       print_fix ~output ~theme ~severity ?warning edit
 
-let output_error ?(output = Format.err_formatter) ~theme ~source ~location
+let output_error ?(output = channel_sink stderr) ~theme ~source ~location
     ~severity ?warning ?hint ?edit ?(related = []) msg =
   match !global_format with
   | Json ->
@@ -509,7 +523,7 @@ let output_error ?(output = Format.err_formatter) ~theme ~source ~location
 (* Where and how a context renders. Held only by a rendering context; a
    [collector] has none — it merely accumulates entries (see [collected]) for a
    rendering context to re-report, so it needs no theme or output at all. *)
-type render = { theme : theme; output : Format.formatter; exit_on_error : bool }
+type render = { theme : theme; output : sink; exit_on_error : bool }
 
 type context = {
   max : int;
@@ -611,7 +625,11 @@ let output_errors ?exit_on_error context =
               ~related message)
           context.queue;
         Queue.clear context.queue;
-        if exit_on_error then exit 128)
+        if exit_on_error then (
+          (* [Format.err_formatter]'s at-exit flush used to cover this; make it
+             explicit now that the sink is a plain channel. *)
+          render.output.flush ();
+          exit 128))
 
 let report context ~location ~severity ?warning ?(universal = false) ?hint ?edit
     ?(related = []) ~message () =
@@ -666,7 +684,7 @@ let run ~color ~palette ~source ?related ?(exit = true) ?output ?policy f =
   let render =
     {
       theme = get_theme ~color ~palette ();
-      output = Option.value output ~default:Format.err_formatter;
+      output = Option.value output ~default:(channel_sink stderr);
       exit_on_error = exit;
     }
   in

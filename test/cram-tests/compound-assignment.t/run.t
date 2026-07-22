@@ -84,8 +84,7 @@ itself. A bitwise operator rejects a float operand:
   $ wax -f wat - <<'WAX'
   > fn f(a: f64) -> f64 { a &= 1.0; a; }
   > WAX
-  Error:
-    This operator cannot be applied to operands of types 'f64' and 'float'.
+  Error: This operator cannot be applied to operands of types 'f64' and 'float'.
    ──➤  -:1:25
   1 │ fn f(a: f64) -> f64 { a &= 1.0; a; }
     ·                         ^^

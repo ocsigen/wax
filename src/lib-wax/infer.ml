@@ -8,10 +8,17 @@ open Ast
 module Output = struct
   include Output
 
-  let valtype f t = Wax_utils.Printer.run f (fun pp -> Output.valtype pp t)
-  let comptype f t = Wax_utils.Printer.run f (fun pp -> Output.comptype pp t)
-  let fieldtype f t = Wax_utils.Printer.run f (fun pp -> Output.fieldtype pp t)
-  let instr f i = Wax_utils.Printer.run f (fun pp -> Output.instr pp i)
+  let valtype_string t =
+    String.trim (Wax_utils.Printer.run_string (fun pp -> Output.valtype pp t))
+
+  let comptype_string t =
+    String.trim (Wax_utils.Printer.run_string (fun pp -> Output.comptype pp t))
+
+  let fieldtype_string f =
+    String.trim (Wax_utils.Printer.run_string (fun pp -> Output.fieldtype pp f))
+
+  let instr_string i =
+    String.trim (Wax_utils.Printer.run_string (fun pp -> Output.instr pp i))
 end
 
 module Cell = struct
@@ -163,10 +170,10 @@ let rec output_inferred_type_styled sp ty =
   | Valtype { anon_comptype = Some c; _ } -> Output.comptype_styled sp c
   | Valtype ty -> Output.valtype_styled sp ty.typ
 
-(* The plain-[Format] rendering, for the stack/debug printers and the editor's
+(* The plain-string rendering, for the stack/debug printers and the editor's
    hover string: run the styled renderer with an uncoloured theme. *)
-let output_inferred_type f ty =
-  Wax_utils.Printer.run f (fun p ->
+let inferred_type_string ty =
+  Wax_utils.Printer.run_string (fun p ->
       output_inferred_type_styled
         (Wax_utils.Styled_printer.create ~printer:p
            ~theme:Wax_utils.Colors.no_color

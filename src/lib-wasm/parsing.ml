@@ -132,7 +132,7 @@ struct
     let rec positions_in_stack env i =
       match P.MenhirInterpreter.get i env with
       | Some (Element (_, _, pos1, pos2)) ->
-          if false then Format.eprintf "%d--%d@." pos1.pos_cnum pos2.pos_cnum;
+          if false then Printf.eprintf "%d--%d\n%!" pos1.pos_cnum pos2.pos_cnum;
           positions_in_stack env (i + 1)
       | None -> ()
 

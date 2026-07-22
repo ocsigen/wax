@@ -9,8 +9,8 @@ let indent_level = 4
 
 (* Target line width for Wax output, matching the Rust Style Guide's default
    ([max_width = 100]); WebAssembly text output keeps the printer's own default.
-   Passed at every [Printer.run] that renders a Wax module to a real
-   formatter. *)
+   Passed as the [?width] at every render of a Wax module (e.g.
+   [Printer.run_channel]/[Printer.run_string]). *)
 let width = 100
 
 (*** Printer primitives ***)

@@ -13,7 +13,7 @@ let first_line s =
    exactly what was salvaged (e.g. an unclosed call auto-closed into the body,
    rather than the whole statement being dropped). Mirrors the CLI's wax output
    path: a dry pass records which trivia the printer looks up, then the real pass
-   prints. The trailing flush matters — [Printer.run] leaves it to the caller. *)
+   prints. *)
 let report_ast name source =
   Printf.printf "=== %s ===\n" name;
   let ast, _errors, ctx =
@@ -23,18 +23,14 @@ let report_ast name source =
   | None -> print_string "none\n"
   | Some m ->
       let used = Wax_utils.Trivia.create_locations () in
-      let null = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ()) in
-      Wax_utils.Printer.run null (fun p ->
+      Wax_utils.Printer.run_discard (fun p ->
           Wax_lang.Output.module_ p
             ~trivia:(Wax_utils.Trivia.empty ())
             ~collect:used m);
       let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
-      let buf = Buffer.create 128 in
-      let f = Format.formatter_of_buffer buf in
-      Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-          Wax_lang.Output.module_ p ~trivia ~tail m);
-      Format.pp_print_flush f ();
-      print_string (Buffer.contents buf));
+      print_string
+        (Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+             Wax_lang.Output.module_ p ~trivia ~tail m)));
   print_newline ()
 
 let report name source =

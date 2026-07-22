@@ -27,16 +27,12 @@ let slice src (l : Wax_utils.Ast.location) =
 
 (* The hover summary a reference carries (the editor renders it the same way). *)
 let render_hover ~name = function
-  | Typing.Value_type ity ->
-      Format.asprintf "%a" Infer.output_inferred_type (Infer.valtype_cell ity)
+  | Typing.Value_type ity -> Infer.inferred_type_string (Infer.valtype_cell ity)
   | Typing.Type_def st ->
       let field = Ast.no_loc (Ast.no_loc name, st) in
-      let buf = Buffer.create 32 in
-      let f = Format.formatter_of_buffer buf in
-      Wax_utils.Printer.run ~width:Output.width f (fun p ->
-          Output.subtype p field);
-      Format.pp_print_flush f ();
-      String.trim (Buffer.contents buf)
+      String.trim
+        (Wax_utils.Printer.run_string ~width:Output.width (fun p ->
+             Output.subtype p field))
 
 let resolve name src =
   Printf.printf "=== %s ===\n" name;

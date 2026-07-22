@@ -138,7 +138,8 @@ Wax type-checking should have failed (undeclared function reference):
   fn f() {
       _ = f;
   }
-from wasm: (start $f)
+from wasm:
+  (start $f)
   (func $f (drop (ref.func $f)))
 ==== core/return_call_ref.wast ====
 Wax type-checking should have failed (type mismatch):

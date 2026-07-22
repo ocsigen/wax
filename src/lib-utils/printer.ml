@@ -522,30 +522,6 @@ let hovbox t ?(skip_space = false) ?(indent = 0) f =
 let vbox t ?(skip_space = false) ?(indent = 0) f =
   Doc.vbox t ~skip_space ~indent f
 
-let run ?(width = 78) fmt f =
-  (* Lay out into a buffer, then relay line by line through the formatter's own
-     newline, so that when [run] is called inside an enclosing Format box (e.g.
-     an [@[<2>…@]] wrapping a snippet), every line — not just the first — picks
-     up that box's indentation. A bare [pp_print_string] of the multi-line string
-     would leave the embedded newlines at column 0. *)
-  let b = Buffer.create 256 in
-  let feed, finish_stream =
-    Doc.make_engine ~width ~add_string:(Buffer.add_string b)
-      ~add_char:(Buffer.add_char b) ~add_substring:(Buffer.add_substring b)
-  in
-  let c = Doc.create ~feed ~finish_stream in
-  f c;
-  Doc.finalize c;
-  match String.split_on_char '\n' (Buffer.contents b) with
-  | [] -> ()
-  | first :: rest ->
-      Format.pp_print_string fmt first;
-      List.iter
-        (fun line ->
-          Format.pp_force_newline fmt ();
-          Format.pp_print_string fmt line)
-        rest
-
 let run_channel ?(width = 78) oc f =
   (* Lay out straight into the channel — no intermediate string, no Format
      buffering. The hot output path. *)
@@ -556,6 +532,25 @@ let run_channel ?(width = 78) oc f =
   let c = Doc.create ~feed ~finish_stream in
   f c;
   Doc.finalize c
+
+let run_string ?(width = 78) f =
+  (* Lay out straight into a buffer and return its contents. *)
+  let b = Buffer.create 256 in
+  let feed, finish_stream =
+    Doc.make_engine ~width ~add_string:(Buffer.add_string b)
+      ~add_char:(Buffer.add_char b) ~add_substring:(Buffer.add_substring b)
+  in
+  let c = Doc.create ~feed ~finish_stream in
+  f c;
+  Doc.finalize c;
+  Buffer.contents b
+
+let run_err ?(width = 78) f =
+  (* Lay out to stderr, then a trailing newline and a flush — the replacement
+     for the [Format.eprintf "%a@."] debug idiom, which got both for free. *)
+  run_channel ~width stderr f;
+  output_char stderr '\n';
+  flush stderr
 
 let run_discard f =
   (* A printer that produces no output: tokens are dropped, nothing is laid out.

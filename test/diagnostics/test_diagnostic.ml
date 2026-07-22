@@ -19,7 +19,7 @@ let loc start_line start_col end_line end_col =
   in
   { Ast.loc_start = pos_start; loc_end = pos_end }
 
-let output = Format.std_formatter
+let output = Diagnostic.channel_sink stdout
 
 let test_case1 () =
   let source =
@@ -38,7 +38,7 @@ let test_case1 () =
      line 13\n\
      line 14\n"
   in
-  Format.fprintf output "--- Case 1: Simple secondary label ---@.";
+  Printf.printf "--- Case 1: Simple secondary label ---\n%!";
   Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
     ~source:(Some source) (fun d ->
       let related =
@@ -57,7 +57,7 @@ let test_case2 () =
   let source =
     "line 1\nline 2 start here\nline 3 middle\nline 4 end here\nline 5\n"
   in
-  Format.fprintf output "@.--- Case 2: Multi-line primary error ---@.";
+  Printf.printf "\n--- Case 2: Multi-line primary error ---\n%!";
   Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
     ~source:(Some source) (fun d ->
       Diagnostic.report d ~location:(loc 2 7 4 15) ~severity:Error
@@ -75,7 +75,7 @@ let test_case3 () =
      line 7 main error\n\
      line 8\n"
   in
-  Format.fprintf output "@.--- Case 3: Multi-line secondary label ---@.";
+  Printf.printf "\n--- Case 3: Multi-line secondary label ---\n%!";
   Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
     ~source:(Some source) (fun d ->
       let related =
@@ -98,7 +98,7 @@ let test_case4 () =
     in
     gen 1 ""
   in
-  Format.fprintf output "@.--- Case 4: Long multi-line span ---@.";
+  Printf.printf "\n--- Case 4: Long multi-line span ---\n%!";
   Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
     ~source:(Some source) (fun d ->
       Diagnostic.report d ~location:(loc 10 7 90 12) ~severity:Error
@@ -107,7 +107,7 @@ let test_case4 () =
 
 let test_case5 () =
   let source = "fn x {\nlet x = 10;\n" in
-  Format.fprintf output "@.--- Case 5: Error at end of file (EOF) ---@.";
+  Printf.printf "\n--- Case 5: Error at end of file (EOF) ---\n%!";
   Diagnostic.run ~output ~exit:false ~color:Never ~palette:Colors.wax_theme
     ~source:(Some source) (fun d ->
       let related =
@@ -137,7 +137,7 @@ let test_case6 () =
   if String.contains s '\027' then (
     prerr_endline "to_plain_string leaked an ANSI escape";
     exit 1);
-  Format.fprintf output "@.--- Case 6: plain render has no ANSI ---@.%s@." s
+  Printf.printf "\n--- Case 6: plain render has no ANSI ---\n%s\n%!" s
 
 let () =
   try
@@ -147,7 +147,7 @@ let () =
     test_case4 ();
     test_case5 ();
     test_case6 ();
-    Format.pp_print_flush output ()
+    flush stdout
   with
   | Unix.Unix_error (Unix.EPIPE, _, _) -> ()
   | e ->

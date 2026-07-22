@@ -2,13 +2,14 @@
     ([Cell]) that carry it, and the shared printers/type aliases built on top.
 *)
 
-(** Output printers wrapping {!module:Output} so they take a [Format.formatter]
-    directly (rather than a {!Wax_utils.Printer.t}), for use in diagnostics. *)
+(** Output printers wrapping {!module:Output} so they render straight to a
+    (trimmed) string rather than into a {!Wax_utils.Printer.t}, for use in
+    diagnostics. *)
 module Output : sig
-  val instr : Format.formatter -> _ Ast.instr -> unit
-  val valtype : Format.formatter -> Ast.valtype -> unit
-  val comptype : Format.formatter -> Ast.comptype -> unit
-  val fieldtype : Format.formatter -> Ast.fieldtype -> unit
+  val instr_string : _ Ast.instr -> string
+  val valtype_string : Ast.valtype -> string
+  val comptype_string : Ast.comptype -> string
+  val fieldtype_string : Ast.fieldtype -> string
 end
 
 (** A mutable cell carrying a value, backed by union-find: [merge] unifies two
@@ -66,7 +67,7 @@ type inferred_type =
      chosen width when nothing constrains it. [Number] is the bottom (any of the
      four numeric types); [Int]/[Float] commit to the integer/float family;
      [LargeInt] is a [Number] restricted to exclude i32 (still float-capable), NOT
-     an integer-committed type. [output_inferred_type] renders them by family —
+     an integer-committed type. [inferred_type_string] renders them by family —
      [number], [int], [large number], [float] — so a diagnostic distinguishes them
      from one another and from a concrete valtype. *)
   | Number
@@ -127,7 +128,7 @@ val output_inferred_type_styled :
     message's colour theme and width (an unresolved one prints as [any]). This
     is what the typer's [Message] [typ] combinator is built on. *)
 
-val output_inferred_type : Format.formatter -> inferred_type Cell.t -> unit
+val inferred_type_string : inferred_type Cell.t -> string
 (** Render an inferred type as plain (uncoloured) text — for the editor's hover
     string and the stack/debug printers. Diagnostics use
     {!output_inferred_type_styled} instead. *)

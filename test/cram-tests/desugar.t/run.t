@@ -33,8 +33,7 @@ desugaring, since there is no core-wasm form for it:
 An unresolved `(@if …)` makes desugaring fail:
 
   $ wax cond.wat -f wat --desugar
-  Error:
-    A conditional annotation cannot be desugared to plain WebAssembly text.
+  Error: A conditional annotation cannot be desugared to plain WebAssembly text.
    ──➤  cond.wat:3:5
   1 │ (module
   2 │   (func (export "f") (result i32)

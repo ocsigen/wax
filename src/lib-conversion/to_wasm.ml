@@ -92,21 +92,14 @@ let blocktype typ : Text.blocktype option =
   | _ -> Some (Typeuse (None, Some (functype typ)))
 
 let print_instr i =
-  Format.eprintf "%a@."
-    (fun f i -> Wax_utils.Printer.run f (fun pp -> Wax_lang.Output.instr pp i))
-    i
+  Wax_utils.Printer.run_err (fun pp -> Wax_lang.Output.instr pp i)
 
 (*
 let print_storagetype i =
-  Format.eprintf "%a@."
-    (fun f i -> Wax_utils.Printer.run f (fun pp -> Wax_lang.Output.storagetype pp i))
-    i
+  Wax_utils.Printer.run_err (fun pp -> Wax_lang.Output.storagetype pp i)
 *)
 let print_valtype i =
-  Format.eprintf "%a@."
-    (fun f i ->
-      Wax_utils.Printer.run f (fun pp -> Wax_lang.Output.valtype pp i))
-    i
+  Wax_utils.Printer.run_err (fun pp -> Wax_lang.Output.valtype pp i)
 
 let binop i op operand_type : _ Text.instr_desc =
   match (op, operand_type) with

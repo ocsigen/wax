@@ -197,18 +197,15 @@ let print_source_type pp = function
 
 (* Render a source type to a plain (uncoloured) string. *)
 let render_source_type source =
-  let buf = Buffer.create 32 in
-  let fmt = Format.formatter_of_buffer buf in
-  Wax_utils.Printer.run fmt (fun p ->
-      let pp =
-        Wax_utils.Styled_printer.create ~printer:p
-          ~theme:Wax_utils.Colors.no_color
-          ~trivia:(Wax_utils.Trivia.empty ())
-          ()
-      in
-      print_source_type pp source);
-  Format.pp_print_flush fmt ();
-  String.trim (Buffer.contents buf)
+  String.trim
+    (Wax_utils.Printer.run_string (fun p ->
+         let pp =
+           Wax_utils.Styled_printer.create ~printer:p
+             ~theme:Wax_utils.Colors.no_color
+             ~trivia:(Wax_utils.Trivia.empty ())
+             ()
+         in
+         print_source_type pp source))
 
 (* What the editor type sink records at each instruction span. Kept unrendered:
    the recording pass runs over the whole module, but the editor renders only
@@ -1106,7 +1103,7 @@ module Error = struct
       (text "A module can have at most one start function.")
 end
 
-let print_instr f i = Wax_utils.Printer.run f (fun p -> Output.instr p i)
+let print_instr i = Wax_utils.Printer.run_err (fun p -> Output.instr p i)
 
 (* A diagnostics context that drops everything reported to it. Passed to a
    pre-pass that resolves references the validating pass resolves (and reports)
@@ -2266,7 +2263,7 @@ let rec output_stack ~full pp st =
       output_stack ~full pp st
 
 let print_stack st =
-  Wax_utils.Printer.run Format.err_formatter (fun p ->
+  Wax_utils.Printer.run_err (fun p ->
       let pp =
         Wax_utils.Styled_printer.create ~printer:p
           ~theme:Wax_utils.Colors.no_color
@@ -2669,7 +2666,7 @@ let track_label ctx label =
   used
 
 let rec instruction_core ctx (i : _ Ast.Text.instr) =
-  if false then Format.eprintf "%a@." print_instr i;
+  if false then print_instr i;
   let loc = i.info in
   match i.desc with
   | Block { label; typ; block = b } ->

@@ -108,14 +108,12 @@ let method_candidates ~recv_name ~reinterp_name methods =
 
 (* A struct field's declared type, rendered for the member-completion detail
    (e.g. [i32], [mut i32], [&point]) as it reads in a type definition. [Output]
-   here is [Infer.Output] (open Infer), whose printers take a formatter. *)
-let render_fieldtype (f : Ast.fieldtype) =
-  String.trim (Format.asprintf "%a" Output.fieldtype f)
+   here is [Infer.Output] (open Infer), whose printers return trimmed strings. *)
+let render_fieldtype (f : Ast.fieldtype) = Output.fieldtype_string f
 
 (* A reference type rendered as it reads in source (e.g. [&func], [&?extern]),
    for a table's element type in the member-completion detail. *)
-let render_reftype (rt : Ast.reftype) =
-  String.trim (Format.asprintf "%a" Output.valtype (Ast.Ref rt))
+let render_reftype (rt : Ast.reftype) = Output.valtype_string (Ast.Ref rt)
 
 (* The member candidates for a struct's [fields] (each name and declared type),
    for member completion. *)

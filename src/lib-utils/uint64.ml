@@ -5,7 +5,7 @@ let of_string s =
     if String.starts_with ~prefix:"0x" s then Int64.of_string s
     else Int64.of_string ("0u" ^ s)
   with Failure _ as e ->
-    Format.eprintf "Unsigned int overflow: %s@." s;
+    Printf.eprintf "Unsigned int overflow: %s\n%!" s;
     raise e
 
 (* Avoid [Printf.sprintf "%Lu"], whose [camlinternalFormat] interpreter is a

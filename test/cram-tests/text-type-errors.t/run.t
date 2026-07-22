@@ -490,8 +490,7 @@ A call with too few values on the stack reports how many arguments it takes
 and how many were there:
 
   $ wax --validate call_underflow.wat -o out.wat
-  Error:
-    Type mismatch: expecting 2 argument(s) from the stack, but there are 1.
+  Error: Type mismatch: expecting 2 argument(s) from the stack, but there are 1.
    ──➤  call_underflow.wat:3:24
   1 │ (module
   2 │   (func $g (param i32 i64))

@@ -7,7 +7,8 @@ Validation should have failed (custom descriptors required for exact reference t
   (func (param (ref (exact $t))))
 Wax type-checking should have failed (custom descriptors required for exact reference types):
   type t = { }; fn f(&!t) {}
-from wasm: (type $t (struct))
+from wasm:
+  (type $t (struct))
   (func (param (ref (exact $t))))
 ==== empty.wast ====
 Parsing should have failed (x): 

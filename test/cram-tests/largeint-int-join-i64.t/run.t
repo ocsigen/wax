@@ -28,8 +28,7 @@ internal assertion:
   > }
   > WAX
   $ wax -i wax g.wax -f wasm -o /dev/null --validate
-  Error:
-    This operator cannot be applied to operands of types 'i64' and 'float'.
+  Error: This operator cannot be applied to operands of types 'i64' and 'float'.
    ──➤  g.wax:2:30
   1 │ fn f(c: i32) -> f64 {
   2 │     (c ? 5 & 7 : 5000000000) + 0.5;
@@ -47,8 +46,7 @@ float-capable value:
   > }
   > WAX
   $ wax -i wax h.wax -f wasm -o /dev/null --validate
-  Error:
-    This operator cannot be applied to operands of types 'i64' and 'float'.
+  Error: This operator cannot be applied to operands of types 'i64' and 'float'.
    ──➤  h.wax:2:22
   1 │ fn f() -> f64 {
   2 │     (5 & 5000000000) + 0.5;

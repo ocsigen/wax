@@ -84,13 +84,18 @@ val vbox : t -> ?skip_space:bool -> ?indent:int -> (unit -> unit) -> unit
     broken within the box. If [?skip_space] is true, no space will be added
     before the box. *)
 
-val run : ?width:int -> Format.formatter -> (t -> unit) -> unit
-(** [run ?width fmt f] creates a new printer on the given formatter, runs [f],
-    and renders the result. [width] is the target line width (default 78). *)
-
 val run_channel : ?width:int -> out_channel -> (t -> unit) -> unit
-(** Like {!run}, but lays the document out straight into the channel — no
-    intermediate string and no [Format] buffering. The hot output path. *)
+(** [run_channel ?width oc f] creates a new printer, runs [f], and lays the
+    document out straight into the channel — no intermediate string. [width] is
+    the target line width (default 78). The hot output path. *)
+
+val run_string : ?width:int -> (t -> unit) -> string
+(** Like {!run_channel}, but lays the document out into a buffer and returns its
+    contents. [width] is the target line width (default 78). *)
+
+val run_err : ?width:int -> (t -> unit) -> unit
+(** Like {!run_channel} to [stderr], then emits a trailing newline and flushes.
+    The replacement for the [Format.eprintf "%a@."] debug idiom. *)
 
 val run_discard : (t -> unit) -> unit
 (** Run [f] with a printer that produces no output and does no layout — for a

@@ -1,6 +1,6 @@
 (* A structured diagnostic message. See message.mli. The tree carries the
-   message's structure; the theme and width are supplied only at render time
-   ([render_into]/[to_plain_string]), so one value renders three ways (themed
+   message's structure; the theme and layout are supplied only at render time
+   ([render]/[to_plain_string]), so one value renders three ways (themed
    terminal, JSON, short). *)
 
 type t =
@@ -95,8 +95,7 @@ let render_top sp d =
 let styled_printer ~theme printer =
   Styled_printer.create ~printer ~theme ~trivia:(Trivia.empty ()) ()
 
-let render_into ~theme ~width fmt t =
-  Printer.run ~width fmt (fun p -> render_top (styled_printer ~theme p) t)
+let render ~theme p t = render_top (styled_printer ~theme p) t
 
 (* A wide margin so a hard-broken message still emits one physical line per
    break (a stray break is harmless — yojson escapes it, keeping one JSON object
@@ -104,9 +103,5 @@ let render_into ~theme ~width fmt t =
 let flat_margin = 1_000_000
 
 let to_plain_string t =
-  let b = Buffer.create 128 in
-  let fmt = Format.formatter_of_buffer b in
-  Printer.run ~width:flat_margin fmt (fun p ->
-      render_top (styled_printer ~theme:Colors.no_color p) t);
-  Format.pp_print_flush fmt ();
-  Buffer.contents b
+  Printer.run_string ~width:flat_margin (fun p ->
+      render_top (styled_printer ~theme:Colors.no_color p) t)

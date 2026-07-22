@@ -1,6 +1,10 @@
 open Ast
 module Cond = Wax_wasm.Cond_solver
 module Nz = Wax_wasm.Types.Normalized
+
+(* The Printer-native output printers, captured before [open Infer] shadows
+   [Output] with its [Format]-based wrappers. *)
+module Printer_output = Output
 open Infer
 open Typing_env
 
@@ -1963,7 +1967,7 @@ let rec output_stack pp st =
       output_stack pp st
 
 let print_stack st =
-  Wax_utils.Printer.run Format.err_formatter (fun p ->
+  Wax_utils.Printer.run_err (fun p ->
       let pp =
         Wax_utils.Styled_printer.create ~printer:p
           ~theme:Wax_utils.Colors.no_color
@@ -3108,10 +3112,19 @@ let report_missing_hole ctx ~location ty =
       end
   | None -> ()
 
-let _print_arg_stack f l =
-  Format.pp_print_list
-    ~pp_sep:(fun f () -> Format.fprintf f "@ ")
-    output_inferred_type f l
+let _print_arg_stack l =
+  Wax_utils.Printer.run_err (fun p ->
+      let pp =
+        Wax_utils.Styled_printer.create ~printer:p
+          ~theme:Wax_utils.Colors.no_color
+          ~trivia:(Wax_utils.Trivia.empty ())
+          ()
+      in
+      List.iteri
+        (fun i ty ->
+          if i > 0 then Wax_utils.Printer.space p ();
+          output_inferred_type_styled pp ty)
+        l)
 
 (* Peel the condition / reference operand off the last slot of a branch
    instruction's operand types, returning it together with the remaining branch
@@ -3427,9 +3440,7 @@ let simd_cell t = valtype_cell (Members.simd_valtype t)
 (* Build the {!R_cont} descriptor of a receiver of declared continuation type
    [ct], rendering the method signatures from the type context. *)
 let cont_receiver ctx ct =
-  let render (t : Ast.valtype) =
-    String.trim (Format.asprintf "%a" Output.valtype t)
-  in
+  let render (t : Ast.valtype) = Output.valtype_string t in
   let sign =
     let*@ inner = lookup_cont_inner ctx ct in
     lookup_func_type ctx inner
@@ -4317,7 +4328,7 @@ let float_literal_lattice s =
 
 let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
     =
-  if debug then Format.eprintf "%a@." Output.instr i;
+  if debug then Wax_utils.Printer.run_err (fun p -> Printer_output.instr p i);
   match i.desc with
   | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | If_annotation _
   | TryTable _ | Try _ | TryCatch _ ->
@@ -8884,7 +8895,7 @@ and match_recover_scrutinee ctx scrutinee = function
            { pending; value_loc = None; reported = false })
 
 and toplevel_instruction ctx i : stack -> stack * 'b =
-  if debug then Format.eprintf "%a@." Output.instr i;
+  if debug then Wax_utils.Printer.run_err (fun p -> Printer_output.instr p i);
   match i.desc with
   | Block { label; typ; block = { desc = instrs; _ } as blkloc } ->
       let*! params =
@@ -10352,7 +10363,7 @@ let rec functions ctx fields =
                   | None -> ())
                 params
           | _ -> ());
-          if debug then Format.eprintf "=== %s@." name.desc;
+          if debug then Printf.eprintf "=== %s\n%!" name.desc;
           let ctx =
             {
               ctx with

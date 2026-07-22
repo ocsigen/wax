@@ -33,7 +33,7 @@ let error ?pos ch fmt =
   let start = match pos with Some p -> p | None -> ch.pos in
   let loc_start = position ch start in
   let loc_end = position ch (max ch.pos start) in
-  Format.kasprintf
+  Printf.ksprintf
     (fun msg ->
       Wax_utils.Diagnostic.report ch.diagnostics
         ~location:{ Ast.loc_start; loc_end } ~severity:Error

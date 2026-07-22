@@ -18,13 +18,24 @@ type edit = { edit_location : Ast.location; new_text : string }
     the source spanned by [edit_location] with [new_text]. The diagnostic's
     message doubles as the quick-fix title. *)
 
+type sink = { write : string -> unit; flush : unit -> unit }
+(** A destination for rendered diagnostics. Defaults to {!channel_sink} over
+    [stderr]; a caller that needs to capture the output passes a {!buffer_sink}.
+*)
+
+val channel_sink : out_channel -> sink
+(** A sink that writes to (and flushes) an output channel. *)
+
+val buffer_sink : Buffer.t -> sink
+(** A sink that appends to a buffer (its [flush] is a no-op). *)
+
 val run :
   color:Colors.flag ->
   palette:Colors.theme ->
   source:string option ->
   ?related:label list ->
   ?exit:bool ->
-  ?output:Format.formatter ->
+  ?output:sink ->
   ?policy:Warning.policy ->
   (context -> 'a) ->
   'a
@@ -142,7 +153,7 @@ type theme
 (** A theme for diagnostic output. *)
 
 val output_error_with_source :
-  ?output:Format.formatter ->
+  ?output:sink ->
   theme:theme ->
   source:string ->
   location:Ast.location ->

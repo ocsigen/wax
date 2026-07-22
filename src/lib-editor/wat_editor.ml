@@ -30,15 +30,12 @@ let format_string src =
               ~trivia:(Wax_utils.Trivia.empty ())
               ~collect ast)
       in
-      let buf = Buffer.create (String.length src) in
-      let fmt = Format.formatter_of_buffer buf in
-      let print_wat f m =
-        Wax_utils.Printer.run f (fun p ->
+      let printed =
+        Wax_utils.Printer.run_string (fun p ->
             Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p ~trivia
-              ~tail m)
+              ~tail ast)
       in
-      Format.fprintf fmt "%a@." print_wat ast;
-      Ok (Buffer.contents buf)
+      Ok (printed ^ "\n")
 
 (* Everything a WAT buffer's language features read, computed by one recovered
    parse followed by one validation pass (with the type sink on) and one
@@ -508,14 +505,11 @@ let to_wax_string src =
                 (Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
               ctx
           in
-          let buf = Buffer.create (String.length src) in
-          let fmt = Format.formatter_of_buffer buf in
-          let print_wax f m =
-            Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-                Wax_lang.Output.module_ p ~trivia ~tail m)
+          let printed =
+            Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+                Wax_lang.Output.module_ p ~trivia ~tail wax_ast)
           in
-          Format.fprintf fmt "%a@." print_wax wax_ast;
-          Ok (Buffer.contents buf)
+          Ok (printed ^ "\n")
       with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
 
 (* Decode a Wasm binary ([bytes] holds the raw bytes) and render it as WAT / Wax.
@@ -531,16 +525,13 @@ let binary_to_wat_string bytes =
     if has_errors d then Error (errors_string d)
     else
       let text_ast = Wax_wasm.Binary_to_text.module_ ~features binary_ast in
-      let buf = Buffer.create (String.length bytes) in
-      let fmt = Format.formatter_of_buffer buf in
-      let print_wat f m =
-        Wax_utils.Printer.run f (fun p ->
+      let printed =
+        Wax_utils.Printer.run_string (fun p ->
             Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p
               ~trivia:(Wax_utils.Trivia.empty ())
-              m)
+              text_ast)
       in
-      Format.fprintf fmt "%a@." print_wat text_ast;
-      Ok (Buffer.contents buf)
+      Ok (printed ^ "\n")
   with Wax_utils.Diagnostic.Aborted -> Error (errors_string d)
 
 let binary_to_wax_string bytes =
@@ -558,14 +549,13 @@ let binary_to_wax_string bytes =
           Wax_lang.Typing.f ~simplify:true d wax_ast
           |> snd |> Wax_lang.Typing.erase_types
         in
-        let buf = Buffer.create (String.length bytes) in
-        let fmt = Format.formatter_of_buffer buf in
-        let print_wax f m =
-          Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
-              Wax_lang.Output.module_ p ~trivia:(Wax_utils.Trivia.empty ()) m)
+        let printed =
+          Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+              Wax_lang.Output.module_ p
+                ~trivia:(Wax_utils.Trivia.empty ())
+                wax_ast)
         in
-        Format.fprintf fmt "%a@." print_wax wax_ast;
-        Ok (Buffer.contents buf)
+        Ok (printed ^ "\n")
   with Wax_utils.Diagnostic.Aborted -> Error (errors_string d)
 
 (* Iterate [f] over every WAT module field, descending into the branches of an
