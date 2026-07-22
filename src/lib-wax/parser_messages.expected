@@ -209,10 +209,13 @@ parse: CONST IDENT EQUAL CHAR MINUS UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR ON LBRACKET COMMA
+parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT ARROW IDENT COMMA WHILE
 
-Assuming that the on clauses are complete, expecting ']'.
-<2>This '[' opens the enclosing construct.
+Expecting ']', or an on clause.
+
+parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT ARROW IDENT WHILE
+
+Expecting ',', or ']'.
 
 parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT ARROW QUOTE UNDERSCORE
 
@@ -225,6 +228,11 @@ Expecting ''', or an identifier.
 parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT WHILE
 
 Expecting '->'.
+
+parse: CONST IDENT EQUAL CHAR ON LBRACKET WHILE
+
+Expecting ']', or an on clause.
+<1>This '[' opens the enclosing construct.
 
 parse: CONST IDENT EQUAL CHAR ON WHILE
 
@@ -339,15 +347,26 @@ parse: DATA IDENT AT WHILE
 
 Expecting an identifier.
 
-parse: DATA IDENT EQUAL LBRACKET IDENT COLON COMMA
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON FLOAT COMMA WHILE
 
-Assuming that the data run items are complete, expecting ']'.
-<4>This '[' opens the enclosing construct.
+Expecting ']', or a data run item.
 
-parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN COMMA
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON FLOAT WHILE
 
-Assuming that the data numbers are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting ',', or ']'.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN FLOAT COMMA WHILE
+
+Expecting ')', or a data number.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN FLOAT WHILE
+
+Expecting ')', or ','.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN WHILE
+
+Expecting ')', or a data number.
+<1>This '(' opens the enclosing construct.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT WHILE
 
@@ -356,6 +375,11 @@ Expecting '('.
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON MINUS WHILE
 
 Expecting a raw number.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON WHILE
+
+Expecting ']', or a data run item.
+<3>This '[' opens the enclosing construct.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT WHILE
 
@@ -691,6 +715,10 @@ parse: FN IDENT LBRACE DISPATCH CHAR ELSE
 
 Syntax error
 
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE QUOTE AS COLON LBRACE RBRACE WHILE
+
+Expecting ';', '}', or a dispatch arm.
+
 parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE QUOTE AS COLON WHILE
 
 Expecting a block.
@@ -703,10 +731,14 @@ parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE QUOT
 
 Expecting a label name.
 
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE SEMI WHILE
+
+Expecting ';', '}', or a dispatch arm.
+
 parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE WHILE
 
-Assuming that the list is complete, expecting '}'.
-<2>This '{' opens the enclosing construct.
+Expecting ';', '}', or a dispatch arm.
+<1>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET WHILE
 
@@ -733,7 +765,7 @@ parse: FN IDENT LBRACE DISPATCH UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE DO IDENT ARROW
+parse: FN IDENT LBRACE DO IDENT WHILE
 
 Expecting a block.
 
@@ -754,7 +786,7 @@ parse: FN IDENT LBRACE IDENT EQUAL UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE IF CHAR FATARROW IDENT ARROW
+parse: FN IDENT LBRACE IF CHAR FATARROW IDENT WHILE
 
 Expecting a block.
 
@@ -915,10 +947,14 @@ parse: FN IDENT LBRACE LET LPAREN IDENT COLON WHILE
 
 Expecting a value type.
 
-parse: FN IDENT LBRACE LET LPAREN IDENT UNDERSCORE
+parse: FN IDENT LBRACE LET LPAREN IDENT COMMA COMMA
 
 Assuming that the let pattern is complete, expecting ')'.
 <2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LET LPAREN IDENT WHILE
+
+Expecting ')', ',', or ':'.
 
 parse: FN IDENT LBRACE LET LPAREN RPAREN EQUAL UNREACHABLE
 
@@ -933,7 +969,7 @@ parse: FN IDENT LBRACE LET WHILE
 
 Expecting '(', or a simple pattern.
 
-parse: FN IDENT LBRACE LOOP IDENT ARROW
+parse: FN IDENT LBRACE LOOP IDENT WHILE
 
 Expecting a block.
 
@@ -972,6 +1008,10 @@ parse: FN IDENT LBRACE MATCH CHAR LBRACE IDENT WHILE
 
 Expecting ':'.
 
+parse: FN IDENT LBRACE MATCH CHAR LBRACE NULL FATARROW LBRACE RBRACE WHILE
+
+Expecting ';', '_', or a match arm.
+
 parse: FN IDENT LBRACE MATCH CHAR LBRACE NULL FATARROW WHILE
 
 Expecting a block.
@@ -979,6 +1019,10 @@ Expecting a block.
 parse: FN IDENT LBRACE MATCH CHAR LBRACE NULL WHILE
 
 Expecting '=>'.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE SEMI WHILE
+
+Expecting ';', '_', or a match arm.
 
 parse: FN IDENT LBRACE MATCH CHAR LBRACE UNDERSCORE FATARROW LBRACE RBRACE WHILE
 
@@ -995,7 +1039,7 @@ Expecting '=>'.
 
 parse: FN IDENT LBRACE MATCH CHAR LBRACE WHILE
 
-Assuming that the list is complete, expecting a match default.
+Expecting ';', a match arm, or a match default.
 
 parse: FN IDENT LBRACE MATCH UNREACHABLE
 
@@ -1009,7 +1053,7 @@ parse: FN IDENT LBRACE PLUS UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE QUOTE AS COLON DO IDENT ARROW
+parse: FN IDENT LBRACE QUOTE AS COLON DO IDENT WHILE
 
 Expecting a block.
 
@@ -1017,7 +1061,7 @@ parse: FN IDENT LBRACE QUOTE AS COLON DO WHILE
 
 Expecting a block, or a block type.
 
-parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR FATARROW IDENT ARROW
+parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR FATARROW IDENT WHILE
 
 Expecting a block.
 
@@ -1033,7 +1077,7 @@ parse: FN IDENT LBRACE QUOTE AS COLON IF UNREACHABLE
 
 Expecting a condition expression.
 
-parse: FN IDENT LBRACE QUOTE AS COLON LOOP IDENT ARROW
+parse: FN IDENT LBRACE QUOTE AS COLON LOOP IDENT WHILE
 
 Expecting a block.
 
@@ -1041,7 +1085,7 @@ parse: FN IDENT LBRACE QUOTE AS COLON LOOP WHILE
 
 Expecting a block, or a block type.
 
-parse: FN IDENT LBRACE QUOTE AS COLON TRY IDENT ARROW
+parse: FN IDENT LBRACE QUOTE AS COLON TRY IDENT WHILE
 
 Expecting a block.
 
@@ -1052,13 +1096,13 @@ Expecting '}'.
 
 parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACE WHILE
 
-Assuming that the list is complete, expecting '}', or a trycatch all.
-<2>This '{' opens the enclosing construct.
+Expecting ';', '}', a trycatch all, or a trycatch arm.
+<1>This '{' opens the enclosing construct.
 
-parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACKET COMMA
+parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACKET WHILE
 
-Assuming that the catches are complete, expecting ']'.
-<2>This '[' opens the enclosing construct.
+Expecting ']', or a catch.
+<1>This '[' opens the enclosing construct.
 
 parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH WHILE
 
@@ -1072,7 +1116,7 @@ parse: FN IDENT LBRACE QUOTE AS COLON TRY WHILE
 
 Expecting a block, or a block type.
 
-parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY IDENT ARROW
+parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY IDENT WHILE
 
 Expecting a block.
 
@@ -1083,8 +1127,8 @@ Expecting '}'.
 
 parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY LBRACE RBRACE CATCH LBRACE WHILE
 
-Assuming that the list is complete, expecting '}', or a catch-all clause.
-<2>This '{' opens the enclosing construct.
+Expecting ';', '}', a catch clause, or a catch-all clause.
+<1>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY LBRACE RBRACE CATCH WHILE
 
@@ -1222,7 +1266,7 @@ parse: FN IDENT LBRACE THROW_REF UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE TRY IDENT ARROW
+parse: FN IDENT LBRACE TRY IDENT WHILE
 
 Expecting a block.
 
@@ -1234,6 +1278,10 @@ parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT AMPERSAND WHILE
 
 Expecting '=>'.
 
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT FATARROW LBRACE RBRACE WHILE
+
+Expecting ';', '_', '}', or a trycatch arm.
+
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT FATARROW WHILE
 
 Expecting a block.
@@ -1241,6 +1289,10 @@ Expecting a block.
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT WHILE
 
 Expecting '&', or '=>'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE SEMI WHILE
+
+Expecting ';', '_', '}', or a trycatch arm.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE AMPERSAND FATARROW WHILE
 
@@ -1265,13 +1317,8 @@ Expecting '&', or '=>'.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE WHILE
 
-Assuming that the list is complete, expecting '}', or a trycatch all.
-<2>This '{' opens the enclosing construct.
-
-parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET COMMA
-
-Assuming that the catches are complete, expecting ']'.
-<2>This '[' opens the enclosing construct.
+Expecting ';', '}', a trycatch all, or a trycatch arm.
+<1>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT AMPERSAND ARROW QUOTE UNDERSCORE
 
@@ -1284,6 +1331,14 @@ Expecting '''.
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT AMPERSAND WHILE
 
 Expecting '->'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT ARROW QUOTE AS COMMA WHILE
+
+Expecting ']', or a catch.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT ARROW QUOTE AS WHILE
+
+Expecting ',', or ']'.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT ARROW QUOTE UNDERSCORE
 
@@ -1321,6 +1376,11 @@ parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET UNDERSCORE WHILE
 
 Expecting '&', or '->'.
 
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET WHILE
+
+Expecting ']', or a catch.
+<1>This '[' opens the enclosing construct.
+
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH WHILE
 
 Expecting '[', or '{'.
@@ -1333,7 +1393,7 @@ parse: FN IDENT LBRACE TRY WHILE
 
 Expecting a block, or a block type.
 
-parse: FN IDENT LBRACE TRY_LEGACY IDENT ARROW
+parse: FN IDENT LBRACE TRY_LEGACY IDENT WHILE
 
 Expecting a block.
 
@@ -1342,6 +1402,10 @@ parse: FN IDENT LBRACE TRY_LEGACY LBRACE ELSE
 Assuming that the statement list is complete, expecting '}'.
 <2>This '{' opens the enclosing construct.
 
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE IDENT FATARROW LBRACE RBRACE WHILE
+
+Expecting ';', '_', '}', or a catch clause.
+
 parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE IDENT FATARROW WHILE
 
 Expecting a block.
@@ -1349,6 +1413,10 @@ Expecting a block.
 parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE IDENT WHILE
 
 Expecting '=>'.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE SEMI WHILE
+
+Expecting ';', '_', '}', or a catch clause.
 
 parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE UNDERSCORE FATARROW LBRACE RBRACE WHILE
 
@@ -1365,8 +1433,8 @@ Expecting '=>'.
 
 parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE WHILE
 
-Assuming that the list is complete, expecting '}', or a catch-all clause.
-<2>This '{' opens the enclosing construct.
+Expecting ';', '}', a catch clause, or a catch-all clause.
+<1>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH WHILE
 
@@ -1384,6 +1452,10 @@ Assuming that the parameter types are complete, expecting ')'.
 parse: FN IDENT LBRACE TRY_LEGACY LPAREN RPAREN ARROW WHILE
 
 Expecting a result type.
+
+parse: FN IDENT LBRACE TRY_LEGACY LPAREN RPAREN WHILE
+
+Expecting '->', or '{'.
 
 parse: FN IDENT LBRACE TRY_LEGACY LPAREN WHILE
 
@@ -1634,6 +1706,10 @@ parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET EQUA
 
 Expecting a data elem.
 
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET SEMI WHILE
+
+Expecting '}', or a data item.
+
 parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET WHILE
 
 Expecting ';', or '='.
@@ -1656,8 +1732,8 @@ Expecting a data name.
 
 parse: MEMORY IDENT COLON IDENT LBRACE WHILE
 
-Assuming that the data items are complete, expecting '}'.
-<2>This '{' opens the enclosing construct.
+Expecting '}', or a data item.
+<1>This '{' opens the enclosing construct.
 
 parse: MEMORY IDENT COLON IDENT LBRACKET INT COMMA INT WHILE
 
@@ -1670,13 +1746,13 @@ Expecting an integer.
 
 parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET LBRACE WHILE
 
-Assuming that the data items are complete, expecting '}'.
-<2>This '{' opens the enclosing construct.
+Expecting '}', or a data item.
+<1>This '{' opens the enclosing construct.
 
 parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET PAGESIZE INT LBRACE WHILE
 
-Assuming that the data items are complete, expecting '}'.
-<2>This '{' opens the enclosing construct.
+Expecting '}', or a data item.
+<1>This '{' opens the enclosing construct.
 
 parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET PAGESIZE INT SHARED WHILE
 
@@ -1705,8 +1781,8 @@ Expecting an integer.
 
 parse: MEMORY IDENT COLON IDENT PAGESIZE INT LBRACE WHILE
 
-Assuming that the data items are complete, expecting '}'.
-<2>This '{' opens the enclosing construct.
+Expecting '}', or a data item.
+<1>This '{' opens the enclosing construct.
 
 parse: MEMORY IDENT COLON IDENT PAGESIZE INT SHARED WHILE
 
@@ -1740,10 +1816,14 @@ parse: MEMORY WHILE
 
 Expecting an identifier.
 
+parse: REC LBRACE TYPE IDENT EQUAL LBRACE RBRACE SEMI WHILE
+
+Expecting '}', or a typedef.
+
 parse: REC LBRACE WHILE
 
-Assuming that the typedefs are complete, expecting '}'.
-<2>This '{' opens the enclosing construct.
+Expecting '}', or a typedef.
+<1>This '{' opens the enclosing construct.
 
 parse: REC WHILE
 
@@ -1851,10 +1931,18 @@ parse: SHARP LBRACKET IF LPAREN IDENT COMMA
 Assuming that the condition is complete, expecting ')'.
 <2>This '(' opens the enclosing construct.
 
-parse: SHARP LBRACKET IF LPAREN IDENT LPAREN COMMA
+parse: SHARP LBRACKET IF LPAREN IDENT LPAREN IDENT BANGEQUAL STRING WHILE
 
-Assuming that the conditions are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting ')', or ','.
+
+parse: SHARP LBRACKET IF LPAREN IDENT LPAREN IDENT COMMA WHILE
+
+Expecting ')', or a condition.
+
+parse: SHARP LBRACKET IF LPAREN IDENT LPAREN WHILE
+
+Expecting ')', or a condition.
+<1>This '(' opens the enclosing construct.
 
 parse: SHARP LBRACKET IF LPAREN IDENT RPAREN RBRACKET WHILE
 

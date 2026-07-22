@@ -33,7 +33,7 @@ are complete"), rather than leaking the raw
 `separated_nonempty_list_trailing(comma,on_clause)`:
 
   $ wax check onclause.wax
-  Error: Assuming that the on clauses are complete, expecting ']'.
+  Error: Expecting ']', or an on clause.
    ──➤  onclause.wax:2:18
   1 │ fn f() {
   2 │   c.resume() on [_ => switch 5]
@@ -64,11 +64,10 @@ token. The lexer gives that token the '(' as its start (so the location really
 begins at the paren), and the hint shrinks the range to that one character:
 
   $ wax check result.wat
-  Error: Assuming that the value types are complete, expecting ')'.
+  Error: Expecting ')', or a value type.
    ──➤  result.wat:1:27
   1 │ (module (func (result i32 $x)))
     ·                           ^^
-    ·               ^ This '(' opens the enclosing construct.
   2 │ 
   [128]
 

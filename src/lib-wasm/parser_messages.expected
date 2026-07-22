@@ -27,6 +27,10 @@ parse: LPAREN DATA LPAREN BLOCK WAIT
 Expecting ')', a block type, a label, or instructions.
 <2>This '(' opens the enclosing construct.
 
+parse: LPAREN DATA LPAREN CALL_INDIRECT STRING_ANNOT RPAREN WAIT
+
+Expecting ')', or a folded instruction.
+
 parse: LPAREN DATA LPAREN F32 WAIT
 
 Expecting ')', or a float lit.
@@ -160,8 +164,8 @@ Expecting ')', or an int lit.
 
 parse: LPAREN DATA LPAREN SELECT MEM_ALIGN
 
-Assuming that the folded instructions are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
+Assuming that the plain instruction is complete, expecting ')', or a folded instruction.
+<2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY ID RPAREN
 
@@ -435,12 +439,12 @@ parse: LPAREN ELEM ANYREF LPAREN WAIT
 
 Syntax error
 
-parse: LPAREN ELEM ANYREF MEM_OFFSET
+parse: LPAREN ELEM ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
 <4>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM DECLARE ANYREF MEM_OFFSET
+parse: LPAREN ELEM DECLARE ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
 <5>This '(' opens the enclosing construct.
@@ -448,6 +452,14 @@ Assuming that the element list is complete, expecting ')'.
 parse: LPAREN ELEM DECLARE WAIT
 
 Expecting an element list.
+
+parse: LPAREN ELEM FUNC NAT MEM_OFFSET
+
+Expecting ')', or an index.
+
+parse: LPAREN ELEM FUNC WAIT
+
+Expecting ')', or an index.
 
 parse: LPAREN ELEM ID WAIT
 
@@ -475,7 +487,7 @@ parse: LPAREN ELEM LPAREN TABLE NAT RPAREN LPAREN WAIT
 
 Syntax error
 
-parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN ANYREF MEM_OFFSET
+parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
 <9>This '(' opens the enclosing construct.
@@ -496,15 +508,15 @@ parse: LPAREN ELEM LPAREN WAIT
 
 Syntax error
 
-parse: LPAREN ELEM STRING_ANNOT RPAREN ANYREF MEM_OFFSET
+parse: LPAREN ELEM STRING_ANNOT RPAREN ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
 <5>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM STRING_ANNOT RPAREN MEM_OFFSET
+parse: LPAREN ELEM STRING_ANNOT RPAREN WAIT
 
-Assuming that the indexes are complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
+Expecting ')', an element list, or an index.
+<4>This '(' opens the enclosing construct.
 
 parse: LPAREN ELEM WAIT
 
@@ -926,6 +938,10 @@ parse: LPAREN FUNC LPAREN_IMPORT WAIT
 
 Expecting a name.
 
+parse: LPAREN FUNC LPAREN_LOCAL ANYREF WAIT
+
+Expecting ')', or a value type.
+
 parse: LPAREN FUNC LPAREN_LOCAL ID ANYREF WAIT
 
 Expecting ')'.
@@ -942,8 +958,8 @@ Assuming that the locals are complete, expecting ')', or instructions.
 
 parse: LPAREN FUNC LPAREN_LOCAL WAIT
 
-Assuming that the value types are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting ')', 'id', or a value type.
+<1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC MEMORY_COPY NAT MEM_OFFSET
 
@@ -1042,21 +1058,21 @@ Expecting an index.
 
 parse: LPAREN FUNC SELECT LPAREN_RESULT WAIT
 
-Assuming that the value types are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting ')', or a value type.
+<1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC SELECT MEM_ALIGN
 
 Assuming that the plain instruction is complete, expecting instructions.
 
+parse: LPAREN FUNC STRING_ANNOT NAT NAT
+
+Expecting ')', or a string.
+<2>This '(' opens the enclosing construct.
+
 parse: LPAREN FUNC STRING_ANNOT RPAREN WAIT
 
 Expecting instructions.
-
-parse: LPAREN FUNC STRING_ANNOT STRING NAT
-
-Assuming that the string list is complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC STRING_ANNOT WAIT
 
@@ -1732,10 +1748,14 @@ parse: LPAREN MODULE WAIT
 Expecting ')', 'id', or a module field.
 <2>This '(' opens the enclosing construct.
 
+parse: LPAREN REC LPAREN_TYPE LPAREN FUNC RPAREN RPAREN WAIT
+
+Expecting ')', or a typedef.
+
 parse: LPAREN REC WAIT
 
-Assuming that the typedefs are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
+Expecting ')', or a typedef.
+<2>This '(' opens the enclosing construct.
 
 parse: LPAREN START NAT NAT
 
@@ -1924,8 +1944,8 @@ Expecting '(result'.
 
 parse: LPAREN TAG LPAREN_RESULT WAIT
 
-Assuming that the value types are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting ')', or a value type.
+<1>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_TYPE NAT NAT
 
@@ -2179,6 +2199,10 @@ parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST WAI
 
 Expecting a 64-bit signed integer.
 
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR RPAREN WAIT
+
+Expecting ')', or a result pattern.
+
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR WAIT
 
 Expecting ')'.
@@ -2252,8 +2276,8 @@ Syntax error
 
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN WAIT
 
-Assuming that the result patterns are complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
+Expecting ')', or a result pattern.
+<3>This '(' opens the enclosing construct.
 
 parse_script: LPAREN ASSERT_RETURN WAIT
 
@@ -2330,7 +2354,7 @@ Expecting a script instance.
 
 parse_script: LPAREN DATA RPAREN WAIT
 
-Assuming that the inline module is complete, expecting end of file.
+Expecting a module field, or end of file.
 
 parse_script: LPAREN GET ID WAIT
 
@@ -2361,6 +2385,10 @@ Expecting 'id', or a string.
 parse_script: LPAREN INVOKE ID WAIT
 
 Expecting a string.
+
+parse_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT RPAREN WAIT
+
+Expecting ')', or a const.
 
 parse_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT WAIT
 
@@ -2444,8 +2472,8 @@ Syntax error
 
 parse_script: LPAREN INVOKE STRING WAIT
 
-Assuming that the consts are complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
+Expecting ')', or a const.
+<4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN INVOKE WAIT
 
@@ -2453,8 +2481,8 @@ Expecting 'id', or a string.
 
 parse_script: LPAREN MODULE BINARY WAIT
 
-Assuming that the strings are complete, expecting ')'.
-<6>This '(' opens the enclosing construct.
+Expecting ')', or a string.
+<5>This '(' opens the enclosing construct.
 
 parse_script: LPAREN MODULE DEFINITION WAIT
 
@@ -2486,8 +2514,8 @@ Syntax error
 
 parse_script: LPAREN MODULE QUOTE WAIT
 
-Assuming that the strings are complete, expecting ')'.
-<6>This '(' opens the enclosing construct.
+Expecting ')', or a string.
+<5>This '(' opens the enclosing construct.
 
 parse_script: LPAREN MODULE WAIT
 
@@ -2852,6 +2880,10 @@ parse_script: LPAREN_TYPE LPAREN FUNC WAIT
 Expecting ')', or parameters and results.
 <2>This '(' opens the enclosing construct.
 
+parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD ANYREF WAIT
+
+Expecting ')', or a field type.
+
 parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD ID ANYREF WAIT
 
 Expecting ')'.
@@ -2861,10 +2893,14 @@ parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD ID WAIT
 
 Expecting a field type.
 
+parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD RPAREN WAIT
+
+Expecting ')', or a field.
+
 parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD WAIT
 
-Assuming that the field types are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
+Expecting ')', 'id', or a field type.
+<2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN WAIT
 
@@ -2872,8 +2908,8 @@ Expecting 'field'.
 
 parse_script: LPAREN_TYPE LPAREN STRUCT WAIT
 
-Assuming that the fields are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
+Expecting ')', or a field.
+<2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_TYPE LPAREN SUB FINAL WAIT
 
@@ -2978,10 +3014,14 @@ parse_script: RPAREN
 
 Assuming that the script is complete, expecting end of file.
 
-parse_script: STRING_ANNOT ID STRING NAT
+parse_script: STRING_ANNOT ID NAT NAT
 
-Assuming that the string list is complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
+Expecting ')', or a string.
+<3>This '(' opens the enclosing construct.
+
+parse_script: STRING_ANNOT ID STRING WAIT
+
+Expecting ')', or a string.
 
 parse_script: STRING_ANNOT ID WAIT
 

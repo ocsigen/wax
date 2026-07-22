@@ -219,7 +219,7 @@
 %token INPUT
 %token OUTPUT
 
-%on_error_reduce plain_instruction list(STRING) list(value_type) list(field_type) list(field) limits list(folded_instruction) list(typedef) list(index) list(elemexpr) list(module_field) nonempty_list(f64) list(const) nonempty_list(float_or_nan) nonempty_list(result_pat) list(result_pat) list(cmd) nonempty_list(module_field) nonempty_list(index) string_list exports catches on_clauses locals select_result_type
+%on_error_reduce plain_instruction limits list(elemexpr) list(module_field) nonempty_list(f64) nonempty_list(float_or_nan) nonempty_list(result_pat) list(cmd) nonempty_list(index) exports catches on_clauses locals select_result_type
 
 %parameter <Context : sig type t = Wax_utils.Trivia.context val context : t end>
 

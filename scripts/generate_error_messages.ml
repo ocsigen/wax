@@ -837,6 +837,17 @@ let generate_message grammar terminals ~comments entry =
     else "Syntax error"
   in
 
+  (* The "Assuming that the X is complete" subject is the *outermost* spurious
+     reduction (the last in menhir's innermost→outermost list). A/B'd against the
+     innermost in step 4b: outermost wins because the Expecting token is the
+     FOLLOW of the outermost frame, so naming that frame keeps hedge and
+     expectation coherent ("the instructions are complete, expecting 'end'"),
+     whereas the innermost names the construct at the edit point but pairs it with
+     a FOLLOW token from a wider frame ("the parameters without bindings are
+     complete, expecting 'end'" — incoherent, and jargon). Outermost also keeps
+     the step-4 "block type is complete" messages and avoids the raw-grammar
+     "plaininstr"/"parameters without bindings" subjects the innermost surfaced on
+     the deep cascades. *)
   let message_body =
     match List.rev d.spurious_reductions with
     | [] -> base_message
@@ -1064,6 +1075,19 @@ let output_stats gram auto results =
   Printf.printf "with an expected list: %d\n" (count (fun s -> s.expecting));
   Printf.printf "using the spurious-reduction template: %d\n"
     (count (fun s -> s.assuming));
+  (* Cascade depth = the number of spurious reductions folded before the error
+     is reported (the length of the "Assuming …" chain). A deep cascade means
+     the hedge names a construct far from where the user was editing; the prune
+     audit (step 4b) watches these so over-annotation is measurable. *)
+  let cascade_depths =
+    List.map
+      (fun (entry, _) ->
+        List.length entry.Parse_messages.data.spurious_reductions)
+      results
+  in
+  Printf.printf "entries with cascade depth >= 4: %d\n"
+    (List.length (List.filter (fun d -> d >= 4) cascade_depths));
+  Printf.printf "max cascade depth: %d\n" (List.fold_left max 0 cascade_depths);
   Printf.printf "generic fallback (empty expected list): %d\n"
     (count (fun s -> s.empty_expected));
   Printf.printf "generic fallback (expected list over 5): %d\n"

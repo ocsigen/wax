@@ -8,22 +8,12 @@
        <_>This '[' opens the enclosing construct.
     1x Assuming that the attributes are complete, expecting a definition.
     1x Assuming that the attributes are complete, expecting an import declaration.
-    2x Assuming that the catches are complete, expecting ']'.
-       <_>This '[' opens the enclosing construct.
     2x Assuming that the condition expression is complete, expecting ':', or a block.
     2x Assuming that the condition expression is complete, expecting '=>', or a block.
     3x Assuming that the condition is complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
-    1x Assuming that the conditions are complete, expecting ')'.
-       <_>This '(' opens the enclosing construct.
     2x Assuming that the constant expression is complete, expecting ';'.
     3x Assuming that the constant expression is complete, expecting ']'.
-       <_>This '[' opens the enclosing construct.
-    4x Assuming that the data items are complete, expecting '}'.
-       <_>This '{' opens the enclosing construct.
-    1x Assuming that the data numbers are complete, expecting ')'.
-       <_>This '(' opens the enclosing construct.
-    1x Assuming that the data run items are complete, expecting ']'.
        <_>This '[' opens the enclosing construct.
     3x Assuming that the expression list is complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
@@ -33,15 +23,6 @@
        <_>This '[' opens the enclosing construct.
     1x Assuming that the let pattern is complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
-    2x Assuming that the list is complete, expecting '}', or a catch-all clause.
-       <_>This '{' opens the enclosing construct.
-    2x Assuming that the list is complete, expecting '}', or a trycatch all.
-       <_>This '{' opens the enclosing construct.
-    1x Assuming that the list is complete, expecting '}'.
-       <_>This '{' opens the enclosing construct.
-    1x Assuming that the list is complete, expecting a match default.
-    1x Assuming that the on clauses are complete, expecting ']'.
-       <_>This '[' opens the enclosing construct.
     2x Assuming that the optional function type is complete, expecting ''', or '{'.
     1x Assuming that the parameter list is complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
@@ -64,8 +45,6 @@
        <_>This '{' opens the enclosing construct.
     1x Assuming that the tag sig is complete, expecting ';'.
     1x Assuming that the then branch is complete, expecting ':'.
-    1x Assuming that the typedefs are complete, expecting '}'.
-       <_>This '{' opens the enclosing construct.
     1x Expecting '!', ''', ':', '{', or an optional function type.
     1x Expecting '!', ':', ';', or an optional function type.
     1x Expecting '!', '?', 'fn', or a heap type.
@@ -83,7 +62,14 @@
     1x Expecting '(', ')', ',', or a comparison operator.
     1x Expecting '(', or a simple pattern.
     9x Expecting '('.
-    1x Expecting ')', ',', or ':'.
+    2x Expecting ')', ',', or ':'.
+    2x Expecting ')', or ','.
+    1x Expecting ')', or a condition.
+    1x Expecting ')', or a condition.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a data number.
+    1x Expecting ')', or a data number.
+       <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a function parameter.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a let pattern.
@@ -102,11 +88,13 @@
     1x Expecting ',', ':', '|', or '}'.
        <_>This '{' opens the enclosing construct.
     1x Expecting ',', or ':'.
+    3x Expecting ',', or ']'.
     1x Expecting ',', or ']'.
        <_>This '[' opens the enclosing construct.
     1x Expecting ',', or '}'.
        <_>This '{' opens the enclosing construct.
     3x Expecting ','.
+    1x Expecting '->', or '{'.
     3x Expecting '->'.
     1x Expecting '..', '}', a descriptor operand, a structure field, or an identifier.
        <_>This '{' opens the enclosing construct.
@@ -119,17 +107,28 @@
    14x Expecting ':'.
     1x Expecting ';', '=', or '@'.
     2x Expecting ';', '=', or memory limits.
+    2x Expecting ';', '_', '}', or a catch clause.
+    2x Expecting ';', '_', '}', or a trycatch arm.
+    2x Expecting ';', '_', or a match arm.
     1x Expecting ';', 'shared', '{', a page-size clause, or memory limits.
     1x Expecting ';', 'shared', '{', or a page-size clause.
     1x Expecting ';', 'shared', a page-size clause, or memory limits.
     2x Expecting ';', 'shared', or '{'.
     1x Expecting ';', 'shared', or a page-size clause.
+    2x Expecting ';', '}', a catch clause, or a catch-all clause.
+       <_>This '{' opens the enclosing construct.
+    2x Expecting ';', '}', a trycatch all, or a trycatch arm.
+       <_>This '{' opens the enclosing construct.
+    2x Expecting ';', '}', or a dispatch arm.
+    1x Expecting ';', '}', or a dispatch arm.
+       <_>This '{' opens the enclosing construct.
     2x Expecting ';', '}', or a module field.
     1x Expecting ';', '}', or a module field.
        <_>This '{' opens the enclosing construct.
     2x Expecting ';', '}', or an import item.
     1x Expecting ';', '}', or an import item.
        <_>This '{' opens the enclosing construct.
+    1x Expecting ';', a match arm, or a match default.
     4x Expecting ';', or '='.
     2x Expecting ';', or 'shared'.
     4x Expecting ';', or '{'.
@@ -150,9 +149,18 @@
     9x Expecting '['.
     1x Expecting ']', an array body, or an identifier.
        <_>This '[' opens the enclosing construct.
+    1x Expecting ']', or a catch.
+    2x Expecting ']', or a catch.
+       <_>This '[' opens the enclosing construct.
+    1x Expecting ']', or a data run item.
+    1x Expecting ']', or a data run item.
+       <_>This '[' opens the enclosing construct.
     1x Expecting ']', or an array body.
        <_>This '[' opens the enclosing construct.
     2x Expecting ']', or an expression.
+       <_>This '[' opens the enclosing construct.
+    1x Expecting ']', or an on clause.
+    1x Expecting ']', or an on clause.
        <_>This '[' opens the enclosing construct.
    12x Expecting ']'.
        <_>This '[' opens the enclosing construct.
@@ -166,9 +174,15 @@
     1x Expecting 'import', or an identifier.
     6x Expecting '{'.
     1x Expecting '|'.
+    1x Expecting '}', or a data item.
+    4x Expecting '}', or a data item.
+       <_>This '{' opens the enclosing construct.
     1x Expecting '}', or a structure field.
        <_>This '{' opens the enclosing construct.
     1x Expecting '}', or a structure type field.
+       <_>This '{' opens the enclosing construct.
+    1x Expecting '}', or a typedef.
+    1x Expecting '}', or a typedef.
        <_>This '{' opens the enclosing construct.
     8x Expecting '}'.
        <_>This '{' opens the enclosing construct.
