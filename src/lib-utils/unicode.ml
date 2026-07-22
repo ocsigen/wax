@@ -1,5 +1,27 @@
 let tab_width pos = 8 - (pos land 7)
 
+(* The "Trojan Source" bidirectional formatting characters: text-direction
+   overrides/embeddings and isolates that can reorder how a string displays
+   without changing its bytes. Same set [wasm-tools] rejects in string literals. *)
+let is_confusable c =
+  match c with
+  | 0x202a | 0x202b | 0x202d | 0x202e | 0x2066 | 0x2067 | 0x2068 | 0x206c
+  | 0x2069 ->
+      true
+  | _ -> false
+
+let first_confusable s =
+  let n = String.length s in
+  let rec loop i =
+    if i >= n then None
+    else
+      let d = String.get_utf_8_uchar s i in
+      let u = Uchar.utf_decode_uchar d in
+      if is_confusable (Uchar.to_int u) then Some u
+      else loop (i + Uchar.utf_decode_length d)
+  in
+  loop 0
+
 let char_width pos u =
   let c = Uchar.to_int u in
   if c = 9 (* Tab *) then tab_width pos else Unicode_widths.get_width c

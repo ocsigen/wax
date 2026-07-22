@@ -109,8 +109,9 @@ An unknown warning or group name is rejected:
        constant-condition, unused-result, dead-code, cast-always-fails,
        eager-select, precedence, redundant-operation, truncated-coverage,
        naming-conflict, reserved-word-rename, generated-name,
-       compound-assignment, field-punning, redundant-annotation, unused,
-       correctness, redundant, naming, suggestion, all.
+       compound-assignment, field-punning, redundant-annotation,
+       confusable-unicode, unused, correctness, redundant, naming, suggestion,
+       all.
   [124]
 
 An unknown level is rejected:

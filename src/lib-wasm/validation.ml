@@ -869,6 +869,14 @@ module Error = struct
     report context ~location ~severity:Warning ~warning ~universal:true ?hint
       ?related message
 
+  let confusable_unicode context ~location u =
+    warn_lint context ~location Warning.Confusable_unicode
+      (text
+         (Printf.sprintf
+            "This string contains a bidirectional control character (U+%04X) \
+             that can make the displayed text read differently than it runs."
+            (Uchar.to_int u)))
+
   (* [count] is the shift count as an unsigned 64-bit value (an i32/i64 const
      with the high bit set is a large positive count, not a negative one), so
      print and reduce it unsigned — matching the Wax typer's [shift_overflow]. *)
@@ -5409,6 +5417,87 @@ let functions ?(warn_unused = true) ctx fields =
       | _ -> ())
     fields
 
+(* Report a "Trojan Source" bidirectional control character in any string the
+   module carries — an export/import name, a data segment, a string literal, a
+   feature or conditional string. A subset of what [wasm-tools] rejects in
+   string literals; gated by [warn_unused] like the other lints. *)
+let lint_confusable ctx fields =
+  let d = ctx.diagnostics in
+  let check (s : Ast.Text.name) =
+    match Wax_utils.Unicode.first_confusable s.Ast.desc with
+    | Some u -> Error.confusable_unicode d ~location:s.Ast.info u
+    | None -> ()
+  in
+  let check_str ~location s =
+    match Wax_utils.Unicode.first_confusable s with
+    | Some u -> Error.confusable_unicode d ~location u
+    | None -> ()
+  in
+  let rec check_cond (c : Ast.cond) =
+    match c with
+    | Cond_string s -> check s
+    | Cond_var _ | Cond_version _ -> ()
+    | Cond_and l | Cond_or l -> List.iter check_cond l
+    | Cond_not c -> check_cond c
+    | Cond_cmp (_, a, b) ->
+        check_cond a;
+        check_cond b
+  in
+  let check_instr (i : _ Ast.Text.instr) =
+    match i.desc with
+    | String (_, pieces) -> List.iter check pieces
+    | If_annotation { cond; _ } -> check_cond cond
+    | _ -> ()
+  in
+  let check_body instrs = List.iter (Ast_utils.iter_instr check_instr) instrs in
+  let check_data init =
+    List.iter
+      (fun (e : (Ast.Text.datavalelem, Ast.location) Ast.annotated) ->
+        match e.Ast.desc with
+        | Str s -> check_str ~location:e.Ast.info s
+        | Numlist _ | V128list _ -> ())
+      init
+  in
+  let rec walk fields =
+    List.iter
+      (fun (field : (_ Ast.Text.modulefield, Ast.location) Ast.annotated) ->
+        match field.Ast.desc with
+        | Export { name; _ } -> check name
+        | Import { module_; name; exports; _ } ->
+            check module_;
+            check name;
+            List.iter check exports
+        | Import_group1 { module_; items } ->
+            check module_;
+            List.iter (fun (n, _, _) -> check n) items
+        | Import_group2 { module_; items; _ } ->
+            check module_;
+            List.iter (fun (n, _) -> check n) items
+        | Func { instrs; exports; _ } ->
+            List.iter check exports;
+            check_body instrs
+        | Global { init; exports; _ } ->
+            List.iter check exports;
+            check_body init
+        | Elem { init; _ } -> List.iter check_body init
+        | Memory { init; exports; _ } ->
+            List.iter check exports;
+            Option.iter check_data init
+        | Table { exports; _ } | Tag { exports; _ } -> List.iter check exports
+        | Data { init; _ } -> check_data init
+        | String_global { init; _ } -> List.iter check init
+        | Feature_annotation n -> check n
+        | Module_if_annotation { cond; then_fields; else_fields } ->
+            check_cond cond;
+            walk then_fields.Ast.desc;
+            Option.iter
+              (fun (f : (_, _) Ast.annotated) -> walk f.Ast.desc)
+              else_fields
+        | Types _ | Start _ -> ())
+      fields
+  in
+  walk fields
+
 let exports ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
@@ -5709,6 +5798,7 @@ let validate_configuration ?(warn_unused = true)
   functions ~warn_unused ctx fields;
   exports ctx fields;
   start ctx fields;
+  if warn_unused then lint_confusable ctx fields;
   unused_fields ctx
 
 (* Path-sensitive validation of conditional annotations.

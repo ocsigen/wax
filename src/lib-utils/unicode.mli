@@ -56,3 +56,10 @@ val has_hex_escape : string -> bool
 val char_width : int -> Uchar.t -> int
 (** [char_width pos u] returns the display width of the Unicode character [u],
     accounting for tabs assuming starting position [pos]. *)
+
+val first_confusable : string -> Uchar.t option
+(** [first_confusable s] is the first "confusing" bidirectional control
+    character in [s], if any — the Unicode text-direction overrides and isolates
+    of the "Trojan Source" class (U+202A/B/D/E, U+2066/7/8, U+206C, U+2069),
+    which can make displayed text read differently from its bytes. The set
+    matches what [wasm-tools] rejects in string literals. *)

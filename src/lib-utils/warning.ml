@@ -20,6 +20,7 @@ type t =
   | Compound_assignment
   | Field_punning
   | Redundant_annotation
+  | Confusable_unicode
 
 let all =
   [
@@ -44,6 +45,7 @@ let all =
     Compound_assignment;
     Field_punning;
     Redundant_annotation;
+    Confusable_unicode;
   ]
 
 let name = function
@@ -68,6 +70,7 @@ let name = function
   | Compound_assignment -> "compound-assignment"
   | Field_punning -> "field-punning"
   | Redundant_annotation -> "redundant-annotation"
+  | Confusable_unicode -> "confusable-unicode"
 
 let description = function
   | Unused_local -> "A local that is declared but never read."
@@ -117,6 +120,9 @@ let description = function
       "A struct field 'x: x' could use the punning shorthand 'x'."
   | Redundant_annotation ->
       "A 'let' type annotation the inferred type already makes redundant."
+  | Confusable_unicode ->
+      "A string contains a bidirectional control character that can make the \
+       source read differently than it runs (a \"Trojan Source\" character)."
 
 (* Whether the warning flags code that can be removed with no change in
    behaviour: an unused binding, import, or label, or an unreachable statement.
@@ -130,7 +136,7 @@ let is_unnecessary = function
   | Constant_condition | Unused_result | Cast_always_fails | Eager_select
   | Precedence | Redundant_operation | Truncated_coverage | Naming_conflict
   | Reserved_word_rename | Generated_name | Compound_assignment | Field_punning
-  | Redundant_annotation ->
+  | Redundant_annotation | Confusable_unicode ->
       false
 
 (* Group name -> members. The special group "all" is handled separately by
@@ -152,6 +158,7 @@ let group_table =
         Unused_field;
         Unused_import;
         Unused_label;
+        Confusable_unicode;
       ] );
     ("redundant", [ Redundant_operation ]);
     ("naming", [ Naming_conflict; Reserved_word_rename; Generated_name ]);
@@ -178,7 +185,7 @@ let default_policy = function
   | Unused_local | Unused_field | Unused_import | Unused_label | Shift_overflow
   | Constant_trap | Tautological_comparison | Constant_condition | Unused_result
   | Dead_code | Cast_always_fails | Eager_select | Precedence
-  | Truncated_coverage ->
+  | Truncated_coverage | Confusable_unicode ->
       Displayed
 
 let resolve (policy : policy) w = policy w

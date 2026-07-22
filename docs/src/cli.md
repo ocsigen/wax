@@ -164,6 +164,12 @@ server](#language-server)).
           generated code); enable with `-W redundant=warning`.
         - `truncated-coverage`: path-sensitive validation gave up after too
           many conditional configurations. Shown by default.
+        - `confusable-unicode` (group `correctness`): a string the module
+          carries — an export/import name, a string literal, a data segment, or
+          a conditional string — contains a "Trojan Source" bidirectional
+          control character (U+202A/B/D/E, U+2066–2069, U+206C) that can make the
+          displayed source read differently than it runs. Shown by default,
+          reported on Wax, WAT and Wasm input alike.
         - `naming-conflict` (group `naming`): converting from Wasm, a source
           name collided with another and was renamed (e.g. `foo` → `foo_2`).
           Hidden by default.

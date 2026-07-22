@@ -80,6 +80,10 @@ type t =
       (** A [let] type annotation the inferred type already makes redundant
           could be dropped: [let x: t = e] reads back as [let x = e]
           ([Suggestion]). *)
+  | Confusable_unicode
+      (** A string (an export/import name, a string literal, or a data segment)
+          contains a bidirectional control character that can make the source
+          read differently than it runs (a "Trojan Source" character). *)
 
 val all : t list
 (** Every named warning. *)

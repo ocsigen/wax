@@ -117,6 +117,19 @@ module Error = struct
              type."
           else "This cast always traps: the value can never have this type."))
 
+  (* A "Trojan Source" bidirectional control character in a string (an
+     export/import name, a string literal, a data segment, a feature or
+     conditional string) that can make the source read differently than it
+     runs. *)
+  let confusable_unicode context ~location u =
+    warn ~warning:Wax_utils.Warning.Confusable_unicode ~universal:true context
+      ~location
+      (text
+         (Printf.sprintf
+            "This string contains a bidirectional control character (U+%04X) \
+             that can make the displayed text read differently than it runs."
+            (Uchar.to_int u)))
+
   (* A cast/test whose operand already has the target type. A redundant cast (not
      a test, whose value cannot be dropped safely) carries an [edit] that removes
      it, so the editor can offer a quick fix. *)
@@ -11606,8 +11619,100 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
       fields
   end
 
+(* Report a "Trojan Source" bidirectional control character in any string the
+   module carries — an export/import name or feature (in an attribute), a string
+   literal, a data segment, or a conditional string. Purely syntactic; runs
+   whenever the module is type-checked, shown or hidden by the warning policy. *)
+let lint_confusable diagnostics fields =
+  let check_str ~location s =
+    match Wax_utils.Unicode.first_confusable s with
+    | Some u -> Error.confusable_unicode diagnostics ~location u
+    | None -> ()
+  in
+  let check (s : (string, location) annotated) =
+    check_str ~location:s.info s.desc
+  in
+  let rec check_cond (c : Wax_wasm.Ast.cond) =
+    match c with
+    | Cond_string s -> check s
+    | Cond_var _ | Cond_version _ -> ()
+    | Cond_and l | Cond_or l -> List.iter check_cond l
+    | Cond_not c -> check_cond c
+    | Cond_cmp (_, a, b) ->
+        check_cond a;
+        check_cond b
+  in
+  let check_instr (i : _ instr) =
+    match i.desc with
+    | String (_, s) -> check_str ~location:i.info s
+    | If_annotation { cond; _ } -> check_cond cond
+    | _ -> ()
+  in
+  let check_body instrs = List.iter (Ast_utils.iter_instr check_instr) instrs in
+  let check_attrs (attrs : attributes) =
+    List.iter
+      (fun (_, value, guard) ->
+        Option.iter (Ast_utils.iter_instr check_instr) value;
+        Option.iter
+          (fun (g : (Wax_wasm.Ast.cond, location) annotated) ->
+            check_cond g.desc)
+          guard)
+      attrs
+  in
+  let check_data ~location init =
+    List.iter
+      (function
+        | Data_string s -> check_str ~location s
+        | Data_run (_, l) -> List.iter check l
+        | Data_v128 _ -> ())
+      init
+  in
+  let rec walk fields =
+    List.iter
+      (fun (field : (_ modulefield, location) annotated) ->
+        let location = field.info in
+        match field.desc with
+        | Type _ -> ()
+        | Func { body = _, instrs; attributes; _ } ->
+            check_attrs attributes;
+            check_body instrs
+        | Global { def; attributes; _ } ->
+            check_attrs attributes;
+            check_body [ def ]
+        | Tag { attributes; _ } -> check_attrs attributes
+        | Memory { data; attributes; _ } ->
+            check_attrs attributes;
+            List.iter (fun (m : _ memdata) -> check_data ~location m.init) data
+        | Data { init; attributes; _ } ->
+            check_attrs attributes;
+            check_data ~location init
+        | Table { init; attributes; _ } ->
+            check_attrs attributes;
+            Option.iter (fun i -> check_body [ i ]) init
+        | Elem { init; attributes; _ } ->
+            check_attrs attributes;
+            check_body init
+        | Import { module_; decl } ->
+            check module_;
+            check_attrs decl.desc.attributes
+        | Import_group { module_; decls } ->
+            check module_;
+            List.iter
+              (fun (d : (import_decl, _) annotated) ->
+                check_attrs d.desc.attributes)
+              decls
+        | Module_annotation attrs -> check_attrs attrs
+        | Conditional { cond; then_fields; else_fields } ->
+            check_cond cond;
+            walk then_fields.desc;
+            Option.iter (fun f -> walk f.desc) else_fields)
+      fields
+  in
+  walk fields
+
 let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
+  if warn_unused then lint_confusable diagnostics fields;
   let types, typed =
     f_infer ~simplify ~warn_unused ~suggest ~features diagnostics fields
   in
@@ -11617,6 +11722,7 @@ let check ?(warn_unused = false) ?(suggest = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   apply_declared_features diagnostics features fields;
+  if warn_unused then lint_confusable diagnostics fields;
   let has_conditional = List.exists field_has_conditional fields in
   if has_conditional then check_let_bindings diagnostics fields;
   if not has_conditional then
