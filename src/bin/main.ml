@@ -854,6 +854,33 @@ let check format_opt strict color warnings features debug error_format defines
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 128
 
+let link output_file source_map_file inputs =
+  let inputs =
+    List.map
+      (fun (module_name, file) ->
+        let opt_source_map =
+          let map_file = file ^ ".map" in
+          if Sys.file_exists map_file then
+            try Some (Wax_linker.Js_source_map.Standard.of_file map_file)
+            with _ -> None
+          else None
+        in
+        { Wax_linker.Wasm_link.module_name; file; code = None; opt_source_map })
+      inputs
+  in
+  match
+    try Ok (Wax_linker.Wasm_link.f inputs ~output_file) with
+    | Wax_utils.Diagnostic.Aborted -> exit 128
+    | exn -> Error (Printexc.to_string exn)
+  with
+  | Ok map ->
+      Option.iter
+        (fun map_file -> Wax_linker.Js_source_map.to_file map map_file)
+        source_map_file
+  | Error msg ->
+      Printf.eprintf "Link error: %s\n" msg;
+      exit 128
+
 (*** Command-line interface ***)
 
 (* Shell-completion helpers (cmdliner drives completion through [Cmd.eval]; a
@@ -1015,6 +1042,30 @@ let source_map_option =
      sourceMappingURL custom section."
   in
   Arg.(value & flag & info [ "source-map" ] ~doc)
+
+let source_map_file_option =
+  let doc = "Generate a source map file." in
+  Arg.(
+    value
+    & opt (some file_conv) None
+    & info [ "source-map-file" ] ~docv:"FILE" ~doc)
+
+(* Define link inputs: list of NAME:FILE pairs *)
+let link_inputs =
+  let doc =
+    "Specify an input module with name $(i,NAME) and Wasm binary file \
+     $(i,FILE) as $(i,NAME:FILE)."
+  in
+  Arg.(
+    non_empty
+    & pos_all (pair ~sep:':' string string) []
+    & info [] ~docv:"NAME:FILE" ~doc)
+
+(* Define link output option *)
+let link_output_file =
+  let doc = "Specify the Wasm binary output file." in
+  Arg.(
+    required & opt (some string) None & info [ "o"; "output" ] ~docv:"FILE" ~doc)
 
 (* Define the --define/-D option (set conditional-compilation variables) *)
 let define_option =
@@ -1389,6 +1440,32 @@ let lsp_cmd =
   in
   Cmd.v (Cmd.info "lsp" ~doc ~man ~exits ~envs:[ warn_env_info ]) lsp_term
 
+let link_term =
+  let+ output = link_output_file
+  and+ source_map_file = source_map_file_option
+  and+ inputs = link_inputs in
+  link output source_map_file inputs
+
+let link_cmd =
+  let doc = "Link WebAssembly binary modules together" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Link a list of input WebAssembly binary files (.wasm) together into a \
+         single output Wasm binary module.";
+      `P
+        "Each input module must be specified as $(b,NAME:FILE) where $(b,NAME) \
+         is the module's name (corresponding to its import namespace) and \
+         $(b,FILE) is the path to the input Wasm binary file.";
+      `S Manpage.s_examples;
+      `P "Link standard library and main module:";
+      `Pre "  $(mname) $(tname) -o linked.wasm main:main.wasm std:std.wasm";
+      `S Manpage.s_options;
+    ]
+  in
+  Cmd.v (Cmd.info "link" ~doc ~man ~exits) link_term
+
 let convert_cmd =
   let doc = "Convert between WebAssembly formats (the default command)" in
   Cmd.v (Cmd.info "convert" ~doc ~exits ~envs:[ warn_env_info ]) convert_term
@@ -1437,7 +1514,7 @@ let main_cmd =
   Cmd.group
     (Cmd.info "wax" ~version ~doc ~man ~exits ~envs:[ warn_env_info ])
     ~default:convert_term
-    [ convert_cmd; format_cmd; check_cmd; lsp_cmd ]
+    [ convert_cmd; format_cmd; check_cmd; lsp_cmd; link_cmd ]
 
 (* cmdliner reads the first token as a subcommand name and, even with a default
    command, errors on an unrecognised one rather than falling through. So that

@@ -8,6 +8,7 @@
   wax_lang
   wax_conversion
   wax_lsp
+  wax_linker
   cmdliner
   unix
   dune-build-info))

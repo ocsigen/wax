@@ -1383,6 +1383,46 @@ let output_branch_hint_section out_channel
         b func_hints)
     ()
 
+let type_section out_channel types =
+  output_section out_channel 1 (Encoder.vec Encoder.rectype) types
+
+let import_section out_channel imports =
+  output_import_section
+    ~features:(Wax_utils.Feature.default ())
+    ~coalesce_imports:false out_channel imports
+
+let function_section out_channel functions =
+  output_section out_channel 3 (Encoder.vec Encoder.sint) functions
+
+let memory_section out_channel memories =
+  output_section out_channel 5 (Encoder.vec Encoder.limits) memories
+
+let tag_section out_channel tags =
+  output_section out_channel 13
+    (Encoder.vec (fun b tag ->
+         Encoder.byte b 0;
+         Encoder.uint b tag))
+    tags
+
+let export_section out_channel exports =
+  output_section out_channel 7
+    (Encoder.vec (fun b (e : export) ->
+         Encoder.name b e.name;
+         (match e.kind with
+         | Func -> Encoder.byte b 0x00
+         | Table -> Encoder.byte b 0x01
+         | Memory -> Encoder.byte b 0x02
+         | Global -> Encoder.byte b 0x03
+         | Tag -> Encoder.byte b 0x04);
+         Encoder.sint b e.index))
+    exports
+
+let start_section out_channel start =
+  output_section out_channel 8 Encoder.sint start
+
+let datacount_section out_channel count =
+  output_section out_channel 12 Encoder.uint count
+
 (*** The module writer ***)
 
 let module_ ~out_channel ?output_file ?(source_map = false)
@@ -1404,9 +1444,6 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   (* Advance the position past a just-written section whose content was [len]
      bytes (id byte + LEB128 length prefix + content). *)
   let bump len = file_pos := !file_pos + 1 + leb_size len + len in
-  let section id encoder data =
-    bump (output_section out_channel id encoder data)
-  in
   (* A section carrying source-mapped code / const-exprs. Its mappings were
      recorded relative to the section content buffer, so once the section is
      written — and its absolute content start is known — rebase them to the file
@@ -1421,7 +1458,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   in
 
   (* 1. Type Section *)
-  if m.types <> [] then section 1 (Encoder.vec Encoder.rectype) m.types;
+  if m.types <> [] then bump (type_section out_channel m.types);
 
   (* 2. Import Section *)
   if m.imports <> [] then
@@ -1429,7 +1466,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       (output_import_section ~features ~coalesce_imports out_channel m.imports);
 
   (* 3. Function Section *)
-  if m.functions <> [] then section 3 (Encoder.vec Encoder.sint) m.functions;
+  if m.functions <> [] then bump (function_section out_channel m.functions);
 
   (* 4. Table Section *)
   if m.tables <> [] then
@@ -1445,15 +1482,10 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       m.tables;
 
   (* 5. Memory Section *)
-  if m.memories <> [] then section 5 (Encoder.vec Encoder.limits) m.memories;
+  if m.memories <> [] then bump (memory_section out_channel m.memories);
 
   (* 6. Tag Section *)
-  if m.tags <> [] then
-    section 13
-      (Encoder.vec (fun b i ->
-           Encoder.byte b 0x00;
-           Encoder.sint b i))
-      m.tags;
+  if m.tags <> [] then bump (tag_section out_channel m.tags);
 
   (* 7. Global Section *)
   if m.globals <> [] then
@@ -1464,22 +1496,11 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       m.globals;
 
   (* 8. Export Section *)
-  if m.exports <> [] then
-    section 7
-      (Encoder.vec (fun b (e : export) ->
-           Encoder.name b e.name;
-           (match e.kind with
-           | Func -> Encoder.byte b 0x00
-           | Table -> Encoder.byte b 0x01
-           | Memory -> Encoder.byte b 0x02
-           | Global -> Encoder.byte b 0x03
-           | Tag -> Encoder.byte b 0x04);
-           Encoder.sint b e.index))
-      m.exports;
+  if m.exports <> [] then bump (export_section out_channel m.exports);
 
   (* 9. Start Section *)
   (match m.start with
-  | Some i -> section 8 Encoder.sint i
+  | Some i -> bump (start_section out_channel i)
   | None -> ());
 
   (* 10. Element Section *)
@@ -1548,7 +1569,8 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       m.elem;
 
   (* 12. Data Count Section *)
-  if m.data <> [] then section 12 Encoder.uint (List.length m.data);
+  if m.data <> [] then
+    bump (datacount_section out_channel (List.length m.data));
 
   (* 11. Code Section *)
   (* Branch-hinting proposal: collect each function's hints while encoding its

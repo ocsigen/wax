@@ -51,7 +51,8 @@ let check_header ch =
   then error ~pos:0 ch "magic header not detected"
   else if ch.limit < 8 then error ~pos:4 ch "unexpected end"
   else if not (String.equal (String.sub ch.buf 4 4) (String.sub header 4 4))
-  then error ~pos:4 ch "unknown binary version"
+  then error ~pos:4 ch "unknown binary version";
+  ch.pos <- 8
 
 let pos_in ch = ch.pos
 let seek_in ch pos = ch.pos <- pos
@@ -207,6 +208,64 @@ let next_section ch =
 let skip_section (ch : ch) { pos; size; _ } =
   if ch.pos > pos + size then error ch "section size mismatch";
   seek_in ch (pos + size)
+
+module IntHashtbl = Hashtbl.Make (struct
+  type t = int
+
+  let equal (x : int) y = x = y
+  let hash (x : int) = x
+end)
+
+module StringHashtbl = Hashtbl.Make (struct
+  type t = string
+
+  let equal = String.equal
+  let hash = Hashtbl.hash
+end)
+
+type index = {
+  sections : section IntHashtbl.t;
+  custom_sections : section StringHashtbl.t;
+}
+
+let index ch =
+  let index =
+    {
+      sections = IntHashtbl.create 16;
+      custom_sections = StringHashtbl.create 16;
+    }
+  in
+  let rec loop () =
+    match next_section ch with
+    | None -> index
+    | Some sect ->
+        if sect.id = 0 then
+          StringHashtbl.add index.custom_sections (name ch) sect
+        else IntHashtbl.add index.sections sect.id sect;
+        skip_section ch sect;
+        loop ()
+  in
+  loop ()
+
+let find_section ch index n =
+  match IntHashtbl.find index.sections n with
+  | { pos; _ } ->
+      seek_in ch pos;
+      true
+  | exception Not_found -> false
+
+let get_custom_section index name =
+  StringHashtbl.find_opt index.custom_sections name
+
+let focus_on_custom_section ch idx name_str =
+  let pos, limit =
+    match get_custom_section idx name_str with
+    | Some { pos; size; _ } -> (pos, pos + size)
+    | None -> (0, 0)
+  in
+  let ch' = { ch with pos; limit } in
+  if limit > 0 then ignore (name ch');
+  (ch', index ch')
 
 (*** Type and entity decoding ***)
 
@@ -469,6 +528,9 @@ let export ch =
   let idx = uint ch in
   let kind = exportable_kind d in
   { name = export_name; kind; index = idx }
+
+let import_section ch = List.concat (Array.to_list (vec import_entry ch))
+let export_section ch = vec export ch
 
 let memarg ch =
   (* Binary order is align, then (when align's bit 6 is set) the explicit memory
@@ -1503,6 +1565,12 @@ let tag ch =
   if b <> 0 then error ch "malformed tag attribute";
   typeidx ch
 
+let function_section ch = vec typeidx ch
+let memory_section ch = vec memtype ch
+let tag_section ch = vec tag ch
+let start_section ch = uint ch
+let datacount_section ch = uint ch
+
 let empty_names =
   {
     module_ = None;
@@ -1536,6 +1604,7 @@ let name_assoc ch =
   let i = uint ch in
   (i, name ch)
 
+let namemap ch = vec name_assoc ch
 let name_map ch = name_map' name_assoc ch
 
 let indirect_name_map ch =
@@ -1622,6 +1691,26 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
             let start_pos = List.nth code_starts ci in
             { c with instrs = List.map (go start_pos tbl) c.instrs })
       code
+
+let branch_hint_section ch =
+  vec
+    (fun ch ->
+      let funcidx = uint ch in
+      let hints =
+        vec
+          (fun ch ->
+            let offset = uint ch in
+            let len = uint ch in
+            if len = 0 then error ch "empty branch hint";
+            let v = input_byte ch <> 0 in
+            for _ = 2 to len do
+              ignore (input_byte ch)
+            done;
+            (offset, v))
+          ch
+      in
+      (funcidx, Array.to_list hints))
+    ch
 
 (*** The module reader ***)
 
@@ -1810,29 +1899,7 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
                     error ch
                       "metadata.code.branch_hint must appear before the code \
                        section";
-                  let entries =
-                    vec
-                      (fun ch ->
-                        let funcidx = uint ch in
-                        let hints =
-                          vec
-                            (fun ch ->
-                              let offset = uint ch in
-                              let len = uint ch in
-                              (* The payload is [len] bytes (always 1 in practice:
-                                 a single 0x00/0x01 hint byte); read them all and
-                                 take the first as the hint value. *)
-                              if len = 0 then error ch "empty branch hint";
-                              let v = input_byte ch <> 0 in
-                              for _ = 2 to len do
-                                ignore (input_byte ch)
-                              done;
-                              (offset, v))
-                            ch
-                        in
-                        (funcidx, Array.to_list hints))
-                      ch
-                  in
+                  let entries = branch_hint_section ch in
                   branch_hint_sections :=
                     !branch_hint_sections @ Array.to_list entries;
                   m
@@ -1888,4 +1955,15 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
     code =
       attach_branch_hints ~num_func_imports ~code_starts:!code_body_starts
         ~sections:!branch_hint_sections res.code;
+  }
+
+let make_ch diagnostics ?filename buf pos =
+  {
+    filename;
+    buf;
+    pos;
+    limit = String.length buf;
+    has_data_count = false;
+    diagnostics;
+    features = Wax_utils.Feature.default ();
   }

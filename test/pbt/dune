@@ -1,0 +1,8 @@
+(executable
+ (name test_source_map)
+ (libraries qcheck wax-lib.linker))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./test_source_map.exe)))

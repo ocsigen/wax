@@ -1,3 +1,9 @@
+module Encoder : sig
+  val uint : Buffer.t -> int -> unit
+  val name : Buffer.t -> string -> unit
+  val vec' : (Buffer.t -> 'a -> unit) -> Buffer.t -> 'a array -> unit
+end
+
 val module_ :
   out_channel:out_channel ->
   ?output_file:string ->
@@ -15,3 +21,19 @@ val module_ :
     compact-import-section is enabled; it is the binary-input compressor path
     (default [false]), off for text inputs whose import layout comes from their
     own group syntax. *)
+
+(** Each [*_section] writer returns the number of content bytes written (as
+    [output_section] does), so callers that track the running file position can
+    account for it; [Wasm_link] uses them purely for their effect. *)
+
+val type_section : out_channel -> Ast.Binary.rectype list -> int
+val import_section : out_channel -> Ast.Binary.import list -> int
+val function_section : out_channel -> int list -> int
+val memory_section : out_channel -> Ast.Binary.limits list -> int
+val tag_section : out_channel -> int list -> int
+val export_section : out_channel -> Ast.Binary.export list -> int
+val start_section : out_channel -> int -> int
+val datacount_section : out_channel -> int -> int
+
+val output_branch_hint_section :
+  out_channel -> (int * (int * bool) list) list -> int

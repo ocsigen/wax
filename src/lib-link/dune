@@ -1,0 +1,4 @@
+(library
+ (name wax_linker)
+ (public_name wax-lib.linker)
+ (libraries wax_wasm wax_utils yojson base64 unix))
