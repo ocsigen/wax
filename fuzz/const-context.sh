@@ -111,18 +111,81 @@ CASES=(
   '|i32|(i32.eqz (i32.const 0))'
 )
 
-# A random nested const expression, so the arms are also exercised composed (the
-# depth a flat case list misses). Seed-derived so a run replays.
-rand_const() {
-  local seed="$1" pick=$(( seed % 6 ))
-  case "$pick" in
-    0) echo '|(ref extern)|(extern.convert_any (any.convert_extern (extern.convert_any (ref.i31 (i32.const '"$((seed % 9))"')))))' ;;
-    1) echo '|(ref $a)|(array.new_default $a (i32.mul (i32.const '"$((seed % 5 + 1))"') (global.get $g32)))' ;;
-    2) echo '|(ref $s)|(struct.new $s (i32.sub (i32.const '"$((seed % 7))"') (global.get $g32)))' ;;
-    3) echo '|(ref i31)|(ref.i31 (i32.add (i32.mul (i32.const 2) (global.get $g32)) (i32.const '"$((seed % 4))"')))' ;;
-    4) echo '|(ref any)|(any.convert_extern (extern.convert_any (struct.new_default $s)))' ;;
-    5) echo '|(ref $a)|(array.new_fixed $a 3 (global.get $g32) (i32.const '"$((seed % 6))"') (i32.sub (global.get $g32) (i32.const 1)))' ;;
+# A recursive, type-directed generator of a CONSTANT expression of a given type,
+# so the checker arms are exercised deeply composed (the nesting a flat case list
+# misses). Every producer is itself constant, so the whole expression is a valid
+# const — any rejection is a checker over-rejecting. Seed-derived (masked to stay
+# positive across bash's wrapping multiply) so a run replays. [d] is the depth
+# budget; a leaf is emitted at 0.
+derive() { echo $(( (seed * 1103515245 + $1) & 0x7fffffff )); }
+gen() {
+  local t="$1" d="$2" seed="$3" r=$(( seed % 100 )) a b
+  a=$(derive 12345); b=$(derive 54321)
+  if [ "$d" -le 0 ]; then
+    case "$t" in
+      i32) echo "(i32.const $((seed % 17)))" ;;
+      i64) echo "(i64.const $((seed % 17)))" ;;
+      f32) echo "(f32.const $((seed % 9)).5)" ;;
+      f64) echo "(f64.const $((seed % 9)).5)" ;;
+      extern) [ $((r % 2)) = 0 ] && echo '(ref.null extern)' || echo '(global.get $gext)' ;;
+      any) echo '(ref.null any)' ;;
+      i31) echo "(ref.i31 (i32.const $((seed % 5))))" ;;
+      func) echo '(ref.func $f)' ;;
+      struct) echo '(struct.new_default $s)' ;;
+      array) echo "(array.new_default \$a (i32.const $((seed % 4))))" ;;
+      cont) echo '(cont.new $ct (ref.func $f))' ;;
+    esac
+    return
+  fi
+  case "$t" in
+    i32) case $((r % 4)) in
+      0) echo "(i32.const $((seed % 17)))" ;;
+      1) echo "(i32.add $(gen i32 $((d-1)) "$a") $(gen i32 $((d-1)) "$b"))" ;;
+      2) echo "(i32.sub $(gen i32 $((d-1)) "$a") $(gen i32 $((d-1)) "$b"))" ;;
+      3) echo '(global.get $g32)' ;; esac ;;
+    i64) case $((r % 4)) in
+      0) echo "(i64.const $((seed % 17)))" ;;
+      1) echo "(i64.add $(gen i64 $((d-1)) "$a") $(gen i64 $((d-1)) "$b"))" ;;
+      2) echo "(i64.mul $(gen i64 $((d-1)) "$a") $(gen i64 $((d-1)) "$b"))" ;;
+      3) echo '(global.get $g64)' ;; esac ;;
+    f32) echo "(f32.const $((seed % 9)).5)" ;;
+    f64) echo "(f64.const $((seed % 9)).5)" ;;
+    extern) case $((r % 3)) in
+      0) echo '(ref.null extern)' ;;
+      1) echo "(extern.convert_any $(gen any $((d-1)) "$a"))" ;;
+      2) echo '(global.get $gext)' ;; esac ;;
+    any) case $((r % 4)) in
+      0) echo "(any.convert_extern $(gen extern $((d-1)) "$a"))" ;;
+      1) echo "(ref.i31 $(gen i32 $((d-1)) "$a"))" ;;
+      2) gen struct $((d-1)) "$a" ;;
+      3) gen array $((d-1)) "$a" ;; esac ;;
+    i31) echo "(ref.i31 $(gen i32 $((d-1)) "$a"))" ;;
+    func) [ $((r % 2)) = 0 ] && echo '(ref.func $f)' || echo '(ref.null func)' ;;
+    struct) case $((r % 2)) in
+      0) echo "(struct.new \$s $(gen i32 $((d-1)) "$a"))" ;;
+      1) echo '(struct.new_default $s)' ;; esac ;;
+    array) case $((r % 3)) in
+      0) echo "(array.new \$a $(gen i32 $((d-1)) "$a") $(gen i32 $((d-1)) "$b"))" ;;
+      1) echo "(array.new_default \$a $(gen i32 $((d-1)) "$a"))" ;;
+      2) echo "(array.new_fixed \$a 2 $(gen i32 $((d-1)) "$a") $(gen i32 $((d-1)) "$b"))" ;; esac ;;
+    cont) echo '(cont.new $ct (ref.func $f))' ;;
   esac
+}
+
+# Pick a result type, generate a const expression of it at depth 1-4, and wrap it
+# in a matching (nullable, so a non-null producer still fits) global type.
+rand_const() {
+  local seed="$1"
+  local types=(i32 i64 f32 f64 extern any i31 func struct array cont)
+  local t="${types[$(( seed % ${#types[@]} ))]}" gt
+  case "$t" in
+    i32) gt=i32 ;; i64) gt=i64 ;; f32) gt=f32 ;; f64) gt=f64 ;;
+    extern) gt='(ref null extern)' ;; any) gt='(ref null any)' ;;
+    i31) gt='(ref null i31)' ;; func) gt='(ref null func)' ;;
+    struct) gt='(ref null $s)' ;; array) gt='(ref null $a)' ;;
+    cont) gt='(ref null $ct)' ;;
+  esac
+  echo "|$gt|$(gen "$t" "$(( seed % 4 + 1 ))" "$seed")"
 }
 
 # Worker: emit case [spec] as module [n], run the oracle, keep any finding.
