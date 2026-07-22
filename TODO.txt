@@ -1,8 +1,0 @@
-
-- support for string imports
-- names in result type (symmetry with params) ?
-
-Maybe
-=====
-
-- allow comma/semicolon at end of block
