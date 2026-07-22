@@ -4948,9 +4948,10 @@ let lint_body ctx instrs =
         Wax_utils.Message.(
           (text "This operation always yields" ++ int64 v) ^^ text ".")
     in
-    (* [st] is [right :: left :: _]. The redundant-operation cases require both
-       operands to be tracked (so the whole expression is effect-free): a
-       constant on one side plus a second entry ([_ :: _]) for the other. *)
+    (* [st] is [right :: left :: _]. The absorbing and identical-operand cases
+       require both operands tracked (so the whole expression is effect-free): a
+       constant on one side plus a second entry ([_ :: _]) for the other. The
+       no-effect identity cases do not — see their note below. *)
     match (o, st) with
     | (Shl | Shr _), LInt n :: _
       when Int64.unsigned_compare n (Int64.of_int width) >= 0 ->
@@ -4967,13 +4968,20 @@ let lint_body ctx instrs =
        float ones are a different opcode), so there is no NaN caveat. *)
     | (Eq | Le _ | Ge _), a :: b :: _ when same_read a b -> taut true
     | (Ne | Lt _ | Gt _), a :: b :: _ when same_read a b -> taut false
-    (* Arithmetic identities: the result is the other operand unchanged. *)
-    | Add, (LInt 0L :: _ :: _ | _ :: LInt 0L :: _) -> no_effect () (* x + 0 *)
-    | (Sub | Shl | Shr _ | Rotl | Rotr), LInt 0L :: _ :: _ ->
+    (* Arithmetic identities: the result is the other operand unchanged. Unlike
+       the absorbing cases below, the *identity* constant makes the operation a
+       no-op whatever the other operand is — traps and effects of that operand
+       are preserved either way — so an identity on the top of the stack fires
+       even when the other operand is not tracked (an impure producer, e.g. a
+       call, that cleared the stack). This matches the Wax linter, which reports
+       these structurally. A left-identity ([0 + x]) still needs the top (its
+       [x]) tracked to be seen at all. *)
+    | Add, (LInt 0L :: _ | _ :: LInt 0L :: _) -> no_effect () (* x + 0 *)
+    | (Sub | Shl | Shr _ | Rotl | Rotr), LInt 0L :: _ ->
         no_effect () (* x - 0, x << 0, … *)
-    | Mul, (LInt 1L :: _ :: _ | _ :: LInt 1L :: _) -> no_effect () (* x * 1 *)
-    | Div _, LInt 1L :: _ :: _ -> no_effect () (* x / 1 *)
-    | (Or | Xor), (LInt 0L :: _ :: _ | _ :: LInt 0L :: _) ->
+    | Mul, (LInt 1L :: _ | _ :: LInt 1L :: _) -> no_effect () (* x * 1 *)
+    | Div _, LInt 1L :: _ -> no_effect () (* x / 1 *)
+    | (Or | Xor), (LInt 0L :: _ | _ :: LInt 0L :: _) ->
         no_effect () (* x | 0, x ^ 0 *)
     | (And | Or), a :: b :: _ when same_read a b ->
         no_effect () (* x & x, x | x *)
