@@ -579,11 +579,24 @@ if [ -n "$waxf" ] && [ -n "$watf" ]; then
   cwax="$(lint_codes "$waxf" "$excl")"
   cwat="$(lint_codes "$watf" "$excl")"
   if [ "$cwax" != "$cwat" ]; then
-    only_wax="$(comm -23 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat") | paste -sd, -)"
-    only_wat="$(comm -13 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat") | paste -sd, -)"
-    finding LINT_PARITY REVIEW "$IN" \
-      "lint sets differ between the wax and wat form (wax-only: ${only_wax:-none}; wat-only: ${only_wat:-none})" \
-      "wax check -W all=warning $waxf; wax check -W all=warning $watf"
+    only_wax="$(comm -23 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat"))"
+    only_wat="$(comm -13 <(printf '%s\n' "$cwax") <(printf '%s\n' "$cwat"))"
+    # redundant-operation is a wax-side superset: the Wax typer reports every
+    # arithmetic identity/absorbing operation structurally, whereas the
+    # validator's stack-based lint cannot see one whose other operand is impure
+    # (a call etc. clears its purity stack — and for an absorbing op the
+    # "always N" result would then be unsound anyway). So a WAX-ONLY
+    # redundant-operation is the expected one-sided asymmetry and is dropped; a
+    # WAT-ONLY one (the validator firing what the typer does not) would be a real
+    # bug and is kept.
+    only_wax="$(printf '%s\n' "$only_wax" | grep -vxE 'redundant-operation' || true)"
+    if [ -n "$only_wax" ] || [ -n "$only_wat" ]; then
+      dw="$(printf '%s' "$only_wax" | paste -sd, -)"
+      dt="$(printf '%s' "$only_wat" | paste -sd, -)"
+      finding LINT_PARITY REVIEW "$IN" \
+        "lint sets differ between the wax and wat form (wax-only: ${dw:-none}; wat-only: ${dt:-none})" \
+        "wax check -W all=warning $waxf; wax check -W all=warning $watf"
+    fi
   fi
 fi
 
