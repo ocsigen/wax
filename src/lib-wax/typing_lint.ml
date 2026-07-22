@@ -672,8 +672,11 @@ let lint_comparison ctx op l r =
    two identical operands), or whose result is a constant regardless of the
    variable operand (an absorbing operand). Off by default. *)
 let lint_redundant ctx op l r =
-  let is0 = int_literal_value_is 0L in
-  let is1 = int_literal_value_is 1L in
+  (* Look through a leading sign so a signed identity literal — [x + -0],
+     [x * +1] — is recognised, as the Wasm validator does (it sees the folded
+     [iNN.const]; [-0] is [UnOp (Neg, Int 0)], not a bare [Int], on this side). *)
+  let is0 e = int_operand_value e = Some 0L in
+  let is1 e = int_operand_value e = Some 1L in
   let is_int e =
     match expression_type_opt e with
     | Some c -> (
