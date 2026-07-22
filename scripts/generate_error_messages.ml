@@ -659,6 +659,10 @@ type message_stat = {
           soundness/jargon self-lints, which cannot parse free prose — see the
           override-merge site in [generate_message] for the claim-soundness
           responsibility note. *)
+  fallback_symbols : string list;
+      (** The readable expected list of a not-overridden generic-fallback entry
+          (empty, or over the ≤5 cap) — what [-list-fallbacks] shows an override
+          author as candidates; [] for any other entry. *)
 }
 
 (* Would [token] plausibly open the construct [closer] terminates? Broader than
@@ -1044,6 +1048,10 @@ let generate_message grammar terminals ~comments ~overrides entry =
       jargon;
       claims = (if emitted then expected_raw else []);
       overridden;
+      fallback_symbols =
+        (if (not overridden) && (n_expected = 0 || n_expected > 5) then
+           expected_symbols
+         else []);
     }
   in
   (* [full_message] is returned separately for the census (step 7), which counts
@@ -1315,6 +1323,33 @@ let output_census bodies =
           Printf.printf "%5dx %s\n" count first;
           List.iter (fun l -> Printf.printf "       %s\n" l) rest)
 
+(* Print a ready-to-paste [.overrides] template block for every generic-fallback
+   entry that is not yet overridden — the "Syntax error" states: the state's
+   auto-generated ## comments (valid comment lines in the overrides format), the
+   over-cap candidate list, the sentence key, and a placeholder message. Empty
+   output means every fallback state is covered, the condition the stats
+   ratchet pins at zero. *)
+let output_fallbacks results =
+  let header e =
+    e.Parse_messages.entry_point ^ ": " ^ e.Parse_messages.sentence
+  in
+  let fallbacks =
+    results
+    |> List.filter (fun (_, stat) ->
+        stat.empty_expected || stat.overflow_expected)
+    |> List.sort (fun (e1, _) (e2, _) -> String.compare (header e1) (header e2))
+  in
+  Printf.eprintf "%d fallback state(s) without an override\n"
+    (List.length fallbacks);
+  List.iter
+    (fun (entry, stat) ->
+      List.iter print_endline entry.Parse_messages.original_comments;
+      Printf.printf "# Candidates (%d): %s\n"
+        (List.length stat.fallback_symbols)
+        (String.concat ", " stat.fallback_symbols);
+      Printf.printf "%s\n<YOUR SYNTAX ERROR MESSAGE HERE>\n\n" (header entry))
+    fallbacks
+
 (* --- Main Entry Point --- *)
 
 let main () =
@@ -1323,6 +1358,7 @@ let main () =
   let no_comments = ref false in
   let census = ref false in
   let stats = ref false in
+  let list_fallbacks = ref false in
   let list_transitions = ref false in
   let cmly_file = ref "" in
   let overrides_file = ref "" in
@@ -1345,6 +1381,12 @@ let main () =
         Arg.Set stats,
         "Print the message-quality summary (fallback/hint counts, self-lints) \
          instead of the messages" );
+      ( "-list-fallbacks",
+        Arg.Set list_fallbacks,
+        "Print a ready-to-paste .overrides template block for each \
+         generic-fallback (\"Syntax error\") state not yet overridden: the \
+         state's ## comments, the over-cap candidate list, and the sentence \
+         key. Empty output = all covered" );
       ( "-list-transitions",
         Arg.Set list_transitions,
         "List all possible continuations for states" );
@@ -1386,12 +1428,15 @@ let main () =
      mode, so a stale entry can never sit silently in the file. *)
   check_override_rot overrides entries;
 
-  if !generate_messages || !stats || !census || !list_transitions then (
+  if
+    !generate_messages || !stats || !census || !list_fallbacks
+    || !list_transitions
+  then (
     if !cmly_file = "" then (
       Printf.eprintf "Error: -cmly is required for this mode.\n";
       exit 1);
     let terminals, grammar, auto = load_grammar !cmly_file in
-    if !generate_messages || !stats || !census then (
+    if !generate_messages || !stats || !census || !list_fallbacks then (
       if !generate_messages then Printf.eprintf "Generating messages...\n";
       let results =
         List.map
@@ -1426,6 +1471,9 @@ let main () =
         output_census (List.map (fun (_, (_, body, _)) -> body) results);
       if !stats then
         output_stats grammar auto
+          (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results);
+      if !list_fallbacks then
+        output_fallbacks
           (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results))
     else analyze_transitions grammar terminals entries)
   else if
