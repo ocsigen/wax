@@ -6,3 +6,7 @@ generic fallback (expected list over 5): 18
 delimiter hints: 236
 missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
+state/automaton item-set match: 710/710
+unsound claims: 0
+entries with uncovered actions: 40
+uncovered action tokens (total): 3233
