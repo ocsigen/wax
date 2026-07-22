@@ -370,3 +370,36 @@ let val_subtype subtyping_info ty ty' =
   match (ty, ty') with
   | I.Ref t, I.Ref t' -> ref_subtype subtyping_info t t'
   | _ -> ty == ty'
+
+let rec heaptype_equal (t1 : I.heaptype) (t2 : I.heaptype) =
+  t1 == t2
+  ||
+  match (t1, t2) with
+  | Type id1, Type id2 | Exact id1, Exact id2 -> Id.equal id1 id2
+  | Func, Func
+  | NoFunc, NoFunc
+  | Extern, Extern
+  | NoExtern, NoExtern
+  | Exn, Exn
+  | NoExn, NoExn
+  | Cont, Cont
+  | NoCont, NoCont
+  | Any, Any
+  | Eq, Eq
+  | I31, I31
+  | Struct, Struct
+  | Array, Array
+  | None_, None_ ->
+      true
+  | _ -> false
+
+and reftype_equal (rt1 : I.reftype) (rt2 : I.reftype) =
+  rt1.nullable = rt2.nullable && heaptype_equal rt1.typ rt2.typ
+
+and valtype_equal (vt1 : I.valtype) (vt2 : I.valtype) =
+  vt1 == vt2
+  ||
+  match (vt1, vt2) with
+  | Ref rt1, Ref rt2 -> reftype_equal rt1 rt2
+  | I32, I32 | I64, I64 | F32, F32 | F64, F64 | V128, V128 -> true
+  | _ -> false
