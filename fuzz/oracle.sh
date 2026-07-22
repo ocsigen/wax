@@ -284,14 +284,18 @@ case "$verdict:$EXPECT" in
       if [ "$sverdict" != "$ref" ]; then
         if [ "$sverdict" = ok ] && [ "$ref" = rejected ] \
           && { grep -q "likely-confusing unicode" "$IN.err" \
-               || wt_ahead_divergence "$IN.err"; }; then
+               || wt_ahead_divergence "$IN.err" \
+               || { [ "$FMT" = wat ] && grep -qE '\(do( |\))' "$IN"; }; }; then
           # A known non-divergence where wax accepts and wasm-tools rejects:
           #   * a "Trojan Source" bidirectional control character in a string —
           #     the spec allows any UTF-8, so wax accepts it (and flags it with
           #     the confusable-unicode lint) where wasm-tools' text lexer refuses
           #     it; wax is correct; or
           #   * [cont.new] in a constant position (open PR #148, see
-          #     [wt_ahead_divergence]).
+          #     [wt_ahead_divergence]); or
+          #   * a folded legacy-exception [(try (do …) (catch …))] — valid WAT
+          #     (wabt and wax accept it) that wasm-tools 1.254's text parser only
+          #     takes unfolded.
           report_diff=0
         elif [ "$FMT" = wat ] && ! grep -q '[^[:space:]]' "$IN"; then
           # A whitespace-only WAT is a valid empty module to wax (and to
@@ -382,7 +386,7 @@ demit=(--desugar -i "$FMT" -f wat "$IN" -o "$WORK/cand.wat")
 if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
    && ! grep -qE "likely-confusing unicode|expected at least one module field|non-constant operator: visit_cont_new" \
         "$WORK/cand.wat.err" \
-   && ! grep -q '(item \$' "$WORK/cand.wat"; then
+   && ! grep -qE '\(item \$|\(do( |\))' "$WORK/cand.wat"; then
   # Rejections that are not wax bugs — wasm-tools text is stricter than the spec,
   # or trips on a deliberate wax text extension the emitted BINARY renders in
   # standard form:
@@ -397,6 +401,10 @@ if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
   #     documented wax text-only convenience (compact-import-item-id.t) so a
   #     shared-type import can be referenced by name; the emitted binary is the
   #     standard name-only form and validates.
+  #   * a folded legacy-exception [(try (do …) (catch …) (catch_all …))] — valid
+  #     WAT (wabt's wat2wasm and wax's own reader accept it; the binary
+  #     validates), but wasm-tools 1.254's text parser only takes the unfolded
+  #     legacy [try … catch … end] form.
   finding FALSE_ACCEPT HIGH "$IN" \
     "wax accepted the module but emitted WAT text wasm-tools rejects: $(head -1 "$WORK/cand.wat.err")" \
     "$(repro "${demit[@]}") && wasm-tools validate --features all $WORK/cand.wat"
