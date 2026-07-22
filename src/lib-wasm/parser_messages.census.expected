@@ -1,0 +1,265 @@
+    1x Assuming that the 64-bit floats are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the block type is complete, expecting '('.
+    2x Assuming that the block type is complete, expecting ')', or instructions.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the block type is complete, expecting 'else', 'end', or instructions.
+    2x Assuming that the block type is complete, expecting 'end', or instructions.
+    1x Assuming that the block type is complete, expecting a folded instruction, or a folded then.
+    1x Assuming that the block type is complete, expecting instructions, or legacy catches.
+    1x Assuming that the catches are complete, expecting ')', or instructions.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the catches are complete, expecting 'end', or instructions.
+    2x Assuming that the cmds are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the consts are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    4x Assuming that the element list is complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    2x Assuming that the elemexprs are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the exports are complete, expecting '(', '(import', a memory type, a page-size clause, or an address type.
+    1x Assuming that the exports are complete, expecting '(import', ')', a local declaration, a type use, or instructions.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the exports are complete, expecting '(import', ')', or a type use.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the exports are complete, expecting '(import', a reference type, a table type, or an address type.
+    1x Assuming that the exports are complete, expecting '(import', or a global type.
+    4x Assuming that the expression is complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the field types are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the fields are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the float or NaNs are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the folded instructions are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the indexes are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the inline module is complete, expecting end of file.
+   11x Assuming that the instructions are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the instructions are complete, expecting 'else', or 'end'.
+    5x Assuming that the instructions are complete, expecting 'end'.
+    2x Assuming that the instructions are complete, expecting legacy catches.
+    1x Assuming that the limits are complete, expecting ')', 'shared', or a page-size clause.
+    1x Assuming that the limits are complete, expecting a reference type.
+    2x Assuming that the list of indices is complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the locals are complete, expecting ')', or instructions.
+       <_>This '(' opens the enclosing construct.
+    4x Assuming that the module fields are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the module fields are complete, expecting end of file.
+    1x Assuming that the parameters and results are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    2x Assuming that the plain instruction is complete, expecting instructions.
+    2x Assuming that the result patterns are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the script is complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the script is complete, expecting end of file.
+    2x Assuming that the string list is complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    2x Assuming that the strings are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    7x Assuming that the type use is complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Assuming that the typedefs are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    3x Assuming that the value types are complete, expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting '(', ')', 'id', a data elem, or an offset.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting '(', ')', 'id', or a type use.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting '(', ')', a data elem, or an offset.
+       <_>This '(' opens the enclosing construct.
+    2x Expecting '(', ')', or a type use.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting '(', 'declare', 'id', an element list, or an offset.
+    1x Expecting '(', 'declare', an element list, or an offset.
+    1x Expecting '(', a 64-bit unsigned integer, or a page-size clause.
+    1x Expecting '(', a block type, or a label.
+    2x Expecting '(', or '(descriptor'.
+    1x Expecting '(', or ')'.
+    1x Expecting '(', or a block type.
+    5x Expecting '('.
+    1x Expecting '(export', '(import', ')', 'id', or a type use.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting '(export', '(import', 'id', or a global type.
+    3x Expecting '(export', or 'id'.
+    1x Expecting '(param'.
+    1x Expecting '(result'.
+    1x Expecting '(then', or a folded instruction.
+    1x Expecting ')', 'binary', 'id', 'quote', or a module field.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', 'id', a cmd, or a shared clause.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', 'id', or a cmd.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', 'id', or a module field.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', 'id', or a string.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', 'id', or a type use.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', 'id', or an unnamed param.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', a block type, a label, catches, or instructions.
+       <_>This '(' opens the enclosing construct.
+    2x Expecting ')', a block type, a label, or instructions.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', a block type, catches, or instructions.
+       <_>This '(' opens the enclosing construct.
+    2x Expecting ')', a block type, or instructions.
+       <_>This '(' opens the enclosing construct.
+    2x Expecting ')', a string, or an index.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or 'id'.
+    3x Expecting ')', or 'id'.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a cond else.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a cond.
+    1x Expecting ')', or a data elem.
+    6x Expecting ')', or a data elem.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a float lit.
+    2x Expecting ')', or a float lit.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a folded else.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a heap type.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a page-size clause.
+    1x Expecting ')', or a string.
+       <_>This '(' opens the enclosing construct.
+    4x Expecting ')', or a type use.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a v128 const body.
+    4x Expecting ')', or an expression.
+       <_>This '(' opens the enclosing construct.
+    2x Expecting ')', or an external type.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or an import group elem.
+    1x Expecting ')', or an int lit.
+    3x Expecting ')', or an int lit.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or an integer.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or an unnamed param.
+    1x Expecting ')', or an unnamed param.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or cond else fields.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or folded catches.
+    1x Expecting ')', or folded catches.
+       <_>This '(' opens the enclosing construct.
+    7x Expecting ')', or instructions.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or parameters and results.
+       <_>This '(' opens the enclosing construct.
+  110x Expecting ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting 'and', 'not', 'or', a cmp op, or an integer.
+    1x Expecting 'array', 'cont', 'func', 'struct', or 'sub'.
+    1x Expecting 'array', 'cont', 'func', or 'struct'.
+    2x Expecting 'data', or 'pagesize'.
+    2x Expecting 'data'.
+    1x Expecting 'do'.
+    2x Expecting 'elem'.
+    1x Expecting 'else', 'end', a block type, a label, or instructions.
+    1x Expecting 'else', 'end', a block type, or instructions.
+    1x Expecting 'else'.
+    1x Expecting 'end', a block type, a label, catches, or instructions.
+    2x Expecting 'end', a block type, a label, or instructions.
+    1x Expecting 'end', a block type, catches, or instructions.
+    2x Expecting 'end', a block type, or instructions.
+    1x Expecting 'end', a label, or instructions.
+    2x Expecting 'end', or instructions.
+    3x Expecting 'exact'.
+    1x Expecting 'field'.
+    1x Expecting 'final', a composite type, an index, or descriptor clauses.
+    2x Expecting 'func', 'global', 'memory', 'table', or 'tag'.
+    1x Expecting 'get', 'invoke', or 'module'.
+    1x Expecting 'get', or 'invoke'.
+    1x Expecting 'id', or a global type.
+    1x Expecting 'id', or a memory type.
+    1x Expecting 'id', or a name.
+    3x Expecting 'id', or a string.
+    1x Expecting 'id', or a subtype.
+    1x Expecting 'id', or a table type.
+    2x Expecting 'id'.
+    3x Expecting 'module'.
+    2x Expecting 'mut', or 'ref'.
+    1x Expecting 'nan', or a 32-bit float.
+    1x Expecting 'nan', or a 64-bit float.
+    1x Expecting 'null', or a heap type.
+    1x Expecting 'pagesize'.
+    1x Expecting 'ref'.
+    1x Expecting 'switch', or an index.
+   16x Expecting a 16-bit signed integer.
+   10x Expecting a 32-bit float.
+   11x Expecting a 32-bit signed integer.
+    2x Expecting a 32-bit unsigned integer.
+    7x Expecting a 64-bit float.
+    7x Expecting a 64-bit signed integer.
+    1x Expecting a 64-bit unsigned integer, or a reference type.
+    1x Expecting a 64-bit unsigned integer.
+    1x Expecting a block type, a folded instruction, a folded then, or a label.
+    1x Expecting a block type, a folded instruction, or a folded then.
+    1x Expecting a block type, a label, instructions, or legacy catches.
+    1x Expecting a block type, instructions, or legacy catches.
+    1x Expecting a block, a folded instruction, or a plain instruction.
+    1x Expecting a composite type, an index, or descriptor clauses.
+    1x Expecting a composite type, or descriptor clauses.
+    2x Expecting a composite type.
+    1x Expecting a cond then.
+    7x Expecting a cond.
+    1x Expecting a dummy ctx.
+    2x Expecting a field type.
+    1x Expecting a float or NaN.
+    2x Expecting a global type.
+    3x Expecting a heap type.
+    6x Expecting a label.
+    2x Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an index.
+    2x Expecting a memory alignment, a memory offset, or an 8-bit unsigned integer.
+    4x Expecting a memory alignment, or an 8-bit unsigned integer.
+    2x Expecting a memory type.
+    4x Expecting a module.
+    1x Expecting a name, or an import group elem.
+   14x Expecting a name.
+    1x Expecting a parameter group.
+   11x Expecting a reference type.
+    1x Expecting a result pattern.
+    1x Expecting a script instance, or an action.
+    1x Expecting a script instance.
+    1x Expecting a storage type.
+   16x Expecting a string.
+    1x Expecting a subtype.
+    2x Expecting a table type.
+    1x Expecting a v128 const body.
+    3x Expecting a value type.
+    2x Expecting a vec shape.
+   32x Expecting an 8-bit signed integer.
+   26x Expecting an 8-bit unsigned integer.
+    5x Expecting an action.
+    2x Expecting an element list.
+    1x Expecting an extern index.
+    1x Expecting an external type.
+    2x Expecting an index, or type use without bindings.
+   88x Expecting an index.
+    5x Expecting an integer.
+    2x Expecting an offset.
+    1x Expecting cond then fields.
+    1x Expecting end of file.
+    1x Expecting instructions, or legacy catches.
+    5x Expecting instructions.
+    1x Expecting parameters and results without bindings.
+    1x Expecting parameters and results.
+    2x Expecting type use without bindings.
+   16x Syntax error
+    2x Syntax error
+       <_>This '(' opens the enclosing construct.

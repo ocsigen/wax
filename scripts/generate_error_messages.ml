@@ -906,7 +906,9 @@ let generate_message grammar terminals ~comments entry =
       claims = (if emitted then expected_raw else []);
     }
   in
-  (Buffer.contents buf, stat)
+  (* [full_message] is returned separately for the census (step 7), which counts
+     distinct message bodies without the per-entry sentence header. *)
+  (Buffer.contents buf, full_message, stat)
 
 (* Analysis: List all possible continuations for states, indicating spurious reductions. *)
 let analyze_transitions grammar terminals entries =
@@ -1123,12 +1125,45 @@ let output_stats gram auto results =
           (String.concat " " (StringSet.elements unc)))
       with_uncovered
 
+(* --- Message census (step 7) --- *)
+
+(* Normalize a message body for the census: collapse the state-specific depth in
+   a delimiter hint ([<3>This '(' …] -> [<_>…]) so identical wordings at
+   different stack depths count as one census line and a depth shift does not
+   churn the counts. Kept verbatim, that depth would fragment one wording into
+   several census entries. *)
+let census_normalize body =
+  Str.global_replace (Str.regexp "<[0-9]+>") "<_>" body
+
+(* Emit the message census: each distinct (depth-normalized) message body once,
+   prefixed by its occurrence count, sorted by the message text. Entry sentences
+   never appear, so sentence re-picking at most bumps a count and a wording
+   change is a one-line diff. A multi-line body (hedge + delimiter hint) is one
+   census item; its continuation lines are indented to the message column. *)
+let output_census bodies =
+  let tbl = Hashtbl.create 256 in
+  List.iter
+    (fun body ->
+      let key = census_normalize body in
+      let n = try Hashtbl.find tbl key with Not_found -> 0 in
+      Hashtbl.replace tbl key (n + 1))
+    bodies;
+  Hashtbl.fold (fun msg count acc -> (msg, count) :: acc) tbl []
+  |> List.sort (fun (m1, _) (m2, _) -> String.compare m1 m2)
+  |> List.iter (fun (msg, count) ->
+      match String.split_on_char '\n' msg with
+      | [] -> ()
+      | first :: rest ->
+          Printf.printf "%5dx %s\n" count first;
+          List.iter (fun l -> Printf.printf "       %s\n" l) rest)
+
 (* --- Main Entry Point --- *)
 
 let main () =
   let input_file = ref "" in
   let generate_messages = ref false in
   let no_comments = ref false in
+  let census = ref false in
   let stats = ref false in
   let list_transitions = ref false in
   let cmly_file = ref "" in
@@ -1142,6 +1177,11 @@ let main () =
         Arg.Set no_comments,
         "Omit the auto-generated ## comments (state numbers, LR items) from \
          the output, keeping only the sentence and message" );
+      ( "-census",
+        Arg.Set census,
+        "Print the message census: each distinct message body once, prefixed \
+         by its occurrence count, sorted by message text (no sentences); the \
+         delimiter-hint depth is normalized to <_>" );
       ( "-stats",
         Arg.Set stats,
         "Print the message-quality summary (fallback/hint counts, self-lints) \
@@ -1173,28 +1213,47 @@ let main () =
   let entries = Parse_messages.parse_file !input_file in
   Printf.eprintf "Parsed %d entries from %s\n" (List.length entries) !input_file;
 
-  if !generate_messages || !stats || !list_transitions then (
+  if !generate_messages || !stats || !census || !list_transitions then (
     if !cmly_file = "" then (
       Printf.eprintf "Error: -cmly is required for this mode.\n";
       exit 1);
     let terminals, grammar, auto = load_grammar !cmly_file in
-    if !generate_messages || !stats then (
+    if !generate_messages || !stats || !census then (
       if !generate_messages then Printf.eprintf "Generating messages...\n";
       let results =
         List.map
           (fun entry ->
-            let text, stat =
+            let text, body, stat =
               generate_message grammar terminals ~comments:(not !no_comments)
                 entry
             in
-            (entry, (text, stat)))
+            (entry, (text, body, stat)))
           entries
       in
-      if !generate_messages then
-        List.iter (fun (_, (text, _)) -> print_string text) results;
+      (if !generate_messages then
+         (* The full [.messages] output (with comments) fed to
+            [--compile-errors] keeps menhir's order; the stripped [-no-comments]
+            golden is sorted by the sentence header ([entry_point: sentence]) so
+            entry order stops tracking state numbers and a state merge becomes
+            one clean local deletion instead of scattered delete+add pairs. *)
+         let to_print =
+           if !no_comments then
+             List.stable_sort
+               (fun (e1, _) (e2, _) ->
+                 let header e =
+                   e.Parse_messages.entry_point ^ ": "
+                   ^ e.Parse_messages.sentence
+                 in
+                 String.compare (header e1) (header e2))
+               results
+           else results
+         in
+         List.iter (fun (_, (text, _, _)) -> print_string text) to_print);
+      if !census then
+        output_census (List.map (fun (_, (_, body, _)) -> body) results);
       if !stats then
         output_stats grammar auto
-          (List.map (fun (entry, (_, stat)) -> (entry, stat)) results))
+          (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results))
     else analyze_transitions grammar terminals entries)
   else if
     (* Default verification dump *)

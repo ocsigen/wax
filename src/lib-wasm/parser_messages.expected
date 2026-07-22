@@ -2,1666 +2,54 @@ dummy_ctx: WAIT
 
 Expecting a dummy ctx.
 
-parse_script: STRING_ANNOT WAIT
+parse: LPAREN DATA ID WAIT
 
-Expecting 'id'.
-
-parse_script: STRING_ANNOT ID WAIT
-
-Expecting ')', a string, or an index.
-<2>This '(' opens the enclosing construct.
-
-parse_script: STRING_ANNOT ID STRING NAT
-
-Assuming that the string list is complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE WAIT
-
-Expecting 'id', or a subtype.
-
-parse_script: LPAREN_TYPE ID WAIT
-
-Expecting a subtype.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIPTOR WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIPTOR NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIBES WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN WAIT
-
-Expecting '(', or '(descriptor'.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN WAIT
-
-Expecting 'array', 'cont', 'func', 'struct', or 'sub'.
-
-parse_script: LPAREN_TYPE LPAREN SUB WAIT
-
-Expecting 'final', a composite type, an index, or descriptor clauses.
-
-parse_script: LPAREN_TYPE LPAREN SUB FINAL WAIT
-
-Expecting a composite type, an index, or descriptor clauses.
-
-parse_script: LPAREN_TYPE LPAREN SUB NAT NAT
-
-Expecting a composite type, or descriptor clauses.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN WAIT
-
-Expecting '(', or '(descriptor'.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR NAT RPAREN WAIT
-
-Expecting a composite type.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN WAIT
-
-Expecting 'array', 'cont', 'func', or 'struct'.
-
-parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN WAIT
-
-Expecting 'field'.
-
-parse_script: LPAREN_TYPE LPAREN ARRAY LPAREN WAIT
-
-Expecting 'mut', or 'ref'.
-
-parse: LPAREN ELEM LPAREN REF WAIT
-
-Expecting 'null', or a heap type.
-
-parse: LPAREN ELEM LPAREN REF NULL WAIT
-
-Expecting a heap type.
-
-parse: LPAREN FUNC REF_NULL LPAREN WAIT
-
-Expecting 'exact'.
-
-parse: LPAREN FUNC REF_NULL LPAREN EXACT WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC REF_NULL LPAREN EXACT NAT NAT
-
-Expecting ')'.
+Expecting '(', ')', a data elem, or an offset.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM LPAREN REF NAT NAT
+parse: LPAREN DATA LPAREN BLOCK CALL_INDIRECT END
 
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN ARRAY LPAREN MUT WAIT
-
-Expecting a storage type.
-
-parse: LPAREN TABLE LPAREN WAIT
-
-Expecting 'ref'.
-
-parse_script: LPAREN_TYPE LPAREN ARRAY LPAREN MUT ANYREF WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD ID WAIT
-
-Expecting a field type.
-
-parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD ID ANYREF WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD WAIT
-
-Assuming that the field types are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN STRUCT WAIT
-
-Assuming that the fields are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN FUNC WAIT
-
-Expecting ')', or parameters and results.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_PARAM WAIT
-
-Expecting ')', 'id', or an unnamed param.
-<1>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_PARAM ID WAIT
-
-Expecting a value type.
-
-parse: LPAREN TAG LPAREN_PARAM ID ANYREF WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_PARAM ANYREF WAIT
-
-Expecting ')', or an unnamed param.
-
-parse_script: LPAREN_TYPE LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the parameters and results are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_RESULT WAIT
-
-Assuming that the value types are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_RESULT RPAREN WAIT
-
-Expecting '(result'.
-
-parse: LPAREN TAG LPAREN_PARAM RPAREN WAIT
-
-Expecting a parameter group.
-
-parse_script: LPAREN_TYPE LPAREN CONT WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN CONT NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN ARRAY WAIT
-
-Expecting a field type.
-
-parse_script: LPAREN_TYPE LPAREN ARRAY ANYREF WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN FUNC RPAREN WAIT
-
-Expecting ')'.
-<6>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN FUNC RPAREN WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIPTOR NAT RPAREN WAIT
-
-Expecting a composite type.
-
-parse_script: LPAREN_IMPORT WAIT
-
-Expecting a name.
-
-parse_script: LPAREN_IMPORT STRING WAIT
-
-Expecting a name, or an import group elem.
-
-parse_script: LPAREN_IMPORT STRING LPAREN WAIT
-
-Syntax error
-
-parse_script: LPAREN_IMPORT STRING LPAREN TAG WAIT
-
-Expecting ')', 'id', or a type use.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN TAG ID WAIT
-
-Expecting ')', or a type use.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_TYPE WAIT
-
-Expecting an index.
-
-parse: LPAREN TAG LPAREN_TYPE NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_TYPE NAT RPAREN WAIT
-
-Expecting parameters and results.
-
-parse_script: LPAREN_IMPORT STRING LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the type use is complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN TABLE WAIT
-
-Expecting 'id', or a table type.
-
-parse_script: LPAREN_IMPORT STRING LPAREN TABLE ID WAIT
-
-Expecting a table type.
-
-parse_script: LPAREN_IMPORT STRING LPAREN TABLE NAT ANYREF WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE NAT WAIT
-
-Assuming that the limits are complete, expecting a reference type.
-
-parse_script: LPAREN_IMPORT STRING LPAREN TABLE I32 WAIT
-
-Expecting a 64-bit unsigned integer.
-
-parse_script: LPAREN_IMPORT STRING LPAREN MEMORY WAIT
-
-Expecting 'id', or a memory type.
-
-parse_script: LPAREN_IMPORT STRING LPAREN MEMORY ID WAIT
-
-Expecting a memory type.
-
-parse_script: LPAREN_IMPORT STRING LPAREN MEMORY NAT LPAREN PAGESIZE NAT RPAREN WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse: LPAREN MEMORY NAT WAIT
-
-Assuming that the limits are complete, expecting ')', 'shared', or a page-size clause.
-
-parse: LPAREN MEMORY NAT SHARED WAIT
-
-Expecting ')', or a page-size clause.
-
-parse: LPAREN MEMORY NAT LPAREN WAIT
-
-Expecting 'pagesize'.
-
-parse: LPAREN MEMORY LPAREN PAGESIZE WAIT
-
-Expecting a 32-bit unsigned integer.
-
-parse: LPAREN MEMORY LPAREN PAGESIZE NAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN ITEM WAIT
-
-Expecting 'id', or a name.
-
-parse_script: LPAREN_IMPORT STRING LPAREN ITEM ID WAIT
-
-Expecting a name.
-
-parse_script: LPAREN_IMPORT STRING LPAREN ITEM ID STRING WAIT
-
-Expecting ')', or an external type.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING STRING LPAREN WAIT
-
-Expecting 'func', 'global', 'memory', 'table', or 'tag'.
-
-parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL WAIT
-
-Expecting 'id', or a global type.
-
-parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL ID WAIT
-
-Expecting a global type.
-
-parse: LPAREN GLOBAL LPAREN WAIT
-
-Expecting 'mut', or 'ref'.
-
-parse: LPAREN GLOBAL LPAREN MUT WAIT
-
-Expecting a value type.
-
-parse: LPAREN GLOBAL LPAREN MUT ANYREF WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL ANYREF WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC WAIT
-
-Expecting '(', ')', 'id', or a type use.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC ID WAIT
-
-Expecting '(', ')', or a type use.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN WAIT
-
-Expecting 'exact'.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT WAIT
-
-Expecting ')', or a type use.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the type use is complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT RPAREN WAIT
-
-Expecting ')'.
-<7>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the type use is complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN ITEM ID STRING LPAREN FUNC RPAREN WAIT
-
-Expecting ')'.
+Assuming that the instructions are complete, expecting ')'.
 <5>This '(' opens the enclosing construct.
 
-parse_script: LPAREN_IMPORT STRING LPAREN ITEM STRING WAIT
-
-Expecting ')', or an external type.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN ITEM STRING LPAREN FUNC RPAREN WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING STRING WAIT
-
-Expecting an external type.
-
-parse_script: LPAREN_IMPORT STRING STRING LPAREN FUNC RPAREN WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_IMPORT STRING LPAREN FUNC RPAREN WAIT
-
-Expecting ')', or an import group elem.
-
-parse_script: LPAREN_EXPORT WAIT
-
-Expecting a name.
-
-parse_script: LPAREN_EXPORT STRING WAIT
-
-Expecting an extern index.
-
-parse_script: LPAREN_EXPORT STRING LPAREN WAIT
-
-Expecting 'func', 'global', 'memory', 'table', or 'tag'.
-
-parse_script: LPAREN_EXPORT STRING LPAREN TAG WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_EXPORT STRING LPAREN TAG NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_EXPORT STRING LPAREN TABLE WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_EXPORT STRING LPAREN TABLE NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_EXPORT STRING LPAREN MEMORY WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_EXPORT STRING LPAREN MEMORY NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_EXPORT STRING LPAREN GLOBAL WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_EXPORT STRING LPAREN GLOBAL NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_EXPORT STRING LPAREN FUNC WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_EXPORT STRING LPAREN FUNC NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_EXPORT STRING LPAREN FUNC NAT RPAREN WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN WAIT
-
-Syntax error
-
-parse: LPAREN TAG WAIT
-
-Expecting '(export', '(import', ')', 'id', or a type use.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_EXPORT WAIT
-
-Expecting a name.
-
-parse: LPAREN TAG LPAREN_EXPORT STRING WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG ID WAIT
-
-Assuming that the exports are complete, expecting '(import', ')', or a type use.
-<4>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_IMPORT WAIT
-
-Expecting a name.
-
-parse: LPAREN TAG LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN TAG LPAREN_IMPORT STRING STRING WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN WAIT
-
-Expecting ')', or a type use.
-<8>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the type use is complete, expecting ')'.
-<9>This '(' opens the enclosing construct.
-
-parse: LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the type use is complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE WAIT
-
-Expecting '(export', or 'id'.
-
-parse: LPAREN TABLE ID WAIT
-
-Assuming that the exports are complete, expecting '(import', a reference type, a table type, or an address type.
-
-parse: LPAREN TABLE LPAREN_IMPORT WAIT
-
-Expecting a name.
-
-parse: LPAREN TABLE LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN TABLE LPAREN_IMPORT STRING STRING WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE LPAREN_IMPORT STRING STRING RPAREN WAIT
-
-Expecting a table type.
-
-parse: LPAREN TABLE LPAREN_IMPORT STRING STRING RPAREN NAT ANYREF WAIT
-
-Expecting ')'.
-<9>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE NAT ANYREF WAIT
-
-Expecting ')', or an expression.
-<5>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC VEC_STORE_LANE WAIT
-
-Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an index.
-
-parse: LPAREN FUNC VEC_STORE_LANE NAT WAIT
-
-Syntax error
-
-parse: LPAREN FUNC VEC_STORE_LANE MEM_OFFSET WAIT
-
-Expecting a memory alignment, or an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_STORE_LANE MEM_OFFSET MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_STORE_LANE MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_STORE_LANE ID WAIT
-
-Expecting a memory alignment, a memory offset, or an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_STORE_LANE NAT MEM_OFFSET WAIT
-
-Expecting a memory alignment, or an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_STORE_LANE NAT MEM_OFFSET MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_STORE_LANE NAT MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_REPLACE WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_LOAD_LANE WAIT
-
-Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an index.
-
-parse: LPAREN FUNC VEC_LOAD_LANE MEM_OFFSET WAIT
-
-Expecting a memory alignment, or an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_LOAD_LANE MEM_OFFSET MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_LOAD_LANE MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_LOAD_LANE ID WAIT
-
-Expecting a memory alignment, a memory offset, or an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_LOAD_LANE NAT MEM_OFFSET WAIT
-
-Expecting a memory alignment, or an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_LOAD_LANE NAT MEM_OFFSET MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_LOAD_LANE NAT MEM_ALIGN WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC VEC_EXTRACT WAIT
-
-Expecting an 8-bit unsigned integer.
-
-parse: LPAREN FUNC V128_CONST WAIT
-
-Syntax error
-
-parse: LPAREN FUNC V128_CONST I8X16 WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I64X2 WAIT
-
-Expecting a 64-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I64X2 INT WAIT
-
-Expecting a 64-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I32X4 WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I32X4 INT WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I32X4 INT INT WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I32X4 INT INT INT WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN FUNC V128_CONST F64X2 WAIT
-
-Expecting a 64-bit float.
-
-parse: LPAREN FUNC V128_CONST F64X2 FLOAT WAIT
-
-Expecting a 64-bit float.
-
-parse: LPAREN FUNC V128_CONST F32X4 WAIT
-
-Expecting a 32-bit float.
-
-parse: LPAREN FUNC V128_CONST F32X4 FLOAT WAIT
-
-Expecting a 32-bit float.
-
-parse: LPAREN FUNC V128_CONST F32X4 FLOAT FLOAT WAIT
-
-Expecting a 32-bit float.
-
-parse: LPAREN FUNC V128_CONST F32X4 FLOAT FLOAT FLOAT WAIT
-
-Expecting a 32-bit float.
-
-parse: LPAREN FUNC TRY_TABLE WAIT
-
-Expecting 'end', a block type, a label, catches, or instructions.
-
-parse: LPAREN FUNC TRY_TABLE ID RPAREN
-
-Expecting 'end', a block type, catches, or instructions.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_TYPE WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_TYPE NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_TYPE NAT RPAREN WAIT
-
-Expecting parameters and results without bindings.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM WAIT
-
-Expecting ')', or an unnamed param.
-<1>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM RPAREN WAIT
-
-Expecting '(param'.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_REF WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_REF NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_REF NAT NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL_REF WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL_REF NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH NAT NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC TRY_TABLE LPAREN_RESULT RPAREN RPAREN
-
-Assuming that the catches are complete, expecting 'end', or instructions.
-
-parse: LPAREN FUNC TRY WAIT
-
-Expecting a block type, a label, instructions, or legacy catches.
-
-parse: LPAREN FUNC TRY ID LPAREN_THEN
-
-Expecting a block type, instructions, or legacy catches.
-
-parse: LPAREN FUNC TRY LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the block type is complete, expecting instructions, or legacy catches.
-
-parse: LPAREN FUNC THROW WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC TABLE_INIT WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC TABLE_COPY NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC SWITCH WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC SWITCH NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC SUSPEND WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_SET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_SET NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_NEW_DESC WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_NEW_DEFAULT_DESC WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_NEW_DEFAULT WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_NEW WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_GET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC STRUCT_GET NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC STRING_ANNOT WAIT
-
-Expecting ')', a string, or an index.
-<1>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC STRING_ANNOT STRING NAT
-
-Assuming that the string list is complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC SELECT LPAREN_RESULT WAIT
-
-Assuming that the value types are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC RETURN_CALL_REF WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC RETURN_CALL_INDIRECT WAIT
-
-Expecting an index, or type use without bindings.
-
-parse: LPAREN FUNC RETURN_CALL_INDIRECT NAT NAT
-
-Expecting type use without bindings.
-
-parse: LPAREN FUNC RETURN_CALL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC RESUME_THROW_REF WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC RESUME NAT LPAREN_ON WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT MEM_OFFSET
-
-Expecting 'switch', or an index.
-
-parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT SWITCH WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC RESUME_THROW WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC RESUME_THROW NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC RESUME WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC REF_TEST WAIT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC REF_NULL WAIT
-
-Expecting a heap type.
-
-parse: LPAREN FUNC REF_GET_DESC WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC REF_FUNC WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC REF_CAST_DESC_EQ WAIT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC REF_CAST WAIT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC MEMORY_INIT WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC MEMORY_COPY NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC LPAREN WAIT
-
-Syntax error
-
-parse: LPAREN DATA LPAREN TRY_TABLE WAIT
-
-Expecting ')', a block type, a label, catches, or instructions.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY_TABLE ID END
-
-Expecting ')', a block type, catches, or instructions.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY_TABLE LPAREN_RESULT RPAREN END
-
-Assuming that the catches are complete, expecting ')', or instructions.
-<5>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC LOOP WAIT
-
-Expecting 'end', a block type, a label, or instructions.
-
-parse: LPAREN FUNC LOOP ID RPAREN
-
-Expecting 'end', a block type, or instructions.
-
-parse: LPAREN FUNC LOOP LPAREN_RESULT RPAREN RPAREN
-
-Assuming that the block type is complete, expecting 'end', or instructions.
-
-parse: LPAREN FUNC LOCAL_TEE WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC LOCAL_SET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC LOCAL_GET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC IF_ANNOT WAIT
-
-Expecting a cond.
-
-parse_script: IF_ANNOT LPAREN WAIT
-
-Expecting 'and', 'not', 'or', a cmp op, or an integer.
-
-parse_script: IF_ANNOT LPAREN OR WAIT
-
-Expecting a cond.
-
-parse_script: IF_ANNOT LPAREN OR ID WAIT
-
-Expecting ')', or a cond.
-
-parse_script: IF_ANNOT LPAREN NOT WAIT
-
-Expecting a cond.
-
-parse_script: IF_ANNOT LPAREN NOT ID WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: IF_ANNOT LPAREN NAT WAIT
-
-Expecting an integer.
-
-parse_script: IF_ANNOT LPAREN NAT NAT WAIT
-
-Expecting an integer.
-
-parse_script: IF_ANNOT LPAREN NAT NAT NAT WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: IF_ANNOT LPAREN AND WAIT
-
-Expecting a cond.
-
-parse_script: IF_ANNOT LPAREN CMP_EQ WAIT
-
-Expecting a cond.
-
-parse_script: IF_ANNOT LPAREN CMP_EQ ID WAIT
-
-Expecting a cond.
-
-parse_script: IF_ANNOT LPAREN CMP_EQ ID ID WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC IF_ANNOT ID WAIT
-
-Expecting a cond then.
-
-parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT WAIT
-
-Expecting ')', or instructions.
-<1>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC IF WAIT
-
-Expecting 'else', 'end', a block type, a label, or instructions.
-
-parse: LPAREN FUNC IF ID LPAREN_THEN
-
-Expecting 'else', 'end', a block type, or instructions.
-
-parse: LPAREN FUNC IF LPAREN_RESULT RPAREN LPAREN_LOCAL
-
-Assuming that the block type is complete, expecting 'else', 'end', or instructions.
-
-parse: LPAREN FUNC I64_CONST WAIT
-
-Expecting a 64-bit signed integer.
-
-parse: LPAREN FUNC I32_CONST WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN FUNC GLOBAL_SET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC GLOBAL_GET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC F64_CONST WAIT
-
-Expecting a 64-bit float.
-
-parse: LPAREN FUNC F32_CONST WAIT
-
-Expecting a 32-bit float.
-
-parse: LPAREN FUNC ELEM_DROP WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC DATA_DROP WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC CONT_NEW WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC CONT_BIND WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC CONT_BIND NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC CHAR_ANNOT WAIT
-
-Expecting a string.
-
-parse: LPAREN FUNC CHAR_ANNOT STRING WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC CALL_REF WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC CALL_INDIRECT WAIT
-
-Expecting an index, or type use without bindings.
-
-parse: LPAREN FUNC CALL_INDIRECT NAT NAT
-
-Expecting type use without bindings.
-
-parse: LPAREN FUNC CALL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_TABLE WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_ON_NULL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_ON_NON_NULL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_ON_CAST_FAIL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_ON_CAST_FAIL NAT NAT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_ON_CAST_FAIL NAT ANYREF WAIT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_ON_CAST_DESC_EQ_FAIL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_ON_CAST_DESC_EQ_FAIL NAT NAT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_ON_CAST_DESC_EQ_FAIL NAT ANYREF WAIT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_ON_CAST_DESC_EQ WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_ON_CAST_DESC_EQ NAT NAT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_ON_CAST_DESC_EQ NAT ANYREF WAIT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_ON_CAST WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BR_ON_CAST NAT NAT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_ON_CAST NAT ANYREF WAIT
-
-Expecting a reference type.
-
-parse: LPAREN FUNC BR_IF WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT WAIT
-
-Expecting a string.
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC BR WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC BLOCK WAIT
-
-Expecting 'end', a block type, a label, or instructions.
-
-parse: LPAREN FUNC BLOCK ID RPAREN
-
-Expecting 'end', a block type, or instructions.
-
-parse: LPAREN FUNC BLOCK LPAREN_RESULT RPAREN RPAREN
-
-Assuming that the block type is complete, expecting 'end', or instructions.
-
-parse: LPAREN FUNC ARRAY_SET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_NEW_FIXED WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_NEW_FIXED NAT MEM_OFFSET
-
-Expecting a 32-bit unsigned integer.
-
-parse: LPAREN FUNC ARRAY_NEW_ELEM WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_NEW_ELEM NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_NEW_DEFAULT WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_NEW_DATA WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_NEW_DATA NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_NEW WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_INIT_ELEM WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_INIT_ELEM NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_INIT_DATA WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_INIT_DATA NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_GET WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_FILL WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_COPY WAIT
-
-Expecting an index.
-
-parse: LPAREN FUNC ARRAY_COPY NAT MEM_OFFSET
-
-Expecting an index.
-
-parse: LPAREN FUNC SELECT MEM_ALIGN
-
-Assuming that the plain instruction is complete, expecting instructions.
-
-parse: LPAREN FUNC STRING_ANNOT RPAREN WAIT
-
-Expecting instructions.
-
-parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN RPAREN WAIT
-
-Expecting instructions.
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN WAIT
-
-Expecting a block, a folded instruction, or a plain instruction.
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN SELECT MEM_ALIGN
-
-Assuming that the plain instruction is complete, expecting instructions.
-
-parse: LPAREN FUNC TRY_TABLE END ID LPAREN_THEN
-
-Expecting instructions.
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN STRING_ANNOT RPAREN WAIT
-
-Expecting instructions.
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN TRY_TABLE END ID LPAREN_THEN
-
-Expecting instructions.
-
-parse: LPAREN FUNC BLOCK CALL_INDIRECT RPAREN
-
-Assuming that the instructions are complete, expecting 'end'.
-
-parse: LPAREN FUNC BLOCK END WAIT
-
-Expecting a label.
-
-parse: LPAREN FUNC IF CALL_INDIRECT RPAREN
-
-Assuming that the instructions are complete, expecting 'else', or 'end'.
-
-parse: LPAREN FUNC IF END WAIT
-
-Expecting a label.
-
-parse: LPAREN FUNC IF ELSE WAIT
-
-Expecting 'end', a label, or instructions.
-
-parse: LPAREN FUNC IF ELSE ID RPAREN
-
-Expecting 'end', or instructions.
-
-parse: LPAREN FUNC IF ELSE CALL_INDIRECT RPAREN
-
-Assuming that the instructions are complete, expecting 'end'.
-
-parse: LPAREN FUNC IF ELSE END WAIT
-
-Expecting a label.
-
-parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT CALL_INDIRECT END
-
-Assuming that the instructions are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN WAIT
-
-Expecting ')', or a cond else.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT WAIT
-
-Expecting ')', or instructions.
-<1>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT CALL_INDIRECT END
-
-Assuming that the instructions are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT RPAREN WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC LOOP CALL_INDIRECT RPAREN
-
-Assuming that the instructions are complete, expecting 'end'.
-
-parse: LPAREN FUNC LOOP END WAIT
-
-Expecting a label.
-
-parse: LPAREN DATA LPAREN TRY_TABLE CALL_INDIRECT END
-
-Assuming that the instructions are complete, expecting ')'.
-<6>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY WAIT
-
-Expecting '(', a block type, or a label.
-
-parse: LPAREN DATA LPAREN TRY ID RPAREN
-
-Expecting '(', or a block type.
-
-parse: LPAREN DATA LPAREN TRY LPAREN_RESULT RPAREN LPAREN_THEN
-
-Assuming that the block type is complete, expecting '('.
-
-parse: LPAREN DATA LPAREN TRY LPAREN WAIT
-
-Expecting 'do'.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO WAIT
-
-Expecting ')', or instructions.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO CALL_INDIRECT CATCH_ALL
-
-Assuming that the instructions are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN WAIT
-
-Expecting ')', or folded catches.
-<8>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL WAIT
-
-Expecting ')', or instructions.
-<1>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL CALL_INDIRECT END
-
-Assuming that the instructions are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH WAIT
-
-Expecting an index.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT NAT
-
-Expecting ')', or instructions.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT CALL_INDIRECT END
-
-Assuming that the instructions are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT RPAREN WAIT
-
-Expecting ')', or folded catches.
-
-parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL RPAREN WAIT
-
-Expecting ')'.
-<9>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN LOOP WAIT
-
-Expecting ')', a block type, a label, or instructions.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN LOOP ID LPAREN_THEN
+parse: LPAREN DATA LPAREN BLOCK ID LPAREN_THEN
 
 Expecting ')', a block type, or instructions.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN LOOP LPAREN_RESULT RPAREN LPAREN_THEN
+parse: LPAREN DATA LPAREN BLOCK LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the block type is complete, expecting ')', or instructions.
 <4>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN LOOP CALL_INDIRECT END
+parse: LPAREN DATA LPAREN BLOCK WAIT
 
-Assuming that the instructions are complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
+Expecting ')', a block type, a label, or instructions.
+<2>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN IF WAIT
+parse: LPAREN DATA LPAREN F32 WAIT
 
-Expecting a block type, a folded instruction, a folded then, or a label.
+Expecting ')', or a float lit.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN F64 FLOAT WAIT
+
+Expecting ')', or a float lit.
+
+parse: LPAREN DATA LPAREN F64 WAIT
+
+Expecting ')', or a float lit.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN I32 WAIT
+
+Expecting ')', or an int lit.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN I64 WAIT
+
+Expecting ')', or an int lit.
+<2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN IF ID CATCH_ALL
 
@@ -1671,28 +59,9 @@ parse: LPAREN DATA LPAREN IF LPAREN_RESULT RPAREN LPAREN_CATCH_REF
 
 Assuming that the block type is complete, expecting a folded instruction, or a folded then.
 
-parse: LPAREN DATA LPAREN IF LPAREN_THEN WAIT
-
-Expecting ')', or instructions.
-<1>This '(' opens the enclosing construct.
-
 parse: LPAREN DATA LPAREN IF LPAREN_THEN CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN WAIT
-
-Expecting ')', or a folded else.
-<6>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN WAIT
-
-Expecting 'else'.
-
-parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN ELSE WAIT
-
-Expecting ')', or instructions.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN ELSE CALL_INDIRECT END
@@ -1705,353 +74,180 @@ parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN ELSE RPAREN WAIT
 Expecting ')'.
 <7>This '(' opens the enclosing construct.
 
+parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN ELSE WAIT
+
+Expecting ')', or instructions.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN WAIT
+
+Expecting 'else'.
+
+parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN WAIT
+
+Expecting ')', or a folded else.
+<6>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN IF LPAREN_THEN WAIT
+
+Expecting ')', or instructions.
+<1>This '(' opens the enclosing construct.
+
 parse: LPAREN DATA LPAREN IF STRING_ANNOT RPAREN WAIT
 
 Expecting '(then', or a folded instruction.
 
-parse: LPAREN DATA LPAREN BLOCK WAIT
+parse: LPAREN DATA LPAREN IF WAIT
 
-Expecting ')', a block type, a label, or instructions.
-<2>This '(' opens the enclosing construct.
+Expecting a block type, a folded instruction, a folded then, or a label.
 
-parse: LPAREN DATA LPAREN BLOCK ID LPAREN_THEN
+parse: LPAREN DATA LPAREN LOOP CALL_INDIRECT END
+
+Assuming that the instructions are complete, expecting ')'.
+<5>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN LOOP ID LPAREN_THEN
 
 Expecting ')', a block type, or instructions.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN BLOCK LPAREN_RESULT RPAREN LPAREN_THEN
+parse: LPAREN DATA LPAREN LOOP LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the block type is complete, expecting ')', or instructions.
 <4>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN BLOCK CALL_INDIRECT END
+parse: LPAREN DATA LPAREN LOOP WAIT
 
-Assuming that the instructions are complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
+Expecting ')', a block type, a label, or instructions.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN MEMORY NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN MEMORY NAT RPAREN STRING_ANNOT RPAREN WAIT
+
+Expecting ')', or a data elem.
+<8>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN MEMORY NAT RPAREN WAIT
+
+Expecting an offset.
+
+parse: LPAREN DATA LPAREN MEMORY WAIT
+
+Expecting an index.
+
+parse: LPAREN DATA LPAREN OFFSET CALL_INDIRECT END
+
+Assuming that the expression is complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN OFFSET WAIT
+
+Expecting ')', or an expression.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN PACKEDTYPE INT WAIT
+
+Expecting ')', or an int lit.
+
+parse: LPAREN DATA LPAREN PACKEDTYPE WAIT
+
+Expecting ')', or an int lit.
+<2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN SELECT MEM_ALIGN
 
 Assuming that the folded instructions are complete, expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY CALL_INDIRECT RPAREN
+parse: LPAREN DATA LPAREN TRY ID RPAREN
 
-Assuming that the instructions are complete, expecting legacy catches.
+Expecting '(', or a block type.
 
-parse: LPAREN FUNC TRY CATCH_ALL WAIT
+parse: LPAREN DATA LPAREN TRY LPAREN DO CALL_INDIRECT CATCH_ALL
 
-Expecting 'end', or instructions.
+Assuming that the instructions are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY CATCH_ALL CALL_INDIRECT RPAREN
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT CALL_INDIRECT END
 
-Assuming that the instructions are complete, expecting 'end'.
+Assuming that the instructions are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY CATCH WAIT
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT NAT
+
+Expecting ')', or instructions.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT RPAREN WAIT
+
+Expecting ')', or folded catches.
+
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH WAIT
 
 Expecting an index.
 
-parse: LPAREN FUNC TRY CATCH NAT NAT
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL CALL_INDIRECT END
 
-Expecting instructions, or legacy catches.
+Assuming that the instructions are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY CATCH NAT CALL_INDIRECT RPAREN
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL RPAREN WAIT
 
-Assuming that the instructions are complete, expecting legacy catches.
+Expecting ')'.
+<9>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY END WAIT
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL WAIT
 
-Expecting a label.
+Expecting ')', or instructions.
+<1>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY_TABLE CALL_INDIRECT RPAREN
+parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN WAIT
 
-Assuming that the instructions are complete, expecting 'end'.
+Expecting ')', or folded catches.
+<8>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY_TABLE END WAIT
+parse: LPAREN DATA LPAREN TRY LPAREN DO WAIT
 
-Expecting a label.
+Expecting ')', or instructions.
+<2>This '(' opens the enclosing construct.
 
-parse: LPAREN TABLE NAT ANYREF CALL_INDIRECT END
+parse: LPAREN DATA LPAREN TRY LPAREN WAIT
 
-Assuming that the expression is complete, expecting ')'.
+Expecting 'do'.
+
+parse: LPAREN DATA LPAREN TRY LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the block type is complete, expecting '('.
+
+parse: LPAREN DATA LPAREN TRY WAIT
+
+Expecting '(', a block type, or a label.
+
+parse: LPAREN DATA LPAREN TRY_TABLE CALL_INDIRECT END
+
+Assuming that the instructions are complete, expecting ')'.
 <6>This '(' opens the enclosing construct.
 
-parse: LPAREN TABLE ANYREF WAIT
+parse: LPAREN DATA LPAREN TRY_TABLE ID END
 
-Expecting '('.
+Expecting ')', a block type, catches, or instructions.
+<3>This '(' opens the enclosing construct.
 
-parse: LPAREN TABLE ANYREF LPAREN WAIT
+parse: LPAREN DATA LPAREN TRY_TABLE LPAREN_RESULT RPAREN END
 
-Expecting 'elem'.
+Assuming that the catches are complete, expecting ')', or instructions.
+<5>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM ANYREF LPAREN WAIT
+parse: LPAREN DATA LPAREN TRY_TABLE WAIT
 
-Syntax error
-
-parse: LPAREN ELEM ANYREF LPAREN ITEM WAIT
-
-Expecting ')', or an expression.
+Expecting ')', a block type, a label, catches, or instructions.
 <2>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM ANYREF LPAREN ITEM CALL_INDIRECT END
-
-Assuming that the expression is complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE ANYREF LPAREN ELEM NAT MEM_OFFSET
-
-Assuming that the list of indices is complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE ANYREF LPAREN ELEM NAT RPAREN WAIT
-
-Expecting ')'.
-<9>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE ANYREF LPAREN ELEM WAIT
-
-Assuming that the elemexprs are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE ANYREF LPAREN ELEM RPAREN WAIT
-
-Expecting ')'.
-<9>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE I32 WAIT
-
-Expecting a 64-bit unsigned integer, or a reference type.
-
-parse: LPAREN TABLE I32 ANYREF WAIT
-
-Expecting '('.
-
-parse: LPAREN TABLE I32 ANYREF LPAREN WAIT
-
-Expecting 'elem'.
-
-parse: LPAREN TABLE I32 ANYREF LPAREN ELEM NAT MEM_OFFSET
-
-Assuming that the list of indices is complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE I32 ANYREF LPAREN ELEM NAT RPAREN WAIT
-
-Expecting ')'.
-<10>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE I32 ANYREF LPAREN ELEM WAIT
-
-Assuming that the elemexprs are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE I32 ANYREF LPAREN ELEM RPAREN WAIT
-
-Expecting ')'.
-<10>This '(' opens the enclosing construct.
-
-parse: LPAREN START WAIT
-
-Expecting an index.
-
-parse: LPAREN START NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN REC WAIT
-
-Assuming that the typedefs are complete, expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN MODULE WAIT
-
-Expecting ')', 'id', or a module field.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE LPAREN WAIT
-
-Syntax error
-
-parse: LPAREN MEMORY WAIT
-
-Expecting '(export', or 'id'.
-
-parse: LPAREN MEMORY ID WAIT
-
-Assuming that the exports are complete, expecting '(', '(import', a memory type, a page-size clause, or an address type.
-
-parse: LPAREN MEMORY LPAREN_IMPORT WAIT
-
-Expecting a name.
-
-parse: LPAREN MEMORY LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING RPAREN WAIT
-
-Expecting a memory type.
-
-parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING RPAREN NAT LPAREN PAGESIZE NAT RPAREN WAIT
-
-Expecting ')'.
-<9>This '(' opens the enclosing construct.
-
-parse: LPAREN MEMORY LPAREN WAIT
-
-Expecting 'data', or 'pagesize'.
-
-parse: LPAREN MEMORY LPAREN DATA WAIT
-
-Expecting ')', or a data elem.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA STRING LPAREN WAIT
-
-Syntax error
-
-parse: LPAREN DATA LPAREN V128 WAIT
-
-Expecting a v128 const body.
-
-parse: LPAREN DATA LPAREN V128 I8X16 WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
-
-Expecting an 8-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I64X2 WAIT
-
-Expecting a 64-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I64X2 INT WAIT
-
-Expecting a 64-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I32X4 WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I32X4 INT WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I32X4 INT INT WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I32X4 INT INT INT WAIT
-
-Expecting a 32-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT INT INT INT WAIT
-
-Expecting a 16-bit signed integer.
-
-parse: LPAREN DATA LPAREN V128 F64X2 WAIT
-
-Expecting a 64-bit float.
-
-parse: LPAREN DATA LPAREN V128 F64X2 FLOAT WAIT
-
-Expecting a 64-bit float.
-
-parse: LPAREN DATA LPAREN V128 F32X4 WAIT
-
-Expecting a 32-bit float.
-
-parse: LPAREN DATA LPAREN V128 F32X4 FLOAT WAIT
+parse: LPAREN DATA LPAREN V128 F32X4 FLOAT FLOAT FLOAT WAIT
 
 Expecting a 32-bit float.
 
@@ -2059,7 +255,11 @@ parse: LPAREN DATA LPAREN V128 F32X4 FLOAT FLOAT WAIT
 
 Expecting a 32-bit float.
 
-parse: LPAREN DATA LPAREN V128 F32X4 FLOAT FLOAT FLOAT WAIT
+parse: LPAREN DATA LPAREN V128 F32X4 FLOAT WAIT
+
+Expecting a 32-bit float.
+
+parse: LPAREN DATA LPAREN V128 F32X4 WAIT
 
 Expecting a 32-bit float.
 
@@ -2067,182 +267,622 @@ parse: LPAREN DATA LPAREN V128 F64X2 FLOAT FLOAT WAIT
 
 Expecting ')', or a v128 const body.
 
-parse: LPAREN DATA LPAREN PACKEDTYPE WAIT
+parse: LPAREN DATA LPAREN V128 F64X2 FLOAT WAIT
 
-Expecting ')', or an int lit.
-<2>This '(' opens the enclosing construct.
+Expecting a 64-bit float.
 
-parse: LPAREN DATA LPAREN PACKEDTYPE INT WAIT
+parse: LPAREN DATA LPAREN V128 F64X2 WAIT
 
-Expecting ')', or an int lit.
+Expecting a 64-bit float.
 
-parse: LPAREN DATA LPAREN I64 WAIT
+parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT INT INT INT WAIT
 
-Expecting ')', or an int lit.
-<2>This '(' opens the enclosing construct.
+Expecting a 16-bit signed integer.
 
-parse: LPAREN DATA LPAREN I32 WAIT
+parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT INT INT WAIT
 
-Expecting ')', or an int lit.
-<2>This '(' opens the enclosing construct.
+Expecting a 16-bit signed integer.
 
-parse: LPAREN DATA LPAREN F64 WAIT
+parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT INT WAIT
 
-Expecting ')', or a float lit.
-<2>This '(' opens the enclosing construct.
+Expecting a 16-bit signed integer.
 
-parse: LPAREN DATA LPAREN F64 FLOAT WAIT
+parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT INT WAIT
 
-Expecting ')', or a float lit.
+Expecting a 16-bit signed integer.
 
-parse: LPAREN DATA LPAREN F32 WAIT
+parse: LPAREN DATA LPAREN V128 I16X8 INT INT INT WAIT
 
-Expecting ')', or a float lit.
-<2>This '(' opens the enclosing construct.
+Expecting a 16-bit signed integer.
 
-parse: LPAREN MEMORY LPAREN DATA RPAREN WAIT
+parse: LPAREN DATA LPAREN V128 I16X8 INT INT WAIT
 
-Expecting ')'.
-<8>This '(' opens the enclosing construct.
+Expecting a 16-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I16X8 INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I16X8 WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I32X4 INT INT INT WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I32X4 INT INT WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I32X4 INT WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I32X4 WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I64X2 INT WAIT
+
+Expecting a 64-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I64X2 WAIT
+
+Expecting a 64-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 I8X16 WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN DATA LPAREN V128 WAIT
+
+Expecting a v128 const body.
+
+parse: LPAREN DATA LPAREN WAIT
+
+Syntax error
+
+parse: LPAREN DATA STRING LPAREN WAIT
+
+Syntax error
 
 parse: LPAREN DATA STRING WAIT
 
 Expecting ')', or a data elem.
 
-parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN WAIT
-
-Expecting '('.
-
-parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN WAIT
-
-Expecting 'data'.
-
-parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN DATA WAIT
+parse: LPAREN DATA STRING_ANNOT RPAREN WAIT
 
 Expecting ')', or a data elem.
+<4>This '(' opens the enclosing construct.
+
+parse: LPAREN DATA WAIT
+
+Expecting '(', ')', 'id', a data elem, or an offset.
 <2>This '(' opens the enclosing construct.
 
-parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN DATA RPAREN WAIT
+parse: LPAREN ELEM ANYREF LPAREN ITEM CALL_INDIRECT END
 
-Expecting ')'.
-<9>This '(' opens the enclosing construct.
+Assuming that the expression is complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
 
-parse: LPAREN MEMORY NAT LPAREN PAGESIZE NAT RPAREN WAIT
+parse: LPAREN ELEM ANYREF LPAREN ITEM WAIT
 
-Expecting ')'.
+Expecting ')', or an expression.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN ELEM ANYREF LPAREN WAIT
+
+Syntax error
+
+parse: LPAREN ELEM ANYREF MEM_OFFSET
+
+Assuming that the element list is complete, expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse: LPAREN ELEM DECLARE ANYREF MEM_OFFSET
+
+Assuming that the element list is complete, expecting ')'.
 <5>This '(' opens the enclosing construct.
 
-parse: LPAREN MEMORY I32 WAIT
+parse: LPAREN ELEM DECLARE WAIT
 
-Expecting '(', a 64-bit unsigned integer, or a page-size clause.
+Expecting an element list.
 
-parse: LPAREN MEMORY I32 LPAREN WAIT
+parse: LPAREN ELEM ID WAIT
 
-Expecting 'data', or 'pagesize'.
+Expecting '(', 'declare', an element list, or an offset.
 
-parse: LPAREN MEMORY I32 LPAREN DATA WAIT
-
-Expecting ')', or a data elem.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN MEMORY I32 LPAREN DATA RPAREN WAIT
+parse: LPAREN ELEM LPAREN REF NAT NAT
 
 Expecting ')'.
-<9>This '(' opens the enclosing construct.
+<4>This '(' opens the enclosing construct.
 
-parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN WAIT
+parse: LPAREN ELEM LPAREN REF NULL WAIT
 
-Expecting '('.
+Expecting a heap type.
 
-parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN WAIT
+parse: LPAREN ELEM LPAREN REF WAIT
 
-Expecting 'data'.
+Expecting 'null', or a heap type.
 
-parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN DATA WAIT
-
-Expecting ')', or a data elem.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN DATA RPAREN WAIT
-
-Expecting ')'.
-<10>This '(' opens the enclosing construct.
-
-parse: LPAREN GLOBAL WAIT
-
-Expecting '(export', '(import', 'id', or a global type.
-
-parse: LPAREN GLOBAL ID WAIT
-
-Assuming that the exports are complete, expecting '(import', or a global type.
-
-parse: LPAREN GLOBAL LPAREN_IMPORT WAIT
-
-Expecting a name.
-
-parse: LPAREN GLOBAL LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING WAIT
+parse: LPAREN ELEM LPAREN TABLE NAT NAT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING RPAREN WAIT
+parse: LPAREN ELEM LPAREN TABLE NAT RPAREN LPAREN WAIT
 
-Expecting a global type.
+Syntax error
 
-parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING RPAREN ANYREF WAIT
+parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN ANYREF MEM_OFFSET
 
-Expecting ')'.
+Assuming that the element list is complete, expecting ')'.
 <9>This '(' opens the enclosing construct.
 
-parse: LPAREN GLOBAL ANYREF WAIT
+parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN WAIT
 
-Expecting ')', or an expression.
+Expecting an element list.
+
+parse: LPAREN ELEM LPAREN TABLE NAT RPAREN WAIT
+
+Expecting an offset.
+
+parse: LPAREN ELEM LPAREN TABLE WAIT
+
+Expecting an index.
+
+parse: LPAREN ELEM LPAREN WAIT
+
+Syntax error
+
+parse: LPAREN ELEM STRING_ANNOT RPAREN ANYREF MEM_OFFSET
+
+Assuming that the element list is complete, expecting ')'.
 <5>This '(' opens the enclosing construct.
 
-parse: LPAREN GLOBAL ANYREF CALL_INDIRECT END
+parse: LPAREN ELEM STRING_ANNOT RPAREN MEM_OFFSET
 
-Assuming that the expression is complete, expecting ')'.
-<6>This '(' opens the enclosing construct.
+Assuming that the indexes are complete, expecting ')'.
+<5>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC WAIT
+parse: LPAREN ELEM WAIT
 
-Expecting '(export', or 'id'.
+Expecting '(', 'declare', 'id', an element list, or an offset.
+
+parse: LPAREN FUNC ARRAY_COPY NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_COPY WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_FILL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_GET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_INIT_DATA NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_INIT_DATA WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_INIT_ELEM NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_INIT_ELEM WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_NEW WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_NEW_DATA NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_NEW_DATA WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_NEW_DEFAULT WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_NEW_ELEM NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_NEW_ELEM WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_NEW_FIXED NAT MEM_OFFSET
+
+Expecting a 32-bit unsigned integer.
+
+parse: LPAREN FUNC ARRAY_NEW_FIXED WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ARRAY_SET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BLOCK CALL_INDIRECT RPAREN
+
+Assuming that the instructions are complete, expecting 'end'.
+
+parse: LPAREN FUNC BLOCK END WAIT
+
+Expecting a label.
+
+parse: LPAREN FUNC BLOCK ID RPAREN
+
+Expecting 'end', a block type, or instructions.
+
+parse: LPAREN FUNC BLOCK LPAREN_RESULT RPAREN RPAREN
+
+Assuming that the block type is complete, expecting 'end', or instructions.
+
+parse: LPAREN FUNC BLOCK WAIT
+
+Expecting 'end', a block type, a label, or instructions.
+
+parse: LPAREN FUNC BR WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN SELECT MEM_ALIGN
+
+Assuming that the plain instruction is complete, expecting instructions.
+
+parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN STRING_ANNOT RPAREN WAIT
+
+Expecting instructions.
+
+parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN TRY_TABLE END ID LPAREN_THEN
+
+Expecting instructions.
+
+parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN WAIT
+
+Expecting a block, a folded instruction, or a plain instruction.
+
+parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC BRANCH_HINT_ANNOT WAIT
+
+Expecting a string.
+
+parse: LPAREN FUNC BR_IF WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BR_ON_CAST NAT ANYREF WAIT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST NAT NAT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BR_ON_CAST_DESC_EQ NAT ANYREF WAIT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST_DESC_EQ NAT NAT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST_DESC_EQ WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BR_ON_CAST_DESC_EQ_FAIL NAT ANYREF WAIT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST_DESC_EQ_FAIL NAT NAT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST_DESC_EQ_FAIL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BR_ON_CAST_FAIL NAT ANYREF WAIT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST_FAIL NAT NAT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC BR_ON_CAST_FAIL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BR_ON_NON_NULL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BR_ON_NULL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC BR_TABLE WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC CALL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC CALL_INDIRECT END
+
+Assuming that the instructions are complete, expecting ')'.
+<7>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC CALL_INDIRECT NAT NAT
+
+Expecting type use without bindings.
+
+parse: LPAREN FUNC CALL_INDIRECT WAIT
+
+Expecting an index, or type use without bindings.
+
+parse: LPAREN FUNC CALL_REF WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC CHAR_ANNOT STRING WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC CHAR_ANNOT WAIT
+
+Expecting a string.
+
+parse: LPAREN FUNC CONT_BIND NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC CONT_BIND WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC CONT_NEW WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC DATA_DROP WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC ELEM_DROP WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC F32_CONST WAIT
+
+Expecting a 32-bit float.
+
+parse: LPAREN FUNC F64_CONST WAIT
+
+Expecting a 64-bit float.
+
+parse: LPAREN FUNC GLOBAL_GET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC GLOBAL_SET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC I32_CONST WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN FUNC I64_CONST WAIT
+
+Expecting a 64-bit signed integer.
 
 parse: LPAREN FUNC ID WAIT
 
 Assuming that the exports are complete, expecting '(import', ')', a local declaration, a type use, or instructions.
 <4>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC LPAREN_IMPORT WAIT
+parse: LPAREN FUNC IF CALL_INDIRECT RPAREN
 
-Expecting a name.
+Assuming that the instructions are complete, expecting 'else', or 'end'.
 
-parse: LPAREN FUNC LPAREN_IMPORT STRING WAIT
+parse: LPAREN FUNC IF ELSE CALL_INDIRECT RPAREN
 
-Expecting a name.
+Assuming that the instructions are complete, expecting 'end'.
 
-parse: LPAREN FUNC LPAREN_IMPORT STRING STRING WAIT
+parse: LPAREN FUNC IF ELSE END WAIT
+
+Expecting a label.
+
+parse: LPAREN FUNC IF ELSE ID RPAREN
+
+Expecting 'end', or instructions.
+
+parse: LPAREN FUNC IF ELSE WAIT
+
+Expecting 'end', a label, or instructions.
+
+parse: LPAREN FUNC IF END WAIT
+
+Expecting a label.
+
+parse: LPAREN FUNC IF ID LPAREN_THEN
+
+Expecting 'else', 'end', a block type, or instructions.
+
+parse: LPAREN FUNC IF LPAREN_RESULT RPAREN LPAREN_LOCAL
+
+Assuming that the block type is complete, expecting 'else', 'end', or instructions.
+
+parse: LPAREN FUNC IF WAIT
+
+Expecting 'else', 'end', a block type, a label, or instructions.
+
+parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT CALL_INDIRECT END
+
+Assuming that the instructions are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT CALL_INDIRECT END
+
+Assuming that the instructions are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT RPAREN WAIT
 
 Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT WAIT
+
+Expecting ')', or instructions.
+<1>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN RPAREN WAIT
+
+Expecting instructions.
+
+parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN WAIT
+
+Expecting ')', or a cond else.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN WAIT
+parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT WAIT
 
-Expecting '(', ')', or a type use.
-<8>This '(' opens the enclosing construct.
+Expecting ')', or instructions.
+<1>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN WAIT
+parse: LPAREN FUNC IF_ANNOT ID WAIT
 
-Expecting 'exact'.
+Expecting a cond then.
 
-parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT WAIT
+parse: LPAREN FUNC IF_ANNOT WAIT
 
-Expecting ')', or a type use.
-<2>This '(' opens the enclosing construct.
+Expecting a cond.
+
+parse: LPAREN FUNC LOCAL_GET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC LOCAL_SET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC LOCAL_TEE WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC LOOP CALL_INDIRECT RPAREN
+
+Assuming that the instructions are complete, expecting 'end'.
+
+parse: LPAREN FUNC LOOP END WAIT
+
+Expecting a label.
+
+parse: LPAREN FUNC LOOP ID RPAREN
+
+Expecting 'end', a block type, or instructions.
+
+parse: LPAREN FUNC LOOP LPAREN_RESULT RPAREN RPAREN
+
+Assuming that the block type is complete, expecting 'end', or instructions.
+
+parse: LPAREN FUNC LOOP WAIT
+
+Expecting 'end', a block type, a label, or instructions.
+
+parse: LPAREN FUNC LPAREN WAIT
+
+Syntax error
 
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT LPAREN_RESULT RPAREN LPAREN_THEN
 
@@ -2254,180 +894,829 @@ parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT RPAREN WAIT
 Expecting ')'.
 <12>This '(' opens the enclosing construct.
 
+parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT WAIT
+
+Expecting ')', or a type use.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN WAIT
+
+Expecting 'exact'.
+
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
 <9>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC LPAREN_LOCAL ID WAIT
+parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN WAIT
 
-Expecting a value type.
+Expecting '(', ')', or a type use.
+<8>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC LPAREN_IMPORT STRING STRING WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC LPAREN_IMPORT STRING WAIT
+
+Expecting a name.
+
+parse: LPAREN FUNC LPAREN_IMPORT WAIT
+
+Expecting a name.
 
 parse: LPAREN FUNC LPAREN_LOCAL ID ANYREF WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC LPAREN_LOCAL WAIT
+parse: LPAREN FUNC LPAREN_LOCAL ID WAIT
 
-Assuming that the value types are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting a value type.
 
 parse: LPAREN FUNC LPAREN_LOCAL RPAREN LPAREN_THEN
 
 Assuming that the locals are complete, expecting ')', or instructions.
 <6>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC CALL_INDIRECT END
+parse: LPAREN FUNC LPAREN_LOCAL WAIT
 
-Assuming that the instructions are complete, expecting ')'.
-<7>This '(' opens the enclosing construct.
+Assuming that the value types are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM WAIT
-
-Expecting '(', 'declare', 'id', an element list, or an offset.
-
-parse: LPAREN ELEM ID WAIT
-
-Expecting '(', 'declare', an element list, or an offset.
-
-parse: LPAREN ELEM LPAREN WAIT
-
-Syntax error
-
-parse: LPAREN ELEM LPAREN TABLE WAIT
+parse: LPAREN FUNC MEMORY_COPY NAT MEM_OFFSET
 
 Expecting an index.
 
-parse: LPAREN ELEM LPAREN TABLE NAT NAT
+parse: LPAREN FUNC MEMORY_INIT WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC REF_CAST WAIT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC REF_CAST_DESC_EQ WAIT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC REF_FUNC WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC REF_GET_DESC WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC REF_NULL LPAREN EXACT NAT NAT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM LPAREN TABLE NAT RPAREN WAIT
+parse: LPAREN FUNC REF_NULL LPAREN EXACT WAIT
 
-Expecting an offset.
+Expecting an index.
 
-parse: LPAREN ELEM LPAREN TABLE NAT RPAREN LPAREN WAIT
+parse: LPAREN FUNC REF_NULL LPAREN WAIT
+
+Expecting 'exact'.
+
+parse: LPAREN FUNC REF_NULL WAIT
+
+Expecting a heap type.
+
+parse: LPAREN FUNC REF_TEST WAIT
+
+Expecting a reference type.
+
+parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT MEM_OFFSET
+
+Expecting 'switch', or an index.
+
+parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT SWITCH WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC RESUME NAT LPAREN_ON WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC RESUME WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC RESUME_THROW NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC RESUME_THROW WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC RESUME_THROW_REF WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC RETURN_CALL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC RETURN_CALL_INDIRECT NAT NAT
+
+Expecting type use without bindings.
+
+parse: LPAREN FUNC RETURN_CALL_INDIRECT WAIT
+
+Expecting an index, or type use without bindings.
+
+parse: LPAREN FUNC RETURN_CALL_REF WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC SELECT LPAREN_RESULT WAIT
+
+Assuming that the value types are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC SELECT MEM_ALIGN
+
+Assuming that the plain instruction is complete, expecting instructions.
+
+parse: LPAREN FUNC STRING_ANNOT RPAREN WAIT
+
+Expecting instructions.
+
+parse: LPAREN FUNC STRING_ANNOT STRING NAT
+
+Assuming that the string list is complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC STRING_ANNOT WAIT
+
+Expecting ')', a string, or an index.
+<1>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC STRUCT_GET NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC STRUCT_GET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC STRUCT_NEW WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC STRUCT_NEW_DEFAULT WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC STRUCT_NEW_DEFAULT_DESC WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC STRUCT_NEW_DESC WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC STRUCT_SET NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC STRUCT_SET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC SUSPEND WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC SWITCH NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC SWITCH WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TABLE_COPY NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC TABLE_INIT WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC THROW WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY CALL_INDIRECT RPAREN
+
+Assuming that the instructions are complete, expecting legacy catches.
+
+parse: LPAREN FUNC TRY CATCH NAT CALL_INDIRECT RPAREN
+
+Assuming that the instructions are complete, expecting legacy catches.
+
+parse: LPAREN FUNC TRY CATCH NAT NAT
+
+Expecting instructions, or legacy catches.
+
+parse: LPAREN FUNC TRY CATCH WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY CATCH_ALL CALL_INDIRECT RPAREN
+
+Assuming that the instructions are complete, expecting 'end'.
+
+parse: LPAREN FUNC TRY CATCH_ALL WAIT
+
+Expecting 'end', or instructions.
+
+parse: LPAREN FUNC TRY END WAIT
+
+Expecting a label.
+
+parse: LPAREN FUNC TRY ID LPAREN_THEN
+
+Expecting a block type, instructions, or legacy catches.
+
+parse: LPAREN FUNC TRY LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the block type is complete, expecting instructions, or legacy catches.
+
+parse: LPAREN FUNC TRY WAIT
+
+Expecting a block type, a label, instructions, or legacy catches.
+
+parse: LPAREN FUNC TRY_TABLE CALL_INDIRECT RPAREN
+
+Assuming that the instructions are complete, expecting 'end'.
+
+parse: LPAREN FUNC TRY_TABLE END ID LPAREN_THEN
+
+Expecting instructions.
+
+parse: LPAREN FUNC TRY_TABLE END WAIT
+
+Expecting a label.
+
+parse: LPAREN FUNC TRY_TABLE ID RPAREN
+
+Expecting 'end', a block type, catches, or instructions.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH NAT NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL_REF NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_ALL_REF WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_REF NAT MEM_OFFSET
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_REF NAT NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_CATCH_REF WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM RPAREN WAIT
+
+Expecting '(param'.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM WAIT
+
+Expecting ')', or an unnamed param.
+<1>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_RESULT RPAREN RPAREN
+
+Assuming that the catches are complete, expecting 'end', or instructions.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_TYPE NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_TYPE NAT RPAREN WAIT
+
+Expecting parameters and results without bindings.
+
+parse: LPAREN FUNC TRY_TABLE LPAREN_TYPE WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC TRY_TABLE WAIT
+
+Expecting 'end', a block type, a label, catches, or instructions.
+
+parse: LPAREN FUNC V128_CONST F32X4 FLOAT FLOAT FLOAT WAIT
+
+Expecting a 32-bit float.
+
+parse: LPAREN FUNC V128_CONST F32X4 FLOAT FLOAT WAIT
+
+Expecting a 32-bit float.
+
+parse: LPAREN FUNC V128_CONST F32X4 FLOAT WAIT
+
+Expecting a 32-bit float.
+
+parse: LPAREN FUNC V128_CONST F32X4 WAIT
+
+Expecting a 32-bit float.
+
+parse: LPAREN FUNC V128_CONST F64X2 FLOAT WAIT
+
+Expecting a 64-bit float.
+
+parse: LPAREN FUNC V128_CONST F64X2 WAIT
+
+Expecting a 64-bit float.
+
+parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT INT INT INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT INT INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I16X8 INT INT INT INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I16X8 INT INT INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I16X8 INT INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I16X8 INT WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I16X8 WAIT
+
+Expecting a 16-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I32X4 INT INT INT WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I32X4 INT INT WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I32X4 INT WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I32X4 WAIT
+
+Expecting a 32-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I64X2 INT WAIT
+
+Expecting a 64-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I64X2 WAIT
+
+Expecting a 64-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 INT WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST I8X16 WAIT
+
+Expecting an 8-bit signed integer.
+
+parse: LPAREN FUNC V128_CONST WAIT
 
 Syntax error
 
-parse: LPAREN DATA LPAREN OFFSET WAIT
+parse: LPAREN FUNC VEC_EXTRACT WAIT
 
-Expecting ')', or an expression.
-<2>This '(' opens the enclosing construct.
+Expecting an 8-bit unsigned integer.
 
-parse: LPAREN DATA LPAREN OFFSET CALL_INDIRECT END
+parse: LPAREN FUNC VEC_LOAD_LANE ID WAIT
+
+Expecting a memory alignment, a memory offset, or an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_LOAD_LANE MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_LOAD_LANE MEM_OFFSET MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_LOAD_LANE MEM_OFFSET WAIT
+
+Expecting a memory alignment, or an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_LOAD_LANE NAT MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_LOAD_LANE NAT MEM_OFFSET MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_LOAD_LANE NAT MEM_OFFSET WAIT
+
+Expecting a memory alignment, or an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_LOAD_LANE WAIT
+
+Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an index.
+
+parse: LPAREN FUNC VEC_REPLACE WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE NAT WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_SHUFFLE WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE ID WAIT
+
+Expecting a memory alignment, a memory offset, or an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE MEM_OFFSET MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE MEM_OFFSET WAIT
+
+Expecting a memory alignment, or an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE NAT MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE NAT MEM_OFFSET MEM_ALIGN WAIT
+
+Expecting an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE NAT MEM_OFFSET WAIT
+
+Expecting a memory alignment, or an 8-bit unsigned integer.
+
+parse: LPAREN FUNC VEC_STORE_LANE NAT WAIT
+
+Syntax error
+
+parse: LPAREN FUNC VEC_STORE_LANE WAIT
+
+Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an index.
+
+parse: LPAREN FUNC WAIT
+
+Expecting '(export', or 'id'.
+
+parse: LPAREN GLOBAL ANYREF CALL_INDIRECT END
 
 Assuming that the expression is complete, expecting ')'.
+<6>This '(' opens the enclosing construct.
+
+parse: LPAREN GLOBAL ANYREF WAIT
+
+Expecting ')', or an expression.
+<5>This '(' opens the enclosing construct.
+
+parse: LPAREN GLOBAL ID WAIT
+
+Assuming that the exports are complete, expecting '(import', or a global type.
+
+parse: LPAREN GLOBAL LPAREN MUT ANYREF WAIT
+
+Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN WAIT
+parse: LPAREN GLOBAL LPAREN MUT WAIT
 
-Expecting an element list.
+Expecting a value type.
 
-parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN ANYREF MEM_OFFSET
+parse: LPAREN GLOBAL LPAREN WAIT
 
-Assuming that the element list is complete, expecting ')'.
+Expecting 'mut', or 'ref'.
+
+parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING RPAREN ANYREF WAIT
+
+Expecting ')'.
 <9>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM DECLARE WAIT
+parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING RPAREN WAIT
 
-Expecting an element list.
+Expecting a global type.
 
-parse: LPAREN ELEM DECLARE ANYREF MEM_OFFSET
-
-Assuming that the element list is complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
-
-parse: LPAREN ELEM STRING_ANNOT RPAREN MEM_OFFSET
-
-Assuming that the indexes are complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
-
-parse: LPAREN ELEM STRING_ANNOT RPAREN ANYREF MEM_OFFSET
-
-Assuming that the element list is complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
-
-parse: LPAREN ELEM ANYREF MEM_OFFSET
-
-Assuming that the element list is complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA WAIT
-
-Expecting '(', ')', 'id', a data elem, or an offset.
-<2>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA ID WAIT
-
-Expecting '(', ')', a data elem, or an offset.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN DATA LPAREN WAIT
-
-Syntax error
-
-parse: LPAREN DATA LPAREN MEMORY WAIT
-
-Expecting an index.
-
-parse: LPAREN DATA LPAREN MEMORY NAT NAT
+parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN MEMORY NAT RPAREN WAIT
+parse: LPAREN GLOBAL LPAREN_IMPORT STRING WAIT
 
-Expecting an offset.
+Expecting a name.
 
-parse: LPAREN DATA LPAREN MEMORY NAT RPAREN STRING_ANNOT RPAREN WAIT
+parse: LPAREN GLOBAL LPAREN_IMPORT WAIT
+
+Expecting a name.
+
+parse: LPAREN GLOBAL WAIT
+
+Expecting '(export', '(import', 'id', or a global type.
+
+parse: LPAREN MEMORY I32 LPAREN DATA RPAREN WAIT
+
+Expecting ')'.
+<9>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY I32 LPAREN DATA WAIT
 
 Expecting ')', or a data elem.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN DATA RPAREN WAIT
+
+Expecting ')'.
+<10>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN DATA WAIT
+
+Expecting ')', or a data elem.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN WAIT
+
+Expecting 'data'.
+
+parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN WAIT
+
+Expecting '('.
+
+parse: LPAREN MEMORY I32 LPAREN WAIT
+
+Expecting 'data', or 'pagesize'.
+
+parse: LPAREN MEMORY I32 WAIT
+
+Expecting '(', a 64-bit unsigned integer, or a page-size clause.
+
+parse: LPAREN MEMORY ID WAIT
+
+Assuming that the exports are complete, expecting '(', '(import', a memory type, a page-size clause, or an address type.
+
+parse: LPAREN MEMORY LPAREN DATA RPAREN WAIT
+
+Expecting ')'.
 <8>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA STRING_ANNOT RPAREN WAIT
+parse: LPAREN MEMORY LPAREN DATA WAIT
 
 Expecting ')', or a data elem.
-<4>This '(' opens the enclosing construct.
+<2>This '(' opens the enclosing construct.
 
-parse_script: IF_ANNOT WAIT
-
-Expecting a cond.
-
-parse_script: IF_ANNOT ID WAIT
-
-Expecting cond then fields.
-
-parse_script: FEATURE_ANNOT WAIT
-
-Expecting a string.
-
-parse_script: FEATURE_ANNOT STRING WAIT
+parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN DATA RPAREN WAIT
 
 Expecting ')'.
+<9>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN DATA WAIT
+
+Expecting ')', or a data elem.
 <2>This '(' opens the enclosing construct.
 
-parse_script: IF_ANNOT ID THEN_ANNOT WAIT
+parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN WAIT
 
-Assuming that the module fields are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting 'data'.
 
-parse_script: IF_ANNOT ID THEN_ANNOT RPAREN WAIT
+parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN WAIT
 
-Expecting ')', or cond else fields.
+Expecting '('.
+
+parse: LPAREN MEMORY LPAREN PAGESIZE NAT WAIT
+
+Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT WAIT
+parse: LPAREN MEMORY LPAREN PAGESIZE WAIT
 
-Assuming that the module fields are complete, expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting a 32-bit unsigned integer.
 
-parse_script: IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT RPAREN WAIT
+parse: LPAREN MEMORY LPAREN WAIT
+
+Expecting 'data', or 'pagesize'.
+
+parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING RPAREN NAT LPAREN PAGESIZE NAT RPAREN WAIT
 
 Expecting ')'.
-<4>This '(' opens the enclosing construct.
+<9>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING RPAREN WAIT
+
+Expecting a memory type.
+
+parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY LPAREN_IMPORT STRING WAIT
+
+Expecting a name.
+
+parse: LPAREN MEMORY LPAREN_IMPORT WAIT
+
+Expecting a name.
+
+parse: LPAREN MEMORY NAT LPAREN PAGESIZE NAT RPAREN WAIT
+
+Expecting ')'.
+<5>This '(' opens the enclosing construct.
+
+parse: LPAREN MEMORY NAT LPAREN WAIT
+
+Expecting 'pagesize'.
+
+parse: LPAREN MEMORY NAT SHARED WAIT
+
+Expecting ')', or a page-size clause.
+
+parse: LPAREN MEMORY NAT WAIT
+
+Assuming that the limits are complete, expecting ')', 'shared', or a page-size clause.
+
+parse: LPAREN MEMORY WAIT
+
+Expecting '(export', or 'id'.
 
 parse: LPAREN MODULE ID WAIT
 
@@ -2438,225 +1727,621 @@ parse: LPAREN MODULE RPAREN WAIT
 
 Expecting end of file.
 
+parse: LPAREN MODULE WAIT
+
+Expecting ')', 'id', or a module field.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN REC WAIT
+
+Assuming that the typedefs are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN START NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN START WAIT
+
+Expecting an index.
+
+parse: LPAREN TABLE ANYREF LPAREN ELEM NAT MEM_OFFSET
+
+Assuming that the list of indices is complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE ANYREF LPAREN ELEM NAT RPAREN WAIT
+
+Expecting ')'.
+<9>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE ANYREF LPAREN ELEM RPAREN WAIT
+
+Expecting ')'.
+<9>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE ANYREF LPAREN ELEM WAIT
+
+Assuming that the elemexprs are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE ANYREF LPAREN WAIT
+
+Expecting 'elem'.
+
+parse: LPAREN TABLE ANYREF WAIT
+
+Expecting '('.
+
+parse: LPAREN TABLE I32 ANYREF LPAREN ELEM NAT MEM_OFFSET
+
+Assuming that the list of indices is complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE I32 ANYREF LPAREN ELEM NAT RPAREN WAIT
+
+Expecting ')'.
+<10>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE I32 ANYREF LPAREN ELEM RPAREN WAIT
+
+Expecting ')'.
+<10>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE I32 ANYREF LPAREN ELEM WAIT
+
+Assuming that the elemexprs are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE I32 ANYREF LPAREN WAIT
+
+Expecting 'elem'.
+
+parse: LPAREN TABLE I32 ANYREF WAIT
+
+Expecting '('.
+
+parse: LPAREN TABLE I32 WAIT
+
+Expecting a 64-bit unsigned integer, or a reference type.
+
+parse: LPAREN TABLE ID WAIT
+
+Assuming that the exports are complete, expecting '(import', a reference type, a table type, or an address type.
+
+parse: LPAREN TABLE LPAREN WAIT
+
+Expecting 'ref'.
+
+parse: LPAREN TABLE LPAREN_IMPORT STRING STRING RPAREN NAT ANYREF WAIT
+
+Expecting ')'.
+<9>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE LPAREN_IMPORT STRING STRING RPAREN WAIT
+
+Expecting a table type.
+
+parse: LPAREN TABLE LPAREN_IMPORT STRING STRING WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE LPAREN_IMPORT STRING WAIT
+
+Expecting a name.
+
+parse: LPAREN TABLE LPAREN_IMPORT WAIT
+
+Expecting a name.
+
+parse: LPAREN TABLE NAT ANYREF CALL_INDIRECT END
+
+Assuming that the expression is complete, expecting ')'.
+<6>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE NAT ANYREF WAIT
+
+Expecting ')', or an expression.
+<5>This '(' opens the enclosing construct.
+
+parse: LPAREN TABLE NAT WAIT
+
+Assuming that the limits are complete, expecting a reference type.
+
+parse: LPAREN TABLE WAIT
+
+Expecting '(export', or 'id'.
+
+parse: LPAREN TAG ID WAIT
+
+Assuming that the exports are complete, expecting '(import', ')', or a type use.
+<4>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_EXPORT STRING WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_EXPORT WAIT
+
+Expecting a name.
+
+parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the type use is complete, expecting ')'.
+<9>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN WAIT
+
+Expecting ')', or a type use.
+<8>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_IMPORT STRING STRING WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_IMPORT STRING WAIT
+
+Expecting a name.
+
+parse: LPAREN TAG LPAREN_IMPORT WAIT
+
+Expecting a name.
+
+parse: LPAREN TAG LPAREN_PARAM ANYREF WAIT
+
+Expecting ')', or an unnamed param.
+
+parse: LPAREN TAG LPAREN_PARAM ID ANYREF WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_PARAM ID WAIT
+
+Expecting a value type.
+
+parse: LPAREN TAG LPAREN_PARAM RPAREN WAIT
+
+Expecting a parameter group.
+
+parse: LPAREN TAG LPAREN_PARAM WAIT
+
+Expecting ')', 'id', or an unnamed param.
+<1>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the type use is complete, expecting ')'.
+<5>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_RESULT RPAREN WAIT
+
+Expecting '(result'.
+
+parse: LPAREN TAG LPAREN_RESULT WAIT
+
+Assuming that the value types are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_TYPE NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN TAG LPAREN_TYPE NAT RPAREN WAIT
+
+Expecting parameters and results.
+
+parse: LPAREN TAG LPAREN_TYPE WAIT
+
+Expecting an index.
+
+parse: LPAREN TAG WAIT
+
+Expecting '(export', '(import', ')', 'id', or a type use.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN WAIT
+
+Syntax error
+
 parse: WAIT
 
 Assuming that the module fields are complete, expecting end of file.
 
-parse_script: LPAREN VEC_TERN_OP
+parse_script: FEATURE_ANNOT STRING WAIT
 
-Syntax error
-
-parse_script: LPAREN WAIT WAIT
-
-Expecting ')', or 'id'.
+Expecting ')'.
 <2>This '(' opens the enclosing construct.
 
-parse_script: LPAREN WAIT ID WAIT
+parse_script: FEATURE_ANNOT WAIT
+
+Expecting a string.
+
+parse_script: IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT RPAREN WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT WAIT
+
+Assuming that the module fields are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: IF_ANNOT ID THEN_ANNOT RPAREN WAIT
+
+Expecting ')', or cond else fields.
+<3>This '(' opens the enclosing construct.
+
+parse_script: IF_ANNOT ID THEN_ANNOT WAIT
+
+Assuming that the module fields are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: IF_ANNOT ID WAIT
+
+Expecting cond then fields.
+
+parse_script: IF_ANNOT LPAREN AND WAIT
+
+Expecting a cond.
+
+parse_script: IF_ANNOT LPAREN CMP_EQ ID ID WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: IF_ANNOT LPAREN CMP_EQ ID WAIT
+
+Expecting a cond.
+
+parse_script: IF_ANNOT LPAREN CMP_EQ WAIT
+
+Expecting a cond.
+
+parse_script: IF_ANNOT LPAREN NAT NAT NAT WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: IF_ANNOT LPAREN NAT NAT WAIT
+
+Expecting an integer.
+
+parse_script: IF_ANNOT LPAREN NAT WAIT
+
+Expecting an integer.
+
+parse_script: IF_ANNOT LPAREN NOT ID WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN THREAD WAIT
+parse_script: IF_ANNOT LPAREN NOT WAIT
 
-Expecting ')', 'id', a cmd, or a shared clause.
-<2>This '(' opens the enclosing construct.
+Expecting a cond.
 
-parse_script: LPAREN THREAD LPAREN VEC_TERN_OP
+parse_script: IF_ANNOT LPAREN OR ID WAIT
+
+Expecting ')', or a cond.
+
+parse_script: IF_ANNOT LPAREN OR WAIT
+
+Expecting a cond.
+
+parse_script: IF_ANNOT LPAREN WAIT
+
+Expecting 'and', 'not', 'or', a cmp op, or an integer.
+
+parse_script: IF_ANNOT WAIT
+
+Expecting a cond.
+
+parse_script: LPAREN ASSERT_EXCEPTION LPAREN GET STRING RPAREN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_EXCEPTION WAIT
+
+Expecting an action.
+
+parse_script: LPAREN ASSERT_EXHAUSTION LPAREN GET STRING RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_EXHAUSTION LPAREN GET STRING RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_EXHAUSTION WAIT
+
+Expecting an action.
+
+parse_script: LPAREN ASSERT_INVALID LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_INVALID LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_INVALID WAIT
+
+Expecting a module.
+
+parse_script: LPAREN ASSERT_INVALID_CUSTOM LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_INVALID_CUSTOM LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_INVALID_CUSTOM WAIT
+
+Expecting a module.
+
+parse_script: LPAREN ASSERT_MALFORMED LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_MALFORMED LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_MALFORMED WAIT
+
+Expecting a module.
+
+parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE WAIT
 
 Syntax error
+<2>This '(' opens the enclosing construct.
 
-parse_script: LPAREN THREAD LPAREN SHARED WAIT
-
-Expecting '('.
-
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN WAIT
+parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN WAIT
 
 Expecting 'module'.
 
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE WAIT
+parse_script: LPAREN ASSERT_MALFORMED_CUSTOM WAIT
 
-Expecting 'id'.
+Expecting a module.
 
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER LPAREN INSTR RPAREN WAIT
+
+Assuming that the result patterns are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER WAIT
+
+Expecting a result pattern.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST FLOAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN WAIT
-
-Expecting '(', or ')'.
-
-parse_script: LPAREN SCRIPT WAIT
-
-Expecting ')', 'id', or a cmd.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
-
-Syntax error
-
-parse_script: LPAREN REGISTER WAIT
-
-Expecting a string.
-
-parse_script: LPAREN REGISTER STRING WAIT
-
-Expecting ')', or 'id'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN REGISTER STRING ID WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN OUTPUT WAIT
-
-Expecting ')', 'id', or a string.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN OUTPUT ID WAIT
-
-Expecting ')', or a string.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN OUTPUT STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE WAIT
-
-Syntax error
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE INSTANCE WAIT
-
-Expecting ')', or 'id'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE INSTANCE ID WAIT
-
-Expecting ')', or 'id'.
-
-parse_script: LPAREN MODULE INSTANCE ID ID WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE DEFINITION WAIT
-
-Expecting ')', 'binary', 'id', 'quote', or a module field.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE QUOTE WAIT
-
-Assuming that the strings are complete, expecting ')'.
-<6>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE BINARY WAIT
-
-Assuming that the strings are complete, expecting ')'.
-<6>This '(' opens the enclosing construct.
-
-parse_script: LPAREN MODULE ID WAIT
-
-Assuming that the module fields are complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE WAIT
-
-Expecting 'id', or a string.
-
-parse_script: LPAREN INVOKE ID WAIT
-
-Expecting a string.
-
-parse_script: LPAREN INVOKE STRING LPAREN WAIT
-
-Syntax error
-
-parse_script: LPAREN INVOKE STRING LPAREN V128_CONST WAIT
-
-Expecting a vec shape.
-
-parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 WAIT
-
-Expecting a 64-bit float.
-
-parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 FLOAT WAIT
-
-Assuming that the 64-bit floats are complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_NULL WAIT
-
-Expecting a heap type.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_NULL NAT NAT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST NAN WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN INVOKE STRING LPAREN REF_HOST WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST WAIT
 
-Expecting an integer.
+Expecting 'nan', or a 32-bit float.
 
-parse_script: LPAREN INVOKE STRING LPAREN REF_HOST NAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_EXTERN WAIT
-
-Expecting an integer.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_EXTERN NAT WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST FLOAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN INVOKE STRING LPAREN I64_CONST WAIT
-
-Expecting a 64-bit signed integer.
-
-parse_script: LPAREN INVOKE STRING LPAREN I64_CONST INT WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST NAN WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN INVOKE STRING LPAREN I32_CONST WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST WAIT
+
+Expecting 'nan', or a 64-bit float.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST INT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST WAIT
 
 Expecting a 32-bit signed integer.
 
-parse_script: LPAREN INVOKE STRING LPAREN I32_CONST INT WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST INT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN INVOKE STRING LPAREN F64_CONST WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST WAIT
 
-Expecting a 64-bit float.
+Expecting a 64-bit signed integer.
 
-parse_script: LPAREN INVOKE STRING LPAREN F64_CONST FLOAT WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_ARRAY WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN NAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN INVOKE STRING LPAREN F32_CONST WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN WAIT
 
-Expecting a 32-bit float.
+Expecting ')', or an integer.
+<2>This '(' opens the enclosing construct.
 
-parse_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_FUNC WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST NAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN INVOKE STRING WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST WAIT
 
-Assuming that the consts are complete, expecting ')'.
-<5>This '(' opens the enclosing construct.
+Expecting an integer.
 
-parse_script: LPAREN INPUT WAIT
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL WAIT
+
+Expecting ')', or a heap type.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_STRUCT WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 FLOAT WAIT
+
+Assuming that the float or NaNs are complete, expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 WAIT
+
+Expecting a float or NaN.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST WAIT
+
+Expecting a vec shape.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
+
+Syntax error
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN WAIT
+
+Assuming that the result patterns are complete, expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN WAIT
+
+Expecting an action.
+
+parse_script: LPAREN ASSERT_RETURN_NAN LPAREN GET STRING RPAREN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN_NAN WAIT
+
+Expecting an action.
+
+parse_script: LPAREN ASSERT_SUSPENSION LPAREN GET STRING RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_SUSPENSION LPAREN GET STRING RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_SUSPENSION LPAREN WAIT
+
+Expecting 'get', or 'invoke'.
+
+parse_script: LPAREN ASSERT_SUSPENSION WAIT
+
+Expecting an action.
+
+parse_script: LPAREN ASSERT_TRAP LPAREN GET STRING RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_TRAP LPAREN GET STRING RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_TRAP LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_TRAP LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_TRAP LPAREN WAIT
+
+Expecting 'get', 'invoke', or 'module'.
+
+parse_script: LPAREN ASSERT_TRAP WAIT
+
+Expecting a script instance, or an action.
+
+parse_script: LPAREN ASSERT_UNLINKABLE LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_UNLINKABLE LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_script: LPAREN ASSERT_UNLINKABLE LPAREN WAIT
+
+Expecting 'module'.
+
+parse_script: LPAREN ASSERT_UNLINKABLE WAIT
+
+Expecting a script instance.
+
+parse_script: LPAREN DATA RPAREN WAIT
+
+Assuming that the inline module is complete, expecting end of file.
+
+parse_script: LPAREN GET ID WAIT
+
+Expecting a string.
+
+parse_script: LPAREN GET STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN GET WAIT
 
 Expecting 'id', or a string.
 
@@ -2669,309 +2354,192 @@ parse_script: LPAREN INPUT STRING WAIT
 Expecting ')'.
 <4>This '(' opens the enclosing construct.
 
-parse_script: LPAREN GET WAIT
+parse_script: LPAREN INPUT WAIT
 
 Expecting 'id', or a string.
 
-parse_script: LPAREN GET ID WAIT
+parse_script: LPAREN INVOKE ID WAIT
 
 Expecting a string.
 
-parse_script: LPAREN GET STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_UNLINKABLE WAIT
-
-Expecting a script instance.
-
-parse_script: LPAREN ASSERT_UNLINKABLE LPAREN WAIT
-
-Expecting 'module'.
-
-parse_script: LPAREN ASSERT_UNLINKABLE LPAREN MODULE RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_UNLINKABLE LPAREN MODULE RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_TRAP WAIT
-
-Expecting a script instance, or an action.
-
-parse_script: LPAREN ASSERT_TRAP LPAREN WAIT
-
-Expecting 'get', 'invoke', or 'module'.
-
-parse_script: LPAREN ASSERT_TRAP LPAREN MODULE RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_TRAP LPAREN MODULE RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_TRAP LPAREN GET STRING RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_TRAP LPAREN GET STRING RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_SUSPENSION WAIT
-
-Expecting an action.
-
-parse_script: LPAREN ASSERT_SUSPENSION LPAREN WAIT
-
-Expecting 'get', or 'invoke'.
-
-parse_script: LPAREN ASSERT_SUSPENSION LPAREN GET STRING RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_SUSPENSION LPAREN GET STRING RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN_NAN WAIT
-
-Expecting an action.
-
-parse_script: LPAREN ASSERT_RETURN_NAN LPAREN GET STRING RPAREN WAIT
+parse_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_RETURN WAIT
+parse_script: LPAREN INVOKE STRING LPAREN F32_CONST WAIT
 
-Expecting an action.
+Expecting a 32-bit float.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
-
-Syntax error
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST WAIT
-
-Expecting a vec shape.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 WAIT
-
-Expecting a float or NaN.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 FLOAT WAIT
-
-Assuming that the float or NaNs are complete, expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_STRUCT WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL WAIT
-
-Expecting ')', or a heap type.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL NAT NAT
+parse_script: LPAREN INVOKE STRING LPAREN F64_CONST FLOAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST WAIT
+parse_script: LPAREN INVOKE STRING LPAREN F64_CONST WAIT
 
-Expecting an integer.
+Expecting a 64-bit float.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST NAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_FUNC WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN WAIT
-
-Expecting ')', or an integer.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN NAT WAIT
+parse_script: LPAREN INVOKE STRING LPAREN I32_CONST INT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_ARRAY WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST WAIT
-
-Expecting a 64-bit signed integer.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST INT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST WAIT
+parse_script: LPAREN INVOKE STRING LPAREN I32_CONST WAIT
 
 Expecting a 32-bit signed integer.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST INT WAIT
+parse_script: LPAREN INVOKE STRING LPAREN I64_CONST INT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST WAIT
+parse_script: LPAREN INVOKE STRING LPAREN I64_CONST WAIT
 
-Expecting 'nan', or a 64-bit float.
+Expecting a 64-bit signed integer.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST NAN WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST FLOAT WAIT
+parse_script: LPAREN INVOKE STRING LPAREN REF_EXTERN NAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST WAIT
+parse_script: LPAREN INVOKE STRING LPAREN REF_EXTERN WAIT
 
-Expecting 'nan', or a 32-bit float.
+Expecting an integer.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST NAN WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST FLOAT WAIT
+parse_script: LPAREN INVOKE STRING LPAREN REF_HOST NAT WAIT
 
 Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER WAIT
+parse_script: LPAREN INVOKE STRING LPAREN REF_HOST WAIT
 
-Expecting a result pattern.
+Expecting an integer.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER LPAREN INSTR RPAREN WAIT
+parse_script: LPAREN INVOKE STRING LPAREN REF_NULL NAT NAT
 
-Assuming that the result patterns are complete, expecting ')'.
+Expecting ')'.
 <3>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN WAIT
+parse_script: LPAREN INVOKE STRING LPAREN REF_NULL WAIT
 
-Assuming that the result patterns are complete, expecting ')'.
+Expecting a heap type.
+
+parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 FLOAT WAIT
+
+Assuming that the 64-bit floats are complete, expecting ')'.
 <4>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_MALFORMED_CUSTOM WAIT
+parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 WAIT
 
-Expecting a module.
+Expecting a 64-bit float.
 
-parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN WAIT
+parse_script: LPAREN INVOKE STRING LPAREN V128_CONST WAIT
 
-Expecting 'module'.
+Expecting a vec shape.
 
-parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE WAIT
+parse_script: LPAREN INVOKE STRING LPAREN WAIT
+
+Syntax error
+
+parse_script: LPAREN INVOKE STRING WAIT
+
+Assuming that the consts are complete, expecting ')'.
+<5>This '(' opens the enclosing construct.
+
+parse_script: LPAREN INVOKE WAIT
+
+Expecting 'id', or a string.
+
+parse_script: LPAREN MODULE BINARY WAIT
+
+Assuming that the strings are complete, expecting ')'.
+<6>This '(' opens the enclosing construct.
+
+parse_script: LPAREN MODULE DEFINITION WAIT
+
+Expecting ')', 'binary', 'id', 'quote', or a module field.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN MODULE ID WAIT
+
+Assuming that the module fields are complete, expecting ')'.
+<5>This '(' opens the enclosing construct.
+
+parse_script: LPAREN MODULE INSTANCE ID ID WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN MODULE INSTANCE ID WAIT
+
+Expecting ')', or 'id'.
+
+parse_script: LPAREN MODULE INSTANCE WAIT
+
+Expecting ')', or 'id'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN MODULE LPAREN WAIT
+
+Syntax error
+
+parse_script: LPAREN MODULE QUOTE WAIT
+
+Assuming that the strings are complete, expecting ')'.
+<6>This '(' opens the enclosing construct.
+
+parse_script: LPAREN MODULE WAIT
 
 Syntax error
 <2>This '(' opens the enclosing construct.
 
-parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE RPAREN WAIT
+parse_script: LPAREN OUTPUT ID WAIT
 
-Expecting a string.
-
-parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_MALFORMED WAIT
-
-Expecting a module.
-
-parse_script: LPAREN ASSERT_MALFORMED LPAREN MODULE RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_MALFORMED LPAREN MODULE RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_INVALID_CUSTOM WAIT
-
-Expecting a module.
-
-parse_script: LPAREN ASSERT_INVALID_CUSTOM LPAREN MODULE RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_INVALID_CUSTOM LPAREN MODULE RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_INVALID WAIT
-
-Expecting a module.
-
-parse_script: LPAREN ASSERT_INVALID LPAREN MODULE RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_INVALID LPAREN MODULE RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_EXHAUSTION WAIT
-
-Expecting an action.
-
-parse_script: LPAREN ASSERT_EXHAUSTION LPAREN GET STRING RPAREN WAIT
-
-Expecting a string.
-
-parse_script: LPAREN ASSERT_EXHAUSTION LPAREN GET STRING RPAREN STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_EXCEPTION WAIT
-
-Expecting an action.
-
-parse_script: LPAREN ASSERT_EXCEPTION LPAREN GET STRING RPAREN WAIT
-
-Expecting ')'.
+Expecting ')', or a string.
 <3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN OUTPUT STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN OUTPUT WAIT
+
+Expecting ')', 'id', or a string.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN REGISTER STRING ID WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN REGISTER STRING WAIT
+
+Expecting ')', or 'id'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN REGISTER WAIT
+
+Expecting a string.
 
 parse_script: LPAREN SCRIPT ID STRING_ANNOT
 
 Assuming that the script is complete, expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
+
+Syntax error
+
+parse_script: LPAREN SCRIPT WAIT
+
+Expecting ')', 'id', or a cmd.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN THREAD ID WAIT
+
+Assuming that the cmds are complete, expecting ')'.
 <4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN RPAREN WAIT
@@ -2979,16 +2547,448 @@ parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN RPAREN WAIT
 Assuming that the cmds are complete, expecting ')'.
 <5>This '(' opens the enclosing construct.
 
-parse_script: LPAREN THREAD ID WAIT
+parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN WAIT
 
-Assuming that the cmds are complete, expecting ')'.
+Expecting '(', or ')'.
+
+parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE WAIT
+
+Expecting 'id'.
+
+parse_script: LPAREN THREAD LPAREN SHARED LPAREN WAIT
+
+Expecting 'module'.
+
+parse_script: LPAREN THREAD LPAREN SHARED WAIT
+
+Expecting '('.
+
+parse_script: LPAREN THREAD LPAREN VEC_TERN_OP
+
+Syntax error
+
+parse_script: LPAREN THREAD WAIT
+
+Expecting ')', 'id', a cmd, or a shared clause.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN VEC_TERN_OP
+
+Syntax error
+
+parse_script: LPAREN WAIT ID WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN WAIT WAIT
+
+Expecting ')', or 'id'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_EXPORT STRING LPAREN FUNC NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_EXPORT STRING LPAREN FUNC NAT RPAREN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_EXPORT STRING LPAREN FUNC WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_EXPORT STRING LPAREN GLOBAL NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_EXPORT STRING LPAREN GLOBAL WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_EXPORT STRING LPAREN MEMORY NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_EXPORT STRING LPAREN MEMORY WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_EXPORT STRING LPAREN TABLE NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_EXPORT STRING LPAREN TABLE WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_EXPORT STRING LPAREN TAG NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_EXPORT STRING LPAREN TAG WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_EXPORT STRING LPAREN WAIT
+
+Expecting 'func', 'global', 'memory', 'table', or 'tag'.
+
+parse_script: LPAREN_EXPORT STRING WAIT
+
+Expecting an extern index.
+
+parse_script: LPAREN_EXPORT WAIT
+
+Expecting a name.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC ID WAIT
+
+Expecting '(', ')', or a type use.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the type use is complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT RPAREN WAIT
+
+Expecting ')'.
+<7>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT WAIT
+
+Expecting ')', or a type use.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN WAIT
+
+Expecting 'exact'.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the type use is complete, expecting ')'.
 <4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC RPAREN WAIT
+
+Expecting ')', or an import group elem.
+
+parse_script: LPAREN_IMPORT STRING LPAREN FUNC WAIT
+
+Expecting '(', ')', 'id', or a type use.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL ANYREF WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL ID WAIT
+
+Expecting a global type.
+
+parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL WAIT
+
+Expecting 'id', or a global type.
+
+parse_script: LPAREN_IMPORT STRING LPAREN ITEM ID STRING LPAREN FUNC RPAREN WAIT
+
+Expecting ')'.
+<5>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN ITEM ID STRING WAIT
+
+Expecting ')', or an external type.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN ITEM ID WAIT
+
+Expecting a name.
+
+parse_script: LPAREN_IMPORT STRING LPAREN ITEM STRING LPAREN FUNC RPAREN WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN ITEM STRING WAIT
+
+Expecting ')', or an external type.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN ITEM WAIT
+
+Expecting 'id', or a name.
+
+parse_script: LPAREN_IMPORT STRING LPAREN MEMORY ID WAIT
+
+Expecting a memory type.
+
+parse_script: LPAREN_IMPORT STRING LPAREN MEMORY NAT LPAREN PAGESIZE NAT RPAREN WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN MEMORY WAIT
+
+Expecting 'id', or a memory type.
+
+parse_script: LPAREN_IMPORT STRING LPAREN TABLE I32 WAIT
+
+Expecting a 64-bit unsigned integer.
+
+parse_script: LPAREN_IMPORT STRING LPAREN TABLE ID WAIT
+
+Expecting a table type.
+
+parse_script: LPAREN_IMPORT STRING LPAREN TABLE NAT ANYREF WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN TABLE WAIT
+
+Expecting 'id', or a table type.
+
+parse_script: LPAREN_IMPORT STRING LPAREN TAG ID WAIT
+
+Expecting ')', or a type use.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the type use is complete, expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN TAG WAIT
+
+Expecting ')', 'id', or a type use.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING LPAREN WAIT
+
+Syntax error
+
+parse_script: LPAREN_IMPORT STRING STRING LPAREN FUNC RPAREN WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_IMPORT STRING STRING LPAREN WAIT
+
+Expecting 'func', 'global', 'memory', 'table', or 'tag'.
+
+parse_script: LPAREN_IMPORT STRING STRING WAIT
+
+Expecting an external type.
+
+parse_script: LPAREN_IMPORT STRING WAIT
+
+Expecting a name, or an import group elem.
+
+parse_script: LPAREN_IMPORT WAIT
+
+Expecting a name.
+
+parse_script: LPAREN_TYPE ID WAIT
+
+Expecting a subtype.
+
+parse_script: LPAREN_TYPE LPAREN ARRAY ANYREF WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN ARRAY LPAREN MUT ANYREF WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN ARRAY LPAREN MUT WAIT
+
+Expecting a storage type.
+
+parse_script: LPAREN_TYPE LPAREN ARRAY LPAREN WAIT
+
+Expecting 'mut', or 'ref'.
+
+parse_script: LPAREN_TYPE LPAREN ARRAY WAIT
+
+Expecting a field type.
+
+parse_script: LPAREN_TYPE LPAREN CONT NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN CONT WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_TYPE LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
+
+Assuming that the parameters and results are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN FUNC RPAREN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN FUNC WAIT
+
+Expecting ')', or parameters and results.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD ID ANYREF WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD ID WAIT
+
+Expecting a field type.
+
+parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD WAIT
+
+Assuming that the field types are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN WAIT
+
+Expecting 'field'.
+
+parse_script: LPAREN_TYPE LPAREN STRUCT WAIT
+
+Assuming that the fields are complete, expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN SUB FINAL WAIT
+
+Expecting a composite type, an index, or descriptor clauses.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN FUNC RPAREN WAIT
+
+Expecting ')'.
+<6>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN WAIT
+
+Expecting 'array', 'cont', 'func', or 'struct'.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN WAIT
+
+Expecting '(', or '(descriptor'.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR NAT RPAREN WAIT
+
+Expecting a composite type.
+
+parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_TYPE LPAREN SUB NAT NAT
+
+Expecting a composite type, or descriptor clauses.
+
+parse_script: LPAREN_TYPE LPAREN SUB WAIT
+
+Expecting 'final', a composite type, an index, or descriptor clauses.
+
+parse_script: LPAREN_TYPE LPAREN WAIT
+
+Expecting 'array', 'cont', 'func', 'struct', or 'sub'.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN WAIT
+
+Expecting '(', or '(descriptor'.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIBES WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIPTOR NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIPTOR NAT RPAREN WAIT
+
+Expecting a composite type.
+
+parse_script: LPAREN_TYPE LPAREN_DESCRIPTOR WAIT
+
+Expecting an index.
+
+parse_script: LPAREN_TYPE WAIT
+
+Expecting 'id', or a subtype.
 
 parse_script: RPAREN
 
 Assuming that the script is complete, expecting end of file.
 
-parse_script: LPAREN DATA RPAREN WAIT
+parse_script: STRING_ANNOT ID STRING NAT
 
-Assuming that the inline module is complete, expecting end of file.
+Assuming that the string list is complete, expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_script: STRING_ANNOT ID WAIT
+
+Expecting ')', a string, or an index.
+<2>This '(' opens the enclosing construct.
+
+parse_script: STRING_ANNOT WAIT
+
+Expecting 'id'.
 

@@ -97,3 +97,19 @@
  (alias runtest)
  (action
   (diff parser_messages.stats.expected parser_messages.stats)))
+
+; Pinned message census: each distinct generated message body once, prefixed by
+; its occurrence count, sorted by message text (no sentences appear). Sentence
+; re-picking on a state merge at most bumps a count; a wording change is one
+; line; a message disappearing outright is a one-line diff — the compact review
+; surface for A/B work. The delimiter-hint depth is normalized to <_>. Accept
+; with `dune promote`; never hand-edit parser_messages.census.expected.
+(rule
+ (with-stdout-to
+  parser_messages.census
+  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -census %{dep:parser_messages.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff parser_messages.census.expected parser_messages.census)))
