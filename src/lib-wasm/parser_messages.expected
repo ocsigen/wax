@@ -405,11 +405,11 @@ Expecting a v128 const body.
 
 parse: LPAREN DATA LPAREN WAIT
 
-Syntax error
+Expecting 'memory', a data element type ('i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'), or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
 
 parse: LPAREN DATA STRING LPAREN WAIT
 
-Syntax error
+Expecting a data element type: 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'.
 
 parse: LPAREN DATA STRING WAIT
 
@@ -437,7 +437,7 @@ Expecting ')', or an expression.
 
 parse: LPAREN ELEM ANYREF LPAREN WAIT
 
-Syntax error
+Expecting 'item', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
 
 parse: LPAREN ELEM ANYREF WAIT
 
@@ -485,7 +485,7 @@ Expecting ')'.
 
 parse: LPAREN ELEM LPAREN TABLE NAT RPAREN LPAREN WAIT
 
-Syntax error
+Expecting 'offset', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
 
 parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN ANYREF WAIT
 
@@ -506,7 +506,7 @@ Expecting an index.
 
 parse: LPAREN ELEM LPAREN WAIT
 
-Syntax error
+Expecting 'table', 'offset', 'ref', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
 
 parse: LPAREN ELEM STRING_ANNOT RPAREN ANYREF WAIT
 
@@ -894,7 +894,7 @@ Expecting 'end', a block type, a label, or instructions.
 
 parse: LPAREN FUNC LPAREN WAIT
 
-Syntax error
+Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
 
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT LPAREN_RESULT RPAREN LPAREN_THEN
 
@@ -1411,7 +1411,7 @@ Expecting an 8-bit signed integer.
 
 parse: LPAREN FUNC V128_CONST WAIT
 
-Syntax error
+Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
 
 parse: LPAREN FUNC VEC_EXTRACT WAIT
 
@@ -1547,7 +1547,7 @@ Expecting a memory alignment, or an 8-bit unsigned integer.
 
 parse: LPAREN FUNC VEC_STORE_LANE NAT WAIT
 
-Syntax error
+Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
 
 parse: LPAREN FUNC VEC_STORE_LANE WAIT
 
@@ -1940,7 +1940,7 @@ Assuming that the type use is complete, expecting ')'.
 
 parse: LPAREN TAG LPAREN_RESULT RPAREN WAIT
 
-Expecting '(result'.
+Expecting another '(result' group, an instruction, or ')'.
 
 parse: LPAREN TAG LPAREN_RESULT WAIT
 
@@ -1967,7 +1967,7 @@ Expecting '(export', '(import', ')', 'id', or a type use.
 
 parse: LPAREN WAIT
 
-Syntax error
+Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', 'rec', or 'module'.
 
 parse: WAIT
 
@@ -2133,7 +2133,7 @@ Expecting a string.
 
 parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE WAIT
 
-Syntax error
+Expecting 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN WAIT
@@ -2272,7 +2272,7 @@ Expecting a vec shape.
 
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
 
-Syntax error
+Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
 
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN WAIT
 
@@ -2468,7 +2468,7 @@ Expecting a vec shape.
 
 parse_script: LPAREN INVOKE STRING LPAREN WAIT
 
-Syntax error
+Expecting a constant: 'i32.const', 'i64.const', 'f32.const', 'f64.const', 'v128.const', 'ref.null', 'ref.host', or 'ref.extern'.
 
 parse_script: LPAREN INVOKE STRING WAIT
 
@@ -2510,7 +2510,7 @@ Expecting ')', or 'id'.
 
 parse_script: LPAREN MODULE LPAREN WAIT
 
-Syntax error
+Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', or 'rec'.
 
 parse_script: LPAREN MODULE QUOTE WAIT
 
@@ -2519,7 +2519,7 @@ Expecting ')', or a string.
 
 parse_script: LPAREN MODULE WAIT
 
-Syntax error
+Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN OUTPUT ID WAIT
@@ -2558,7 +2558,7 @@ Assuming that the script is complete, expecting ')'.
 
 parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
 
-Syntax error
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
 
 parse_script: LPAREN SCRIPT WAIT
 
@@ -2598,7 +2598,7 @@ Expecting '('.
 
 parse_script: LPAREN THREAD LPAREN VEC_TERN_OP
 
-Syntax error
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
 
 parse_script: LPAREN THREAD WAIT
 
@@ -2607,7 +2607,7 @@ Expecting ')', 'id', a cmd, or a shared clause.
 
 parse_script: LPAREN VEC_TERN_OP
 
-Syntax error
+Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
 
 parse_script: LPAREN WAIT ID WAIT
 
@@ -2807,7 +2807,7 @@ Expecting ')', 'id', or a type use.
 
 parse_script: LPAREN_IMPORT STRING LPAREN WAIT
 
-Syntax error
+Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
 
 parse_script: LPAREN_IMPORT STRING STRING LPAREN FUNC RPAREN WAIT
 

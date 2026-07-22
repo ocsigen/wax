@@ -44,7 +44,7 @@ Expecting '?', a cast type, or a descriptor operand.
 
 parse: CONST IDENT EQUAL CHAR BANGEQUAL CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR BANGEQUAL UNREACHABLE
 
@@ -64,7 +64,7 @@ Expecting 'descriptor', or an identifier.
 
 parse: CONST IDENT EQUAL CHAR EQUALEQUAL CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR EQUALEQUAL UNREACHABLE
 
@@ -72,7 +72,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR GE CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR GE UNREACHABLE
 
@@ -80,7 +80,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR GES CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR GES UNREACHABLE
 
@@ -88,7 +88,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR GEU CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR GEU UNREACHABLE
 
@@ -96,7 +96,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR GT CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR GT UNREACHABLE
 
@@ -104,7 +104,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR GTS CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR GTS UNREACHABLE
 
@@ -112,7 +112,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR GTU CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR GTU UNREACHABLE
 
@@ -137,7 +137,7 @@ Expecting an index expression.
 
 parse: CONST IDENT EQUAL CHAR LE CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR LE UNREACHABLE
 
@@ -145,7 +145,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR LES CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR LES UNREACHABLE
 
@@ -153,7 +153,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR LEU CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR LEU UNREACHABLE
 
@@ -183,7 +183,7 @@ Expecting ')', or an argument.
 
 parse: CONST IDENT EQUAL CHAR LT CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR LT UNREACHABLE
 
@@ -191,7 +191,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR LTS CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR LTS UNREACHABLE
 
@@ -199,7 +199,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR LTU CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: CONST IDENT EQUAL CHAR LTU UNREACHABLE
 
@@ -530,7 +530,7 @@ Expecting an expression.
 
 parse: FN IDENT LBRACE BECOME CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BECOME CHAR LPAREN CHAR SHARP
 
@@ -539,7 +539,7 @@ Assuming that the argument list is complete, expecting ')'.
 
 parse: FN IDENT LBRACE BECOME CHAR LPAREN RPAREN WHILE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BECOME CHAR LPAREN UNREACHABLE
 
@@ -560,7 +560,7 @@ Expecting '''.
 
 parse: FN IDENT LBRACE BR_IF QUOTE AS CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BR_IF QUOTE AS UNREACHABLE
 
@@ -576,7 +576,7 @@ Expecting '''.
 
 parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT UNREACHABLE
 
@@ -584,7 +584,7 @@ Expecting an expression.
 
 parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN UNREACHABLE
 
@@ -608,7 +608,7 @@ Expecting '''.
 
 parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT UNREACHABLE
 
@@ -616,7 +616,7 @@ Expecting an expression.
 
 parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN UNREACHABLE
 
@@ -640,7 +640,7 @@ Expecting '''.
 
 parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS UNREACHABLE
 
@@ -656,7 +656,7 @@ Expecting '''.
 
 parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS CHAR QUOTE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS UNREACHABLE
 
@@ -713,7 +713,7 @@ Assuming that the statement is complete, expecting ';'.
 
 parse: FN IDENT LBRACE DISPATCH CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE QUOTE AS COLON LBRACE RBRACE WHILE
 
@@ -808,7 +808,7 @@ Expecting a condition expression.
 
 parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE DOTDOT WHILE
@@ -897,7 +897,7 @@ Expecting ';'.
 
 parse: FN IDENT LBRACE LBRACKET IDENT AT CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE LBRACKET IDENT AT CHAR SEMI UNREACHABLE
 
@@ -998,7 +998,7 @@ Expecting a parenthesized expression, or an expression.
 
 parse: FN IDENT LBRACE MATCH CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE MATCH CHAR LBRACE IDENT COLON WHILE
 
@@ -1144,7 +1144,7 @@ Expecting a block, or a block type.
 
 parse: FN IDENT LBRACE QUOTE AS COLON UNREACHABLE
 
-Syntax error
+Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN CHAR EQUAL
 
@@ -1489,7 +1489,7 @@ Assuming that the statement is complete, expecting ')'.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN DO LBRACE RBRACE ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN IDENT RPAREN WHILE
 
@@ -1544,7 +1544,7 @@ Assuming that the optional function type is complete, expecting ''', or '{'.
 
 parse: FN IDENT LPAREN RPAREN WHILE
 
-Syntax error
+Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LPAREN WHILE
 
@@ -2020,7 +2020,7 @@ Expecting a heap type.
 
 parse: TABLE IDENT COLON AMPERSAND CONT EQUAL CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: TABLE IDENT COLON AMPERSAND CONT EQUAL UNREACHABLE
 
@@ -2028,7 +2028,7 @@ Expecting an expression.
 
 parse: TABLE IDENT COLON AMPERSAND CONT LBRACKET INT RBRACKET EQUAL CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: TABLE IDENT COLON AMPERSAND CONT LBRACKET INT RBRACKET EQUAL UNREACHABLE
 
@@ -2052,7 +2052,7 @@ Expecting '!', '?', or a heap type.
 
 parse: TABLE IDENT COLON IDENT AMPERSAND CONT EQUAL CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: TABLE IDENT COLON IDENT AMPERSAND CONT EQUAL UNREACHABLE
 
@@ -2060,7 +2060,7 @@ Expecting an expression.
 
 parse: TABLE IDENT COLON IDENT AMPERSAND CONT LBRACKET INT RBRACKET EQUAL CHAR ELSE
 
-Syntax error
+Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: TABLE IDENT COLON IDENT AMPERSAND CONT LBRACKET INT RBRACKET EQUAL UNREACHABLE
 

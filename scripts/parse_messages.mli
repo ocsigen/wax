@@ -34,3 +34,7 @@ val parse_file : string -> entry list
 (** [parse_file filename] reads a Menhir .messages file and returns a list of
     parsed entries. It handles reading the file, parsing comments, and
     separating entries. *)
+
+val read_lines : string -> string list
+(** [read_lines filename] returns the file's lines with any trailing carriage
+    return stripped. Shared with the generator's [.overrides] loader. *)

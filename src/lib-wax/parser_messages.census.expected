@@ -94,6 +94,7 @@
     1x Expecting ',', or '}'.
        <_>This '{' opens the enclosing construct.
     3x Expecting ','.
+    1x Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
     1x Expecting '->', or '{'.
     3x Expecting '->'.
     1x Expecting '..', '}', a descriptor operand, a structure field, or an identifier.
@@ -204,6 +205,7 @@
     2x Expecting a function type.
     1x Expecting a heap type.
    18x Expecting a label name.
+    1x Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
     1x Expecting a labels else, or an index expression.
     2x Expecting a labels else.
     3x Expecting a length expression.
@@ -226,7 +228,7 @@
     1x Expecting an index expression.
     6x Expecting an integer.
     1x Expecting an on-clause list.
-    2x Expecting braced fields.
-   33x Syntax error
-    1x Syntax error
+   31x Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
+    1x Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
        <_>This '(' opens the enclosing construct.
+    2x Expecting braced fields.

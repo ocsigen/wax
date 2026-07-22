@@ -122,7 +122,9 @@ surfaces alongside them. The warnings and the stack-shape cascades a dropped or
 auto-closed body would otherwise trigger are suppressed in recovery mode:
 
   $ wax check --all-errors wat-broken.wat
-  Error: Syntax error
+  Error:
+    Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or
+    'f64x2'.
    ──➤  wat-broken.wat:2:20
   1 │ (module
   2 │   (func (v128.const))

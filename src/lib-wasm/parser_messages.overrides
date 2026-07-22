@@ -1,0 +1,107 @@
+# Hand-written parser-error-message overrides for the WAT/WASM grammar
+# (ERROR-MESSAGES.md step 5). Keyed by the *sentence* an error state's
+# --list-errors representative carries ("entry_point: sentence"); merged by
+# scripts/generate_error_messages.ml after generation. State numbers renumber
+# on any grammar change, sentences do not, so the sentence is the stable key.
+#
+# Format: blocks separated by blank lines. Within a block, '#' lines are
+# rationale comments, the first surviving line is the "entry_point: sentence"
+# header, and the rest is the replacement message body (optionally a second
+# "<N>This '(' opens the enclosing construct." delimiter-hint line, whose N is
+# bounds-checked against the state's known stack suffix at build time).
+#
+# An override whose sentence matches no error state FAILS THE BUILD (rot
+# protection). The claim-soundness of the prose itself is the author's
+# responsibility: the oracle checks symbols, not free text.
+#
+# These are the 18 structurally immovable over-5 "enumeration" fallbacks (the
+# dot sits at the start of a construct whose FIRST set overflows the readable
+# cap, so the generated message degrades to a bare "Syntax error") plus one
+# residual misleading "(result" singular. Each names the legal category rather
+# than the bare error.
+
+# state 242: bare top-level '(' — the head of a module or a top-level field.
+parse: LPAREN WAIT
+Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', 'rec', or 'module'.
+
+# state 270: after the numeric operand(s) of a lane-store (v128.store_lane etc.)
+# — another number, a named memarg, or the next instruction may follow.
+parse: LPAREN FUNC VEC_STORE_LANE NAT WAIT
+Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
+
+# state 351: the shape selector of a v128.const.
+parse: LPAREN FUNC V128_CONST WAIT
+Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
+
+# state 560: a folded instruction has just been opened with '('.
+parse: LPAREN FUNC LPAREN WAIT
+Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+
+# state 838: an element expression opened with '(' — an (item …) or a folded
+# instruction.
+parse: LPAREN ELEM ANYREF LPAREN WAIT
+Expecting 'item', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+
+# state 885: a typed data element opened with '('.
+parse: LPAREN DATA STRING LPAREN WAIT
+Expecting a data element type: 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'.
+
+# state 1023: inside an elem segment, a '(' opens a table clause, an offset, a
+# reference-type element, or a folded instruction.
+parse: LPAREN ELEM LPAREN WAIT
+Expecting 'table', 'offset', 'ref', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+
+# state 1027: after an elem (table …) clause, a '(' opens an offset or a folded
+# instruction.
+parse: LPAREN ELEM LPAREN TABLE NAT RPAREN LPAREN WAIT
+Expecting 'offset', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+
+# state 1053: inside a data segment, a '(' opens a memory clause, a typed data
+# element, or a folded (offset) instruction.
+parse: LPAREN DATA LPAREN WAIT
+Expecting 'memory', a data element type ('i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'), or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+
+# state 127: after a (result …) group in a type use; the residual misleading
+# bare "Expecting '(result'." — another result group, an instruction, or the
+# closing ')' are all legal.
+parse: LPAREN TAG LPAREN_RESULT RPAREN WAIT
+Expecting another '(result' group, an instruction, or ')'.
+
+# state 149: an import descriptor opened with '(' after the module/name strings.
+parse_script: LPAREN_IMPORT STRING LPAREN WAIT
+Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
+
+# state 872: a module field opened with '(' inside (module …).
+parse_script: LPAREN MODULE LPAREN WAIT
+Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', or 'rec'.
+
+# state 1104: a '(' at script top level opens a command or a bare module field.
+parse_script: LPAREN VEC_TERN_OP
+Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+
+# state 1110: a '(' inside a (thread …) opens a command.
+parse_script: LPAREN THREAD LPAREN VEC_TERN_OP
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
+
+# state 1121: a '(' inside a (script …) opens a command.
+parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+
+# state 1131: after (module in a script — a defined module, a binary/quote
+# module, or a module instance.
+parse_script: LPAREN MODULE WAIT
+Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
+<2>This '(' opens the enclosing construct.
+
+# state 1151: a constant operand opened with '(' inside an (invoke …).
+parse_script: LPAREN INVOKE STRING LPAREN WAIT
+Expecting a constant: 'i32.const', 'i64.const', 'f32.const', 'f64.const', 'v128.const', 'ref.null', 'ref.host', or 'ref.extern'.
+
+# state 1223: a result pattern opened with '(' inside an (assert_return …).
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
+Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
+
+# state 1280: after (module inside an (assert_malformed_custom …).
+parse_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE WAIT
+Expecting 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
+<2>This '(' opens the enclosing construct.

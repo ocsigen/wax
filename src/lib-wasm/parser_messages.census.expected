@@ -74,7 +74,6 @@
     1x Expecting '(export', '(import', 'id', or a global type.
     3x Expecting '(export', or 'id'.
     1x Expecting '(param'.
-    1x Expecting '(result'.
     1x Expecting '(then', or a folded instruction.
     1x Expecting ')', 'binary', 'id', 'quote', or a module field.
        <_>This '(' opens the enclosing construct.
@@ -176,6 +175,8 @@
     1x Expecting 'array', 'cont', 'func', or 'struct'.
     2x Expecting 'data', or 'pagesize'.
     2x Expecting 'data'.
+    1x Expecting 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
+       <_>This '(' opens the enclosing construct.
     1x Expecting 'do'.
     2x Expecting 'elem'.
     1x Expecting 'else', 'end', a block type, a label, or instructions.
@@ -200,14 +201,20 @@
     1x Expecting 'id', or a subtype.
     1x Expecting 'id', or a table type.
     2x Expecting 'id'.
+    1x Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting 'item', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+    1x Expecting 'memory', a data element type ('i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'), or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     3x Expecting 'module'.
     2x Expecting 'mut', or 'ref'.
     1x Expecting 'nan', or a 32-bit float.
     1x Expecting 'nan', or a 64-bit float.
     1x Expecting 'null', or a heap type.
+    1x Expecting 'offset', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     1x Expecting 'pagesize'.
     1x Expecting 'ref'.
     1x Expecting 'switch', or an index.
+    1x Expecting 'table', 'offset', 'ref', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
    16x Expecting a 16-bit signed integer.
    10x Expecting a 32-bit float.
    11x Expecting a 32-bit signed integer.
@@ -226,6 +233,8 @@
     2x Expecting a composite type.
     1x Expecting a cond then.
     7x Expecting a cond.
+    1x Expecting a constant: 'i32.const', 'i64.const', 'f32.const', 'f64.const', 'v128.const', 'ref.null', 'ref.host', or 'ref.extern'.
+    1x Expecting a data element type: 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'.
     1x Expecting a dummy ctx.
     2x Expecting a field type.
     1x Expecting a float or NaN.
@@ -237,12 +246,19 @@
     4x Expecting a memory alignment, or an 8-bit unsigned integer.
     2x Expecting a memory type.
     1x Expecting a module field, or end of file.
+    1x Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', 'rec', or 'module'.
+    1x Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', or 'rec'.
     4x Expecting a module.
     1x Expecting a name, or an import group elem.
    14x Expecting a name.
+    1x Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
     1x Expecting a parameter group.
    11x Expecting a reference type.
+    1x Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
     1x Expecting a result pattern.
+    1x Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+    1x Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
+    1x Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
     1x Expecting a script instance, or an action.
     1x Expecting a script instance.
     1x Expecting a storage type.
@@ -250,6 +266,7 @@
     1x Expecting a subtype.
     2x Expecting a table type.
     1x Expecting a v128 const body.
+    1x Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
     3x Expecting a value type.
     2x Expecting a vec shape.
    32x Expecting an 8-bit signed integer.
@@ -258,10 +275,13 @@
     2x Expecting an element list.
     1x Expecting an extern index.
     1x Expecting an external type.
+    1x Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
     2x Expecting an index, or type use without bindings.
    88x Expecting an index.
+    1x Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     5x Expecting an integer.
     2x Expecting an offset.
+    1x Expecting another '(result' group, an instruction, or ')'.
     1x Expecting cond then fields.
     1x Expecting end of file.
     1x Expecting instructions, or legacy catches.
@@ -269,6 +289,3 @@
     1x Expecting parameters and results without bindings.
     1x Expecting parameters and results.
     2x Expecting type use without bindings.
-   16x Syntax error
-    2x Syntax error
-       <_>This '(' opens the enclosing construct.

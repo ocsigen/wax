@@ -652,6 +652,13 @@ type message_stat = {
           post-filter, pre-readable-name continuation set), or [] when no such
           list was emitted (generic-fallback states claim nothing). The
           soundness oracle checks each of these against the automaton. *)
+  overridden : bool;
+      (** The message was replaced by a hand-written entry from the per-grammar
+          [.overrides] file (step 5). An overridden entry is excluded from the
+          fallback counters (it is no longer a generic fallback) and from the
+          soundness/jargon self-lints, which cannot parse free prose — see the
+          override-merge site in [generate_message] for the claim-soundness
+          responsibility note. *)
 }
 
 (* Would [token] plausibly open the construct [closer] terminates? Broader than
@@ -703,7 +710,102 @@ let renders_as_jargon terminals s =
   && special_name s = None
   && String.contains s '_'
 
-let generate_message grammar terminals ~comments entry =
+(* --- Hand-written overrides (step 5, the sanctioned escape hatch) --- *)
+
+(* A per-grammar [.overrides] file supplies hand-written messages for the states
+   heuristics cannot serve — chiefly the structurally immovable over-5
+   "enumeration" fallbacks (the dot at the start of a construct whose FIRST set
+   overflows the readable cap, so the generated message degrades to a bare
+   "Syntax error"). It is keyed by the *sentence* (`entry_point: sentence`, the
+   stable key — state numbers renumber on any grammar change, sentences do not)
+   and merged after generation. The file mirrors the [.messages] shape: blocks
+   separated by blank lines; within a block, lines beginning with '#' (after
+   optional leading whitespace) are rationale comments, the first surviving line
+   is the `entry_point: sentence` header, and the remaining lines are the
+   replacement message body (a single line, or a message plus a [<N>] delimiter-
+   hint line). *)
+let load_overrides file =
+  let lines = Parse_messages.read_lines file in
+  let blocks =
+    (* Same blank-line block split as the [.messages] parser. *)
+    let rec aux cur acc = function
+      | [] -> List.rev (if cur = [] then acc else List.rev cur :: acc)
+      | line :: rest ->
+          if String.trim line = "" then
+            if cur = [] then aux [] acc rest
+            else aux [] (List.rev cur :: acc) rest
+          else aux (line :: cur) acc rest
+    in
+    aux [] [] lines
+  in
+  List.fold_left
+    (fun map block ->
+      let is_comment l =
+        let t = String.trim l in
+        String.length t > 0 && t.[0] = '#'
+      in
+      match List.filter (fun l -> not (is_comment l)) block with
+      | [] -> map
+      | header :: body ->
+          let header = String.trim header in
+          if String.length header = 0 then map
+          else StringMap.add header (String.concat "\n" body) map)
+    StringMap.empty blocks
+
+(* Validate any [<N>] depth marker an override carries the same way a generated
+   hint is bounded: [N] is a 1-based stack-cell index the runtime resolves with
+   [MenhirInterpreter.get (N-1)], so it must fall within the state's known stack
+   suffix (a marker past the suffix would point the underline at the wrong cell
+   — or off the stack). A bad marker is a hard build error. Claim-soundness of
+   the *prose* itself (that the listed continuations are the ones the state
+   actually accepts) is the override author's responsibility — the oracle checks
+   symbols, not sentences, so it cannot vet free text. *)
+let validate_override_depths ~header body stack_suffix =
+  let n_cells =
+    String.concat " " stack_suffix
+    |> String.split_on_char ' '
+    |> List.filter (fun s -> String.trim s <> "")
+    |> List.length
+  in
+  let re = Str.regexp "<\\([0-9]+\\)>" in
+  let rec scan pos =
+    match Str.search_forward re body pos with
+    | exception Not_found -> ()
+    | i ->
+        let n = int_of_string (Str.matched_group 1 body) in
+        if n < 1 || n > n_cells then
+          failwith
+            (Printf.sprintf
+               "override for %S: depth marker <%d> is out of range (stack \
+                suffix has %d cells)"
+               header n n_cells);
+        scan (i + String.length (Str.matched_string body))
+  in
+  scan 0
+
+(* Report an override whose sentence matches no generated entry: the file must
+   never drift silently, so a stale key fails the build. Called once the full
+   entry set is known. *)
+let check_override_rot overrides entries =
+  let headers =
+    List.fold_left
+      (fun acc e ->
+        StringSet.add
+          (e.Parse_messages.entry_point ^ ": " ^ e.Parse_messages.sentence)
+          acc)
+      StringSet.empty entries
+  in
+  StringMap.iter
+    (fun key _ ->
+      if not (StringSet.mem key headers) then
+        failwith
+          (Printf.sprintf
+             "override for %S matches no error state (stale entry — remove or \
+              fix it)"
+             key))
+    overrides
+
+let generate_message grammar terminals ~comments ~overrides entry =
   let d = entry.Parse_messages.data in
 
   (* Heuristic: Formatting Logic. [subject_name] renders the Assuming subject
@@ -868,7 +970,7 @@ let generate_message grammar terminals ~comments entry =
   in
 
   (* Append Hint if an unclosed delimiter was detected on the stack context *)
-  let full_message =
+  let generated_message =
     match unclosed_details with
     | Some (depth, opener, _) ->
         (* Locate the opener of the construct the error sits inside, without
@@ -883,19 +985,43 @@ let generate_message grammar terminals ~comments entry =
     | None -> message_body
   in
 
+  (* Hand-override merge (step 5): if the sanctioned [.overrides] file supplies a
+     message for this state's sentence, it replaces the generated one verbatim.
+     The override text is the author's own prose — its claim-soundness is NOT
+     machine-checked (the oracle keys on raw symbols, not sentences), only its
+     [<N>] depth markers are bounds-checked; see [validate_override_depths]. An
+     overridden entry drops out of the fallback counters and the self-lints
+     below. *)
+  let header =
+    entry.Parse_messages.entry_point ^ ": " ^ entry.Parse_messages.sentence
+  in
+  let overridden, full_message =
+    match StringMap.find_opt header overrides with
+    | Some body ->
+        validate_override_depths ~header body d.stack_suffix;
+        (true, body)
+    | None -> (false, generated_message)
+  in
+
   Printf.bprintf buf "%s\n\n" full_message;
 
-  (* Self-lints, reported by the [-stats] mode. *)
+  (* Self-lints, reported by the [-stats] mode. An overridden entry is exempt:
+     it is neither a generated "Expecting …" nor a generic fallback, so it
+     carries no claims (nothing for the soundness/jargon oracle to check) and no
+     computed hint (its hint, if any, is author-written and counted straight
+     from the override text). *)
   let n_expected = List.length expected_symbols in
-  let emitted = n_expected > 0 && n_expected <= 5 in
+  let emitted = (not overridden) && n_expected > 0 && n_expected <= 5 in
   let missed_hints =
-    List.filter
-      (fun closer ->
-        List.mem closer valid_symbols
-        && find_matching_depth terminals sentence closer = None
-        && unmatched_opener_like terminals closer
-             (String.concat " " d.stack_suffix))
-      [ "RBRACE"; "RBRACKET"; "RPAREN" ]
+    if overridden then []
+    else
+      List.filter
+        (fun closer ->
+          List.mem closer valid_symbols
+          && find_matching_depth terminals sentence closer = None
+          && unmatched_opener_like terminals closer
+               (String.concat " " d.stack_suffix))
+        [ "RBRACE"; "RBRACKET"; "RPAREN" ]
   in
   let jargon =
     if emitted then
@@ -908,13 +1034,16 @@ let generate_message grammar terminals ~comments entry =
   let stat =
     {
       expecting = emitted;
-      assuming = d.spurious_reductions <> [];
-      empty_expected = n_expected = 0;
-      overflow_expected = n_expected > 5;
-      hinted = unclosed_details <> None;
+      assuming = (not overridden) && d.spurious_reductions <> [];
+      empty_expected = (not overridden) && n_expected = 0;
+      overflow_expected = (not overridden) && n_expected > 5;
+      hinted =
+        (if overridden then String.contains full_message '<'
+         else unclosed_details <> None);
       missed_hints;
       jargon;
       claims = (if emitted then expected_raw else []);
+      overridden;
     }
   in
   (* [full_message] is returned separately for the census (step 7), which counts
@@ -1088,9 +1217,14 @@ let output_stats gram auto results =
   Printf.printf "entries with cascade depth >= 4: %d\n"
     (List.length (List.filter (fun d -> d >= 4) cascade_depths));
   Printf.printf "max cascade depth: %d\n" (List.fold_left max 0 cascade_depths);
-  Printf.printf "generic fallback (empty expected list): %d\n"
+  (* Hand-written overrides (step 5). The fallback counters below exclude these
+     (their [overflow_expected]/[empty_expected] are forced false), so
+     "not overridden" is the new ratchet target: a genuinely un-overridable
+     enumeration state that still degrades to "Syntax error". *)
+  Printf.printf "overridden: %d\n" (count (fun s -> s.overridden));
+  Printf.printf "generic fallback (empty expected list, not overridden): %d\n"
     (count (fun s -> s.empty_expected));
-  Printf.printf "generic fallback (expected list over 5): %d\n"
+  Printf.printf "generic fallback (expected list over 5, not overridden): %d\n"
     (count (fun s -> s.overflow_expected));
   Printf.printf "delimiter hints: %d\n" (count (fun s -> s.hinted));
   let missed =
@@ -1191,6 +1325,7 @@ let main () =
   let stats = ref false in
   let list_transitions = ref false in
   let cmly_file = ref "" in
+  let overrides_file = ref "" in
 
   let spec =
     [
@@ -1218,6 +1353,12 @@ let main () =
         "Path to the grammar's .cmly file (menhirSdk); the source of exact \
          productions, nullability, and token aliases (required for \
          -generate-messages, -stats, and -list-transitions)" );
+      ( "-overrides",
+        Arg.Set_string overrides_file,
+        "Path to the grammar's hand-written .overrides file (step 5): \
+         sentence-keyed replacement messages for states beyond heuristics. \
+         Merged after generation; an override whose sentence matches no error \
+         state fails the build" );
     ]
   in
 
@@ -1237,6 +1378,14 @@ let main () =
   let entries = Parse_messages.parse_file !input_file in
   Printf.eprintf "Parsed %d entries from %s\n" (List.length entries) !input_file;
 
+  let overrides =
+    if !overrides_file = "" then StringMap.empty
+    else load_overrides !overrides_file
+  in
+  (* Rot protection: every override must still key a live error state, in every
+     mode, so a stale entry can never sit silently in the file. *)
+  check_override_rot overrides entries;
+
   if !generate_messages || !stats || !census || !list_transitions then (
     if !cmly_file = "" then (
       Printf.eprintf "Error: -cmly is required for this mode.\n";
@@ -1249,7 +1398,7 @@ let main () =
           (fun entry ->
             let text, body, stat =
               generate_message grammar terminals ~comments:(not !no_comments)
-                entry
+                ~overrides entry
             in
             (entry, (text, body, stat)))
           entries

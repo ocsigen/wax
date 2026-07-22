@@ -1,7 +1,7 @@
 === outline survives a broken field ===
 outline: function/$a function/$b variable/$g
 diagnostics:
-  [error] Syntax error
+  [error] Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
 
 === check suppresses cascades at EOF ===
 outline: function/func
@@ -11,7 +11,7 @@ diagnostics:
 === check keeps a real error past a syntax error ===
 outline: function/func function/func
 diagnostics:
-  [error] Syntax error
+  [error] Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
   [error] Type mismatch: this produces a value of type 'i64', but type 'i32' is expected.
 
 === clean module reports normally ===

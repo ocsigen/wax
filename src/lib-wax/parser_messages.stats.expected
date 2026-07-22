@@ -3,8 +3,9 @@ with an expected list: 499
 using the spurious-reduction template: 50
 entries with cascade depth >= 4: 8
 max cascade depth: 6
-generic fallback (empty expected list): 0
-generic fallback (expected list over 5): 34
+overridden: 34
+generic fallback (empty expected list, not overridden): 0
+generic fallback (expected list over 5, not overridden): 0
 delimiter hints: 102
 missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
