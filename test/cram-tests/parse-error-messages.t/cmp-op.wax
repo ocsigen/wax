@@ -1,0 +1,2 @@
+#[if(VERSION 1)]
+fn f() {}

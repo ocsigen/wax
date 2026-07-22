@@ -13,8 +13,14 @@ test/cram-tests/check-all-errors.t/multi.wax
 test/cram-tests/check-all-errors.t/stack-cascade.wax
 test/cram-tests/check-all-errors.t/unclosed-brace.wax
 test/cram-tests/match.t/err_no_default.wax
+test/cram-tests/parse-error-messages.t/array.wax
 test/cram-tests/parse-error-messages.t/block.wax
+test/cram-tests/parse-error-messages.t/cmp-op.wax
+test/cram-tests/parse-error-messages.t/expr-follow.wax
+test/cram-tests/parse-error-messages.t/labeled-block.wax
 test/cram-tests/parse-error-messages.t/limits.wax
+test/cram-tests/parse-error-messages.t/nested-brace.wax
 test/cram-tests/parse-error-messages.t/onclause.wax
+test/cram-tests/parse-error-messages.t/struct-type.wax
 test/cram-tests/unicode-identifier.t/bad.wax
 test/cram-tests/wax-conditional.t/bad.wax
