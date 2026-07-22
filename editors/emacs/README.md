@@ -16,6 +16,15 @@ Since `wax-ts-mode` requires Emacs 29+, you can install it directly from this re
        :rev :newest
        :lisp-dir "editors/emacs")
   :hook (wax-ts-mode . eglot-ensure))
+
+;; Optional: completion popup as you type. Without it, Eglot still serves
+;; completions through the built-in `completion-at-point' (C-M-i).
+(use-package corfu
+  :ensure t
+  :custom
+  (corfu-auto t)
+  (corfu-auto-prefix 1)  ; pop up after one character, not the default 3
+  :hook (wax-ts-mode . corfu-mode))
 ```
 
 Alternatively, you can manually put `wax-ts-mode.el` on your `load-path`:
@@ -48,6 +57,18 @@ signature help:
 (which Eglot manages), with the warning's `-W` name in the message. The
 tree-sitter mode still provides highlighting, indentation, and `imenu`; the
 server adds the language intelligence on top.
+
+Completion works out of the box through the built-in `completion-at-point`
+(`C-M-i`). For a popup that appears as you type (struct fields after `x.`,
+names in scope), enable a completion frontend; the [install
+snippet](#install) uses corfu, and company works just as well:
+
+```elisp
+(use-package company
+  :ensure t
+  :custom (company-minimum-prefix-length 1)
+  :hook (wax-ts-mode . company-mode))
+```
 
 ## Formatting
 

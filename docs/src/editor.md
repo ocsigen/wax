@@ -73,6 +73,15 @@ Ready-to-use configurations, each with a README, live under
          :rev :newest
          :lisp-dir "editors/emacs")
     :hook (wax-ts-mode . eglot-ensure))
+
+  ;; Optional: completion popup as you type. Without it, Eglot still serves
+  ;; completions through the built-in `completion-at-point' (C-M-i).
+  (use-package corfu
+    :ensure t
+    :custom
+    (corfu-auto t)
+    (corfu-auto-prefix 1)  ; pop up after one character, not the default 3
+    :hook (wax-ts-mode . corfu-mode))
   ```
 
 The server's flags and behaviour (document sync, position-encoding negotiation)
