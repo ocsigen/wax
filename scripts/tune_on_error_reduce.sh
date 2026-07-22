@@ -72,6 +72,24 @@
 #     tension §8 warns the counters cannot fully resolve). Flagged for a human.
 #   NEUTRAL: everything else (no quality movement; e.g. a pure count merge).
 #
+# THE OVERRIDE-ROT COST (the blind spot §8's human review had to find by hand)
+#   The trials run override-free (see the constraint above), so a move's scored
+#   "win" is in the *generated* view only — it cannot see that the win merely
+#   relocates or re-keys a state the per-grammar `.overrides` file already serves
+#   with a hand-written message. Every IMPROVING move is therefore also priced by
+#   its OVERRIDE-ROT COST: the override keys that head an entry in the baseline
+#   no-comments golden but no longer head one in the trial (disappeared or
+#   re-picked sentences ∩ the `.overrides` keys). A move whose single improving
+#   signal (over-5/uncovered/template) has magnitude exactly equal to its rot is
+#   reclassified IMPROVING → RELOCATES-OVERRIDDEN (neutral): its whole win lands
+#   on already-overridden states, so it is a wash unless the merged message beats
+#   the hand override (a human call). A move with rot the win does NOT fully
+#   account for stays IMPROVING but is flagged `override-rot: N` prominently so
+#   the collateral re-keying is visible in the ranking rather than discovered by
+#   hand. Rot is computed only for IMPROVING moves (a per-key grep over the ~19
+#   wasm / 34 wax override keys — cheap), and never for calibration, whose moves
+#   are non-improving, so the 25/25 & 50/50 agreement is untouched.
+#
 # USAGE
 #   scripts/tune_on_error_reduce.sh [wasm|wax|both] [dead|advise|calibrate|all]
 #   Defaults: both all.  Output is a human/agent review report on stdout; a full
@@ -149,6 +167,15 @@ load_stats() {
 
 WORK=""      # per-grammar scratch working dir
 BASE_STATS=""; BASE_CENSUS=""; BASE_ACTUAL=""
+OVERRIDE_KEYS=""   # per-grammar file: the .overrides sentence keys, one per line
+
+# parse_override_keys FILE — the "entry_point: sentence" key of every override
+# block. The .overrides format is blank-line-separated blocks; within a block
+# '#' lines are rationale comments and the FIRST surviving line is the key (the
+# rest is the replacement body). Blank line ends a block.
+parse_override_keys() {
+  awk '/^[[:space:]]*$/{ib=0;next} /^#/{next} {if(!ib){print;ib=1}}' "$1"
+}
 
 # run_pipeline MLY OUTPREFIX — list-errors + cmly + the three generator outputs.
 # Sets nothing; writes $OUTPREFIX.{stats,census,actual}. Returns non-zero on a
@@ -213,6 +240,44 @@ classify() {
   echo -e "NEUTRAL\tno quality movement (template$d_template hints+$d_hints cascade$d_cascade)"
 }
 
+# compute_rot TRIAL_ACTUAL — the per-move OVERRIDE-ROT COST: the override keys
+# (from $OVERRIDE_KEYS) that head an entry in the baseline no-comments golden but
+# no longer head one in the trial golden — i.e. sentences the trial's state
+# merge/renumber made --list-errors disappear or re-pick, on a state the step-5
+# .overrides serves with a hand-written message. A move's generated-view "win"
+# that lands only on such states merely relocates an already-overridden state.
+# Sets ROT_COUNT and ROT_KEYS_SEMI (';;'-joined, newline-free so it survives the
+# tab-packed report arrays; override keys never contain ';;').
+ROT_COUNT=0; ROT_KEYS_SEMI=""
+compute_rot() {
+  ROT_COUNT=0; ROT_KEYS_SEMI=""
+  [ -s "$OVERRIDE_KEYS" ] || return 0
+  local k
+  while IFS= read -r k; do
+    [ -z "$k" ] && continue
+    if grep -qxF "$k" "$BASE_ACTUAL" && ! grep -qxF "$k" "$1"; then
+      ROT_COUNT=$((ROT_COUNT + 1))
+      ROT_KEYS_SEMI="$ROT_KEYS_SEMI$k;;"
+    fi
+  done <"$OVERRIDE_KEYS"
+}
+
+# gain_states BASEPREFIX_DELTAS — echo "KIND<TAB>N" for a mechanically-clear
+# single-signal improving gain (over-5 fallback / uncovered / hedge template),
+# else "<TAB>0". Reads the $d_* deltas the caller computed. A move driven by
+# exactly one improving signal has a clear per-state gain count (the states that
+# left that ledger); a move mixing signals is not mechanically attributable, so
+# it stays "improving" and is only rot-flagged.
+gain_states() {
+  if   [ "$d_over5"   -lt 0 ] && [ "$d_uncov_e" -eq 0 ] && [ "$d_template" -eq 0 ]; then
+    printf 'over-5 fallback\t%d' $((-d_over5))
+  elif [ "$d_uncov_e" -lt 0 ] && [ "$d_over5"   -eq 0 ] && [ "$d_template" -eq 0 ]; then
+    printf 'uncovered action\t%d' $((-d_uncov_e))
+  elif [ "$d_template" -lt 0 ] && [ "$d_over5"  -eq 0 ] && [ "$d_uncov_e"  -eq 0 ]; then
+    printf 'hedge template\t%d' $((-d_template))
+  else printf '\t0'; fi
+}
+
 # vector_delta_line — a compact one-line vector delta for the report.
 vector_delta_line() {
   printf "    Δ over5=%+d empty=%+d hints=%+d template=%+d cascade=%+d uncov=%+d/%+d jargon=%+d unsound=%+d | entries %d→%d withlist %d→%d\n" \
@@ -235,6 +300,8 @@ setup_grammar() {
   # shellcheck disable=SC2206
   CUR_ANNOTS=($line)
   BASE_STATS="$WORK/base.stats"; BASE_CENSUS="$WORK/base.census"; BASE_ACTUAL="$WORK/base.actual"
+  OVERRIDE_KEYS="$WORK/override.keys"
+  parse_override_keys "$REPO/src/lib-$g/parser_messages.overrides" >"$OVERRIDE_KEYS"
   run_pipeline "$WORK/parser.mly" "$WORK/base" || { echo "baseline pipeline failed for $g" >&2; exit 1; }
   # addition candidates: LHS of every reduce production in the automaton, minus
   # the current annotations and menhir-internal __anonymous symbols.
@@ -289,7 +356,7 @@ run_dead_sweep() {
 run_advisor() {
   echo "### ADVISOR ($1) — single-move ranking (${#CUR_ANNOTS[@]} removals, ${#ADD_CANDIDATES[@]} additions)"
   load_stats "$BASE_STATS" b_
-  local improving=() mixed=() harmful=0 neutral=0 dead=0 skipped=0
+  local improving=() mixed=() relocates=() harmful=0 neutral=0 dead=0 skipped=0
   local move nt verdict cls reason
   do_move() {
     local op="$1" nt="$2"
@@ -299,7 +366,21 @@ run_advisor() {
     verdict="$(classify "$WORK/trial" "$WORK/trial")"
     cls="${verdict%%$'\t'*}"; reason="${verdict#*$'\t'}"
     case "$cls" in
-      IMPROVING) improving+=("$op $nt"$'\t'"$reason"$'\t'"$(vector_delta_line)"$'\t'"$(diff "$BASE_CENSUS" "$WORK/trial.census" || true)");;
+      IMPROVING)
+        # The generated-view win may only be relocating a step-5 override:
+        # price it in the override-rot cost, and reclassify when the whole win
+        # lands on rotted (already-overridden) states.
+        compute_rot "$WORK/trial.actual"
+        local d_over5=$((t_over5 - b_over5)) d_uncov_e=$((t_uncov_e - b_uncov_e))
+        local d_template=$((t_template - b_template))
+        local gainline gk gn
+        gainline="$(gain_states)"; gk="${gainline%%$'\t'*}"; gn="${gainline#*$'\t'}"
+        if [ "$ROT_COUNT" -gt 0 ] && [ "$gn" -gt 0 ] && [ "$ROT_COUNT" -eq "$gn" ]; then
+          relocates+=("$op $nt"$'\t'"$gk"$'\t'"$ROT_COUNT"$'\t'"$ROT_KEYS_SEMI"$'\t'"$(vector_delta_line)")
+        else
+          improving+=("$op $nt"$'\t'"$reason"$'\t'"$ROT_COUNT"$'\t'"$ROT_KEYS_SEMI"$'\t'"$(vector_delta_line)"$'\t'"$(diff "$BASE_CENSUS" "$WORK/trial.census" || true)")
+        fi
+        ;;
       MIXED)     mixed+=("$op $nt ($reason)");;
       HARMFUL)   harmful=$((harmful+1));;
       DEAD)      dead=$((dead+1));;
@@ -309,20 +390,38 @@ run_advisor() {
   for nt in "${CUR_ANNOTS[@]}";   do do_move remove "$nt"; done
   for nt in "${ADD_CANDIDATES[@]}"; do do_move add "$nt"; done
 
-  echo "  summary: improving=${#improving[@]} mixed=${#mixed[@]} harmful=$harmful dead/no-op=$dead neutral=$neutral skipped=$skipped"
+  echo "  summary: improving=${#improving[@]} relocates-overridden=${#relocates[@]} mixed=${#mixed[@]} harmful=$harmful dead/no-op=$dead neutral=$neutral skipped=$skipped"
   echo
   if [ ${#improving[@]} -eq 0 ]; then
     echo "  No strictly-improving single move (expected right after a 4b prune)."
   else
     echo "  IMPROVING MOVES (review each — scores do not compose):"
     for e in "${improving[@]}"; do
-      IFS=$'\t' read -r mv rsn vec cen <<<"$e"
+      IFS=$'\t' read -r mv rsn rc rk vec cen <<<"$e"
       echo "  ---- $mv  [$rsn]"
       echo "$vec"
+      if [ "${rc:-0}" -gt 0 ]; then
+        echo "    override-rot: $rc keys (COLLATERAL — the win does not fully map to these; a human must confirm the merged message still beats each hand override):"
+        printf '%s\n' "$rk" | sed 's/;;/\n/g' | grep -v '^[[:space:]]*$' | sed 's/^/      /'
+      fi
       echo "    census diff:"; echo "$cen" | sed 's/^/      /'
     done
   fi
   echo
+  if [ ${#relocates[@]} -gt 0 ]; then
+    echo "  RELOCATES-OVERRIDDEN (neutral) — the whole win lands on hand-overridden"
+    echo "  states, so it merely relocates them; the state already carries a step-5"
+    echo "  message. Apply only if the generated merge-target message beats the"
+    echo "  override (human call), not for the counter delta alone:"
+    for e in "${relocates[@]}"; do
+      IFS=$'\t' read -r mv gk rc rk vec <<<"$e"
+      echo "  ---- $mv  [$gk gain −$rc, all $rc on overridden states]"
+      echo "$vec"
+      echo "    override-rot: $rc keys"
+      printf '%s\n' "$rk" | sed 's/;;/\n/g' | grep -v '^[[:space:]]*$' | sed 's/^/      /'
+    done
+    echo
+  fi
   if [ ${#mixed[@]} -gt 0 ]; then
     echo "  MIXED — needs a human eye (a hint/cascade gain bundled with a new hedge):"
     for m in "${mixed[@]}"; do echo "    $m"; done
