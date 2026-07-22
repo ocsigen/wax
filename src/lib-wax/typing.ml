@@ -9898,10 +9898,15 @@ and constant_instruction ctx i =
         | Valtype { internal = I32; _ } | Error -> false
         | _ -> required ())
   | Cast (i', Valtype (Ref { typ = Extern; nullable })) ->
-      (* extern.convert_any *)
+      (* extern.convert_any. An [i32] operand is first wrapped in [ref.i31]
+         ([i32 -> i31 -> any -> extern], as the non-constant typer lowers
+         [x as &extern]), which is itself constant — so accept it like the
+         [ref.i31] arm above rather than demanding the operand already be an
+         [any] reference. *)
       if constant_instruction ctx i' then true
       else if
         match (Cell.get (expression_type ctx i') : inferred_type) with
+        | Valtype { internal = I32; _ } -> false
         | Valtype { internal; _ } ->
             not
               (Wax_wasm.Types.val_subtype (subtyping_info ctx) internal

@@ -1,0 +1,5 @@
+let e: &?extern = 0 as &extern;
+#[export]
+fn get() -> &?extern {
+    e;
+}
