@@ -100,4 +100,8 @@ val ref_subtype : subtyping_info -> Internal.reftype -> Internal.reftype -> bool
 (** [ref_subtype info rt1 rt2] checks if [rt1] is a subtype of [rt2]. *)
 
 val val_subtype : subtyping_info -> Internal.valtype -> Internal.valtype -> bool
+val heaptype_equal : Internal.heaptype -> Internal.heaptype -> bool
+val reftype_equal : Internal.reftype -> Internal.reftype -> bool
+
+val valtype_equal : Internal.valtype -> Internal.valtype -> bool
 (** [val_subtype info vt1 vt2] checks if [vt1] is a subtype of [vt2]. *)
