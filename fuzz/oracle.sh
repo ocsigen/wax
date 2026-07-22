@@ -272,7 +272,14 @@ case "$verdict:$EXPECT" in
       report_diff=0
       diffmsg="wax says $sverdict, wasm-tools says $ref"
       if [ "$sverdict" != "$ref" ]; then
-        if [ "$FMT" = wat ] && ! grep -q '[^[:space:]]' "$IN"; then
+        if [ "$sverdict" = ok ] && [ "$ref" = rejected ] \
+          && grep -q "likely-confusing unicode" "$IN.err"; then
+          # A "Trojan Source" bidirectional control character in a string: the
+          # spec allows any UTF-8, so wax accepts it (and flags it with the
+          # confusable-unicode lint), whereas wasm-tools' text lexer refuses it.
+          # wax is correct, so this is not a soundness divergence.
+          report_diff=0
+        elif [ "$FMT" = wat ] && ! grep -q '[^[:space:]]' "$IN"; then
           # A whitespace-only WAT is a valid empty module to wax (and to
           # wat2wasm, which warns but accepts); only wasm-tools refuses a bare
           # empty top-level. That divergence is a reference quirk the text
