@@ -11,4 +11,6 @@
 (executable
  (name generate_error_messages)
  (modules generate_error_messages parse_messages)
- (libraries str))
+ ; menhirSdk reads the .cmly for exact productions/nullability/aliases; str is
+ ; still used by parse_messages.ml to parse the --list-errors comment blocks.
+ (libraries menhirSdk str))

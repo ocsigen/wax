@@ -13,65 +13,83 @@ module StatusMap = Map.Make (String)
 
 type status = Direct | Lookahead | Both
 
-(* --- Grammar Analysis Utilities --- *)
+(* --- Exact Grammar (menhirSdk / .cmly) --- *)
 
-(* Build a grammar (LHS -> RHS list map) from all LR items in the file *)
-let build_grammar entries =
-  List.fold_left
-    (fun acc entry ->
-      List.fold_left
-        (fun acc item ->
-          let lhs = item.Parse_messages.lhs in
-          let rhs =
-            item.Parse_messages.rhs_before @ item.Parse_messages.rhs_after
-          in
-          let existing = try StringMap.find lhs acc with Not_found -> [] in
-          if List.mem rhs existing then acc
-          else StringMap.add lhs (rhs :: existing) acc)
-        acc entry.Parse_messages.data.lr1_items)
-    StringMap.empty entries
+(* The grammar knowledge the continuation computation needs, read from the
+   [.cmly] file rather than reconstructed from the LR items that happen to
+   appear in error states (the old scrape was provably incomplete: a
+   menhir-generated symbol whose defining item was absent from every sampled
+   state lost its continuations, and nullability was a name-prefix guess that
+   missed opaque nullable nonterminals like [statement_list]). *)
+type gram = {
+  is_terminal : string -> bool;
+  nullable : string -> bool;  (** false for terminals and unknown names *)
+  productions : string -> string list list;
+      (** each right-hand side as a list of surface symbol names *)
+  is_generated : string -> bool;
+      (** menhir-generated (a parametric-rule instantiation or an inlined
+          anonymous rule) — expand it through its productions; a user-named
+          nonterminal stays opaque *)
+}
 
-(* Strips constructors like option(), list(), etc. to get the inner symbol.
-   Table-driven over [(prefix, has_separator)]: a plain wrapper yields its sole
-   argument; a separated_* wrapper names the instantiation with the separator
-   token first (e.g. [separated_nonempty_list_trailing(COMMA,on_clause)]), so its
-   element is the second comma-field. The trailing-comma variants were once
-   missed exactly because they were hand-copied and forgotten, hence the table. *)
-let strip_constructor s =
-  let open String in
-  let len = length s in
-  let table =
-    [
-      ("loption(", false);
-      ("option(", false);
-      ("boption(", false);
-      ("list(", false);
-      ("semi_list(", false);
-      ("nonempty_list(", false);
-      ("separated_list(", true);
-      ("separated_nonempty_list(", true);
-      ("separated_list_trailing(", true);
-      ("separated_nonempty_list_trailing(", true);
-    ]
+(* A menhir-generated nonterminal is a parametric-rule instantiation
+   ([option(...)], [list(...)], the [separated_*] / [loption] / [boption]
+   wrappers, and the inlined [__anonymous_*] rules) — all of which carry a '(' in
+   their surface name — or a bare anonymous symbol. Such a symbol is expanded
+   through its productions; a user-named nonterminal ([expression],
+   [statement_list], …) is kept opaque, the deliberate design of naming the
+   construct rather than its FIRST set. *)
+let symbol_is_generated s =
+  String.contains s '('
+  || (String.length s >= 11 && String.sub s 0 11 = "__anonymous")
+
+(* Menhir stores a token alias with its surrounding quotes ("\"(\"" for "("). *)
+let strip_alias_quotes a =
+  let n = String.length a in
+  if n >= 2 && a.[0] = '"' && a.[n - 1] = '"' then String.sub a 1 (n - 2) else a
+
+(* Read the [.cmly] file and expose the terminal alias table (for readable names
+   and the delimiter-depth scan) alongside the structural [gram] the
+   continuation computation consumes. *)
+let load_grammar cmly_file =
+  let module G = MenhirSdk.Cmly_read.Read (struct
+    let filename = cmly_file
+  end) in
+  let open G in
+  let terminals = Hashtbl.create 128 in
+  List.iter
+    (fun (name, tok) ->
+      match Surface.Token.alias tok with
+      | Some a -> Hashtbl.replace terminals name (strip_alias_quotes a)
+      | None -> ())
+    (Surface.Syntax.tokens Surface.before_inlining);
+  let terminal_names = Hashtbl.create 128 in
+  Terminal.iter (fun t -> Hashtbl.replace terminal_names (Terminal.name t) ());
+  let nullable_tbl = Hashtbl.create 256 in
+  let prod_tbl = Hashtbl.create 256 in
+  Nonterminal.iter (fun nt ->
+      Hashtbl.replace nullable_tbl (Nonterminal.name nt)
+        (Nonterminal.nullable nt);
+      Hashtbl.replace prod_tbl (Nonterminal.name nt) []);
+  Production.iter (fun p ->
+      let lhs = Nonterminal.name (Production.lhs p) in
+      let rhs =
+        Array.to_list (Production.rhs p)
+        |> List.map (fun (s, _, _) -> Symbol.name s)
+      in
+      let existing = try Hashtbl.find prod_tbl lhs with Not_found -> [] in
+      Hashtbl.replace prod_tbl lhs (existing @ [ rhs ]));
+  let gram =
+    {
+      is_terminal = (fun s -> Hashtbl.mem terminal_names s);
+      nullable =
+        (fun s -> try Hashtbl.find nullable_tbl s with Not_found -> false);
+      productions =
+        (fun s -> try Hashtbl.find prod_tbl s with Not_found -> []);
+      is_generated = symbol_is_generated;
+    }
   in
-  let apply (prefix, has_separator) =
-    if starts_with ~prefix s && ends_with ~suffix:")" s then
-      let plen = length prefix in
-      let content = sub s plen (len - plen - 1) in
-      if has_separator then
-        match split_on_char ',' content with
-        | _ :: x :: _ -> Some (trim x)
-        | _ -> Some s
-      else Some content
-    else None
-  in
-  match
-    List.fold_left
-      (fun acc entry -> match acc with Some _ -> acc | None -> apply entry)
-      None table
-  with
-  | Some r -> r
-  | None -> s
+  (terminals, gram)
 
 (* Check if a symbol involves an anonymous symbol generated by Menhir *)
 let involves_anonymous s =
@@ -85,52 +103,29 @@ let involves_anonymous s =
   in
   check 0
 
-(* Check if a symbol is nullable (heuristic based on name) *)
-let is_nullable_symbol s =
-  let prefixes = [ "option("; "boption("; "loption("; "list("; "semi_list(" ] in
-  List.exists
-    (fun prefix ->
-      String.length s >= String.length prefix
-      && String.sub s 0 (String.length prefix) = prefix)
-    prefixes
-
-(* Recursively expand non-terminals to find the set of first terminals/symbols they can produce *)
-let rec expand_symbol grammar visited s =
-  if StringSet.mem s visited then StringSet.empty (* Cycle detection *)
+(* The opaque continuation symbols a symbol can begin with: terminals and
+   user-named nonterminals. A menhir-generated symbol is expanded through its
+   productions (a FIRST-set walk honouring the SDK's real nullability); a
+   terminal or a user-named nonterminal is returned as-is. Cycles are cut by
+   [visited]. *)
+let rec expand_symbol gram visited s =
+  if StringSet.mem s visited then StringSet.empty
+  else if gram.is_terminal s then StringSet.singleton s
   else
-    let visited' = StringSet.add s visited in
+    let visited = StringSet.add s visited in
+    if gram.is_generated s then
+      List.fold_left
+        (fun acc rhs -> StringSet.union acc (first_of_rhs gram visited rhs))
+        StringSet.empty (gram.productions s)
+    else StringSet.singleton s (* user-named nonterminal: opaque *)
 
-    (* Attempt 1: Expand via grammar if applicable (for anonymous symbols) *)
-    let try_grammar () =
-      if involves_anonymous s then
-        match StringMap.find_opt s grammar with
-        | Some productions ->
-            let result =
-              List.fold_left
-                (fun acc rhs ->
-                  match rhs with
-                  | [] -> acc (* Empty production *)
-                  | first :: _ ->
-                      let firsts = expand_symbol grammar visited' first in
-                      StringSet.union acc firsts)
-                StringSet.empty productions
-            in
-            Some result
-        | None -> None
-      else None
-    in
-
-    match try_grammar () with
-    | Some res -> res
-    | None ->
-        (* Attempt 2: Unwrap constructors *)
-        let s_unwrapped = strip_constructor s in
-        if s_unwrapped <> s then
-          (* Recurse on unwrapped *)
-          expand_symbol grammar visited' s_unwrapped
-        else
-          (* Terminal or opaque non-terminal found *)
-          StringSet.singleton s
+and first_of_rhs gram visited = function
+  | [] -> StringSet.empty
+  | sym :: rest ->
+      let f = expand_symbol gram visited sym in
+      if gram.nullable sym then
+        StringSet.union f (first_of_rhs gram visited rest)
+      else f
 
 (* Helper for StatusMap *)
 let add_status s status map =
@@ -148,27 +143,41 @@ let union_status map1 map2 =
    Collect all possible next symbols (continuations) given the RHS after the dot.
    Handles nullability to look past nullable symbols.
 *)
-let rec collect_continuations grammar visited rhs_after lookaheads =
+let direct_firsts gram symbol =
+  StringSet.fold
+    (fun s acc -> add_status s Direct acc)
+    (expand_symbol gram StringSet.empty symbol)
+    StatusMap.empty
+
+(* Continuations given the rhs after the dot. Walk the symbols left to right,
+   contributing each one's FIRST set (opaque for a user-named nonterminal,
+   expanded for a menhir-generated one); continue past a symbol to the next only
+   when it is nullable AND [look_past] admits it; and when the whole remaining
+   tail is nullable, fold in the item's reduce-lookaheads (the tokens that may
+   follow once every remaining symbol vanishes).
+
+   [look_past] is what distinguishes the two tiers the caller picks between:
+   - aggressive ([fun _ -> true]) skips past every nullable symbol, so an opaque
+     nullable nonterminal like [statement_list] reveals the tokens legal right
+     after it (e.g. '}');
+   - conservative ([gram.is_generated]) skips only past menhir-generated nullable
+     wrappers (option/list/semi_list/…), keeping a user-named nullable
+     nonterminal opaque — the pre-SDK policy, but now with exact expansion.
+   Because the aggressive set is a superset of the conservative one, the caller
+   can prefer it whenever it still fits the readable cap and fall back to the
+   conservative view otherwise, never losing a symbol the old output showed. *)
+let rec collect_continuations ~look_past gram rhs_after lookaheads =
   match rhs_after with
   | [] ->
       List.fold_left
         (fun acc s -> add_status s Lookahead acc)
         StatusMap.empty lookaheads
   | symbol :: rest ->
-      (* Expand the symbol *)
-      let expanded = expand_symbol grammar visited symbol in
-
-      let base_map =
-        StringSet.fold
-          (fun s acc -> add_status s Direct acc)
-          expanded StatusMap.empty
-      in
-      let acc = base_map in
-
-      if is_nullable_symbol symbol then
-        let rest_map = collect_continuations grammar visited rest lookaheads in
-        union_status acc rest_map
-      else acc
+      let base = direct_firsts gram symbol in
+      if gram.nullable symbol && look_past symbol then
+        union_status base
+          (collect_continuations ~look_past gram rest lookaheads)
+      else base
 
 (* --- Depth Calculation --- *)
 
@@ -217,31 +226,6 @@ let find_matching_depth terminals sentence closer =
             else scan current_depth balance rest
       in
       scan 0 0 reversed
-
-(* --- Terminal Alias Loading --- *)
-
-let load_terminals filename =
-  let mapping = Hashtbl.create 100 in
-  let chan = open_in filename in
-  let re_token =
-    Str.regexp
-      "%token[ \t]+\\(<[^>]+>\\)?[ \t]*\\([A-Z_0-9]+\\)[ \t]*\\(\"[^\"]+\"\\)?"
-  in
-  try
-    while true do
-      let line = input_line chan in
-      if Str.string_match re_token line 0 then
-        let name = Str.matched_group 2 line in
-        match try Some (Str.matched_group 3 line) with Not_found -> None with
-        | Some s ->
-            let alias = String.sub s 1 (String.length s - 2) in
-            Hashtbl.add mapping name alias
-        | None -> ()
-    done;
-    assert false
-  with End_of_file ->
-    close_in chan;
-    mapping
 
 (* --- Message Generation --- *)
 
@@ -467,18 +451,74 @@ let renders_as_jargon terminals s =
 let generate_message grammar terminals ~comments entry =
   let d = entry.Parse_messages.data in
 
-  (* Calculate Valid Next Symbols *)
-  let valid_next =
+  (* Heuristic: Formatting Logic *)
+  let readable_name = get_readable_name terminals in
+
+  (* The final expected list for a set of valid symbols: drop any anonymous
+     residue, then collapse an operator class only when it has >=2 members
+     present in this state, so a *large* operator continuation reads "an
+     operator" while a lone operator keeps its precise spelling (rendering a
+     single valid operator as "an operator" would wrongly suggest others are
+     legal). The class then counts as one symbol against the <=5 cap. *)
+  let expected_of valid_symbols =
+    let expected_raw =
+      valid_symbols
+      |> List.filter (fun s -> not (involves_anonymous s))
+      |> List.sort_uniq String.compare
+    in
+    let class_counts =
+      List.fold_left
+        (fun acc s ->
+          match classify_symbol s with
+          | Some c ->
+              StringMap.update c
+                (function None -> Some 1 | Some n -> Some (n + 1))
+                acc
+          | None -> acc)
+        StringMap.empty expected_raw
+    in
+    let expected_symbols =
+      expected_raw
+      |> List.map (fun s ->
+          match classify_symbol s with
+          | Some c when StringMap.find c class_counts >= 2 -> c
+          | _ -> readable_name s)
+      |> List.sort_uniq String.compare
+    in
+    (expected_raw, expected_symbols)
+  in
+
+  (* Calculate Valid Next Symbols, choosing between the two continuation tiers
+     (see [collect_continuations]): prefer the aggressive set, which skips past
+     every nullable symbol (revealing e.g. '}' after a nullable [statement_list]),
+     whenever it still fits the readable <=5 cap; otherwise fall back to the
+     conservative set, which keeps a user-named nullable nonterminal opaque
+     rather than letting its near-universal FOLLOW overflow into a worse generic
+     fallback. The aggressive set is a superset of the conservative one, so the
+     fallback never drops a symbol the conservative (old) view would have
+     shown. *)
+  let symbols_of look_past =
     List.fold_left
       (fun acc item ->
-        let next_map =
-          collect_continuations grammar StringSet.empty
-            item.Parse_messages.rhs_after item.Parse_messages.lookaheads
-        in
-        union_status acc next_map)
+        union_status acc
+          (collect_continuations ~look_past grammar
+             item.Parse_messages.rhs_after item.Parse_messages.lookaheads))
       StatusMap.empty d.lr1_items
   in
-  let valid_symbols = StatusMap.bindings valid_next |> List.map fst in
+  let vs_agg =
+    symbols_of (fun _ -> true) |> StatusMap.bindings |> List.map fst
+  in
+  let expected_raw_agg, exp_agg = expected_of vs_agg in
+  let valid_symbols, expected_raw, expected_symbols =
+    let n = List.length exp_agg in
+    if n >= 1 && n <= 5 then (vs_agg, expected_raw_agg, exp_agg)
+    else
+      let vs_c =
+        symbols_of grammar.is_generated |> StatusMap.bindings |> List.map fst
+      in
+      let expected_raw_c, exp_c = expected_of vs_c in
+      (vs_c, expected_raw_c, exp_c)
+  in
 
   let sentence =
     if d.stack_suffix <> [] then String.concat " " d.stack_suffix
@@ -498,40 +538,6 @@ let generate_message grammar terminals ~comments entry =
   else
     Printf.bprintf buf "%s: %s\n\n" entry.Parse_messages.entry_point
       entry.Parse_messages.sentence;
-
-  (* Heuristic: Formatting Logic *)
-  let readable_name = get_readable_name terminals in
-
-  (* Heuristic: Expected Symbols *)
-  let expected_raw =
-    valid_symbols
-    |> List.filter (fun s -> not (involves_anonymous s)) (* Filter anonymous *)
-    |> List.sort_uniq String.compare
-  in
-  let expected_symbols =
-    (* Collapse an operator class only when it has >=2 members present in this
-       state, so a *large* operator continuation reads "an operator" while a lone
-       operator keeps its precise spelling (rendering a single valid operator as
-       "an operator" would wrongly suggest others are legal). The class then
-       counts as one symbol against the <=5 cap. *)
-    let class_counts =
-      List.fold_left
-        (fun acc s ->
-          match classify_symbol s with
-          | Some c ->
-              StringMap.update c
-                (function None -> Some 1 | Some n -> Some (n + 1))
-                acc
-          | None -> acc)
-        StringMap.empty expected_raw
-    in
-    expected_raw
-    |> List.map (fun s ->
-        match classify_symbol s with
-        | Some c when StringMap.find c class_counts >= 2 -> c
-        | _ -> readable_name s)
-    |> List.sort_uniq String.compare
-  in
 
   (* Heuristic: Unclosed Delimiters *)
   let check_unclosed closer opener_str friendly_name =
@@ -643,8 +649,7 @@ let generate_message grammar terminals ~comments entry =
   (Buffer.contents buf, stat)
 
 (* Analysis: List all possible continuations for states, indicating spurious reductions. *)
-let analyze_transitions terminals entries =
-  let grammar = build_grammar entries in
+let analyze_transitions grammar terminals entries =
   let seen_states = Hashtbl.create 100 in
 
   Printf.printf "Transitions per state:\n";
@@ -658,8 +663,10 @@ let analyze_transitions terminals entries =
         List.fold_left
           (fun acc item ->
             let next_map =
-              collect_continuations grammar StringSet.empty
-                item.Parse_messages.rhs_after item.Parse_messages.lookaheads
+              collect_continuations
+                ~look_past:(fun _ -> true)
+                grammar item.Parse_messages.rhs_after
+                item.Parse_messages.lookaheads
             in
             union_status acc next_map)
           StatusMap.empty d.lr1_items
@@ -745,7 +752,7 @@ let main () =
   let no_comments = ref false in
   let stats = ref false in
   let list_transitions = ref false in
-  let terminals_file = ref "" in
+  let cmly_file = ref "" in
 
   let spec =
     [
@@ -763,10 +770,11 @@ let main () =
       ( "-list-transitions",
         Arg.Set list_transitions,
         "List all possible continuations for states" );
-      ( "-terminals",
-        Arg.Set_string terminals_file,
-        "Path to the .mly file containing terminal definitions (required for \
-         -generate-messages and -stats)" );
+      ( "-cmly",
+        Arg.Set_string cmly_file,
+        "Path to the grammar's .cmly file (menhirSdk); the source of exact \
+         productions, nullability, and token aliases (required for \
+         -generate-messages, -stats, and -list-transitions)" );
     ]
   in
 
@@ -786,34 +794,29 @@ let main () =
   let entries = Parse_messages.parse_file !input_file in
   Printf.eprintf "Parsed %d entries from %s\n" (List.length entries) !input_file;
 
-  if !generate_messages || !stats then (
-    if !terminals_file = "" then (
-      Printf.eprintf
-        "Error: -terminals is required for -generate-messages and -stats.\n";
+  if !generate_messages || !stats || !list_transitions then (
+    if !cmly_file = "" then (
+      Printf.eprintf "Error: -cmly is required for this mode.\n";
       exit 1);
-    let terminals = load_terminals !terminals_file in
-    let grammar = build_grammar entries in
-    if !generate_messages then Printf.eprintf "Generating messages...\n";
-    let results =
-      List.map
-        (fun entry ->
-          let text, stat =
-            generate_message grammar terminals ~comments:(not !no_comments)
-              entry
-          in
-          (entry, (text, stat)))
-        entries
-    in
-    if !generate_messages then
-      List.iter (fun (_, (text, _)) -> print_string text) results;
-    if !stats then
-      output_stats (List.map (fun (entry, (_, stat)) -> (entry, stat)) results))
-  else if !list_transitions then
-    let terminals =
-      if !terminals_file = "" then Hashtbl.create 1
-      else load_terminals !terminals_file
-    in
-    analyze_transitions terminals entries
+    let terminals, grammar = load_grammar !cmly_file in
+    if !generate_messages || !stats then (
+      if !generate_messages then Printf.eprintf "Generating messages...\n";
+      let results =
+        List.map
+          (fun entry ->
+            let text, stat =
+              generate_message grammar terminals ~comments:(not !no_comments)
+                entry
+            in
+            (entry, (text, stat)))
+          entries
+      in
+      if !generate_messages then
+        List.iter (fun (_, (text, _)) -> print_string text) results;
+      if !stats then
+        output_stats
+          (List.map (fun (entry, (_, stat)) -> (entry, stat)) results))
+    else analyze_transitions grammar terminals entries)
   else if
     (* Default verification dump *)
     entries <> []

@@ -51,10 +51,22 @@
   parser_messages.auto.messages
   (run menhir %{dep:parser.mly} --list-errors)))
 
+; The .cmly gives the generator exact grammar knowledge (productions,
+; nullability, token aliases) via menhirSdk. menhir writes <base>.cmly, so
+; --base parser_msgs names it parser_msgs.cmly (a name distinct from parser.mly
+; so it never collides with a stray source-tree parser.cmly). --cmly still runs
+; the default code back-end, which needs type inference dune only injects for
+; the (menhir …) stanza; --no-code-generation skips it (exit 0, same .cmly).
+(rule
+ (target parser_msgs.cmly)
+ (deps parser.mly)
+ (action
+  (run menhir %{dep:parser.mly} --cmly --no-code-generation --base parser_msgs)))
+
 (rule
  (with-stdout-to
   parser_messages.messages
-  (run %{project_root}/scripts/generate_error_messages.exe -terminals %{dep:parser.mly} -generate-messages %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -generate-messages %{dep:parser_messages.auto.messages})))
 
 ; Golden copy of the generated messages, without the ## comments (state
 ; numbers, LR items) that churn wholesale on any grammar change. The stripped
@@ -64,7 +76,7 @@
 (rule
  (with-stdout-to
   parser_messages.actual
-  (run %{project_root}/scripts/generate_error_messages.exe -terminals %{dep:parser.mly} -generate-messages -no-comments %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -generate-messages -no-comments %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)
@@ -79,7 +91,7 @@
 (rule
  (with-stdout-to
   parser_messages.stats
-  (run %{project_root}/scripts/generate_error_messages.exe -terminals %{dep:parser.mly} -stats %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -stats %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)

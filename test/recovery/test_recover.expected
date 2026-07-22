@@ -21,7 +21,7 @@ errors: 1
 === resync on leading 'fn' when no delimiter survives ===
 AST: recovered (1 defs)
 errors: 1
-  1:6-1:7: Expecting a parameter list.
+  1:6-1:7: Expecting ')', or a parameter list.
 
 === error inside parens, resync at ) ===
 AST: recovered (1 defs)
