@@ -2276,7 +2276,7 @@ let hover_of_type ((_, st) : Wax_wasm.Types.ref_index * subtype) =
    a function (as a non-null reference); [Get]/[Set]/[Tee] share this ladder and
    only differ in what they do with each outcome. *)
 type resolved_var =
-  | Local of inferred_valtype option
+  | Local of inferred_valtype option * Ast.location
   | Global of bool (* mutable *) * inferred_valtype option
   | Func_ref of Wax_wasm.Types.Id.t * string * bool
   | Poisoned
@@ -2289,7 +2289,7 @@ let resolve_variable ctx idx =
   | Some (ty, def) ->
       record_reference ~hover:(hover_of_valtype ty) ctx.resolve_links idx.info
         [ def ];
-      Local ty
+      Local (ty, def)
   | None -> (
       match Tbl.find_opt ctx.globals idx with
       | Some (mut, ty) -> Global (mut, ty)
@@ -6156,8 +6156,9 @@ and type_variable_access ctx i =
   | Get idx as desc ->
       let ty =
         match resolve_variable ctx idx with
-        | Local ty ->
-            ctx.read_locals := StringSet.add idx.desc !(ctx.read_locals);
+        | Local (ty, def) ->
+            ctx.read_locals :=
+              IntSet.add def.loc_start.pos_cnum !(ctx.read_locals);
             if not (StringSet.mem idx.desc ctx.initialized_locals) then
               report_uninitialized ctx idx;
             (* A poison local ([None]) reads as [Error] so its uses don't
@@ -6215,10 +6216,11 @@ and type_variable_access ctx i =
       in
       let* checked =
         match resolved with
-        | Local (Some ity) | Global (_, Some ity) ->
+        | Local (Some ity, _) | Global (_, Some ity) ->
             let* c, _ = check_instruction ctx (valtype_cell ity) to_check in
             return c
-        | Local None | Global (_, None) | Func_ref _ | Poisoned | Unbound ->
+        | Local (None, _) | Global (_, None) | Func_ref _ | Poisoned | Unbound
+          ->
             instruction ctx to_check
       in
       let value =
@@ -6259,12 +6261,12 @@ and type_variable_access ctx i =
          operand's own type rather than [Unknown], which [check_type] cannot
          match against. *)
       match resolve_variable ctx idx with
-      | Local (Some ity) ->
+      | Local (Some ity, _) ->
           let typ = valtype_cell ity in
           let* i', _ = check_instruction ctx typ i' in
           mark_initialized ctx idx.desc;
           return_expression i (Tee (idx, i')) typ
-      | Local None ->
+      | Local (None, _) ->
           (* Poison local: recover with the operand's own type, no check. *)
           let* i' = instruction ctx i' in
           mark_initialized ctx idx.desc;
@@ -10345,7 +10347,7 @@ let rec functions ctx fields =
               (* Fresh per-function tracking of declared and read locals. *)
               missing_holes = ref [];
               unresolved_label = ref false;
-              read_locals = ref StringSet.empty;
+              read_locals = ref IntSet.empty;
               local_decls = ref [];
               (* Fresh per-function tracking of branched-to labels, and the
                  labels declared in the body (collected once, up front). *)
@@ -10381,7 +10383,8 @@ let rec functions ctx fields =
               (fun name ->
                 let n = name.desc in
                 if
-                  (not (StringSet.mem n !(ctx.read_locals)))
+                  (not
+                     (IntSet.mem name.info.loc_start.pos_cnum !(ctx.read_locals)))
                   && not (String.length n > 0 && n.[0] = '_')
                 then Error.unused_local ctx.diagnostics ~location:name.info name)
               (List.rev !(ctx.local_decls));
@@ -10707,7 +10710,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       warn_unused;
       missing_holes = ref [];
       unresolved_label = ref false;
-      read_locals = ref StringSet.empty;
+      read_locals = ref IntSet.empty;
       local_decls = ref [];
       used_labels = ref IntSet.empty;
       deferred_lints = ref [];

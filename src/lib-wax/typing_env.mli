@@ -159,7 +159,7 @@ type module_context = {
   mutable deferred_uninit : Ast.ident list ref list;
   missing_holes : (Infer.inferred_type Infer.Cell.t * missing_batch) list ref;
   unresolved_label : bool ref;
-  read_locals : StringSet.t ref;
+  read_locals : IntSet.t ref;
   local_decls : Ast.ident list ref;
   used_labels : IntSet.t ref;
   deferred_lints : (unit -> unit) list ref;

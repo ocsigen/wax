@@ -277,10 +277,13 @@ type module_context = {
          would anchor a derived error away from the unbound label. The
          per-function analogue of the error-recovery-mode suppression. Reset
          per function. *)
-  read_locals : StringSet.t ref;
-      (* Names of locals read so far in the current function. A [ref] (rather
-         than a snapshot field) so reads inside a block propagate to the
-         function level. Reset per function. *)
+  read_locals : IntSet.t ref;
+      (* Source offsets ([loc_start.pos_cnum]) of the local DECLARATIONS read so
+         far in the current function. A [ref] (rather than a snapshot field) so
+         reads inside a block propagate to the function level. Keyed by the
+         binding's offset rather than its name (like [used_labels]) so a
+         shadowing inner local of the same name does not mask the outer one as
+         read. Reset per function. *)
   local_decls : ident list ref;
       (* The [let]-bound locals declared in the current function, in declaration
          order, so an unread one can be reported as unused. Reset per function. *)
