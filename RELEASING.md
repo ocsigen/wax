@@ -70,8 +70,9 @@ Notes:
 This is a separate, manual step done with
 [`dune-release`](https://github.com/tarides/dune-release) *after* the `vX.Y.Z`
 tag has been pushed and the binaries/npm workflows have finished. It submits both
-packages to `ocaml/opam-repository` so that `opam install wax` works. Until this
-is done for a version, the packages are only installable from source
+packages to `ocaml/opam-repository` so that `opam install wax` works — as of
+`0.1.0` both packages are published there. Until this is done for a version, the
+packages are only installable from source
 (`opam pin add wax https://github.com/ocsigen/wax.git`).
 
 Prerequisites (one-time): `opam install dune-release`, and a GitHub token for

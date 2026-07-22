@@ -165,6 +165,15 @@ chmod +x wax-linux-x86_64 && mv wax-linux-x86_64 /usr/local/bin/wax
 The [`edge` prerelease](https://github.com/ocsigen/wax/releases/tag/edge)
 carries the same binaries built from the latest `main`, rebuilt on every push.
 
+### opam
+
+`wax` is published on the [opam repository](https://opam.ocaml.org/packages/wax/),
+so if you have an OCaml toolchain it builds and installs with:
+
+```sh
+opam install wax
+```
+
 ### From source
 
 **Requirements:** [Opam](https://opam.ocaml.org/) (2.1+) and OCaml 4.14+. The
