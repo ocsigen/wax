@@ -17,6 +17,12 @@
 # every non-instruction line ((local ...), (func ... headers, module fields,
 # closing parens) starts with '(' or ')' or is at column 0.
 #
+# One exception is NOT one-instruction-per-line: a wide `br_table` wraps its
+# label list across several lines, whose continuations are bare operands (a digit
+# or `$label`). An instruction always begins with a mnemonic letter, so gate on
+# that — inserting `unreachable` between a `br_table`'s wrapped labels would split
+# the instruction into unparseable text (`Expecting instructions`), not dead code.
+#
 # Track paren depth and the func body level so the boundary is a genuine body
 # instruction, excluding two look-alikes that would make the mutant invalid
 # rather than dead-code-extended:
@@ -30,7 +36,7 @@
 BEGIN { depth = 0 }
 {
   start_depth = depth
-  if (in_func && start_depth == body_level && $0 ~ /^[ \t]+[^ \t()]/) {
+  if (in_func && start_depth == body_level && $0 ~ /^[ \t]+[A-Za-z]/) {
     if (count) n++
     else if (nb++ == k) {
       indent = $0; sub(/[^ \t].*$/, "", indent)

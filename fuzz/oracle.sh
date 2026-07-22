@@ -144,13 +144,20 @@ roundtrip_struct_bag() {
   "$WASM_TOOLS" print "$s" 2>/dev/null | awk '
       { line = $0; gsub(/\(;[^)]*;\)/, "", line) }
       # local declarations: mask reference types (index + nullability), keep
-      # primitive widths (i32/i64/f32/f64/v128) literal.
+      # primitive widths (i32/i64/f32/f64/v128) literal. One token is emitted per
+      # local (not per declaration line) so the outer sort bags them: wax does not
+      # preserve local order (a decompile+recompile freely permutes them, and
+      # rewrites every use to match), so a permutation is semantically inert and
+      # must not read as drift — while a WIDTH change (i64 -> i32) still shows as a
+      # differing multiset. A grouping change ((local i32 i32) vs two lines) also
+      # cancels for the same reason.
       line ~ /^[[:space:]]*\(local[[:space:])]/ {
         t = line
         gsub(/\(ref[^)]*\)/, "REF", t)
         gsub(/(null|any|eq|i31|struct|array|func|extern|nofunc|noextern)ref/, "REF", t)
-        gsub(/[[:space:]]+/, " ", t); sub(/^ +/, "", t); sub(/ +$/, "", t)
-        print "LOCAL " t
+        sub(/^[[:space:]]*\(local/, "", t); gsub(/\)/, "", t)
+        n = split(t, toks, /[[:space:]]+/)
+        for (k = 1; k <= n; k++) if (toks[k] != "") print "LOCAL " toks[k]
       }
       # ref.null operands: mask a concrete type index to #, keep the abstract
       # heaptype keyword (none/any/func/…) — the drift is concrete<->abstract.
@@ -325,7 +332,13 @@ fi
 # (a bug in conversion/encoding, not validation). Only run when wax accepts.
 if [ "$verdict" = ok ]; then
   emit=(-i "$FMT" -f wasm "$IN" -o "$WORK/cand.wasm")
-  if [ "$(classify_wax "${emit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wasm"; then
+  if [ "$(classify_wax "${emit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wasm" \
+     && ! grep -q "non-constant operator: visit_cont_new" "$WORK/cand.wasm.err"; then
+    # [cont.new] in a constant position (a global initializer) is a deliberate wax
+    # choice tracking the still-open stack-switching PR #148 ("Make cont.new a
+    # constant expression", src/lib-wax/typing.ml). No released wasm-tools accepts
+    # it yet, so its rejection is not a wax bug — suppress. Remove this skip once
+    # that PR merges and the pinned wasm-tools catches up.
     finding FALSE_ACCEPT HIGH "$IN" \
       "wax accepted the module but emitted a binary wasm-tools rejects: $(head -1 "$WORK/cand.wasm.err")" \
       "$(repro "${emit[@]}") && wasm-tools validate --features all $WORK/cand.wasm"
@@ -346,13 +359,23 @@ fi
 # [(@if …)], so this only fires on genuinely invalid emitted text.
 demit=(--desugar -i "$FMT" -f wat "$IN" -o "$WORK/cand.wat")
 if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
-   && ! grep -qE "likely-confusing unicode|expected at least one module field" \
-        "$WORK/cand.wat.err"; then
-  # Two wasm-tools rejections are stricter than the spec (the reference
-  # interpreter accepts both), so they are not wax bugs: [likely-confusing
-  # unicode] (an RTL override etc. in an export name), and [expected at least one
-  # module field] (the empty-module text an unnamed field-less module prints to —
-  # a content-dropping bug would instead surface in the round-trip oracles).
+   && ! grep -qE "likely-confusing unicode|expected at least one module field|non-constant operator: visit_cont_new" \
+        "$WORK/cand.wat.err" \
+   && ! grep -q '(item \$' "$WORK/cand.wat"; then
+  # Rejections that are not wax bugs — wasm-tools text is stricter than the spec,
+  # or trips on a deliberate wax text extension the emitted BINARY renders in
+  # standard form:
+  #   * [likely-confusing unicode]   — an RTL override etc. in an export name; the
+  #     spec allows any UTF-8 (the reference interpreter accepts it).
+  #   * [expected at least one module field] — the empty-module text an unnamed
+  #     field-less module prints to (a content drop would surface in a round-trip
+  #     oracle instead).
+  #   * [non-constant operator: visit_cont_new] — [cont.new] in a constant
+  #     position, tracking the open stack-switching PR #148 (see oracle 3 above).
+  #   * the [(item $id "name")] compact-import extension ([expected a string]) — a
+  #     documented wax text-only convenience (compact-import-item-id.t) so a
+  #     shared-type import can be referenced by name; the emitted binary is the
+  #     standard name-only form and validates.
   finding FALSE_ACCEPT HIGH "$IN" \
     "wax accepted the module but emitted WAT text wasm-tools rejects: $(head -1 "$WORK/cand.wat.err")" \
     "$(repro "${demit[@]}") && wasm-tools validate --features all $WORK/cand.wat"
@@ -462,6 +485,14 @@ if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
     [ "$out" = "$FMT" ] && continue # same-format is a reprint, not a lowering
     conv=(-i "$FMT" -f "$out" "$IN" -o "$WORK/conv.$out")
     if [ "$(classify_wax "${conv[@]}")" = rejected ]; then
+      # A module with unresolved conditional-compilation annotations
+      # (#[if]/#[else] in wax, (@if) in wat) is accepted by `check` — the
+      # path-sensitive check validates every branch — but legitimately cannot be
+      # lowered to a binary until specialized with -D. That is documented
+      # behavior, not a typer under-rejection, so skip this one rejection reason;
+      # any other rejection at this step still fires. (classify_wax left the
+      # conversion's stderr in $ERRLOG.)
+      grep -qi "Conditional annotations cannot be emitted" "$ERRLOG" && continue
       finding UNDER_REJECT REVIEW "$IN" \
         "wax check accepts but ${FMT}->${out} rejects it (typer under-rejects): $(grep -m1 -i error "$ERRLOG" || true)" \
         "$(repro "${check[@]}") && $(repro "${conv[@]}")"

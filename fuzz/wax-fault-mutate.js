@@ -72,7 +72,10 @@ const uses = [];
       const word = src.slice(i, j);
       // Callee position: identifier directly followed by `(`, at a fresh
       // token start (the char before is not `.`/`:`/`'`/`&`), not a keyword,
-      // and not preceded by the `fn` keyword (a definition).
+      // and not preceded by a declaration keyword (`fn NAME(` / `tag NAME(`),
+      // whose NAME is a binder, not a use — renaming it just declares a
+      // differently-named (unused) entity, which is valid and produces no error
+      // (a spurious SILENT finding).
       let k = j;
       while (k < n && (src[k] === " " || src[k] === "\t")) k++;
       // The previous non-space character: excludes `.name(` (method),
@@ -92,7 +95,7 @@ const uses = [];
       if (
         src[k] === "(" && !KEYWORDS.has(word) &&
         prev !== "." && prev !== ":" && prev !== "'" && prev !== "&" &&
-        prev !== "?" && prevWord !== "fn"
+        prev !== "?" && prevWord !== "fn" && prevWord !== "tag"
       )
         // A call: the callee's signature — hence its arity — is unknown once
         // unbound, so recovery cannot keep the stack aligned for the hole
