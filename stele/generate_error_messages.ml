@@ -1603,171 +1603,327 @@ let output_suggest_classes cfg results =
 
 (* --- Main Entry Point --- *)
 
-let main () =
-  let input_file = ref "" in
-  let generate_messages = ref false in
-  let no_comments = ref false in
-  let census = ref false in
-  let stats = ref false in
-  let list_fallbacks = ref false in
-  let suggest_classes = ref false in
-  let list_transitions = ref false in
-  let cmly_file = ref "" in
-  let overrides_file = ref "" in
-  let config_file = ref "" in
+(* The output mode, one per subcommand. [Generate] carries the [--no-comments]
+   flag; every other mode is a nullary tag. *)
+type mode =
+  | Generate of bool  (** [true] = [--no-comments] *)
+  | Stats
+  | Census
+  | Fallbacks
+  | Suggest_classes
+  | Transitions
 
-  let spec =
-    [
-      ( "-generate-messages",
-        Arg.Set generate_messages,
-        "Generate error messages for states" );
-      ( "-no-comments",
-        Arg.Set no_comments,
-        "Omit the auto-generated ## comments (state numbers, LR items) from \
-         the output, keeping only the sentence and message" );
-      ( "-census",
-        Arg.Set census,
-        "Print the message census: each distinct message body once, prefixed \
-         by its occurrence count, sorted by message text (no sentences); the \
-         delimiter-hint depth is normalized to <_>" );
-      ( "-stats",
-        Arg.Set stats,
-        "Print the message-quality summary (fallback/hint counts, self-lints) \
-         instead of the messages" );
-      ( "-list-fallbacks",
-        Arg.Set list_fallbacks,
-        "Print a ready-to-paste .overrides template block for each \
-         generic-fallback (\"Syntax error\") state not yet overridden: the \
-         state's ## comments, the over-cap candidate list, and the sentence \
-         key. Empty output = all covered" );
-      ( "-suggest-classes",
-        Arg.Set suggest_classes,
-        "Propose new [class] blocks for the .config file by \
-         signature-clustering the raw expected sets: unclassed terminals that \
-         always co-occur, kept at >=3 members, ranked by how many entries the \
-         collapse newly fits under the <=5 cap. Paste-ready [class <LABEL>] \
-         blocks with impact # comments; empty output = nothing worth a class. \
-         Needs -cmly; composes with other output modes" );
-      ( "-list-transitions",
-        Arg.Set list_transitions,
-        "List all possible continuations for states" );
-      ( "-cmly",
-        Arg.Set_string cmly_file,
-        "Path to the grammar's .cmly file (menhirSdk); the source of exact \
-         productions, nullability, and token aliases (required for \
-         -generate-messages, -stats, and -list-transitions)" );
-      ( "-overrides",
-        Arg.Set_string overrides_file,
-        "Path to the grammar's hand-written .overrides file (step 5): \
-         sentence-keyed replacement messages for states beyond heuristics. \
-         Merged after generation; an override whose sentence matches no error \
-         state fails the build" );
-      ( "-config",
-        Arg.Set_string config_file,
-        "Path to the grammar's .config sidecar: readable names ([names]), \
-         token classes ([class …]), and opener-name nets ([opener-nets]). \
-         Optional; absent means no curated names, no classes, and alias-only \
-         delimiter hints" );
-    ]
-  in
-
-  let usage_msg = "Usage: main.exe [options] <filename.messages>" in
-
-  Arg.parse spec (fun f -> input_file := f) usage_msg;
-
-  if !input_file = "" then (
-    Arg.usage spec usage_msg;
-    exit 1);
-
-  if !generate_messages && !list_transitions then (
-    Printf.eprintf
-      "Error: -generate-messages and -list-transitions are mutually exclusive.\n";
-    exit 1);
-
-  let entries = Parse_messages.parse_file !input_file in
-  Printf.eprintf "Parsed %d entries from %s\n" (List.length entries) !input_file;
-
+(* Run one mode over the [.messages] file, given the three grammar sidecars
+   ([config_file]/[overrides_file] are [""] when not supplied). Every mode
+   parses the entries, checks override rot, loads the [.cmly] grammar (and the
+   config, checking its rot too), then dispatches on [mode]. The rot guards
+   raise [Failure], caught at the top level and rendered as a clean one-line
+   error. *)
+let run mode ~cmly_file ~config_file ~overrides_file input_file =
+  let entries = Parse_messages.parse_file input_file in
+  Printf.eprintf "Parsed %d entries from %s\n" (List.length entries) input_file;
   let overrides =
-    if !overrides_file = "" then StringMap.empty
-    else load_overrides !overrides_file
+    if overrides_file = "" then StringMap.empty
+    else load_overrides overrides_file
   in
   (* Rot protection: every override must still key a live error state, in every
      mode, so a stale entry can never sit silently in the file. *)
   check_override_rot overrides entries;
-
-  if
-    !generate_messages || !stats || !census || !list_fallbacks
-    || !suggest_classes || !list_transitions
-  then (
-    if !cmly_file = "" then (
-      Printf.eprintf "Error: -cmly is required for this mode.\n";
-      exit 1);
-    let terminals, grammar, auto = load_grammar !cmly_file in
-    let cfg =
-      if !config_file = "" then empty_config
-      else
-        let cfg = load_config !config_file in
-        (* Rot protection: every config entry must still name a live grammar
-           symbol, in every config-consuming mode. *)
-        check_config_rot ~file:!config_file grammar cfg;
-        cfg
-    in
-    (* Closer terminals are derived from the token aliases, so a grammar that
-       aliases its delimiters gets hints with no configuration. *)
-    let closers = closers_of terminals in
-    if
-      !generate_messages || !stats || !census || !list_fallbacks
-      || !suggest_classes
-    then (
-      if !generate_messages then Printf.eprintf "Generating messages...\n";
+  let terminals, grammar, auto = load_grammar cmly_file in
+  let cfg =
+    if config_file = "" then empty_config
+    else
+      let cfg = load_config config_file in
+      (* Rot protection: every config entry must still name a live grammar
+         symbol, in every config-consuming mode. *)
+      check_config_rot ~file:config_file grammar cfg;
+      cfg
+  in
+  (* Closer terminals are derived from the token aliases, so a grammar that
+     aliases its delimiters gets hints with no configuration. *)
+  let closers = closers_of terminals in
+  match mode with
+  | Transitions -> analyze_transitions closers grammar terminals entries
+  | Generate _ | Stats | Census | Fallbacks | Suggest_classes -> (
+      let comments = match mode with Generate nc -> not nc | _ -> true in
+      (match mode with
+      | Generate _ -> Printf.eprintf "Generating messages...\n"
+      | _ -> ());
       let results =
         List.map
           (fun entry ->
             let text, body, stat =
-              generate_message cfg closers grammar terminals
-                ~comments:(not !no_comments) ~overrides entry
+              generate_message cfg closers grammar terminals ~comments
+                ~overrides entry
             in
             (entry, (text, body, stat)))
           entries
       in
-      (if !generate_messages then
-         (* The full [.messages] output (with comments) fed to
-            [--compile-errors] keeps menhir's order; the stripped [-no-comments]
-            golden is sorted by the sentence header ([entry_point: sentence]) so
-            entry order stops tracking state numbers and a state merge becomes
-            one clean local deletion instead of scattered delete+add pairs. *)
-         let to_print =
-           if !no_comments then
-             List.stable_sort
-               (fun (e1, _) (e2, _) ->
-                 let header e =
-                   e.Parse_messages.entry_point ^ ": "
-                   ^ e.Parse_messages.sentence
-                 in
-                 String.compare (header e1) (header e2))
-               results
-           else results
-         in
-         List.iter (fun (_, (text, _, _)) -> print_string text) to_print);
-      if !census then
-        output_census (List.map (fun (_, (_, body, _)) -> body) results);
-      if !stats then
-        output_stats cfg grammar auto
-          (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results);
-      if !list_fallbacks then
-        output_fallbacks
-          (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results);
-      if !suggest_classes then
-        output_suggest_classes cfg
-          (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results))
-    else analyze_transitions closers grammar terminals entries)
-  else if
-    (* Default verification dump *)
-    entries <> []
-  then (
-    let first = List.hd entries in
-    Printf.printf "First Entry State: %d\n" first.data.state;
-    Printf.printf "First Entry Info: %d items\n"
-      (List.length first.data.lr1_items))
+      let stats_of () =
+        List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results
+      in
+      match mode with
+      | Generate no_comments ->
+          (* The full [.messages] output (with comments) fed to
+             [--compile-errors] keeps menhir's order; the stripped
+             [--no-comments] golden is sorted by the sentence header
+             ([entry_point: sentence]) so entry order stops tracking state
+             numbers and a state merge becomes one clean local deletion instead
+             of scattered delete+add pairs. *)
+          let to_print =
+            if no_comments then
+              List.stable_sort
+                (fun (e1, _) (e2, _) ->
+                  let header e =
+                    e.Parse_messages.entry_point ^ ": "
+                    ^ e.Parse_messages.sentence
+                  in
+                  String.compare (header e1) (header e2))
+                results
+            else results
+          in
+          List.iter (fun (_, (text, _, _)) -> print_string text) to_print
+      | Census ->
+          output_census (List.map (fun (_, (_, body, _)) -> body) results)
+      | Stats -> output_stats cfg grammar auto (stats_of ())
+      | Fallbacks -> output_fallbacks (stats_of ())
+      | Suggest_classes -> output_suggest_classes cfg (stats_of ())
+      | Transitions -> assert false)
 
-let () = main ()
+(* --- Command-line interface (cmdliner) --- *)
+
+open Cmdliner
+open Term.Syntax
+
+(* The three shared grammar sidecars and the positional [.messages] file, common
+   to every subcommand. *)
+let cmly_arg =
+  let doc =
+    "Path to the grammar's $(b,.cmly) file (produced by $(b,menhir --cmly)): \
+     the source of exact productions, nullability, and token aliases. Required \
+     by every command."
+  in
+  Arg.(required & opt (some string) None & info [ "cmly" ] ~docv:"FILE" ~doc)
+
+let config_arg =
+  let doc =
+    "Path to the grammar's $(b,.config) sidecar: readable names, token \
+     classes, and opener-name nets. Optional; absent means no curated names, \
+     no classes, and alias-only delimiter hints."
+  in
+  Arg.(value & opt string "" & info [ "config" ] ~docv:"FILE" ~doc)
+
+let overrides_arg =
+  let doc =
+    "Path to the grammar's hand-written $(b,.overrides) file: sentence-keyed \
+     replacement messages for the states heuristics cannot serve, merged after \
+     generation. An override whose sentence matches no error state fails the \
+     build. Optional."
+  in
+  Arg.(value & opt string "" & info [ "overrides" ] ~docv:"FILE" ~doc)
+
+let messages_arg =
+  let doc =
+    "The grammar's $(b,menhir --list-errors) output: one representative error \
+     sentence per error state."
+  in
+  Arg.(required & pos 0 (some string) None & info [] ~docv:"MESSAGES" ~doc)
+
+let no_comments_arg =
+  let doc =
+    "Omit the auto-generated $(b,##) comments (state numbers, LR items), \
+     keeping only the sentence and message, and sort the output by sentence — \
+     the stable golden projection."
+  in
+  Arg.(value & flag & info [ "no-comments" ] ~doc)
+
+let generate_cmd =
+  let doc = "Generate the error messages (one per error state)" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Emit a syntax-error message for every error state in the \
+         $(i,MESSAGES) file: an $(b,Expecting) list of the legal \
+         continuations, a delimiter hint, and an $(b,Assuming ... complete) \
+         hedge where a reduction folded, with any hand overrides merged in. \
+         This is the output that $(b,menhir --compile-errors) turns into a \
+         $(b,Parser_messages) module.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ no_comments = no_comments_arg
+    and+ cmly = cmly_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ messages = messages_arg in
+    run (Generate no_comments) ~cmly_file:cmly ~config_file:config
+      ~overrides_file:overrides messages
+  in
+  Cmd.v (Cmd.info "generate" ~doc ~man) term
+
+let stats_cmd =
+  let doc = "Print the message-quality summary and self-lints" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Print the quality counters (entries, states with an expected list, \
+         fallbacks split by whether an override covers them, delimiter hints, \
+         missed hints, jargon, cascade depth) and the soundness-oracle lines, \
+         plus one dormancy line per configured token class. This is the \
+         ratchet: pin it as a golden and a regression fails the build.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ cmly = cmly_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ messages = messages_arg in
+    run Stats ~cmly_file:cmly ~config_file:config ~overrides_file:overrides
+      messages
+  in
+  Cmd.v (Cmd.info "stats" ~doc ~man) term
+
+let census_cmd =
+  let doc = "Print the distinct message bodies with occurrence counts" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Print each distinct message body once, prefixed by its occurrence \
+         count and sorted by message text (no sentences appear); the \
+         delimiter-hint depth is normalized to $(b,<_>). A wording change is a \
+         one-line diff; a sentence re-pick only bumps a count.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ cmly = cmly_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ messages = messages_arg in
+    run Census ~cmly_file:cmly ~config_file:config ~overrides_file:overrides
+      messages
+  in
+  Cmd.v (Cmd.info "census" ~doc ~man) term
+
+let fallbacks_cmd =
+  let doc = "Print .overrides templates for uncovered fallback states" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Print a ready-to-paste $(b,.overrides) block for every \
+         generic-fallback (\"Syntax error\") state not yet covered by an \
+         override: the state's $(b,##) comments, the over-cap candidate list, \
+         and the sentence key. Empty output means every fallback is covered.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ cmly = cmly_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ messages = messages_arg in
+    run Fallbacks ~cmly_file:cmly ~config_file:config ~overrides_file:overrides
+      messages
+  in
+  Cmd.v (Cmd.info "fallbacks" ~doc ~man) term
+
+let suggest_classes_cmd =
+  let doc = "Propose token-class blocks for the config" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Propose new $(b,[class]) blocks for the $(b,--config) file by \
+         signature-clustering the raw expected sets: unclassed terminals that \
+         always co-occur, kept at three or more members, ranked by how many \
+         entries the collapse newly fits under the readable cap. Empty output \
+         means nothing co-occurs tightly enough to be worth a class.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ cmly = cmly_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ messages = messages_arg in
+    run Suggest_classes ~cmly_file:cmly ~config_file:config
+      ~overrides_file:overrides messages
+  in
+  Cmd.v (Cmd.info "suggest-classes" ~doc ~man) term
+
+let transitions_cmd =
+  let doc = "List every continuation of each error state (debug)" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "List, per error state, all possible continuation symbols with \
+         lookahead and delimiter-depth annotations — a debugging view of the \
+         raw continuation computation.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ cmly = cmly_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ messages = messages_arg in
+    run Transitions ~cmly_file:cmly ~config_file:config
+      ~overrides_file:overrides messages
+  in
+  Cmd.v (Cmd.info "transitions" ~doc ~man) term
+
+let main_cmd =
+  let doc = "User-friendly syntax-error messages for a Menhir grammar" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "stele turns a Menhir grammar's $(b,--list-errors) output and its \
+         $(b,.cmly) into readable syntax-error messages, guarded by promoted \
+         golden files so a grammar change shows up as a reviewable message \
+         diff rather than silent staleness.";
+      `P
+        "Every command reads the same inputs: the $(b,--cmly) grammar \
+         (required), an optional $(b,--config) sidecar, an optional \
+         $(b,--overrides) file, and the positional $(i,MESSAGES) file (the \
+         $(b,menhir --list-errors) output).";
+      `S Manpage.s_commands;
+      `S Manpage.s_examples;
+      `P "Generate the messages for $(b,menhir --compile-errors):";
+      `Pre
+        "  $(mname) generate --cmly g.cmly --config g.config --overrides \
+         g.overrides g.messages";
+      `P "Print the quality ratchet:";
+      `Pre "  $(mname) stats --cmly g.cmly --config g.config g.messages";
+    ]
+  in
+  Cmd.group
+    (Cmd.info "stele" ~doc ~man)
+    [
+      generate_cmd;
+      stats_cmd;
+      census_cmd;
+      fallbacks_cmd;
+      suggest_classes_cmd;
+      transitions_cmd;
+    ]
+
+(* A stale-sidecar rot guard (config or overrides) raises [Failure]; render it
+   as a clean one-line error and exit non-zero, rather than letting it escape as
+   an uncaught-exception backtrace. [~catch:false] keeps cmdliner from turning it
+   into a generic internal error. *)
+let () =
+  let code =
+    try Cmd.eval ~catch:false main_cmd
+    with Failure msg ->
+      Printf.eprintf "stele: %s\n" msg;
+      1
+  in
+  exit code

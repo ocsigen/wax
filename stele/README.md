@@ -54,23 +54,33 @@ The generator is a build-time tool. Wire four menhir/stele steps; see
 
 ; 3. the generated messages, comments stripped and sorted — the golden projection
 (rule (with-stdout-to g.actual
-        (run %{project_root}/stele/generate_error_messages.exe
-             -cmly %{dep:g.cmly} -config %{dep:parser_messages.config}
-             -overrides %{dep:parser_messages.overrides}
-             -generate-messages -no-comments %{dep:g.auto.messages})))
+        (run %{project_root}/stele/generate_error_messages.exe generate
+             --no-comments --cmly %{dep:g.cmly} --config %{dep:parser_messages.config}
+             --overrides %{dep:parser_messages.overrides} %{dep:g.auto.messages})))
 (rule (alias runtest) (action (diff parser_messages.expected g.actual)))
 
 ; 4. the full messages (with comments), compiled into a Parser_messages module
 (rule (with-stdout-to g.messages
-        (run %{project_root}/stele/generate_error_messages.exe
-             -cmly %{dep:g.cmly} -config %{dep:parser_messages.config}
-             -overrides %{dep:parser_messages.overrides}
-             -generate-messages %{dep:g.auto.messages})))
+        (run %{project_root}/stele/generate_error_messages.exe generate
+             --cmly %{dep:g.cmly} --config %{dep:parser_messages.config}
+             --overrides %{dep:parser_messages.overrides} %{dep:g.auto.messages})))
 (rule (with-stdout-to parser_messages.ml
         (run menhir %{dep:parser.mly} --compile-errors %{dep:g.messages})))
 ```
 
 `Parser_messages.message : int -> string` is what the parser calls at an error.
+
+## The command line
+
+stele is a `Cmd.group` of subcommands, one per output: `generate`
+(`--no-comments` for the golden projection), `stats`, `census`, `fallbacks`,
+`suggest-classes`, and `transitions`. Each takes the same inputs — the required
+`--cmly FILE`, the optional `--config FILE` / `--overrides FILE`, and the
+positional `.messages` file — so every command line reads
+`stele <command> --cmly g.cmly [--config …] [--overrides …] g.messages`. Run
+`stele --help` or `stele <command> --help` for the man pages. A subcommand runs
+exactly one mode; the modes do not compose in a single invocation (the earlier
+single-dash CLI concatenated their output, but nothing used the combination).
 
 ## The three-goldens promote loop
 
@@ -89,7 +99,7 @@ change regressed quality. Never hand-edit a `.expected` file.
 
 Useful modes while working:
 
-- `-stats` prints the counters: entries, with-an-expected-list, fallbacks (empty
+- `stats` prints the counters: entries, with-an-expected-list, fallbacks (empty
   and over-cap, split by whether an override covers them), delimiter hints,
   missed hints, jargon, cascade depth, and the oracle lines (`state/automaton
   item-set match`, `unsound claims`, uncovered actions). It ends with one
@@ -106,13 +116,13 @@ Useful modes while working:
   (a class waiting for a qualifying state), but the ratchet now makes a class
   going quiet after a grammar change visible as a stats diff. A grammar with no
   classes prints no such line.
-- `-census` prints each distinct message body once with its occurrence count,
+- `census` prints each distinct message body once with its occurrence count,
   the delimiter-hint depth normalized to `<_>`, so sentence re-picking at most
   bumps a count and a wording change is a one-line diff.
-- `-list-fallbacks` prints a ready-to-paste `.overrides` block for every
+- `fallbacks` prints a ready-to-paste `.overrides` block for every
   generic-fallback ("Syntax error") state not yet overridden. Empty output means
   every fallback is covered, the condition the stats ratchet pins at zero.
-- `-suggest-classes` proposes new `[class]` blocks for the config. It clusters
+- `suggest-classes` proposes new `[class]` blocks for the config. It clusters
   unclassed terminals by their **signature** (the set of entries whose raw
   expected list mentions them); terminals with the identical signature always
   co-occur, so collapsing them never drops a token a single state needed. It
@@ -131,7 +141,7 @@ Useful modes while working:
   TRY_TABLE
   ```
 
-  It composes with the other output modes and needs `-cmly`. Because arithmetic
+  Like every command it needs `--cmly`. Because arithmetic
   and comparison operators are often legal in exactly the same states, they share
   a signature and land in one cluster; splitting them into two readable labels is
   the human decision the config records.

@@ -77,7 +77,7 @@
 (rule
  (with-stdout-to
   parser_messages.messages
-  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -generate-messages %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe generate --cmly %{dep:parser_msgs.cmly} --config %{dep:parser_messages.config} --overrides %{dep:parser_messages.overrides} %{dep:parser_messages.auto.messages})))
 
 ; Golden copy of the generated messages, without the ## comments (state
 ; numbers, LR items) that churn wholesale on any grammar change. The stripped
@@ -87,7 +87,7 @@
 (rule
  (with-stdout-to
   parser_messages.actual
-  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -generate-messages -no-comments %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe generate --no-comments --cmly %{dep:parser_msgs.cmly} --config %{dep:parser_messages.config} --overrides %{dep:parser_messages.overrides} %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)
@@ -102,7 +102,7 @@
 (rule
  (with-stdout-to
   parser_messages.stats
-  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -stats %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe stats --cmly %{dep:parser_msgs.cmly} --config %{dep:parser_messages.config} --overrides %{dep:parser_messages.overrides} %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)
@@ -118,7 +118,7 @@
 (rule
  (with-stdout-to
   parser_messages.census
-  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -census %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe census --cmly %{dep:parser_msgs.cmly} --config %{dep:parser_messages.config} --overrides %{dep:parser_messages.overrides} %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)

@@ -30,8 +30,8 @@
 # THE PIPELINE PER TRIAL (all direct invocations — no dune, no tree mutation)
 #   menhir COPY.mly --list-errors                         > trial.messages
 #   menhir COPY.mly --cmly --no-code-generation --base X  > X.cmly
-#   generate_error_messages.exe -cmly X.cmly -config CONFIG \
-#       {-stats | -census | -generate-messages -no-comments} trial.messages
+#   generate_error_messages.exe {stats | census | generate --no-comments} \
+#       --cmly X.cmly --config CONFIG trial.messages
 #   Candidate ADDITIONS are enumerated from `menhir COPY.mly --dump` (the LHS of
 #   every `reduce production N ->` line = the nonterminals reducible somewhere in
 #   the automaton, i.e. every nonterminal a %on_error_reduce move could act on).
@@ -193,9 +193,9 @@ run_pipeline() {
     >/dev/null 2>&1 || true   # --cmly exits 1 (runs code backend) but writes the cmly
   local cmly="$WORK/$base.cmlybase.cmly"
   [ -f "$cmly" ] || return 1
-  "$GEN" -cmly "$cmly" -config "$CONFIG" -stats "$out.messages" >"$out.stats" 2>/dev/null || return 1
-  "$GEN" -cmly "$cmly" -config "$CONFIG" -census "$out.messages" >"$out.census" 2>/dev/null || return 1
-  "$GEN" -cmly "$cmly" -config "$CONFIG" -generate-messages -no-comments "$out.messages" \
+  "$GEN" stats --cmly "$cmly" --config "$CONFIG" "$out.messages" >"$out.stats" 2>/dev/null || return 1
+  "$GEN" census --cmly "$cmly" --config "$CONFIG" "$out.messages" >"$out.census" 2>/dev/null || return 1
+  "$GEN" generate --no-comments --cmly "$cmly" --config "$CONFIG" "$out.messages" \
     >"$out.actual" 2>/dev/null || return 1
   return 0
 }

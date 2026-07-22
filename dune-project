@@ -22,6 +22,8 @@
     (menhir (and :build (>= 20220210)))
     (menhirSdk (>= 20220210))
     (menhirLib (>= 20220210))
+    ; 2.0 for the Cmd.group subcommand CLI the generator exposes.
+    (cmdliner (>= 2.0.0))
   )
 )
 
