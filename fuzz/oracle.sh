@@ -56,6 +56,16 @@ trap 'rm -rf "$WORK"' EXIT
 
 repro() { echo "$WAX $*"; }
 
+# A wasm-tools rejection ($1 = its .err file) that is a KNOWN wax-ahead-of-tool
+# divergence, not a wax bug, so every arm that validates wax output (or a text
+# input) with the reference must ignore it: [cont.new] in a constant position,
+# which wax treats as constant per the still-open stack-switching PR #148 (no
+# released wasm-tools accepts it yet). Drop this once the PR merges and the
+# pinned wasm-tools catches up.
+wt_ahead_divergence() {
+  grep -q "non-constant operator: visit_cont_new" "$1" 2>/dev/null
+}
+
 # Count-per-opcode histogram of the *width-sensitive* numeric operators in a
 # module — integer div/rem, the shifts (shl/shr), and the (non-saturating)
 # float->int truncations. Their WIDTH is load-bearing and NOT carried by the Wax
@@ -273,11 +283,15 @@ case "$verdict:$EXPECT" in
       diffmsg="wax says $sverdict, wasm-tools says $ref"
       if [ "$sverdict" != "$ref" ]; then
         if [ "$sverdict" = ok ] && [ "$ref" = rejected ] \
-          && grep -q "likely-confusing unicode" "$IN.err"; then
-          # A "Trojan Source" bidirectional control character in a string: the
-          # spec allows any UTF-8, so wax accepts it (and flags it with the
-          # confusable-unicode lint), whereas wasm-tools' text lexer refuses it.
-          # wax is correct, so this is not a soundness divergence.
+          && { grep -q "likely-confusing unicode" "$IN.err" \
+               || wt_ahead_divergence "$IN.err"; }; then
+          # A known non-divergence where wax accepts and wasm-tools rejects:
+          #   * a "Trojan Source" bidirectional control character in a string —
+          #     the spec allows any UTF-8, so wax accepts it (and flags it with
+          #     the confusable-unicode lint) where wasm-tools' text lexer refuses
+          #     it; wax is correct; or
+          #   * [cont.new] in a constant position (open PR #148, see
+          #     [wt_ahead_divergence]).
           report_diff=0
         elif [ "$FMT" = wat ] && ! grep -q '[^[:space:]]' "$IN"; then
           # A whitespace-only WAT is a valid empty module to wax (and to
@@ -340,7 +354,7 @@ fi
 if [ "$verdict" = ok ]; then
   emit=(-i "$FMT" -f wasm "$IN" -o "$WORK/cand.wasm")
   if [ "$(classify_wax "${emit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wasm" \
-     && ! grep -q "non-constant operator: visit_cont_new" "$WORK/cand.wasm.err"; then
+     && ! wt_ahead_divergence "$WORK/cand.wasm.err"; then
     # [cont.new] in a constant position (a global initializer) is a deliberate wax
     # choice tracking the still-open stack-switching PR #148 ("Make cont.new a
     # constant expression", src/lib-wax/typing.ml). No released wasm-tools accepts
@@ -420,7 +434,8 @@ if [ "$FMT" != wax ]; then
       finding ROUNDTRIP HIGH "$IN" \
         "x->wax does not recompile (${r#crash:}${r/ok/})" \
         "$(repro "${wa[@]}") && $(repro "${rb[@]}")"
-    elif ! wt_validate "$WORK/via.wasm"; then
+    elif ! wt_validate "$WORK/via.wasm" \
+         && ! wt_ahead_divergence "$WORK/via.wasm.err"; then
       finding ROUNDTRIP HIGH "$IN" \
         "x->wax->wasm is rejected by wasm-tools: $(head -1 "$WORK/via.wasm.err")" \
         "$(repro "${wa[@]}") && $(repro "${rb[@]}") && wasm-tools validate --features all $WORK/via.wasm"
@@ -458,7 +473,8 @@ if [ "$FMT" = wax ]; then
       finding ROUNDTRIP HIGH "$IN" \
         "wax->wasm->wax does not recompile: $rc2" \
         "$(repro "${dc[@]}") && $(repro "${c2[@]}")"
-    elif ! wt_validate "$WORK/rt2.wasm"; then
+    elif ! wt_validate "$WORK/rt2.wasm" \
+         && ! wt_ahead_divergence "$WORK/rt2.wasm.err"; then
       finding ROUNDTRIP HIGH "$IN" \
         "wax->wasm->wax->wasm is rejected by wasm-tools: $(head -1 "$WORK/rt2.wasm.err")" \
         "$(repro "${c1[@]}") && $(repro "${dc[@]}") && $(repro "${c2[@]}") && wasm-tools validate --features all $WORK/rt2.wasm"

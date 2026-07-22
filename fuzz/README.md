@@ -71,6 +71,7 @@ fuzz/mutate-wat.sh [count]  # text-mutate the wat seeds (edge literals) + check 
 fuzz/validate-fuzz.sh       # type-flip valid wat + differential vs the reference (validator rejection arms); COUNT=N
 fuzz/wat-cross-proposal.sh  # graft exact/cont/descriptor constructs across proposals (crash oracle); COUNT=N
 fuzz/unreachable-fuzz.sh    # metamorphic: inserting `unreachable` preserves validity (dead-code principal typing); COUNT=N
+fuzz/const-context.sh       # hoist const-candidate exprs into global/elem inits, differential on the constant-expression checkers; FUZZ=N
 fuzz/fault-locality.sh      # single-fault locality: one unbound use-site ref = one local error (index-space poisoning guard; .wat + .wax); COUNT=N, WAX_COUNT=N
 fuzz/num-id-fuzz.sh         # metamorphic: flipping a type ref name<->number must decompile identically (from_wasm ref resolution); COUNT=N corpus breadth
 fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two-cast chains
@@ -97,7 +98,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
-`validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`,
+`validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`, `const-context.sh`,
 `fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 

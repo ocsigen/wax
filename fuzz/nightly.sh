@@ -19,7 +19,8 @@
 # deterministic SEED-keyed subset of core .wast files), DIFF_VALIDATE_COUNT
 # drives diff-validate.sh, VALIDATE_FUZZ_COUNT drives validate-fuzz.sh,
 # CROSS_PROPOSAL_COUNT drives wat-cross-proposal.sh, UNREACHABLE_COUNT drives
-# unreachable-fuzz.sh, and FAULT_LOCALITY_COUNT drives fault-locality.sh.
+# unreachable-fuzz.sh, FAULT_LOCALITY_COUNT drives fault-locality.sh, and
+CONST_CONTEXT_COUNT drives const-context.sh.
 # COUNT and SMITH are still accepted as legacy coarse
 # overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools; node
 # and the reference interpreter (REF) unlock the execution oracles (campaigns
@@ -45,6 +46,7 @@ validate_fuzz="${VALIDATE_FUZZ_COUNT:-${legacy_count:-800}}"
 cross_proposal="${CROSS_PROPOSAL_COUNT:-${legacy_count:-1500}}"
 unreachable="${UNREACHABLE_COUNT:-${legacy_count:-800}}"
 fault_locality="${FAULT_LOCALITY_COUNT:-${legacy_count:-600}}"
+const_context="${CONST_CONTEXT_COUNT:-${legacy_count:-400}}"
 if [ "${QUICK:-0}" = 1 ]; then
   smith=40
   corpus_smith=40
@@ -58,6 +60,7 @@ if [ "${QUICK:-0}" = 1 ]; then
   cross_proposal=100
   unreachable=60
   fault_locality=60
+  const_context=60
 fi
 
 command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
@@ -66,7 +69,7 @@ command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
 }
 
 echo "nightly campaigns — SEED=$SEED  (replay this run with: SEED=$SEED fuzz/nightly.sh)" >&2
-echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz cross-proposal=$cross_proposal unreachable=$unreachable fault-locality=$fault_locality" >&2
+echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz cross-proposal=$cross_proposal unreachable=$unreachable fault-locality=$fault_locality const-context=$const_context" >&2
 
 fail=0 passed=0 skipped=0 failed_list=""
 
@@ -168,6 +171,10 @@ run "COUNT=$unreachable" unreachable-fuzz.sh
 # Single-fault locality: one retargeted use-site reference must yield exactly
 # the local unbound error — the index-space poisoning regression guard.
 run "COUNT=$fault_locality" fault-locality.sh
+# Constant-expression checkers: hoist const-candidate expressions into global /
+# elem initializers to sweep the arm-by-arm constant_instruction surface both
+# frontends validate independently.
+run "FUZZ=$const_context" const-context.sh
 
 echo >&2
 echo "==================== fuzz/nightly.sh summary ====================" >&2

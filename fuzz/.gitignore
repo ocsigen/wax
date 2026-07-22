@@ -10,3 +10,4 @@ mutate-sound-findings/
 cross-findings/
 unreachable-findings/
 fault-findings/
+const-findings/
