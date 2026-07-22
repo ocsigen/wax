@@ -1,0 +1,7 @@
+# Hand-written message overrides, keyed by the entry-point sentence (stable
+# across state renumbering). A stale key fails the build. See stele/README.md.
+
+# The initial state's generated message names the start symbol ("Expecting a
+# prog."); a program can only begin with a block, so say so.
+prog: STAR
+Expecting a program: a '{' block.

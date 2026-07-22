@@ -4,6 +4,6 @@
  (preprocess
   (pps sedlex.ppx))
  ; (modules :standard \ wasm_link)
- (libraries wax_utils sedlex menhirLib unix theo))
+ (libraries wax_utils sedlex menhirLib stele.runtime unix theo))
 
 (include dune.menhir)

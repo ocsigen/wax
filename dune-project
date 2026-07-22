@@ -14,6 +14,18 @@
 (license "Apache-2.0")
 
 (package
+  (name stele)
+  (synopsis "User-friendly syntax-error messages for any Menhir grammar")
+  (description "A build-time generator that turns a Menhir grammar's --list-errors output and its .cmly into readable syntax-error messages, with a golden/census/stats workflow, a soundness oracle, and a hand-override escape hatch; plus a small runtime helper (stele.runtime) that resolves the delimiter markers the generated messages carry. Configured per grammar by a text sidecar, so the tool itself is grammar-agnostic.")
+  (depends
+    (ocaml (>= 4.14))
+    (menhir (and :build (>= 20220210)))
+    (menhirSdk (>= 20220210))
+    (menhirLib (>= 20220210))
+  )
+)
+
+(package
   (name wax-lib)
   (synopsis "Libraries for Wax, a Rust-like syntax for WebAssembly")
   (description "The parsing, type-checking and format-conversion libraries behind the Wax toolchain (bidirectional Wax <-> Wasm Text <-> Wasm Binary).")
@@ -24,6 +36,8 @@
     (sedlex (>= 3.3))
     (menhir (and :build (>= 20220210)))
     (menhirLib (>= 20220210))
+    ; The parser's runtime resolution of stele's <N> delimiter markers.
+    (stele (= :version))
     (re (>= 1.10.0))
     (yojson (>= 2.0.0))
     (uucp (and :with-dev-setup (>= 16.0.0)))

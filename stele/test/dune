@@ -1,0 +1,100 @@
+; Toy "calc" grammar exercising the whole stele pipeline end to end — the
+; template an adopter copies. A miniature of src/lib-wasm/dune.menhir:
+; menhir --list-errors and --cmly feed the stele generator, whose .messages
+; output menhir --compile-errors turns into a Parser_messages module compiled
+; alongside the parser. Two promoted goldens pin the result: calc.expected (the
+; four message shapes — a plain Expecting list, a delimiter hint, an
+; "Assuming … complete" hedge, and a hand override) and calc.stats.expected (the
+; quality ratchet). Accept changes with `dune promote`.
+
+(library
+ (name calc)
+ (modules parser parser_messages)
+ (libraries menhirLib))
+
+(menhir
+ (modules parser))
+
+; 1. The representative error sentences (one per error state).
+
+(rule
+ (with-stdout-to
+  calc.auto.messages
+  (run menhir %{dep:parser.mly} --list-errors)))
+
+; 2. The exact grammar (productions, nullability, token aliases) for the
+;    generator. --no-code-generation keeps --cmly from running the code back-end.
+
+(rule
+ (target calc.cmly)
+ (deps parser.mly)
+ (action
+  (run menhir %{dep:parser.mly} --cmly --no-code-generation --base calc)))
+
+; 3. The generated messages, comments stripped and sorted by sentence — the
+;    stable golden projection.
+
+(rule
+ (with-stdout-to
+  calc.actual
+  (run
+   %{project_root}/stele/generate_error_messages.exe
+   -cmly
+   %{dep:calc.cmly}
+   -config
+   %{dep:calc.config}
+   -overrides
+   %{dep:calc.overrides}
+   -generate-messages
+   -no-comments
+   %{dep:calc.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.expected calc.actual)))
+
+; The quality summary (fallback/hint counts and self-lints), pinned so a
+; regression fails the build — the ratchet the README describes.
+
+(rule
+ (with-stdout-to
+  calc.stats
+  (run
+   %{project_root}/stele/generate_error_messages.exe
+   -cmly
+   %{dep:calc.cmly}
+   -config
+   %{dep:calc.config}
+   -overrides
+   %{dep:calc.overrides}
+   -stats
+   %{dep:calc.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.stats.expected calc.stats)))
+
+; 4. The full messages (with comments) fed to menhir --compile-errors, producing
+;    the Parser_messages module compiled into the library above — proof the
+;    generated file is well-formed and links against the parser.
+
+(rule
+ (with-stdout-to
+  calc.messages
+  (run
+   %{project_root}/stele/generate_error_messages.exe
+   -cmly
+   %{dep:calc.cmly}
+   -config
+   %{dep:calc.config}
+   -overrides
+   %{dep:calc.overrides}
+   -generate-messages
+   %{dep:calc.auto.messages})))
+
+(rule
+ (with-stdout-to
+  parser_messages.ml
+  (run menhir %{dep:parser.mly} --compile-errors %{dep:calc.messages})))

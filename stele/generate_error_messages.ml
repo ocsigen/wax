@@ -13,6 +13,117 @@ module StatusMap = Map.Make (String)
 
 type status = Direct | Lookahead | Both
 
+(* --- Per-grammar configuration (the [-config] sidecar) --- *)
+
+(* Everything grammar-specific that is not derivable from the [.cmly] lives in a
+   hand-written [-config] file, so the generator itself is grammar-agnostic. Three
+   things: readable names for symbols whose auto-derived rendering would be jargon
+   or grammatically wrong ([names]); token classes collapsed to one readable label
+   before the readable cap ([class …]); and the name-pattern nets the missed-hint
+   lint uses to recognize an opener the alias table alone would miss
+   ([opener-nets]). Absent, [empty_config] gives no curated names, no classes, and
+   alias-only opener recognition — a plain but sound baseline for any grammar. *)
+type net = Prefix of string | Suffix of string | Exact of string
+
+type config = {
+  names : (string, string) Hashtbl.t;
+      (** readable name overrides, keyed by symbol name *)
+  classes : (string * StringSet.t) list;
+      (** each token class: its readable label and its member terminals, in file
+          order (the first matching class wins in [classify_symbol]) *)
+  opener_nets : (char * net list) list;
+      (** per opener character, the name-pattern nets that also count as an
+          opener of that character in the missed-hint lint *)
+}
+
+let empty_config = { names = Hashtbl.create 1; classes = []; opener_nets = [] }
+
+(* Read the [-config] file. Format (a hand-parsed line format, [#] comments,
+   [[section]] headers), documented in stele's README:
+
+     [names]        NAME = readable phrase          (one per line)
+     [class LABEL]  a member terminal per line       (repeatable header)
+     [opener-nets]  OPENER_CHAR KIND ARG             (KIND = prefix|suffix|exact)
+
+   Blank lines and [#] comment lines are ignored anywhere. *)
+let load_config file =
+  let lines = Parse_messages.read_lines file in
+  let names = Hashtbl.create 64 in
+  let classes =
+    ref []
+    (* (label, members ref), reversed *)
+  in
+  let nets = Hashtbl.create 8 in
+  let section = ref `None in
+  List.iter
+    (fun raw ->
+      let line = String.trim raw in
+      if line = "" || line.[0] = '#' then ()
+      else if line.[0] = '[' && line.[String.length line - 1] = ']' then
+        let inner = String.sub line 1 (String.length line - 2) |> String.trim in
+        if inner = "names" then section := `Names
+        else if inner = "opener-nets" then section := `Nets
+        else if String.length inner >= 6 && String.sub inner 0 6 = "class " then (
+          let label =
+            String.trim (String.sub inner 6 (String.length inner - 6))
+          in
+          classes := (label, ref StringSet.empty) :: !classes;
+          section := `Class)
+        else failwith (Printf.sprintf "config: unknown section header %S" line)
+      else
+        match !section with
+        | `None ->
+            failwith
+              (Printf.sprintf "config: line outside any section: %S" line)
+        | `Names -> (
+            match String.index_opt line '=' with
+            | None ->
+                failwith (Printf.sprintf "config [names]: no '=' in %S" line)
+            | Some i ->
+                let key = String.trim (String.sub line 0 i) in
+                let value =
+                  String.trim
+                    (String.sub line (i + 1) (String.length line - i - 1))
+                in
+                Hashtbl.replace names key value)
+        | `Class -> (
+            match !classes with
+            | (_, members) :: _ -> members := StringSet.add line !members
+            | [] -> assert false)
+        | `Nets -> (
+            match
+              String.split_on_char ' ' line |> List.filter (fun s -> s <> "")
+            with
+            | [ ch; kind; arg ] when String.length ch = 1 ->
+                let net =
+                  match kind with
+                  | "prefix" -> Prefix arg
+                  | "suffix" -> Suffix arg
+                  | "exact" -> Exact arg
+                  | _ ->
+                      failwith
+                        (Printf.sprintf "config [opener-nets]: unknown kind %S"
+                           kind)
+                in
+                let c = ch.[0] in
+                let existing = try Hashtbl.find nets c with Not_found -> [] in
+                Hashtbl.replace nets c (existing @ [ net ])
+            | _ ->
+                failwith
+                  (Printf.sprintf
+                     "config [opener-nets]: expected 'CHAR KIND ARG': %S" line)))
+    lines;
+  {
+    names;
+    classes = List.rev_map (fun (l, m) -> (l, !m)) !classes;
+    opener_nets = Hashtbl.fold (fun c nets acc -> (c, nets) :: acc) nets [];
+  }
+
+let net_matches token = function
+  | Prefix p -> String.starts_with ~prefix:p token
+  | Suffix s -> String.ends_with ~suffix:s token
+  | Exact e -> token = e
+
 (* --- Exact Grammar (menhirSdk / .cmly) --- *)
 
 (* The grammar knowledge the continuation computation needs, read from the
@@ -347,17 +458,34 @@ let rec collect_continuations ~look_past gram rhs_after lookaheads =
 
 (* --- Depth Calculation --- *)
 
-(* The opening delimiter each closer terminates, keyed by the closer's own
-   readable spelling: a ')' closes a '(', etc. A terminal is an opener for that
-   closer when its token alias begins with this character — so the opener table
-   is derived from the grammar's [%token NAME "alias"] declarations rather than
-   hand-maintained (the hand-list went stale, missing e.g. the [(@if] / [(on]
-   openers). *)
-let opener_char_of_closer = function
-  | "RBRACE" -> Some '{'
-  | "RBRACKET" -> Some '['
-  | "RPAREN" -> Some '('
+(* Standard bracket pairing: the opening-delimiter character a closing one
+   terminates. Grammar-agnostic (plain ASCII brackets), so it stays built in. *)
+let opener_of_closer_char = function
+  | ')' -> Some '('
+  | ']' -> Some '['
+  | '}' -> Some '{'
   | _ -> None
+
+(* Derive the closer terminals from the grammar's token aliases: any terminal
+   whose alias is a single closing-delimiter character, paired with the matching
+   opener character. Replaces the old hand-maintained RBRACE/RBRACKET/RPAREN name
+   table (which went stale) — a grammar that aliases its delimiters gets hints
+   for free, one that does not simply gets none. Sorted for a deterministic
+   tie-break order between closers valid in the same state. *)
+let closers_of terminals =
+  Hashtbl.fold
+    (fun name alias acc ->
+      if String.length alias = 1 then
+        match opener_of_closer_char alias.[0] with
+        | Some o -> (name, o) :: acc
+        | None -> acc
+      else acc)
+    terminals []
+  |> List.sort compare
+
+(* The opening delimiter a closer terminates, from the derived [closers] table
+   ([List.assoc]-style): a ')' closes a '(', etc. *)
+let opener_char_of_closer closers closer = List.assoc_opt closer closers
 
 let opens_with terminals c token =
   match Hashtbl.find_opt terminals token with
@@ -369,7 +497,7 @@ let opens_with terminals c token =
    Depth is defined as the 1-based index from the top of the stack (right end of the sentence).
    Every token counts as depth 1.
 *)
-let find_matching_depth terminals sentence closer =
+let find_matching_depth closers terminals sentence closer =
   let tokens =
     String.split_on_char ' ' sentence
     |> List.map String.trim
@@ -377,7 +505,7 @@ let find_matching_depth terminals sentence closer =
   in
   let reversed = List.rev tokens in
 
-  match opener_char_of_closer closer with
+  match opener_char_of_closer closers closer with
   | None -> None
   | Some opener_c ->
       let rec scan depth balance items =
@@ -401,125 +529,29 @@ let format_human_list items =
   | [ x ] -> x
   | last :: rest -> String.concat ", " (List.rev rest) ^ ", or " ^ last
 
-(* Fixed readable names for symbols whose auto-derived rendering would be
-   internal jargon or grammatically wrong; [None] falls through to the
-   derivation in [get_readable_name]. *)
-let special_name = function
-  | "IDENT" -> Some "an identifier"
-  | "INT" -> Some "an integer"
-  | "FLOAT" -> Some "a float"
-  | "STRING" -> Some "a string"
-  | "CHAR" -> Some "a character"
-  | "EOF" -> Some "end of file"
-  | "u8" -> Some "an 8-bit unsigned integer"
-  | "u32" -> Some "a 32-bit unsigned integer"
-  | "u64" -> Some "a 64-bit unsigned integer"
-  | "i8" -> Some "an 8-bit signed integer"
-  | "i16" -> Some "a 16-bit signed integer"
-  | "i32" -> Some "a 32-bit signed integer"
-  | "i64" -> Some "a 64-bit signed integer"
-  | "f32" -> Some "a 32-bit float"
-  | "f64" -> Some "a 64-bit float"
-  | "LPAREN_IMPORT" -> Some "an inline import"
-  | "NAT" -> Some "an integer"
-  | "MEM_OFFSET" -> Some "a memory offset"
-  | "MEM_ALIGN" -> Some "a memory alignment"
-  (* Readable names for grammar nonterminals whose auto-derived form is
-     internal jargon ("a blockinstr") or grammatically wrong ("a mem limits",
-     where the [is_plural] heuristic below misfires). A plural alias carries no
-     article, so the "Assuming that the … is/are complete" template picks
-     "are"; a singular one keeps its article. *)
-  | "blockinstr" | "braced_block" -> Some "a block"
-  | "import_kind_decl" -> Some "an import declaration"
-  | "on_clauses" -> Some "an on-clause list"
-  | "mem_limits" -> Some "memory limits"
-  | "mem_pagesize" | "pagesize_clause" -> Some "a page-size clause"
-  | "condition_relop" -> Some "a comparison operator"
-  | "branch_expr" -> Some "a branch expression"
-  | "legacy_catch" -> Some "a catch clause"
-  | "legacy_catch_all" -> Some "a catch-all clause"
-  (* WAT (lib-wasm) nonterminals whose derived name is an abbreviation or reads
-     oddly. *)
-  | "result_pat" -> Some "a result pattern"
-  | "float_or_nan" -> Some "a float or NaN"
-  (* Head noun is "list", not the plural tail: keep the article so the
-     "… is complete" template agrees ("the list of indices is", not "are"). *)
-  | "list_of_indices" -> Some "a list of indices"
-  (* List *elements* the step-3b Expecting-position chase lands on, whose
-     auto-derived name is an abbreviation ("a local decl", "a param group", "a
-     block param type"). Curated here so the singular reads well; the chase only
-     reaches them from a list-shaped parent ([locals], [parameters],
-     [parameter_types]), so no other message is affected. *)
-  | "local_decl" -> Some "a local declaration"
-  | "param_group" -> Some "a parameter group"
-  | "block_param_type" -> Some "a parameter type"
-  | _ -> None
+(* Curated readable name for a symbol whose auto-derived rendering would be
+   internal jargon or grammatically wrong (e.g. "a blockinstr", "a mem limits");
+   [None] falls through to the derivation in [get_readable_name]. Read from the
+   [-config] file's [names] section rather than hard-coded, so the generator
+   itself is grammar-agnostic. *)
+let special_name cfg s = Hashtbl.find_opt cfg.names s
 
-(* Collapse the many wax infix-operator continuations into a single readable
-   class *before* the <=5 cap, so a state whose FOLLOW is "a closer or any
-   operator" (e.g. the [expression] FOLLOW) reads "Expecting ')', or an
-   operator." instead of overflowing to the generic fallback. Keyed by wax token
-   name; the WAT grammar has none of these tokens, so it is unaffected. The
-   compound-assignment variants ([+=] …) are operators too and join the class. *)
-let operator_tokens =
-  [
-    "PLUS";
-    "MINUS";
-    "STAR";
-    "SLASH";
-    "SLASHS";
-    "SLASHU";
-    "PERCENTS";
-    "PERCENTU";
-    "AMPERSAND";
-    "PIPE";
-    "CARET";
-    "SHL";
-    "SHRS";
-    "SHRU";
-    "PLUSEQUAL";
-    "MINUSEQUAL";
-    "STAREQUAL";
-    "SLASHEQUAL";
-    "SLASHSEQUAL";
-    "SLASHUEQUAL";
-    "PERCENTSEQUAL";
-    "PERCENTUEQUAL";
-    "AMPERSANDEQUAL";
-    "PIPEEQUAL";
-    "CARETEQUAL";
-    "SHLEQUAL";
-    "SHRSEQUAL";
-    "SHRUEQUAL";
-  ]
+(* Collapse a token class (e.g. the many infix operators) into a single readable
+   label *before* the <=5 cap, so a state whose FOLLOW is "a closer or any
+   operator" reads "Expecting ')', or an operator." instead of overflowing to the
+   generic fallback. The classes are read from the [-config] file ([class LABEL]
+   sections); a token in no class returns [None] and keeps its precise spelling.
+   The first class the token appears in wins (file order). *)
+let classify_symbol cfg s =
+  List.find_map
+    (fun (label, members) ->
+      if StringSet.mem s members then Some label else None)
+    cfg.classes
 
-let comparison_tokens =
-  [
-    "EQUALEQUAL";
-    "BANGEQUAL";
-    "LT";
-    "LTS";
-    "LTU";
-    "LE";
-    "LES";
-    "LEU";
-    "GT";
-    "GTS";
-    "GTU";
-    "GE";
-    "GES";
-    "GEU";
-  ]
-
-let classify_symbol s =
-  if List.mem s operator_tokens then Some "an operator"
-  else if List.mem s comparison_tokens then Some "a comparison operator"
-  else None
-
-let get_readable_name terminals s =
+let get_readable_name cfg terminals s =
   try Printf.sprintf "'%s'" (Hashtbl.find terminals s)
   with Not_found -> (
-    match special_name s with
+    match special_name cfg s with
     | Some name -> name
     | None ->
         if String.lowercase_ascii s = s then
@@ -564,7 +596,7 @@ let get_readable_name terminals s =
    (e.g. [list_of_indices] → "an index", [on_clauses] → the [on]/[[] opener),
    which is intentional; the curated forms remain in force for the Assuming
    subject, which names the whole completed sequence. *)
-let rec expecting_name ?(visited = StringSet.empty) terminals gram s =
+let rec expecting_name ?(visited = StringSet.empty) cfg terminals gram s =
   if
     (not (Hashtbl.mem terminals s))
     && String.lowercase_ascii s = s
@@ -575,9 +607,10 @@ let rec expecting_name ?(visited = StringSet.empty) terminals gram s =
   then
     match chase_list_element gram s with
     | Some elem ->
-        expecting_name ~visited:(StringSet.add s visited) terminals gram elem
-    | None -> get_readable_name terminals s
-  else get_readable_name terminals s
+        expecting_name ~visited:(StringSet.add s visited) cfg terminals gram
+          elem
+    | None -> get_readable_name cfg terminals s
+  else get_readable_name cfg terminals s
 
 (* Drop a leading indefinite article from a readable noun phrase
    ("a field type" -> "field type", "an elemexpr" -> "elemexpr"); a quoted
@@ -621,13 +654,14 @@ let pluralize_phrase name =
    signals to the reader that an optional list element was elided from the
    Expecting list rather than being illegal — the hedge whose absence silently
    dropped tokens. *)
-let subject_name terminals gram s =
+let subject_name cfg terminals gram s =
   if gram.is_generated s then
     match chase_list_element gram s with
     | Some elem ->
-        pluralize_phrase (strip_article (expecting_name terminals gram elem))
+        pluralize_phrase
+          (strip_article (expecting_name cfg terminals gram elem))
     | None -> "a list"
-  else get_readable_name terminals s
+  else get_readable_name cfg terminals s
 
 (* --- Self-Lints and Statistics --- *)
 
@@ -666,22 +700,25 @@ type message_stat = {
 }
 
 (* Would [token] plausibly open the construct [closer] terminates? Broader than
-   the exact table in [find_matching_depth] on purpose: this is the lint's net
-   for openers that table forgot. *)
-let opener_like terminals closer token =
-  let alias_starts c =
-    match Hashtbl.find_opt terminals token with
-    | Some a -> String.length a > 0 && a.[0] = c
-    | None -> false
-  in
-  match closer with
-  | "RBRACE" -> token = "LBRACE" || alias_starts '{'
-  | "RBRACKET" -> token = "LBRACKET" || alias_starts '['
-  | "RPAREN" ->
-      String.starts_with ~prefix:"LPAREN" token
-      || String.ends_with ~suffix:"_ANNOT" token
-      || alias_starts '('
-  | _ -> false
+   the alias test in [find_matching_depth] on purpose: this is the lint's net for
+   openers the alias table alone would miss. The alias-driven part is built in (a
+   token whose alias begins with the opener character); the extra name-pattern
+   nets come from the [-config] file's [opener-nets] section, keyed by opener
+   character, so nothing here is grammar-specific. *)
+let opener_like cfg closers terminals closer token =
+  match opener_char_of_closer closers closer with
+  | None -> false
+  | Some opener_c -> (
+      let alias_starts c =
+        match Hashtbl.find_opt terminals token with
+        | Some a -> String.length a > 0 && a.[0] = c
+        | None -> false
+      in
+      alias_starts opener_c
+      ||
+      match List.assoc_opt opener_c cfg.opener_nets with
+      | None -> false
+      | Some nets -> List.exists (net_matches token) nets)
 
 (* Does the known stack suffix contain an opener-like token with no matching
    closer? Same balance scan as [find_matching_depth], but with the broad
@@ -691,7 +728,7 @@ let opener_like terminals closer token =
    [LPAREN parameter_list RPAREN] suffix, which needs no hint). [sentence] is the
    space-joined known stack suffix — split into tokens as [find_matching_depth]
    does, since the raw stack lines glue several tokens together. *)
-let unmatched_opener_like terminals closer sentence =
+let unmatched_opener_like cfg closers terminals closer sentence =
   let tokens =
     String.split_on_char ' ' sentence
     |> List.map String.trim
@@ -702,16 +739,16 @@ let unmatched_opener_like terminals closer sentence =
     | [] -> false
     | token :: rest ->
         if token = closer then scan (balance + 1) rest
-        else if opener_like terminals closer token then
+        else if opener_like cfg closers terminals closer token then
           if balance > 0 then scan (balance - 1) rest else true
         else scan balance rest
   in
   scan 0 reversed
 
-let renders_as_jargon terminals s =
+let renders_as_jargon cfg terminals s =
   String.uppercase_ascii s = s
   && (not (Hashtbl.mem terminals s))
-  && special_name s = None
+  && special_name cfg s = None
   && String.contains s '_'
 
 (* --- Hand-written overrides (step 5, the sanctioned escape hatch) --- *)
@@ -809,15 +846,15 @@ let check_override_rot overrides entries =
              key))
     overrides
 
-let generate_message grammar terminals ~comments ~overrides entry =
+let generate_message cfg closers grammar terminals ~comments ~overrides entry =
   let d = entry.Parse_messages.data in
 
   (* Heuristic: Formatting Logic. [subject_name] renders the Assuming subject
      (the whole completed construct — a user-named nonterminal by name, a
      generated list wrapper by its pluralised element); [expecting_name] renders
      the Expecting list (one element — singularises a list-shaped name). *)
-  let subject_name = subject_name terminals grammar in
-  let expecting_name = expecting_name terminals grammar in
+  let subject_name = subject_name cfg terminals grammar in
+  let expecting_name = expecting_name cfg terminals grammar in
 
   (* The final expected list for a set of valid symbols: drop any anonymous
      residue, then collapse an operator class only when it has >=2 members
@@ -834,7 +871,7 @@ let generate_message grammar terminals ~comments ~overrides entry =
     let class_counts =
       List.fold_left
         (fun acc s ->
-          match classify_symbol s with
+          match classify_symbol cfg s with
           | Some c ->
               StringMap.update c
                 (function None -> Some 1 | Some n -> Some (n + 1))
@@ -845,7 +882,7 @@ let generate_message grammar terminals ~comments ~overrides entry =
     let expected_symbols =
       expected_raw
       |> List.map (fun s ->
-          match classify_symbol s with
+          match classify_symbol cfg s with
           | Some c when StringMap.find c class_counts >= 2 -> c
           | _ -> expecting_name s)
       |> List.sort_uniq String.compare
@@ -904,11 +941,14 @@ let generate_message grammar terminals ~comments ~overrides entry =
     Printf.bprintf buf "%s: %s\n\n" entry.Parse_messages.entry_point
       entry.Parse_messages.sentence;
 
-  (* Heuristic: Unclosed Delimiters *)
-  let check_unclosed closer opener_str friendly_name =
+  (* Heuristic: Unclosed Delimiters. [closers] is derived from the token aliases
+     (a terminal aliased ')'/']'/'}' paired with its opener character), so this
+     handles whatever delimiters the grammar declares, in a deterministic
+     tie-break order. *)
+  let check_unclosed (closer, opener_char) =
     if List.mem closer valid_symbols then
-      match find_matching_depth terminals sentence closer with
-      | Some depth -> Some (depth, opener_str, friendly_name)
+      match find_matching_depth closers terminals sentence closer with
+      | Some depth -> Some (depth, String.make 1 opener_char)
       | None -> None
     else None
   in
@@ -923,14 +963,9 @@ let generate_message grammar terminals ~comments ~overrides entry =
       (* Several closers can be valid in one state; hint at the *innermost* open
          construct — the one whose opener sits nearest the top of the stack
          (smallest depth) — since that is the construct the error is directly
-         inside. A stable sort keeps the brace/bracket/paren tie-break order. *)
-      [
-        check_unclosed "RBRACE" "{" "brace";
-        check_unclosed "RBRACKET" "[" "bracket";
-        check_unclosed "RPAREN" "(" "parenthesis";
-      ]
-      |> List.filter_map Fun.id
-      |> List.stable_sort (fun (d1, _, _) (d2, _, _) -> compare d1 d2)
+         inside. A stable sort keeps [closers]' deterministic tie-break order. *)
+      List.filter_map check_unclosed closers
+      |> List.stable_sort (fun (d1, _) (d2, _) -> compare d1 d2)
       |> function
       | [] -> None
       | x :: _ -> Some x
@@ -976,7 +1011,7 @@ let generate_message grammar terminals ~comments ~overrides entry =
   (* Append Hint if an unclosed delimiter was detected on the stack context *)
   let generated_message =
     match unclosed_details with
-    | Some (depth, opener, _) ->
+    | Some (depth, opener) ->
         (* Locate the opener of the construct the error sits inside, without
            claiming it is unmatched: the same error state is reached both when
            the construct is genuinely unclosed (an EOF cut it short) and when a
@@ -1022,16 +1057,16 @@ let generate_message grammar terminals ~comments ~overrides entry =
       List.filter
         (fun closer ->
           List.mem closer valid_symbols
-          && find_matching_depth terminals sentence closer = None
-          && unmatched_opener_like terminals closer
+          && find_matching_depth closers terminals sentence closer = None
+          && unmatched_opener_like cfg closers terminals closer
                (String.concat " " d.stack_suffix))
-        [ "RBRACE"; "RBRACKET"; "RPAREN" ]
+        (List.map fst closers)
   in
   let jargon =
     if emitted then
       List.fold_left
         (fun acc s ->
-          if renders_as_jargon terminals s then StringSet.add s acc else acc)
+          if renders_as_jargon cfg terminals s then StringSet.add s acc else acc)
         StringSet.empty expected_raw
     else StringSet.empty
   in
@@ -1059,7 +1094,7 @@ let generate_message grammar terminals ~comments ~overrides entry =
   (Buffer.contents buf, full_message, stat)
 
 (* Analysis: List all possible continuations for states, indicating spurious reductions. *)
-let analyze_transitions grammar terminals entries =
+let analyze_transitions closers grammar terminals entries =
   let seen_states = Hashtbl.create 100 in
 
   Printf.printf "Transitions per state:\n";
@@ -1104,12 +1139,11 @@ let analyze_transitions grammar terminals entries =
           in
 
           let warning =
-            match s with
-            | "RBRACE" | "RBRACKET" | "RPAREN" -> (
-                match find_matching_depth terminals sentence s with
-                | Some depth -> Printf.sprintf " [depth: %d]" depth
-                | None -> " [mismatch?]")
-            | _ -> ""
+            if List.mem_assoc s closers then
+              match find_matching_depth closers terminals sentence s with
+              | Some depth -> Printf.sprintf " [depth: %d]" depth
+              | None -> " [mismatch?]"
+            else ""
           in
 
           Printf.printf "  %s%s%s\n" s note warning)
@@ -1362,6 +1396,7 @@ let main () =
   let list_transitions = ref false in
   let cmly_file = ref "" in
   let overrides_file = ref "" in
+  let config_file = ref "" in
 
   let spec =
     [
@@ -1401,6 +1436,12 @@ let main () =
          sentence-keyed replacement messages for states beyond heuristics. \
          Merged after generation; an override whose sentence matches no error \
          state fails the build" );
+      ( "-config",
+        Arg.Set_string config_file,
+        "Path to the grammar's .config sidecar: readable names ([names]), \
+         token classes ([class …]), and opener-name nets ([opener-nets]). \
+         Optional; absent means no curated names, no classes, and alias-only \
+         delimiter hints" );
     ]
   in
 
@@ -1436,14 +1477,20 @@ let main () =
       Printf.eprintf "Error: -cmly is required for this mode.\n";
       exit 1);
     let terminals, grammar, auto = load_grammar !cmly_file in
+    let cfg =
+      if !config_file = "" then empty_config else load_config !config_file
+    in
+    (* Closer terminals are derived from the token aliases, so a grammar that
+       aliases its delimiters gets hints with no configuration. *)
+    let closers = closers_of terminals in
     if !generate_messages || !stats || !census || !list_fallbacks then (
       if !generate_messages then Printf.eprintf "Generating messages...\n";
       let results =
         List.map
           (fun entry ->
             let text, body, stat =
-              generate_message grammar terminals ~comments:(not !no_comments)
-                ~overrides entry
+              generate_message cfg closers grammar terminals
+                ~comments:(not !no_comments) ~overrides entry
             in
             (entry, (text, body, stat)))
           entries
@@ -1475,7 +1522,7 @@ let main () =
       if !list_fallbacks then
         output_fallbacks
           (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results))
-    else analyze_transitions grammar terminals entries)
+    else analyze_transitions closers grammar terminals entries)
   else if
     (* Default verification dump *)
     entries <> []

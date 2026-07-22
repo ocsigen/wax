@@ -1,0 +1,9 @@
+; The stele runtime helper: resolves the <N> delimiter markers a
+; stele-generated message carries into located source labels, given the parser's
+; incremental-engine environment. menhirLib + stdlib only, so it compiles under
+; wasm_of_ocaml as well as native.
+
+(library
+ (name parser_error_runtime)
+ (public_name stele.runtime)
+ (libraries menhirLib))

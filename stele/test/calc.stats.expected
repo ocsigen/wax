@@ -1,0 +1,15 @@
+entries: 9
+with an expected list: 8
+using the spurious-reduction template: 1
+entries with cascade depth >= 4: 0
+max cascade depth: 1
+overridden: 1
+generic fallback (empty expected list, not overridden): 0
+generic fallback (expected list over 5, not overridden): 0
+delimiter hints: 2
+missed delimiter hints (opener on stack, none matched): 0
+jargon-rendered tokens: 0
+state/automaton item-set match: 9/9
+unsound claims: 0
+entries with uncovered actions: 0
+uncovered action tokens (total): 0

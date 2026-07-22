@@ -30,7 +30,7 @@
 # THE PIPELINE PER TRIAL (all direct invocations — no dune, no tree mutation)
 #   menhir COPY.mly --list-errors                         > trial.messages
 #   menhir COPY.mly --cmly --no-code-generation --base X  > X.cmly
-#   generate_error_messages.exe -cmly X.cmly \
+#   generate_error_messages.exe -cmly X.cmly -config CONFIG \
 #       {-stats | -census | -generate-messages -no-comments} trial.messages
 #   Candidate ADDITIONS are enumerated from `menhir COPY.mly --dump` (the LHS of
 #   every `reduce production N ->` line = the nonterminals reducible somewhere in
@@ -91,7 +91,7 @@
 #   are non-improving, so the 25/25 & 50/50 agreement is untouched.
 #
 # USAGE
-#   scripts/tune_on_error_reduce.sh [wasm|wax|both] [dead|advise|calibrate|all]
+#   stele/tune_on_error_reduce.sh [wasm|wax|both] [dead|advise|calibrate|all]
 #   Defaults: both all.  Output is a human/agent review report on stdout; a full
 #   sweep over both grammars is a few minutes. Nothing is written outside the
 #   scratch dir, which is removed on exit.
@@ -101,7 +101,7 @@ MODE_G="${1:-both}"
 MODE_P="${2:-all}"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GEN="$REPO/_build/default/scripts/generate_error_messages.exe"
+GEN="$REPO/_build/default/stele/generate_error_messages.exe"
 MENHIR="$(command -v menhir || true)"
 
 if [ -z "$MENHIR" ]; then
@@ -110,7 +110,7 @@ if [ -z "$MENHIR" ]; then
 fi
 if [ ! -x "$GEN" ]; then
   echo "generator exe missing; building it..." >&2
-  (cd "$REPO" && dune build scripts/generate_error_messages.exe) \
+  (cd "$REPO" && dune build stele/generate_error_messages.exe) \
     || { echo "error: could not build generate_error_messages.exe" >&2; exit 1; }
 fi
 
@@ -180,6 +180,11 @@ parse_override_keys() {
 # run_pipeline MLY OUTPREFIX — list-errors + cmly + the three generator outputs.
 # Sets nothing; writes $OUTPREFIX.{stats,census,actual}. Returns non-zero on a
 # menhir/grammar failure (an invalid candidate name), so callers can skip it.
+# $CONFIG is the grammar's -config sidecar, set by setup_grammar. It is passed to
+# every generator call (unlike -overrides, which is deliberately omitted so an
+# annotation change cannot rot a sentence-keyed override): the config carries the
+# readable names and token classes the goldens use, so a trial without it would
+# diff spuriously against them.
 run_pipeline() {
   local mly="$1" out="$2" base
   base="$(basename "$out")"
@@ -188,9 +193,9 @@ run_pipeline() {
     >/dev/null 2>&1 || true   # --cmly exits 1 (runs code backend) but writes the cmly
   local cmly="$WORK/$base.cmlybase.cmly"
   [ -f "$cmly" ] || return 1
-  "$GEN" -cmly "$cmly" -stats "$out.messages" >"$out.stats" 2>/dev/null || return 1
-  "$GEN" -cmly "$cmly" -census "$out.messages" >"$out.census" 2>/dev/null || return 1
-  "$GEN" -cmly "$cmly" -generate-messages -no-comments "$out.messages" \
+  "$GEN" -cmly "$cmly" -config "$CONFIG" -stats "$out.messages" >"$out.stats" 2>/dev/null || return 1
+  "$GEN" -cmly "$cmly" -config "$CONFIG" -census "$out.messages" >"$out.census" 2>/dev/null || return 1
+  "$GEN" -cmly "$cmly" -config "$CONFIG" -generate-messages -no-comments "$out.messages" \
     >"$out.actual" 2>/dev/null || return 1
   return 0
 }
@@ -290,11 +295,12 @@ vector_delta_line() {
 
 # setup_grammar wasm|wax — copy the real grammar, compute the no-overrides
 # baseline, and populate CUR_ANNOTS + ADD_CANDIDATES.
-CUR_ANNOTS=(); ADD_CANDIDATES=()
+CUR_ANNOTS=(); ADD_CANDIDATES=(); CONFIG=""
 setup_grammar() {
   local g="$1"
   WORK="$SCRATCH/$g"; mkdir -p "$WORK"
   cp "$REPO/src/lib-$g/parser.mly" "$WORK/parser.mly"
+  CONFIG="$REPO/src/lib-$g/parser_messages.config"
   local line
   line="$(grep '^%on_error_reduce ' "$WORK/parser.mly" | sed 's/^%on_error_reduce //')"
   # shellcheck disable=SC2206

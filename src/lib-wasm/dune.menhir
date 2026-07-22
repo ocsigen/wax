@@ -63,16 +63,21 @@
  (action
   (run menhir %{dep:parser.mly} --cmly --no-code-generation --base parser_msgs)))
 
-; parser_messages.overrides is the sanctioned hand-edit surface for parser
-; error messages (ERROR-MESSAGES.md step 5): sentence-keyed replacement messages
-; for the structurally immovable over-5 "enumeration" fallbacks, merged after
-; generation. A stale override (its sentence no longer keys any error state)
-; fails the build, so the file cannot rot silently. Passed to every generator
-; invocation below.
+; The message generator is the standalone `stele` package (stele/; see
+; stele/README.md), driven here by path. Two per-grammar sidecars feed it, both
+; passed to every invocation below:
+;  - parser_messages.config (-config): readable names, token classes, and the
+;    missed-hint opener-name nets — the tables the generator used to hard-code,
+;    now grammar configuration.
+;  - parser_messages.overrides (-overrides): the sanctioned hand-edit surface for
+;    the messages themselves (ERROR-MESSAGES.md step 5) — sentence-keyed
+;    replacement messages for the structurally immovable over-5 "enumeration"
+;    fallbacks, merged after generation. A stale override (its sentence no longer
+;    keys any error state) fails the build, so the file cannot rot silently.
 (rule
  (with-stdout-to
   parser_messages.messages
-  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -overrides %{dep:parser_messages.overrides} -generate-messages %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -generate-messages %{dep:parser_messages.auto.messages})))
 
 ; Golden copy of the generated messages, without the ## comments (state
 ; numbers, LR items) that churn wholesale on any grammar change. The stripped
@@ -82,7 +87,7 @@
 (rule
  (with-stdout-to
   parser_messages.actual
-  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -overrides %{dep:parser_messages.overrides} -generate-messages -no-comments %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -generate-messages -no-comments %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)
@@ -97,7 +102,7 @@
 (rule
  (with-stdout-to
   parser_messages.stats
-  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -overrides %{dep:parser_messages.overrides} -stats %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -stats %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)
@@ -113,7 +118,7 @@
 (rule
  (with-stdout-to
   parser_messages.census
-  (run %{project_root}/scripts/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -overrides %{dep:parser_messages.overrides} -census %{dep:parser_messages.auto.messages})))
+  (run %{project_root}/stele/generate_error_messages.exe -cmly %{dep:parser_msgs.cmly} -config %{dep:parser_messages.config} -overrides %{dep:parser_messages.overrides} -census %{dep:parser_messages.auto.messages})))
 
 (rule
  (alias runtest)

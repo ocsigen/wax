@@ -48,10 +48,6 @@ module Lu = MenhirLib.LexerUtil
 
 let succeed v = v
 
-let show text positions =
-  E.extract text positions |> E.sanitize |> E.compress
-  |> E.shorten 20 (* max width 43 *)
-
 let report_syntax_error ~color source (e : syntax_error) =
   let theme = Wax_utils.Diagnostic.get_theme ?color () in
   Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
@@ -121,6 +117,19 @@ struct
   struct
     module P = Parser.Make (Context)
 
+    (* Resolution of the [<N>] delimiter markers stele's generated messages
+       carry: given the error environment and the source, it returns the main
+       message plus located labels at the opening delimiters. Extracted into the
+       [stele.runtime] library so it is not reimplemented per parser; instantiated
+       here over this parser's incremental engine. *)
+    module Error_runtime = Parser_error_runtime.Make (struct
+      type 'a env = 'a P.MenhirInterpreter.env
+      type element = P.MenhirInterpreter.element
+
+      let get = P.MenhirInterpreter.get
+      let positions (P.MenhirInterpreter.Element (_, _, p1, p2)) = (p1, p2)
+    end)
+
     let state checkpoint : int =
       match checkpoint with
       | P.MenhirInterpreter.HandlingError env -> (
@@ -136,18 +145,13 @@ struct
           positions_in_stack env (i + 1)
       | None -> ()
 
-    let get text checkpoint i =
-      match checkpoint with
-      | P.MenhirInterpreter.HandlingError env -> (
-          match P.MenhirInterpreter.get i env with
-          | Some (Element (_, _, pos1, pos2)) -> show text (pos1, pos2)
-          | None -> "???")
-      | _ -> assert false
-
     (* Compute the structured diagnostic (location, message, related labels) for
        a menhir syntax error, without printing anything. Both the printing
        handler [fail] (for the CLI) and the non-printing [fail_detailed] (for
-       in-process/editor use via [parse_diagnostics]) build on this. *)
+       in-process/editor use via [parse_diagnostics]) build on this. The message
+       post-processing (Menhir [$i] expansion, [<N>] marker resolution, the
+       walk-back-to-the-delimiter refinement) is the shared [stele.runtime]
+       helper; here it is only wrapped into Wax's diagnostic types. *)
     let build_syntax_error text buffer checkpoint =
       let env =
         match checkpoint with
@@ -167,66 +171,17 @@ struct
           Printf.sprintf "Syntax error (%d)\n" s
         else message
       in
-      let message = E.expand (get text checkpoint) message in
-      let lines = String.split_on_char '\n' message in
-      let related = ref [] in
-      let main_message = ref [] in
-      List.iter
-        (fun line ->
-          let len = String.length line in
-          if len > 2 && line.[0] = '<' then
-            try
-              let i = String.index line '>' in
-              let depth = int_of_string (String.sub line 1 (i - 1)) in
-              let msg = String.trim (String.sub line (i + 1) (len - i - 1)) in
-              match P.MenhirInterpreter.get (depth - 1) env with
-              | Some (Element (_, _, pos1, _pos2)) ->
-                  (* This hint points at a single opening delimiter, so underline
-                     one character. The delimiter is normally the token's start —
-                     the lexer gives a compound opener ([(then]/[(param]/…) the
-                     '(' as its start — but a spurious reduction can surface a
-                     plain token (e.g. ELEM) sitting just past the '('; in that
-                     case walk the source back over blanks to the delimiter. *)
-                  let cnum = pos1.Lexing.pos_cnum in
-                  let is_delim c = c = '(' || c = '[' || c = '{' in
-                  let blank c = c = ' ' || c = '\t' in
-                  let dcnum =
-                    if cnum < String.length text && is_delim text.[cnum] then
-                      cnum
-                    else
-                      let rec back i =
-                        if i < 0 || not (blank text.[i]) then
-                          if i >= 0 && is_delim text.[i] then i else cnum
-                        else back (i - 1)
-                      in
-                      back (cnum - 1)
-                  in
-                  let start = { pos1 with Lexing.pos_cnum = dcnum } in
-                  let loc =
-                    {
-                      Wax_utils.Ast.loc_start = start;
-                      loc_end = { start with Lexing.pos_cnum = dcnum + 1 };
-                    }
-                  in
-                  related :=
-                    {
-                      Wax_utils.Diagnostic.location = loc;
-                      message = Wax_utils.Message.text msg;
-                    }
-                    :: !related
-              | None -> main_message := line :: !main_message
-            with _ -> main_message := line :: !main_message
-          else main_message := line :: !main_message)
-        lines;
-      let main_message = List.rev !main_message in
-      let related_labels = List.rev !related in
-      (* Remove trailing empty line if it was caused by a trailing newline and we have related labels *)
-      let main_message =
-        match List.rev main_message with
-        | "" :: rest when related_labels <> [] -> List.rev rest
-        | _ -> main_message
+      let message, labels = Error_runtime.resolve ~source:text ~env message in
+      let related_labels =
+        List.map
+          (fun (l : Error_runtime.label) ->
+            {
+              Wax_utils.Diagnostic.location =
+                { Wax_utils.Ast.loc_start = l.loc_start; loc_end = l.loc_end };
+              message = Wax_utils.Message.text l.text;
+            })
+          labels
       in
-      let message = String.concat "\n" main_message in
       (location, message, related_labels)
 
     let fail_detailed text buffer checkpoint =

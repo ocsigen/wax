@@ -1,0 +1,38 @@
+prog: LBRACE INT PLUS INT RBRACE
+
+Expecting ')', ';', or an operator.
+
+prog: LBRACE INT PLUS STAR
+
+Expecting an expr.
+
+prog: LBRACE INT RBRACE
+
+Expecting ';', or an operator.
+
+prog: LBRACE INT STAR STAR
+
+Expecting an expr.
+
+prog: LBRACE LPAREN INT RBRACE
+
+Expecting ')', or an operator.
+<2>This '(' opens the enclosing construct.
+
+prog: LBRACE LPAREN STAR
+
+Expecting an expr.
+
+prog: LBRACE RBRACE STAR
+
+Expecting 'eof'.
+
+prog: LBRACE STAR
+
+Assuming that the statements are complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+prog: STAR
+
+Expecting a program: a '{' block.
+
