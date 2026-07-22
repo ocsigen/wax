@@ -28,11 +28,12 @@ the page-size clause is spelled out:
   4 │ 
   [128]
 
-A trailing-comma list names its element ("an on clause"), rather than leaking
-the raw `separated_nonempty_list_trailing(comma,on_clause)`:
+A completed trailing-comma list is named cleanly in the hedge ("the on clauses
+are complete"), rather than leaking the raw
+`separated_nonempty_list_trailing(comma,on_clause)`:
 
   $ wax check onclause.wax
-  Error: Expecting ']'.
+  Error: Assuming that the on clauses are complete, expecting ']'.
    ──➤  onclause.wax:2:18
   1 │ fn f() {
   2 │   c.resume() on [_ => switch 5]
@@ -63,7 +64,7 @@ token. The lexer gives that token the '(' as its start (so the location really
 begins at the paren), and the hint shrinks the range to that one character:
 
   $ wax check result.wat
-  Error: Expecting ')'.
+  Error: Assuming that the value types are complete, expecting ')'.
    ──➤  result.wat:1:27
   1 │ (module (func (result i32 $x)))
     ·                           ^^

@@ -1,12 +1,12 @@
-entries: 710
-with an expected list: 692
-using the spurious-reduction template: 65
+entries: 690
+with an expected list: 672
+using the spurious-reduction template: 86
 generic fallback (empty expected list): 0
 generic fallback (expected list over 5): 18
-delimiter hints: 236
+delimiter hints: 234
 missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
-state/automaton item-set match: 710/710
+state/automaton item-set match: 690/690
 unsound claims: 0
-entries with uncovered actions: 40
-uncovered action tokens (total): 3233
+entries with uncovered actions: 25
+uncovered action tokens (total): 1752

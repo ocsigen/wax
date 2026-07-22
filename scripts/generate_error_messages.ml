@@ -579,6 +579,56 @@ let rec expecting_name ?(visited = StringSet.empty) terminals gram s =
     | None -> get_readable_name terminals s
   else get_readable_name terminals s
 
+(* Drop a leading indefinite article from a readable noun phrase
+   ("a field type" -> "field type", "an elemexpr" -> "elemexpr"); a quoted
+   terminal or an already-article-less phrase is returned unchanged. *)
+let strip_article name =
+  if String.length name > 2 && String.sub name 0 2 = "a " then
+    String.sub name 2 (String.length name - 2)
+  else if String.length name > 3 && String.sub name 0 3 = "an " then
+    String.sub name 3 (String.length name - 3)
+  else name
+
+(* Pluralise the head (last word) of a readable noun phrase, so a *list*
+   subject reads "the value types are complete" rather than the singular. The
+   rule covers the element names both grammars actually produce (…es after a
+   sibilant so "catch" -> "catches"); a phrase whose head is already the wrong
+   shape can be curated in [special_name]. *)
+let pluralize_phrase name =
+  match List.rev (String.split_on_char ' ' name) with
+  | [] | [ "" ] -> name
+  | last :: rest ->
+      let n = String.length last in
+      let ends suf =
+        let ls = String.length suf in
+        n >= ls && String.sub last (n - ls) ls = suf
+      in
+      let plural =
+        if ends "s" || ends "x" || ends "z" || ends "ch" || ends "sh" then
+          last ^ "es"
+        else last ^ "s"
+      in
+      String.concat " " (List.rev (plural :: rest))
+
+(* Rendering for the *Assuming that the X is complete* subject. A user-named
+   nonterminal names the completed construct directly ("the block type is
+   complete"). A menhir-generated symbol — always a list wrapper when it reaches
+   [%on_error_reduce], since that is the only reason to annotate one — would
+   otherwise render as its raw internal name ("the list(field type) is
+   complete", jargon); instead chase its element and pluralise it ("the field
+   types are complete"). The [%on_error_reduce] reductions that reach here are
+   frequently *epsilon* (an empty list assumed complete), so this subject is what
+   signals to the reader that an optional list element was elided from the
+   Expecting list rather than being illegal — the hedge whose absence silently
+   dropped tokens. *)
+let subject_name terminals gram s =
+  if gram.is_generated s then
+    match chase_list_element gram s with
+    | Some elem ->
+        pluralize_phrase (strip_article (expecting_name terminals gram elem))
+    | None -> "a list"
+  else get_readable_name terminals s
+
 (* --- Self-Lints and Statistics --- *)
 
 type message_stat = {
@@ -656,10 +706,11 @@ let renders_as_jargon terminals s =
 let generate_message grammar terminals ~comments entry =
   let d = entry.Parse_messages.data in
 
-  (* Heuristic: Formatting Logic. [readable_name] renders the Assuming subject
-     (the whole completed sequence — keeps the list name); [expecting_name]
-     renders the Expecting list (one element — singularises a list-shaped name). *)
-  let readable_name = get_readable_name terminals in
+  (* Heuristic: Formatting Logic. [subject_name] renders the Assuming subject
+     (the whole completed construct — a user-named nonterminal by name, a
+     generated list wrapper by its pluralised element); [expecting_name] renders
+     the Expecting list (one element — singularises a list-shaped name). *)
+  let subject_name = subject_name terminals grammar in
   let expecting_name = expecting_name terminals grammar in
 
   (* The final expected list for a set of valid symbols: drop any anonymous
@@ -790,7 +841,7 @@ let generate_message grammar terminals ~comments entry =
     match List.rev d.spurious_reductions with
     | [] -> base_message
     | last :: _ ->
-        let raw_name = readable_name last.symbol in
+        let raw_name = subject_name last.symbol in
         let name, verb =
           if String.length raw_name > 2 && String.sub raw_name 0 2 = "a " then
             (String.sub raw_name 2 (String.length raw_name - 2), "is")

@@ -144,7 +144,7 @@ many at the top level:
   > WAX
 
   $ wax check --all-errors stray-brace.wax
-  Error: Expecting a definition.
+  Error: Assuming that the attributes are complete, expecting a definition.
    ──➤  stray-brace.wax:4:1
   2 │     nop;
   3 │ }
@@ -158,7 +158,7 @@ The deletion fix is an edit whose span covers the stray token with an empty
 `newText`:
 
   $ wax check --all-errors --error-format json stray-brace.wax
-  {"severity":"error","file":"stray-brace.wax","startLine":4,"startColumn":0,"endLine":4,"endColumn":1,"startOffset":20,"endOffset":21,"message":"Expecting a definition.","warning":null,"hint":null,"related":[],"edit":{"startLine":4,"startColumn":0,"endLine":4,"endColumn":1,"startOffset":20,"endOffset":21,"newText":""}}
+  {"severity":"error","file":"stray-brace.wax","startLine":4,"startColumn":0,"endLine":4,"endColumn":1,"startOffset":20,"endOffset":21,"message":"Assuming that the attributes are complete, expecting a definition.","warning":null,"hint":null,"related":[],"edit":{"startLine":4,"startColumn":0,"endLine":4,"endColumn":1,"startOffset":20,"endOffset":21,"newText":""}}
   [128]
 
 The deletion fix is deliberately conservative: it fires only when exactly one

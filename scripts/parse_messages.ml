@@ -67,9 +67,17 @@ let re_stack_start =
 let re_spurious =
   Str.regexp "## WARNING: This example involves spurious reductions\\."
 
+(* No space is required after the arrow: an epsilon production
+   ([exports -> ], [locals -> ], …) prints "… -> " with an empty RHS, and
+   menhir even omits the trailing space, so the RHS group must be allowed to be
+   empty. [String.trim] on both captured groups (in the caller) absorbs any
+   surrounding whitespace. Requiring a space after "->" here silently dropped
+   every epsilon spurious reduction, so the "Assuming that the X is complete, …"
+   hedge never fired for a nullable-list reduction (an [%on_error_reduce] on a
+   nullable list) and the message lost tokens with no hedge to signal it. *)
 let re_spurious_item =
   Str.regexp
-    "## In state [0-9]+, spurious reduction of production \\(.*\\) -> \\(.*\\)"
+    "## In state [0-9]+, spurious reduction of production \\(.*\\) ->\\(.*\\)"
 
 let parse_lr1_item line =
   let line = String.trim line in
