@@ -110,6 +110,8 @@ function buildProvider(wax, language) {
       safe(() => (wat ? wax.signatureHelpWat(src, l, c) : wax.signatureHelp(src, l, c)), null),
     references: (src, l, c) =>
       safe(() => (wat ? wax.referencesWat(src, l, c) : wax.references(src, l, c)), []),
+    definition: (src, l, c) =>
+      safe(() => (wat ? wax.definitionWat(src, l, c) : wax.definition(src, l, c)), []),
   };
 }
 
@@ -431,6 +433,28 @@ function refHighlightPlugin(provider) {
   );
 }
 
+// ---- go-to-definition (Ctrl/Cmd-click, as in VS Code) ------------------------
+
+function defClickPlugin(provider) {
+  return EditorView.domEventHandlers({
+    mousedown(e, view) {
+      if (!(e.ctrlKey || e.metaKey) || e.button !== 0) return false;
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+      if (pos == null) return false;
+      const { line, ch } = posToLC(view.state, pos);
+      const defs = provider.definition(view.state.doc.toString(), line, ch);
+      if (!defs.length) return false;
+      const { from, to } = rangeToPos(view.state, defs[0]);
+      view.dispatch({
+        selection: { anchor: from, head: to },
+        scrollIntoView: true,
+      });
+      e.preventDefault(); // don't also move the cursor to the click site
+      return true;
+    },
+  });
+}
+
 // ---- diagnostics + quick fixes ----------------------------------------------
 
 function severityOf(d) {
@@ -532,7 +556,11 @@ function makeCompletion(provider) {
     override: [
       (context) => {
         const word = context.matchBefore(/[\w$']+/);
-        if (!word && !context.explicit) return null;
+        // `.` and `:` are trigger characters (as declared to VS Code and LSP
+        // clients): the field/type list pops right at the dot, before any
+        // fragment of the name is typed.
+        if (!word && !context.explicit && !context.matchBefore(/[.:]/))
+          return null;
         const { line, ch } = posToLC(context.state, context.pos);
         const items = provider.completion(context.state.doc.toString(), line, ch);
         if (!items.length) return null;
@@ -689,6 +717,7 @@ export function createWaxEditor(opts) {
     highlightPlugin(language, provider, keywords),
     inlayPlugin(provider),
     refHighlightPlugin(provider),
+    defClickPlugin(provider),
     makeLinter(provider, onDiagnostics),
     lintGutter(),
     makeHover(provider),
