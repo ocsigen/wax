@@ -1,0 +1,2 @@
+Parsed 9 entries from ./calc.auto.messages
+Fatal error: exception Failure("config ./calc-rot.config [class an operator]: \"NOSUCHTOKEN\" names no symbol of this grammar (stale entry \226\128\148 remove or fix it)")

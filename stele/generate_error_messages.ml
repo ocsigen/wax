@@ -10,6 +10,7 @@
 module StringSet = Set.Make (String)
 module StringMap = Map.Make (String)
 module StatusMap = Map.Make (String)
+module IntSet = Set.Make (Int)
 
 type status = Direct | Lookahead | Both
 
@@ -134,6 +135,12 @@ let net_matches token = function
    missed opaque nullable nonterminals like [statement_list]). *)
 type gram = {
   is_terminal : string -> bool;
+  is_nonterminal : string -> bool;
+      (** a user- or menhir-named nonterminal the grammar defines (used by the
+          config rot guard to accept a [names] key that names a nonterminal) *)
+  all_terminals : StringSet.t;
+      (** every real terminal name (the error/EOF pseudo-tokens included), used
+          by the config rot guard's [opener-nets] pattern check *)
   nullable : string -> bool;  (** false for terminals and unknown names *)
   productions : string -> string list list;
       (** each right-hand side as a list of surface symbol names *)
@@ -219,6 +226,11 @@ let load_grammar cmly_file =
   let gram =
     {
       is_terminal = (fun s -> Hashtbl.mem terminal_names s);
+      is_nonterminal = (fun s -> Hashtbl.mem prod_tbl s);
+      all_terminals =
+        Hashtbl.fold
+          (fun n () acc -> StringSet.add n acc)
+          terminal_names StringSet.empty;
       nullable =
         (fun s -> try Hashtbl.find nullable_tbl s with Not_found -> false);
       productions =
@@ -697,6 +709,26 @@ type message_stat = {
       (** The readable expected list of a not-overridden generic-fallback entry
           (empty, or over the ≤5 cap) — what [-list-fallbacks] shows an override
           author as candidates; [] for any other entry. *)
+  collapsed_classes : StringSet.t;
+      (** Configured class labels whose collapse fired in this entry's computed
+          expected list (>=2 members present in the chosen continuation tier).
+          Independent of whether the resulting message was ultimately shown: an
+          override or an over-cap overflow can supersede the collapsed phrase,
+          yet the class is not dormant — its members still co-occur in a real
+          state. So this counts the collapse *computation*, not the shown text.
+          The dormancy stat tallies, per class, how many entries carry it; a
+          permanently empty set is a class whose members stopped co-occurring
+          (going quiet), which the stats ratchet then makes visible. *)
+  raw_terminals : string list;
+      (** The pre-classing raw terminal claims of the chosen continuation tier
+          (expected_raw restricted to terminals), for every entry regardless of
+          emission or override. The [-suggest-classes] clustering is over these
+          raw sets. *)
+  readable_len : int;
+      (** The readable expected-list length with the *current* classes applied
+          (List.length expected_symbols), for every entry — the
+          [-suggest-classes] impact simulation's baseline against the <=5 cap.
+      *)
 }
 
 (* Would [token] plausibly open the construct [closer] terminates? Broader than
@@ -824,6 +856,53 @@ let validate_override_depths ~header body stack_suffix =
   in
   scan 0
 
+(* The [-config] sidecar's counterpart to [check_override_rot]: every entry must
+   still name a symbol the grammar has, so a config left behind by a grammar
+   change fails the build instead of firing on nothing. A [class] member must be
+   a terminal; a [names] key a terminal or nonterminal; an [opener-nets] pattern
+   must match at least one terminal (an unmatched net is a silently dead lint
+   rule). Run at [-config] load, so it needs the [.cmly] every config-consuming
+   mode already reads. Error style mirrors [check_override_rot]: a hard failure
+   naming the file, section, and stale entry. *)
+let check_config_rot ~file gram cfg =
+  let stale section entry =
+    failwith
+      (Printf.sprintf
+         "config %s [%s]: %S names no symbol of this grammar (stale entry — \
+          remove or fix it)"
+         file section entry)
+  in
+  Hashtbl.iter
+    (fun key _ ->
+      if not (gram.is_terminal key || gram.is_nonterminal key) then
+        stale "names" key)
+    cfg.names;
+  List.iter
+    (fun (label, members) ->
+      StringSet.iter
+        (fun m ->
+          if not (gram.is_terminal m) then
+            stale (Printf.sprintf "class %s" label) m)
+        members)
+    cfg.classes;
+  List.iter
+    (fun (ch, nets) ->
+      List.iter
+        (fun net ->
+          if
+            not
+              (StringSet.exists (fun t -> net_matches t net) gram.all_terminals)
+          then
+            let pat =
+              match net with
+              | Prefix p -> Printf.sprintf "%c prefix %s" ch p
+              | Suffix s -> Printf.sprintf "%c suffix %s" ch s
+              | Exact e -> Printf.sprintf "%c exact %s" ch e
+            in
+            stale "opener-nets" pat)
+        nets)
+    cfg.opener_nets
+
 (* Report an override whose sentence matches no generated entry: the file must
    never drift silently, so a stale key fails the build. Called once the full
    entry set is known. *)
@@ -887,7 +966,14 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
           | _ -> expecting_name s)
       |> List.sort_uniq String.compare
     in
-    (expected_raw, expected_symbols)
+    (* The classes whose collapse actually fired (>=2 members present): the
+       dormancy stat's per-entry contribution. *)
+    let collapsed =
+      StringMap.fold
+        (fun c n acc -> if n >= 2 then StringSet.add c acc else acc)
+        class_counts StringSet.empty
+    in
+    (expected_raw, expected_symbols, collapsed)
   in
 
   (* Calculate Valid Next Symbols, choosing between the two continuation tiers
@@ -910,16 +996,16 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
   let vs_agg =
     symbols_of (fun _ -> true) |> StatusMap.bindings |> List.map fst
   in
-  let expected_raw_agg, exp_agg = expected_of vs_agg in
-  let valid_symbols, expected_raw, expected_symbols =
+  let expected_raw_agg, exp_agg, collapsed_agg = expected_of vs_agg in
+  let valid_symbols, expected_raw, expected_symbols, collapsed_classes =
     let n = List.length exp_agg in
-    if n >= 1 && n <= 5 then (vs_agg, expected_raw_agg, exp_agg)
+    if n >= 1 && n <= 5 then (vs_agg, expected_raw_agg, exp_agg, collapsed_agg)
     else
       let vs_c =
         symbols_of grammar.is_generated |> StatusMap.bindings |> List.map fst
       in
-      let expected_raw_c, exp_c = expected_of vs_c in
-      (vs_c, expected_raw_c, exp_c)
+      let expected_raw_c, exp_c, collapsed_c = expected_of vs_c in
+      (vs_c, expected_raw_c, exp_c, collapsed_c)
   in
 
   let sentence =
@@ -1087,6 +1173,9 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
         (if (not overridden) && (n_expected = 0 || n_expected > 5) then
            expected_symbols
          else []);
+      collapsed_classes;
+      raw_terminals = List.filter grammar.is_terminal expected_raw;
+      readable_len = n_expected;
     }
   in
   (* [full_message] is returned separately for the census (step 7), which counts
@@ -1240,7 +1329,7 @@ let check_entry gram auto (entry, stat) =
    promoted [parser_messages.stats.expected] goldens: regressions (a new
    fallback state, a lost hint, a jargon token) fail `dune runtest`;
    improvements are accepted with `dune promote`. *)
-let output_stats gram auto results =
+let output_stats cfg gram auto results =
   let count f = List.length (List.filter (fun (_, s) -> f s) results) in
   Printf.printf "entries: %d\n" (List.length results);
   Printf.printf "with an expected list: %d\n" (count (fun s -> s.expecting));
@@ -1323,7 +1412,21 @@ let output_stats gram auto results =
         Printf.printf "  %s %s: %s\n" entry.Parse_messages.entry_point
           entry.Parse_messages.sentence
           (String.concat " " (StringSet.elements unc)))
-      with_uncovered
+      with_uncovered;
+  (* Dormancy ratchet (step 10): one line per configured token class, in file
+     order, giving how many entries had the class collapse fire in their computed
+     expected list (>=2 members co-occurring). This counts the collapse
+     computation, not the shown text — an override or an over-cap overflow may
+     supersede the phrase (as every wax operator state currently does), yet the
+     class is live while its members still co-occur. N=0 is legitimate (a class
+     waiting for a qualifying state) but now visible, so a class that goes quiet
+     after a grammar change shows up as a golden diff. A grammar with no classes
+     prints nothing. *)
+  List.iter
+    (fun (label, _) ->
+      Printf.printf "class %S: collapsed in %d entries\n" label
+        (count (fun s -> StringSet.mem label s.collapsed_classes)))
+    cfg.classes
 
 (* --- Message census (step 7) --- *)
 
@@ -1384,6 +1487,120 @@ let output_fallbacks results =
       Printf.printf "%s\n<YOUR SYNTAX ERROR MESSAGE HERE>\n\n" (header entry))
     fallbacks
 
+(* Discovery aid (step 10): propose new [class] blocks for the [-config] file by
+   signature-clustering the raw expected sets. A terminal's *signature* is the
+   set of entries whose raw expected list mentions it; terminals with the
+   *identical* signature always co-occur, so collapsing them to one label never
+   drops a token a single state needed. Terminals already in a configured class
+   are excluded (they are handled); nothing else is filtered. An earlier draft
+   also dropped short punctuation aliases to avoid a "delimiter" cluster, but the
+   operator tokens a class most wants to capture ([PLUS]="+", [STAR]="*") have
+   one-character aliases too, so that filter excluded exactly them and broke the
+   rediscovery. The identical-signature requirement is a strong enough guard on
+   its own: distinct delimiters (')' / ',' / '}') appear in *varied* subsets
+   across states, so they rarely share an exact signature and do not cluster. A
+   cluster is kept only at >=3 members; ranked by impact — how
+   many entries the collapse newly fits under the <=5 readable cap, then the
+   total list-item reduction. Output is a paste-ready [class <LABEL>] block per
+   cluster (label is a human decision, left as a placeholder), impact as [#]
+   comments, in the [-list-fallbacks] authoring-template style. Empty output
+   means no unclassified terminal set co-occurs tightly enough to be worth a
+   class. *)
+let output_suggest_classes cfg results =
+  let classified =
+    List.fold_left
+      (fun acc (_, m) -> StringSet.union acc m)
+      StringSet.empty cfg.classes
+  in
+  (* A candidate terminal: any terminal not already in a configured class. No
+     alias-length filter: the operator tokens a class most wants to capture
+     ([PLUS]="+", [STAR]="*") have one-character aliases, so filtering short
+     aliases would exclude exactly them. The identical-signature requirement is
+     itself the delimiter guard — ')' and ',' and '}' appear in *varied* subsets
+     across states, so they rarely share an exact signature and do not cluster. *)
+  let is_candidate t = not (StringSet.mem t classified) in
+  let stats = Array.of_list (List.map snd results) in
+  (* signature per candidate terminal: the set of entry indices mentioning it *)
+  let sig_tbl = Hashtbl.create 256 in
+  Array.iteri
+    (fun i stat ->
+      List.iter
+        (fun t ->
+          if is_candidate t then
+            let r =
+              match Hashtbl.find_opt sig_tbl t with
+              | Some r -> r
+              | None ->
+                  let r = ref IntSet.empty in
+                  Hashtbl.add sig_tbl t r;
+                  r
+            in
+            r := IntSet.add i !r)
+        stat.raw_terminals)
+    stats;
+  (* group terminals by identical signature *)
+  let by_sig = Hashtbl.create 64 in
+  Hashtbl.iter
+    (fun t r ->
+      let key = IntSet.elements !r in
+      if key <> [] then
+        let members =
+          match Hashtbl.find_opt by_sig key with
+          | Some m -> m
+          | None ->
+              let m = ref [] in
+              Hashtbl.add by_sig key m;
+              m
+        in
+        members := t :: !members)
+    sig_tbl;
+  (* each kept cluster with its impact simulation *)
+  let clusters =
+    Hashtbl.fold
+      (fun entry_ids members acc ->
+        let members = List.sort String.compare !members in
+        let k = List.length members in
+        if k < 3 then acc
+        else
+          (* every affected entry contains all k members (identical signature),
+             so collapsing them removes k-1 items from that entry's list *)
+          let newly_fits, reduction =
+            List.fold_left
+              (fun (nf, red) idx ->
+                let len = stats.(idx).readable_len in
+                let new_len = len - (k - 1) in
+                ((if len > 5 && new_len <= 5 then nf + 1 else nf), red + (k - 1)))
+              (0, 0) entry_ids
+          in
+          (members, k, List.length entry_ids, newly_fits, reduction) :: acc)
+      by_sig []
+  in
+  (* rank by impact: newly-fitting entries, then total reduction, then size *)
+  let ranked =
+    List.sort
+      (fun (m1, k1, _, nf1, r1) (m2, k2, _, nf2, r2) ->
+        if nf1 <> nf2 then compare nf2 nf1
+        else if r1 <> r2 then compare r2 r1
+        else if k1 <> k2 then compare k2 k1
+        else compare m1 m2)
+      clusters
+  in
+  Printf.eprintf "%d candidate class cluster(s) (>=3 co-occurring terminals)\n"
+    (List.length ranked);
+  List.iter
+    (fun (members, k, states, newly_fits, reduction) ->
+      Printf.printf
+        "# cluster of %d tokens co-occurring in %d state(s); collapsing them\n"
+        k states;
+      Printf.printf
+        "# newly fits %d entrie(s) under the <=5 cap and removes %d list \
+         item(s).\n"
+        newly_fits reduction;
+      Printf.printf "[class <LABEL>]\n";
+      List.iter print_endline members;
+      print_newline ())
+    ranked
+
 (* --- Main Entry Point --- *)
 
 let main () =
@@ -1393,6 +1610,7 @@ let main () =
   let census = ref false in
   let stats = ref false in
   let list_fallbacks = ref false in
+  let suggest_classes = ref false in
   let list_transitions = ref false in
   let cmly_file = ref "" in
   let overrides_file = ref "" in
@@ -1422,6 +1640,14 @@ let main () =
          generic-fallback (\"Syntax error\") state not yet overridden: the \
          state's ## comments, the over-cap candidate list, and the sentence \
          key. Empty output = all covered" );
+      ( "-suggest-classes",
+        Arg.Set suggest_classes,
+        "Propose new [class] blocks for the .config file by \
+         signature-clustering the raw expected sets: unclassed terminals that \
+         always co-occur, kept at >=3 members, ranked by how many entries the \
+         collapse newly fits under the <=5 cap. Paste-ready [class <LABEL>] \
+         blocks with impact # comments; empty output = nothing worth a class. \
+         Needs -cmly; composes with other output modes" );
       ( "-list-transitions",
         Arg.Set list_transitions,
         "List all possible continuations for states" );
@@ -1471,19 +1697,28 @@ let main () =
 
   if
     !generate_messages || !stats || !census || !list_fallbacks
-    || !list_transitions
+    || !suggest_classes || !list_transitions
   then (
     if !cmly_file = "" then (
       Printf.eprintf "Error: -cmly is required for this mode.\n";
       exit 1);
     let terminals, grammar, auto = load_grammar !cmly_file in
     let cfg =
-      if !config_file = "" then empty_config else load_config !config_file
+      if !config_file = "" then empty_config
+      else
+        let cfg = load_config !config_file in
+        (* Rot protection: every config entry must still name a live grammar
+           symbol, in every config-consuming mode. *)
+        check_config_rot ~file:!config_file grammar cfg;
+        cfg
     in
     (* Closer terminals are derived from the token aliases, so a grammar that
        aliases its delimiters gets hints with no configuration. *)
     let closers = closers_of terminals in
-    if !generate_messages || !stats || !census || !list_fallbacks then (
+    if
+      !generate_messages || !stats || !census || !list_fallbacks
+      || !suggest_classes
+    then (
       if !generate_messages then Printf.eprintf "Generating messages...\n";
       let results =
         List.map
@@ -1517,10 +1752,13 @@ let main () =
       if !census then
         output_census (List.map (fun (_, (_, body, _)) -> body) results);
       if !stats then
-        output_stats grammar auto
+        output_stats cfg grammar auto
           (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results);
       if !list_fallbacks then
         output_fallbacks
+          (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results);
+      if !suggest_classes then
+        output_suggest_classes cfg
           (List.map (fun (entry, (_, _, stat)) -> (entry, stat)) results))
     else analyze_transitions closers grammar terminals entries)
   else if

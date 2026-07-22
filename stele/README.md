@@ -92,13 +92,49 @@ Useful modes while working:
 - `-stats` prints the counters: entries, with-an-expected-list, fallbacks (empty
   and over-cap, split by whether an override covers them), delimiter hints,
   missed hints, jargon, cascade depth, and the oracle lines (`state/automaton
-  item-set match`, `unsound claims`, uncovered actions).
+  item-set match`, `unsound claims`, uncovered actions). It ends with one
+  **dormancy line per configured class**, in file order:
+
+  ```
+  class "an operator": collapsed in 33 entries
+  ```
+
+  `N` is how many entries had the class collapse fire in their computed expected
+  list (two or more members co-occurring). It counts the collapse computation,
+  not the shown text: an override or an over-cap overflow may supersede the
+  phrase, yet the class is live while its members co-occur. `N = 0` is legitimate
+  (a class waiting for a qualifying state), but the ratchet now makes a class
+  going quiet after a grammar change visible as a stats diff. A grammar with no
+  classes prints no such line.
 - `-census` prints each distinct message body once with its occurrence count,
   the delimiter-hint depth normalized to `<_>`, so sentence re-picking at most
   bumps a count and a wording change is a one-line diff.
 - `-list-fallbacks` prints a ready-to-paste `.overrides` block for every
   generic-fallback ("Syntax error") state not yet overridden. Empty output means
   every fallback is covered, the condition the stats ratchet pins at zero.
+- `-suggest-classes` proposes new `[class]` blocks for the config. It clusters
+  unclassed terminals by their **signature** (the set of entries whose raw
+  expected list mentions them); terminals with the identical signature always
+  co-occur, so collapsing them never drops a token a single state needed. It
+  keeps clusters of three or more, ranks them by how many entries the collapse
+  newly fits under the cap (then by list-item reduction), and emits paste-ready
+  blocks with impact `#` comments and a `<LABEL>` placeholder:
+
+  ```
+  # cluster of 5 tokens co-occurring in 6 state(s); collapsing them
+  # newly fits 4 entrie(s) under the <=5 cap and removes 24 list item(s).
+  [class <LABEL>]
+  BLOCK
+  IF
+  LOOP
+  TRY
+  TRY_TABLE
+  ```
+
+  It composes with the other output modes and needs `-cmly`. Because arithmetic
+  and comparison operators are often legal in exactly the same states, they share
+  a signature and land in one cluster; splitting them into two readable labels is
+  the human decision the config records.
 
 ## The `.overrides` file
 
@@ -150,6 +186,17 @@ Delimiter **closers** need no config at all: a terminal aliased `)` / `]` / `}`
 is paired with its `(` / `[` / `{` opener automatically. A grammar that aliases
 its delimiters gets hints for free; one that does not simply gets none.
 
+The config is per-grammar: every entry must name a symbol that grammar actually
+has, so two grammars do not share one file.
+
+**Rot guard.** Like the `.overrides` file, the config is checked at load (in
+every config-consuming mode, which already reads the `.cmly`). A `[class]`
+member that is not a terminal, a `[names]` key that is neither a terminal nor a
+nonterminal, or an `[opener-nets]` pattern that matches no terminal is a hard
+error naming the file, section, and stale entry, so a config left behind by a
+grammar change fails the build instead of firing on nothing. Use
+`-suggest-classes` to discover new classes worth adding.
+
 ## The runtime helper
 
 A generated message may carry a `<N>` marker, where `N` is a 1-based index into
@@ -199,6 +246,7 @@ stele/
   test/                      ; the toy calc grammar (the copyable template)
     parser.mly  calc.config  calc.overrides
     calc.expected  calc.stats.expected
+    calc-rot.config  calc-rot.expected  ; the config rot-guard case
     dune
   README.md
 ```

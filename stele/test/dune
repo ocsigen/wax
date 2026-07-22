@@ -76,6 +76,30 @@
  (action
   (diff calc.stats.expected calc.stats)))
 
+; The config rot guard: a stale [class]/[names]/[opener-nets] entry must fail
+; the build. calc-rot.config names a token the grammar lacks; the generator
+; exits non-zero, and its stderr (the "names no symbol of this grammar" failure)
+; is pinned so the guard can never silently stop firing.
+
+(rule
+ (with-stderr-to
+  calc-rot.actual
+  (with-accepted-exit-codes
+   2
+   (run
+    %{project_root}/stele/generate_error_messages.exe
+    -cmly
+    %{dep:calc.cmly}
+    -config
+    %{dep:calc-rot.config}
+    -stats
+    %{dep:calc.auto.messages}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc-rot.expected calc-rot.actual)))
+
 ; 4. The full messages (with comments) fed to menhir --compile-errors, producing
 ;    the Parser_messages module compiled into the library above — proof the
 ;    generated file is well-formed and links against the parser.
