@@ -214,6 +214,85 @@ and first_of_rhs gram visited = function
         StringSet.union f (first_of_rhs gram visited rest)
       else f
 
+(* --- List-element chase (step 3b: singular Expecting wording) --- *)
+
+(* Is [nt] a genuinely *list-shaped* nonterminal — one whose "Expecting …"
+   rendering should name a single element rather than the list? Two shapes
+   qualify: it is directly recursive through itself (right/left-recursive list
+   like [instructions], [exports], [catches]), or a production of it mentions a
+   stdlib list wrapper ([list(…)] / [nonempty_list(…)] / [separated_…] /
+   [loption(separated_…)] / [semi_list(…)], which after menhir's [%inline]
+   expansion surface as generated symbol names carrying "list(" or "separated_").
+   The guard deliberately excludes a *role-refinement* nonterminal like
+   [condition_expression] (whose sole production is [expression]) — there the
+   role word is information and must be kept. A false positive is harmless: the
+   chase below still only renames when a single common element symbol exists. *)
+let is_list_shaped gram nt =
+  let is_list_wrapper s =
+    let contains sub =
+      let ls = String.length s and lsub = String.length sub in
+      let rec go i =
+        i + lsub <= ls && (String.sub s i lsub = sub || go (i + 1))
+      in
+      go 0
+    in
+    gram.is_generated s && (contains "list(" || contains "separated_")
+  in
+  let prods = gram.productions nt in
+  (* Directly recursive through itself ([instructions], [exports], [results],
+     [catches], …). *)
+  List.exists (List.exists (fun s -> s = nt)) prods
+  (* Or a production that *is* a single stdlib list wrapper — the definition of
+     an alias like [string_list : list(STRING)] or [expression_list :
+     separated_list_trailing(",", expression)] (after [%inline], one
+     [loption(separated_…)] symbol). A wrapper that is merely one *field* of a
+     larger construct ([action] holds a [const*], [result_pat] a [float_or_nan+])
+     does not make the construct a list, so the whole-RHS test excludes it. *)
+  || List.exists (function [ s ] -> is_list_wrapper s | _ -> false) prods
+
+(* The single opaque symbol every non-empty production of a list-shaped [nt]
+   begins with — the list *element*'s leftmost mandatory symbol. Chasing looks
+   through nullable prefixes and menhir-generated wrappers (like [expand_symbol]),
+   and treats a recursion back into [nt] as transparent (skipping it: the next
+   iteration's leftmost is what starts a *new* element). Returns [Some sym] when
+   all non-empty productions agree on one symbol, else [None] (e.g. [instructions]
+   has five distinct element openers, [element_list] two — those keep the list
+   name). [sym] may be a terminal (rendered via its alias) or another
+   nonterminal (rendered recursively, itself possibly list-shaped). *)
+let chase_list_element gram nt =
+  let rec leftmost_of_symbol visited s =
+    if StringSet.mem s visited then StringSet.empty
+    else if gram.is_terminal s then StringSet.singleton s
+    else if gram.is_generated s then
+      let visited = StringSet.add s visited in
+      List.fold_left
+        (fun acc rhs -> StringSet.union acc (leftmost_of_rhs visited rhs))
+        StringSet.empty (gram.productions s)
+    else StringSet.singleton s (* user-named nonterminal: opaque element *)
+  and leftmost_of_rhs visited = function
+    | [] -> StringSet.empty
+    | sym :: rest ->
+        (* A recursion into the list itself is skipped (transparent), so a
+           left-recursive [L -> L x] chases to [x]; a nullable symbol is looked
+           past as in the FIRST walk. *)
+        if sym = nt then leftmost_of_rhs visited rest
+        else
+          let f = leftmost_of_symbol visited sym in
+          if gram.nullable sym then
+            StringSet.union f (leftmost_of_rhs visited rest)
+          else f
+  in
+  let leftmosts =
+    List.fold_left
+      (fun acc rhs ->
+        match rhs with
+        | [] -> acc (* skip the empty production of a nullable list *)
+        | _ ->
+            StringSet.union acc (leftmost_of_rhs (StringSet.singleton nt) rhs))
+      StringSet.empty (gram.productions nt)
+  in
+  match StringSet.elements leftmosts with [ x ] -> Some x | _ -> None
+
 (* Helper for StatusMap *)
 let add_status s status map =
   let new_status =
@@ -366,6 +445,14 @@ let special_name = function
   (* Head noun is "list", not the plural tail: keep the article so the
      "… is complete" template agrees ("the list of indices is", not "are"). *)
   | "list_of_indices" -> Some "a list of indices"
+  (* List *elements* the step-3b Expecting-position chase lands on, whose
+     auto-derived name is an abbreviation ("a local decl", "a param group", "a
+     block param type"). Curated here so the singular reads well; the chase only
+     reaches them from a list-shaped parent ([locals], [parameters],
+     [parameter_types]), so no other message is affected. *)
+  | "local_decl" -> Some "a local declaration"
+  | "param_group" -> Some "a parameter group"
+  | "block_param_type" -> Some "a parameter type"
   | _ -> None
 
 (* Collapse the many wax infix-operator continuations into a single readable
@@ -466,6 +553,32 @@ let get_readable_name terminals s =
           (* Keywords/Other Terminals: "TOKEN" -> "'token'" *)
           "'" ^ String.lowercase_ascii s ^ "'")
 
+(* Rendering for the *Expecting* position (step 3b). What the user types next is
+   one element, so a list-shaped nonterminal is rendered as its singular element
+   ("Expecting ')', or an instruction.") rather than the list ("… or
+   instructions."). For a user-named, list-shaped nonterminal the chase names the
+   common element symbol and renders *that* recursively (a terminal by its alias,
+   another nonterminal by its own reading — itself possibly list-shaped); every
+   other symbol, and the *Assuming* subject, keep [get_readable_name]. The chase
+   overrides a curated [special_name] for a list-shaped name when it fires
+   (e.g. [list_of_indices] → "an index", [on_clauses] → the [on]/[[] opener),
+   which is intentional; the curated forms remain in force for the Assuming
+   subject, which names the whole completed sequence. *)
+let rec expecting_name ?(visited = StringSet.empty) terminals gram s =
+  if
+    (not (Hashtbl.mem terminals s))
+    && String.lowercase_ascii s = s
+    && (not (gram.is_terminal s))
+    && (not (gram.is_generated s))
+    && (not (StringSet.mem s visited))
+    && is_list_shaped gram s
+  then
+    match chase_list_element gram s with
+    | Some elem ->
+        expecting_name ~visited:(StringSet.add s visited) terminals gram elem
+    | None -> get_readable_name terminals s
+  else get_readable_name terminals s
+
 (* --- Self-Lints and Statistics --- *)
 
 type message_stat = {
@@ -543,8 +656,11 @@ let renders_as_jargon terminals s =
 let generate_message grammar terminals ~comments entry =
   let d = entry.Parse_messages.data in
 
-  (* Heuristic: Formatting Logic *)
+  (* Heuristic: Formatting Logic. [readable_name] renders the Assuming subject
+     (the whole completed sequence — keeps the list name); [expecting_name]
+     renders the Expecting list (one element — singularises a list-shaped name). *)
   let readable_name = get_readable_name terminals in
+  let expecting_name = expecting_name terminals grammar in
 
   (* The final expected list for a set of valid symbols: drop any anonymous
      residue, then collapse an operator class only when it has >=2 members
@@ -574,7 +690,7 @@ let generate_message grammar terminals ~comments entry =
       |> List.map (fun s ->
           match classify_symbol s with
           | Some c when StringMap.find c class_counts >= 2 -> c
-          | _ -> readable_name s)
+          | _ -> expecting_name s)
       |> List.sort_uniq String.compare
     in
     (expected_raw, expected_symbols)

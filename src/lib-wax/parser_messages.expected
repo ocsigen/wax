@@ -53,7 +53,7 @@ Expecting a heap type.
 
 parse: TYPE IDENT EQUAL LBRACE WHILE
 
-Expecting '..', '}', or a structure type.
+Expecting '..', '}', or a structure type field.
 <1>This '{' opens the enclosing construct.
 
 parse: TYPE IDENT EQUAL LBRACE DOTDOT WHILE
@@ -63,7 +63,7 @@ Expecting ',', or '}'.
 
 parse: TYPE IDENT EQUAL LBRACE DOTDOT COMMA WHILE
 
-Expecting '}', or a structure type.
+Expecting '}', or a structure type field.
 <3>This '{' opens the enclosing construct.
 
 parse: TYPE IDENT EQUAL LBRACE IDENT WHILE
@@ -90,7 +90,7 @@ Expecting a function type.
 
 parse: FN IDENT LPAREN WHILE
 
-Expecting ')', or a parameter list.
+Expecting ')', or a function parameter.
 <1>This '(' opens the enclosing construct.
 
 parse: FN IDENT LPAREN IDENT WHILE
@@ -116,7 +116,7 @@ Expecting a result type.
 
 parse: FN IDENT LPAREN RPAREN ARROW LPAREN WHILE
 
-Expecting ')', or a result type.
+Expecting ')', or a value type.
 <1>This '(' opens the enclosing construct.
 
 parse: FN IDENT LPAREN RPAREN ARROW LPAREN IDENT WHILE
@@ -195,7 +195,7 @@ Expecting a block, or a block type.
 
 parse: FN IDENT LBRACE TRY_LEGACY LPAREN WHILE
 
-Expecting ')', or parameter types.
+Expecting ')', or a parameter type.
 <1>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE TRY_LEGACY LPAREN IDENT WHILE
@@ -336,7 +336,7 @@ Expecting '('.
 
 parse: FN IDENT LBRACE SUSPEND IDENT LPAREN UNREACHABLE
 
-Expecting ')', or an expression list.
+Expecting ')', or an expression.
 <1>This '(' opens the enclosing construct.
 
 parse: IMPORT STRING SHARP WHILE
@@ -413,7 +413,7 @@ Expecting ',', ':', '|', or '}'.
 
 parse: FN IDENT LBRACE LBRACE IDENT PIPE WHILE
 
-Expecting '..', '}', or a structure.
+Expecting '..', '}', or a structure field.
 <3>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE IDENT PIPE DOTDOT WHILE
@@ -523,7 +523,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR LPAREN UNREACHABLE
 
-Expecting ')', or an argument list.
+Expecting ')', or an argument.
 <1>This '(' opens the enclosing construct.
 
 parse: CONST IDENT EQUAL CHAR LPAREN TAG WHILE
@@ -953,7 +953,7 @@ Assuming that the structure field is complete, expecting ',', or '}'.
 
 parse: FN IDENT LBRACE LBRACE IDENT COMMA WHILE
 
-Expecting '}', or a structure.
+Expecting '}', or a structure field.
 <3>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE IDENT COMMA IDENT QUOTE
@@ -967,7 +967,7 @@ Expecting '|'.
 
 parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE WHILE
 
-Expecting '..', '}', or a structure.
+Expecting '..', '}', or a structure field.
 <3>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE DOTDOT WHILE
@@ -1026,7 +1026,7 @@ Assuming that the parenthesized expression is complete, expecting ')'.
 
 parse: FN IDENT LBRACE LPAREN CHAR COMMA UNREACHABLE
 
-Expecting ')', or an expression list.
+Expecting ')', or an expression.
 <3>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LPAREN CHAR COMMA CHAR SHARP
@@ -1097,7 +1097,7 @@ Expecting '('.
 
 parse: FN IDENT LBRACE THROW IDENT LPAREN UNREACHABLE
 
-Expecting ')', or an expression list.
+Expecting ')', or an expression.
 <1>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE THROW IDENT LPAREN CHAR SHARP
@@ -1182,7 +1182,7 @@ Syntax error
 
 parse: FN IDENT LBRACE BECOME CHAR LPAREN UNREACHABLE
 
-Expecting ')', or an argument list.
+Expecting ')', or an argument.
 <1>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE BECOME CHAR LPAREN CHAR SHARP
@@ -1815,7 +1815,7 @@ Expecting ';', or '='.
 
 parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET EQUAL WHILE
 
-Expecting a data init.
+Expecting a data elem.
 
 parse: DATA IDENT EQUAL LBRACKET WHILE
 
@@ -1989,7 +1989,7 @@ Expecting '['.
 
 parse: ELEM IDENT COLON AMPERSAND CONT EQUAL LBRACKET UNREACHABLE
 
-Expecting ']', or an expression list.
+Expecting ']', or an expression.
 <1>This '[' opens the enclosing construct.
 
 parse: ELEM IDENT COLON AMPERSAND CONT EQUAL LBRACKET CHAR SHARP
@@ -2028,7 +2028,7 @@ Expecting '['.
 
 parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL LBRACKET UNREACHABLE
 
-Expecting ']', or an expression list.
+Expecting ']', or an expression.
 <1>This '[' opens the enclosing construct.
 
 parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL LBRACKET CHAR SHARP
@@ -2050,7 +2050,7 @@ Expecting ';', '=', or '@'.
 
 parse: DATA IDENT EQUAL WHILE
 
-Expecting a data init.
+Expecting a data elem.
 
 parse: DATA IDENT AT WHILE
 
@@ -2075,7 +2075,7 @@ Expecting ';', or '='.
 
 parse: DATA IDENT AT IDENT LBRACKET CHAR RBRACKET EQUAL WHILE
 
-Expecting a data init.
+Expecting a data elem.
 
 parse: TAG IDENT LPAREN RPAREN QUOTE
 

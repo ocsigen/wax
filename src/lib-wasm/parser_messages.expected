@@ -8,7 +8,7 @@ Expecting 'id'.
 
 parse_script: STRING_ANNOT ID WAIT
 
-Expecting ')', a string list, or an index.
+Expecting ')', a string, or an index.
 <2>This '(' opens the enclosing construct.
 
 parse_script: STRING_ANNOT ID STRING NAT
@@ -211,11 +211,11 @@ Expecting ')'.
 
 parse: LPAREN TAG LPAREN_RESULT RPAREN WAIT
 
-Expecting results.
+Expecting '(result'.
 
 parse: LPAREN TAG LPAREN_PARAM RPAREN WAIT
 
-Expecting parameters.
+Expecting a parameter group.
 
 parse_script: LPAREN_TYPE LPAREN CONT WAIT
 
@@ -517,12 +517,12 @@ Syntax error
 
 parse: LPAREN TAG WAIT
 
-Expecting '(import', ')', 'id', a type use, or exports.
+Expecting '(export', '(import', ')', 'id', or a type use.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG ID WAIT
 
-Expecting '(import', ')', a type use, or exports.
+Expecting '(export', '(import', ')', or a type use.
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_EXPORT WAIT
@@ -536,7 +536,7 @@ Expecting ')'.
 
 parse: LPAREN TAG LPAREN_EXPORT STRING RPAREN WAIT
 
-Expecting exports.
+Expecting '(export'.
 
 parse: LPAREN TAG LPAREN_EXPORT STRING RPAREN VEC_TERN_OP
 
@@ -573,11 +573,11 @@ Assuming that the type use is complete, expecting ')'.
 
 parse: LPAREN TABLE WAIT
 
-Expecting 'id', or exports.
+Expecting '(export', or 'id'.
 
 parse: LPAREN TABLE ID WAIT
 
-Expecting '(import', a reference type, a table type, an address type, or exports.
+Expecting '(export', '(import', a reference type, a table type, or an address type.
 
 parse: LPAREN TABLE LPAREN_EXPORT STRING RPAREN VEC_TERN_OP
 
@@ -926,7 +926,7 @@ Expecting ')', or an unnamed param.
 
 parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM RPAREN WAIT
 
-Expecting parameters without bindings.
+Expecting '(param'.
 
 parse: LPAREN FUNC TRY_TABLE LPAREN_RESULT RPAREN RPAREN
 
@@ -1066,7 +1066,7 @@ Expecting an index.
 
 parse: LPAREN FUNC STRING_ANNOT WAIT
 
-Expecting ')', a string list, or an index.
+Expecting ')', a string, or an index.
 <1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC STRING_ANNOT STRING NAT
@@ -1076,7 +1076,7 @@ Assuming that the string list is complete, expecting ')'.
 
 parse: LPAREN FUNC SELECT WAIT
 
-Expecting a select result type.
+Expecting '(result'.
 
 parse: LPAREN FUNC SELECT LPAREN_RESULT WAIT
 
@@ -1085,7 +1085,7 @@ Expecting ')'.
 
 parse: LPAREN FUNC SELECT LPAREN_RESULT RPAREN WAIT
 
-Expecting a select result type.
+Expecting '(result'.
 
 parse: LPAREN FUNC RETURN_CALL_REF WAIT
 
@@ -1109,7 +1109,7 @@ Expecting an index.
 
 parse: LPAREN FUNC RESUME_THROW_REF NAT NAT
 
-Expecting an on-clause list.
+Expecting '(on'.
 
 parse: LPAREN FUNC RESUME NAT LPAREN_ON WAIT
 
@@ -1126,7 +1126,7 @@ Expecting ')'.
 
 parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT SWITCH RPAREN WAIT
 
-Expecting an on-clause list.
+Expecting '(on'.
 
 parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT NAT NAT
 
@@ -1135,7 +1135,7 @@ Expecting ')'.
 
 parse: LPAREN FUNC RESUME NAT LPAREN_ON NAT NAT RPAREN WAIT
 
-Expecting an on-clause list.
+Expecting '(on'.
 
 parse: LPAREN FUNC RESUME_THROW WAIT
 
@@ -1147,7 +1147,7 @@ Expecting an index.
 
 parse: LPAREN FUNC RESUME_THROW NAT NAT NAT
 
-Expecting an on-clause list.
+Expecting '(on'.
 
 parse: LPAREN FUNC RESUME WAIT
 
@@ -1155,7 +1155,7 @@ Expecting an index.
 
 parse: LPAREN FUNC RESUME NAT NAT
 
-Expecting an on-clause list.
+Expecting '(on'.
 
 parse: LPAREN FUNC REF_TEST WAIT
 
@@ -1727,15 +1727,15 @@ Assuming that the instructions are complete, expecting ')'.
 
 parse: LPAREN DATA LPAREN IF WAIT
 
-Expecting a block type, a folded then, a label, or folded instructions.
+Expecting a block type, a folded instruction, a folded then, or a label.
 
 parse: LPAREN DATA LPAREN IF ID CATCH_ALL
 
-Expecting a block type, a folded then, or folded instructions.
+Expecting a block type, a folded instruction, or a folded then.
 
 parse: LPAREN DATA LPAREN IF LPAREN_RESULT RPAREN LPAREN_CATCH_REF
 
-Assuming that the block type is complete, expecting a folded then, or folded instructions.
+Assuming that the block type is complete, expecting a folded instruction, or a folded then.
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN WAIT
 
@@ -1773,7 +1773,7 @@ Expecting ')'.
 
 parse: LPAREN DATA LPAREN IF STRING_ANNOT RPAREN WAIT
 
-Expecting '(then', or folded instructions.
+Expecting '(then', or a folded instruction.
 
 parse: LPAREN DATA LPAREN BLOCK WAIT
 
@@ -1940,11 +1940,11 @@ Syntax error
 
 parse: LPAREN MEMORY WAIT
 
-Expecting 'id', or exports.
+Expecting '(export', or 'id'.
 
 parse: LPAREN MEMORY ID WAIT
 
-Expecting exports.
+Expecting '(export'.
 
 parse: LPAREN MEMORY LPAREN_EXPORT STRING RPAREN VEC_TERN_OP
 
@@ -1978,7 +1978,7 @@ Expecting 'data', or 'pagesize'.
 
 parse: LPAREN MEMORY LPAREN DATA WAIT
 
-Expecting ')', or a data string.
+Expecting ')', or a data elem.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA STRING LPAREN WAIT
@@ -2189,7 +2189,7 @@ Expecting 'data'.
 
 parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN DATA WAIT
 
-Expecting ')', or a data string.
+Expecting ')', or a data elem.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN MEMORY LPAREN PAGESIZE NAT RPAREN LPAREN DATA RPAREN WAIT
@@ -2212,7 +2212,7 @@ Expecting 'data', or 'pagesize'.
 
 parse: LPAREN MEMORY I32 LPAREN DATA WAIT
 
-Expecting ')', or a data string.
+Expecting ')', or a data elem.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN MEMORY I32 LPAREN DATA RPAREN WAIT
@@ -2230,7 +2230,7 @@ Expecting 'data'.
 
 parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN DATA WAIT
 
-Expecting ')', or a data string.
+Expecting ')', or a data elem.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN MEMORY I32 LPAREN PAGESIZE NAT RPAREN LPAREN DATA RPAREN WAIT
@@ -2240,11 +2240,11 @@ Expecting ')'.
 
 parse: LPAREN GLOBAL WAIT
 
-Expecting '(import', 'id', a global type, or exports.
+Expecting '(export', '(import', 'id', or a global type.
 
 parse: LPAREN GLOBAL ID WAIT
 
-Expecting '(import', a global type, or exports.
+Expecting '(export', '(import', or a global type.
 
 parse: LPAREN GLOBAL LPAREN_EXPORT STRING RPAREN VEC_TERN_OP
 
@@ -2284,15 +2284,15 @@ Assuming that the expression is complete, expecting ')'.
 
 parse: LPAREN FUNC WAIT
 
-Expecting 'id', or exports.
+Expecting '(export', or 'id'.
 
 parse: LPAREN FUNC ID WAIT
 
-Expecting exports.
+Expecting '(export'.
 
 parse: LPAREN FUNC LPAREN_EXPORT STRING RPAREN V128
 
-Assuming that the exports are complete, expecting '(import', ')', a type use, instructions, or locals.
+Assuming that the exports are complete, expecting '(import', ')', a local declaration, a type use, or instructions.
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_IMPORT WAIT
@@ -2339,7 +2339,7 @@ Assuming that the type use is complete, expecting ')'.
 
 parse: LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
 
-Assuming that the type use is complete, expecting ')', instructions, or locals.
+Assuming that the type use is complete, expecting ')', a local declaration, or instructions.
 <5>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_LOCAL ID WAIT
@@ -2363,7 +2363,7 @@ Assuming that the instructions are complete, expecting ')'.
 
 parse: LPAREN FUNC LPAREN_LOCAL RPAREN WAIT
 
-Expecting locals.
+Expecting a local declaration.
 
 parse: LPAREN ELEM WAIT
 
@@ -2439,12 +2439,12 @@ Assuming that the element list is complete, expecting ')'.
 
 parse: LPAREN DATA WAIT
 
-Expecting '(', ')', 'id', a data string, or an offset.
+Expecting '(', ')', 'id', a data elem, or an offset.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA ID WAIT
 
-Expecting '(', ')', a data string, or an offset.
+Expecting '(', ')', a data elem, or an offset.
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN WAIT
@@ -2466,12 +2466,12 @@ Expecting an offset.
 
 parse: LPAREN DATA LPAREN MEMORY NAT RPAREN STRING_ANNOT RPAREN WAIT
 
-Expecting ')', or a data string.
+Expecting ')', or a data elem.
 <8>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA STRING_ANNOT RPAREN WAIT
 
-Expecting ')', or a data string.
+Expecting ')', or a data elem.
 <4>This '(' opens the enclosing construct.
 
 parse_script: IF_ANNOT WAIT
@@ -2570,7 +2570,7 @@ Expecting '(', or ')'.
 
 parse_script: LPAREN SCRIPT WAIT
 
-Expecting ')', 'id', or a script.
+Expecting ')', 'id', or a cmd.
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP

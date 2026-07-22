@@ -18,7 +18,7 @@ line is reported too:
     ·          ^^^^^^^^^^^^^^
   2 │ fn b( { }
   3 │ 
-  Error: Expecting ')', or a parameter list.
+  Error: Expecting ')', or a function parameter.
    ──➤  stmt-raise.wax:2:7
   1 │ fn a() { #[else] { 1; } }
   2 │ fn b( { }
@@ -33,7 +33,7 @@ errors are reported (this case already worked via the backstop; it must not
 regress):
 
   $ wax check --all-errors module-else.wax
-  Error: Expecting ')', or a parameter list.
+  Error: Expecting ')', or a function parameter.
    ──➤  module-else.wax:3:7
   1 │ fn a() { }
   2 │ #[else] { fn e() {} }
@@ -61,7 +61,7 @@ and recovery goes on to report the type-less `(global $g)`:
     ·                     ^
   3 │   (func $f (result i32) (i32.const 1))
   4 │   (global $g)
-  Error: Expecting '(import', a global type, or exports.
+  Error: Expecting '(export', '(import', or a global type.
    ──➤  pagesize.wat:4:13
   2 │   (memory (pagesize 3))
   3 │   (func $f (result i32) (i32.const 1))
