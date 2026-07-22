@@ -55,3 +55,33 @@
  (with-stdout-to
   parser_messages.messages
   (run %{project_root}/scripts/generate_error_messages.exe -terminals %{dep:parser.mly} -generate-messages %{dep:parser_messages.auto.messages})))
+
+; Golden copy of the generated messages, without the ## comments (state
+; numbers, LR items) that churn wholesale on any grammar change. The stripped
+; sentence-to-message projection is stable, so its diff shows exactly the
+; user-visible error-message impact of a grammar or generator change. Accept
+; with `dune promote`; never hand-edit parser_messages.expected.
+(rule
+ (with-stdout-to
+  parser_messages.actual
+  (run %{project_root}/scripts/generate_error_messages.exe -terminals %{dep:parser.mly} -generate-messages -no-comments %{dep:parser_messages.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff parser_messages.expected parser_messages.actual)))
+
+; Pinned message-quality summary: aggregate counts (fallbacks, hints,
+; spurious-reduction usage) plus the generator's self-lints (missed delimiter
+; hints from a stale opener table, jargon-rendered tokens, hints computed
+; without a stack suffix). A regression fails `dune runtest`; an improvement
+; is accepted with `dune promote`.
+(rule
+ (with-stdout-to
+  parser_messages.stats
+  (run %{project_root}/scripts/generate_error_messages.exe -terminals %{dep:parser.mly} -stats %{dep:parser_messages.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff parser_messages.stats.expected parser_messages.stats)))

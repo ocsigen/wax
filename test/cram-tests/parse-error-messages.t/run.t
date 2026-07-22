@@ -70,3 +70,16 @@ begins at the paren), and the hint shrinks the range to that one character:
     ·               ^ This '(' opens the enclosing construct.
   2 │ 
   [128]
+
+The delimiter-opener table is derived from the grammar's token aliases, so
+compound WAT openers that the old hand-list forgot — here `(descriptor`, from
+the custom-descriptors proposal — are hinted too, with the caret on their '(':
+
+  $ wax check descriptor.wat
+  Error: Expecting ')'.
+   ──➤  descriptor.wat:1:29
+  1 │ (module (type (descriptor 0 0)))
+    ·                             ^
+    ·               ^ This '(' opens the enclosing construct.
+  2 │ 
+  [128]

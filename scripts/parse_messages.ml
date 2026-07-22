@@ -216,6 +216,11 @@ let parse_entry sentence_block message_block =
         original_comments = comment_lines;
       }
 
+(* The input is always the output of [menhir --list-errors]: a strict
+   alternation of a sentence block (the entry-point sentence plus [##] comment
+   lines describing the error state) and a message block, separated by blank
+   lines. Hand-curated files that group several sentences under one message are
+   NOT supported — [pair_blocks] assumes one sentence block per message block. *)
 let parse_file filename =
   let lines = read_lines filename in
   let blocks = split_into_blocks lines in

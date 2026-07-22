@@ -1,0 +1,8 @@
+entries: 710
+with an expected list: 692
+using the spurious-reduction template: 65
+generic fallback (empty expected list): 0
+generic fallback (expected list over 5): 18
+delimiter hints: 189
+missed delimiter hints (opener on stack, none matched): 0
+jargon-rendered tokens: 0

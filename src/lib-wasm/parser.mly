@@ -46,18 +46,18 @@
 %token REC
 %token SUB
 %token FINAL
-%token LPAREN_CATCH
-%token LPAREN_CATCH_ALL
-%token LPAREN_CATCH_ALL_REF
-%token LPAREN_CATCH_REF
-%token LPAREN_ON
-%token LPAREN_EXPORT
-%token LPAREN_IMPORT
-%token LPAREN_LOCAL
-%token LPAREN_PARAM
-%token LPAREN_RESULT
-%token LPAREN_THEN
-%token LPAREN_TYPE
+%token LPAREN_CATCH "(catch"
+%token LPAREN_CATCH_ALL "(catch_all"
+%token LPAREN_CATCH_ALL_REF "(catch_all_ref"
+%token LPAREN_CATCH_REF "(catch_ref"
+%token LPAREN_ON "(on"
+%token LPAREN_EXPORT "(export"
+%token LPAREN_IMPORT "(import"
+%token LPAREN_LOCAL "(local"
+%token LPAREN_PARAM "(param"
+%token LPAREN_RESULT "(result"
+%token LPAREN_THEN "(then"
+%token LPAREN_TYPE "(type"
 %token GLOBAL
 %token START
 %token ELEM
@@ -171,10 +171,13 @@
 %token <string> MEM_ALIGN
 %token <string> MEM_OFFSET
 (* Binaryen extensions *)
-%token STRING_ANNOT CHAR_ANNOT
-%token FEATURE_ANNOT
-%token BRANCH_HINT_ANNOT
-%token IF_ANNOT THEN_ANNOT ELSE_ANNOT
+%token STRING_ANNOT "(@string"
+%token CHAR_ANNOT "(@char"
+%token FEATURE_ANNOT "(@feature"
+%token BRANCH_HINT_ANNOT "(@metadata.code.branch_hint"
+%token IF_ANNOT "(@if"
+%token THEN_ANNOT "(@then"
+%token ELSE_ANNOT "(@else"
 %token AND OR NOT
 %token CMP_EQ CMP_NE CMP_LT CMP_GT CMP_LE CMP_GE
 

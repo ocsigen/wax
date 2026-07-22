@@ -1,0 +1,2125 @@
+dummy_ctx: WHILE
+
+Expecting a dummy ctx.
+
+parse: TYPE WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT WHILE
+
+Expecting ':', or '='.
+
+parse: TYPE IDENT COLON WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT COLON IDENT WHILE
+
+Expecting '='.
+
+parse: TYPE IDENT EQUAL WHILE
+
+Expecting 'describes', 'descriptor', 'open', or a composite type.
+
+parse: TYPE IDENT EQUAL OPEN WHILE
+
+Expecting 'describes', 'descriptor', or a composite type.
+
+parse: TYPE IDENT EQUAL LBRACKET WHILE
+
+Expecting a field type.
+
+parse: TYPE IDENT EQUAL LBRACKET IDENT WHILE
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: TYPE IDENT EQUAL LBRACKET MUT WHILE
+
+Expecting a storage type.
+
+parse: TABLE IDENT COLON AMPERSAND WHILE
+
+Expecting '!', '?', or a heap type.
+
+parse: TABLE IDENT COLON AMPERSAND QUESTIONMARK WHILE
+
+Expecting '!', or a heap type.
+
+parse: TABLE IDENT COLON AMPERSAND BANG WHILE
+
+Expecting a heap type.
+
+parse: TYPE IDENT EQUAL LBRACE WHILE
+
+Expecting '..', or a structure type.
+
+parse: TYPE IDENT EQUAL LBRACE DOTDOT WHILE
+
+Expecting ',', or '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: TYPE IDENT EQUAL LBRACE DOTDOT COMMA WHILE
+
+Expecting a structure type.
+
+parse: TYPE IDENT EQUAL LBRACE IDENT WHILE
+
+Expecting ':'.
+
+parse: TYPE IDENT EQUAL LBRACE IDENT COLON WHILE
+
+Expecting a field type.
+
+parse: TYPE IDENT EQUAL LBRACE DOTDOT COMMA IDENT COLON IDENT IDENT
+
+Assuming that the structure type is complete, expecting '}'.
+<4>This '{' opens the enclosing construct.
+
+parse: TYPE IDENT EQUAL LBRACE IDENT COLON IDENT IDENT
+
+Assuming that the structure type is complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: TYPE IDENT EQUAL FN WHILE
+
+Expecting a function type.
+
+parse: FN IDENT LPAREN WHILE
+
+Expecting a parameter list.
+
+parse: FN IDENT LPAREN IDENT WHILE
+
+Expecting ')', ',', or ':'.
+
+parse: FN IDENT LPAREN IDENT COLON WHILE
+
+Expecting a value type.
+
+parse: FN IDENT LPAREN IDENT COMMA COMMA
+
+Assuming that the parameter list is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LPAREN RPAREN WHILE
+
+Syntax error
+
+parse: FN IDENT LPAREN RPAREN ARROW WHILE
+
+Expecting a result type.
+
+parse: FN IDENT LPAREN RPAREN ARROW LPAREN WHILE
+
+Expecting ')', or a result type.
+<1>This '(' opens the enclosing construct.
+
+parse: FN IDENT LPAREN RPAREN ARROW LPAREN IDENT WHILE
+
+Assuming that the result type is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: TYPE IDENT EQUAL DESCRIPTOR WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT EQUAL DESCRIPTOR IDENT WHILE
+
+Expecting a composite type.
+
+parse: TYPE IDENT EQUAL CONT WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT EQUAL DESCRIPTOR IDENT LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: TYPE IDENT EQUAL DESCRIBES WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT EQUAL DESCRIBES IDENT WHILE
+
+Expecting 'descriptor', or a composite type.
+
+parse: TYPE IDENT EQUAL DESCRIBES IDENT DESCRIPTOR WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT EQUAL DESCRIBES IDENT DESCRIPTOR IDENT WHILE
+
+Expecting a composite type.
+
+parse: TYPE IDENT EQUAL DESCRIBES IDENT DESCRIPTOR IDENT LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: TYPE IDENT EQUAL DESCRIBES IDENT LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: TYPE IDENT EQUAL LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: SHARP WHILE
+
+Expecting '!', or '['.
+
+parse: SHARP LBRACKET WHILE
+
+Expecting 'else', 'if', 'import', or an identifier.
+
+parse: SHARP LBRACKET IMPORT WHILE
+
+Expecting '=', or an attribute guard.
+
+parse: SHARP LBRACKET IMPORT EQUAL UNREACHABLE
+
+Expecting an attribute expression.
+
+parse: FN IDENT LBRACE WHILE UNREACHABLE
+
+Expecting a condition expression.
+
+parse: FN IDENT LBRACE TRY_LEGACY WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE TRY_LEGACY LPAREN WHILE
+
+Expecting parameter types.
+
+parse: FN IDENT LBRACE TRY_LEGACY LPAREN IDENT WHILE
+
+Assuming that the parameter types are complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE TRY_LEGACY LPAREN RPAREN ARROW WHILE
+
+Expecting a result type.
+
+parse: FN IDENT LBRACE TRY_LEGACY IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE UNDERSCORE EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE TRY WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE TRY IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE WHILE
+
+Expecting 'catch'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH WHILE
+
+Expecting '[', or '{'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET UNDERSCORE WHILE
+
+Expecting '&', or '->'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET UNDERSCORE ARROW WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET UNDERSCORE ARROW QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET UNDERSCORE AMPERSAND WHILE
+
+Expecting '->'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET UNDERSCORE AMPERSAND ARROW WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET UNDERSCORE AMPERSAND ARROW QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT WHILE
+
+Expecting '&', or '->'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT ARROW WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT ARROW QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT AMPERSAND WHILE
+
+Expecting '->'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT AMPERSAND ARROW WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT AMPERSAND ARROW QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET COMMA
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT WHILE
+
+Expecting '&', or '=>'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT AMPERSAND WHILE
+
+Expecting '=>'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT AMPERSAND FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE WHILE
+
+Expecting '}', or a trycatch all.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE WHILE
+
+Expecting '&', or '=>'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE AMPERSAND WHILE
+
+Expecting '=>'.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE AMPERSAND FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE FATARROW LBRACE RBRACE WHILE
+
+Expecting '}'.
+<3>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SUSPEND WHILE
+
+Expecting a tag name.
+
+parse: FN IDENT LBRACE SUSPEND IDENT WHILE
+
+Expecting '('.
+
+parse: FN IDENT LBRACE SUSPEND IDENT LPAREN UNREACHABLE
+
+Expecting an expression list.
+
+parse: IMPORT STRING SHARP WHILE
+
+Expecting '['.
+
+parse: IMPORT STRING SHARP LBRACKET WHILE
+
+Expecting 'import', or an identifier.
+
+parse: SHARP LBRACKET IDENT WHILE
+
+Expecting '=', or an attribute guard.
+
+parse: SHARP LBRACKET IDENT EQUAL UNREACHABLE
+
+Expecting an attribute expression.
+
+parse: FN IDENT LBRACE QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE QUOTE AS WHILE
+
+Expecting ':'.
+
+parse: FN IDENT LBRACE QUOTE AS COLON UNREACHABLE
+
+Syntax error
+
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE UNREACHABLE
+
+Expecting a condition expression.
+
+parse: FN IDENT LBRACE PLUS UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE MINUS UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE MATCH UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE LPAREN UNREACHABLE
+
+Expecting a parenthesized expression, or an expression.
+
+parse: FN IDENT LBRACE LOOP WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE LOOP IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE LBRACKET UNREACHABLE
+
+Expecting an array body, or an identifier.
+
+parse: FN IDENT LBRACE LBRACE WHILE
+
+Expecting '..', '}', a descriptor operand, a structure field, or an identifier.
+<1>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE IDENT WHILE
+
+Expecting ',', ':', '|', or '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE IDENT PIPE WHILE
+
+Expecting '..', or a structure.
+
+parse: FN IDENT LBRACE LBRACE IDENT PIPE DOTDOT WHILE
+
+Expecting '}'.
+<4>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE IDENT COLON UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE IF UNREACHABLE
+
+Expecting a condition expression.
+
+parse: CONST IDENT EQUAL IDENT SHARP WHILE
+
+Expecting a string.
+
+parse: CONST IDENT EQUAL IDENT COLONEQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE DO WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE DO IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE DISPATCH UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_ON_NULL WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE BR_ON_NULL QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_ON_NON_NULL WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS WHILE
+
+Expecting '?', a descriptor operand, or a reference type.
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_ON_CAST WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS WHILE
+
+Expecting '?', a descriptor operand, or a reference type.
+
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_IF WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE BR_IF QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE BR_IF QUOTE AS UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BANG UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LPAREN UNREACHABLE
+
+Expecting an argument list.
+
+parse: CONST IDENT EQUAL CHAR LPAREN TAG WHILE
+
+Expecting ':'.
+
+parse: CONST IDENT EQUAL CHAR LPAREN TAG COLON UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR STAR UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR ON WHILE
+
+Expecting an on-clause list.
+
+parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT WHILE
+
+Expecting '->'.
+
+parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT ARROW WHILE
+
+Expecting ''', or an identifier.
+
+parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT ARROW QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: CONST IDENT EQUAL CHAR ON LBRACKET COMMA
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: CONST IDENT EQUAL CHAR LBRACKET UNREACHABLE
+
+Expecting an index expression.
+
+parse: CONST IDENT EQUAL CHAR LBRACKET CHAR QUOTE
+
+Assuming that the index expression is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: CONST IDENT EQUAL CHAR LBRACKET CHAR RBRACKET EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR SLASHU UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR IS WHILE
+
+Expecting a reference type.
+
+parse: CONST IDENT EQUAL CHAR DOT WHILE
+
+Expecting 'descriptor', or an identifier.
+
+parse: CONST IDENT EQUAL CHAR DOT IDENT EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR SLASHS UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR AS WHILE
+
+Expecting '?', a cast type, or a descriptor operand.
+
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND WHILE
+
+Expecting '!', '?', 'fn', or a heap type.
+
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND QUESTIONMARK WHILE
+
+Expecting '!', 'fn', or a heap type.
+
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN WHILE
+
+Expecting a function type.
+
+parse: CONST IDENT EQUAL CHAR AS QUESTIONMARK WHILE
+
+Expecting a descriptor operand.
+
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR WHILE
+
+Expecting '('.
+
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR ELSE
+
+Syntax error
+<2>This '(' opens the enclosing construct.
+
+parse: CONST IDENT EQUAL CHAR SLASH UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IMPORT RBRACKET UNREACHABLE
+
+Expecting a block, or a branch expression.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IMPORT RBRACKET SHARP LBRACKET IMPORT RBRACKET UNREACHABLE
+
+Expecting a block.
+
+parse: CONST IDENT EQUAL CHAR SHRU UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR PLUS UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR PERCENTU UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR PERCENTS UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR MINUS UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR SHRS UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR SHL UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR QUESTIONMARK UNREACHABLE
+
+Expecting a then branch.
+
+parse: CONST IDENT EQUAL CHAR QUESTIONMARK CHAR QUOTE
+
+Assuming that the then branch is complete, expecting ':'.
+
+parse: CONST IDENT EQUAL CHAR QUESTIONMARK CHAR COLON UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR PIPE UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR CARET UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR AMPERSAND UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LTU UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LTU CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR LTS UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LTS CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR LT UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LT CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR LEU UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LEU CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR LES UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LES CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR LE UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LE CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR GTU UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR GTU CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR GTS UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR GTS CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR GT UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR GT CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR GEU UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR GEU CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR GES UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR GES CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR GE UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR GE CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR EQUALEQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR EQUALEQUAL CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL CHAR BANGEQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR BANGEQUAL CHAR QUOTE
+
+Syntax error
+
+parse: CONST IDENT EQUAL IDENT COLONCOLON WHILE
+
+Expecting an identifier.
+
+parse: CONST IDENT EQUAL CHAR LPAREN IDENT COLON UNREACHABLE
+
+Expecting an expression.
+
+parse: CONST IDENT EQUAL CHAR LPAREN CHAR SHARP
+
+Assuming that the argument list is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE BR_IF QUOTE AS CHAR QUOTE
+
+Syntax error
+
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT CHAR QUOTE
+
+Syntax error
+
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS QUESTIONMARK WHILE
+
+Expecting a descriptor operand.
+
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
+
+Syntax error
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT CHAR QUOTE
+
+Syntax error
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS QUESTIONMARK WHILE
+
+Expecting a descriptor operand.
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
+
+Syntax error
+
+parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS CHAR QUOTE
+
+Syntax error
+
+parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS CHAR QUOTE
+
+Syntax error
+
+parse: FN IDENT LBRACE DISPATCH CHAR ELSE
+
+Syntax error
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET UNREACHABLE
+
+Expecting a labels else, or an index expression.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET QUOTE AS WHILE
+
+Expecting ',', or ':'.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET QUOTE AS COMMA WHILE
+
+Expecting a labels else.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET QUOTE AS WHILE
+
+Expecting ','.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET ELSE WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET ELSE QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS WHILE
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET WHILE
+
+Expecting '{'.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE QUOTE AS WHILE
+
+Expecting ':'.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE QUOTE AS COLON WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET ELSE QUOTE AS RBRACKET LBRACE WHILE
+
+Expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE IF CHAR QUOTE
+
+Assuming that the condition expression is complete, expecting '=>', or a block.
+
+parse: FN IDENT LBRACE IF CHAR FATARROW WHILE
+
+Expecting a block type.
+
+parse: FN IDENT LBRACE IF CHAR FATARROW IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE IF CHAR LBRACE RBRACE ELSE WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE LBRACE IDENT PIPE IDENT QUOTE
+
+Assuming that the structure is complete, expecting '}'.
+<4>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE DOTDOT WHILE
+
+Expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE IDENT COLON CHAR COLON
+
+Assuming that the structure field is complete, expecting ',', or '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE IDENT COMMA WHILE
+
+Expecting a structure.
+
+parse: FN IDENT LBRACE LBRACE IDENT COMMA IDENT QUOTE
+
+Assuming that the structure is complete, expecting '}'.
+<4>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN WHILE
+
+Expecting '|'.
+
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE WHILE
+
+Expecting '..', or a structure.
+
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE DOTDOT WHILE
+
+Expecting '}'.
+<4>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE IDENT QUOTE
+
+Assuming that the structure is complete, expecting '}'.
+<4>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACKET IDENT PIPE UNREACHABLE
+
+Expecting an array body.
+
+parse: FN IDENT LBRACE LBRACKET IDENT AT UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE LBRACKET IDENT AT CHAR ELSE
+
+Syntax error
+
+parse: FN IDENT LBRACE LBRACKET IDENT AT CHAR SEMI UNREACHABLE
+
+Expecting a length expression.
+
+parse: FN IDENT LBRACE LBRACKET DOTDOT WHILE
+
+Expecting ';'.
+
+parse: FN IDENT LBRACE LBRACKET DOTDOT SEMI UNREACHABLE
+
+Expecting a length expression.
+
+parse: FN IDENT LBRACE LBRACKET IDENT SEMI UNREACHABLE
+
+Expecting a length expression.
+
+parse: FN IDENT LBRACE LBRACKET IDENT PIPE IDENT QUOTE
+
+Assuming that the array body is complete, expecting ']'.
+<4>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACKET IDENT QUOTE
+
+Assuming that the array body is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LPAREN CHAR QUOTE
+
+Assuming that the parenthesized expression is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LPAREN CHAR COMMA UNREACHABLE
+
+Expecting an expression list.
+
+parse: FN IDENT LBRACE LPAREN CHAR COMMA CHAR SHARP
+
+Assuming that the expression list is complete, expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE MATCH CHAR ELSE
+
+Syntax error
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE IDENT WHILE
+
+Expecting ':'.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE IDENT COLON WHILE
+
+Expecting a reference type.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE NULL WHILE
+
+Expecting '=>'.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE NULL FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE WHILE
+
+Expecting a match default.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE UNDERSCORE WHILE
+
+Expecting '=>'.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE UNDERSCORE FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE MATCH CHAR LBRACE UNDERSCORE FATARROW LBRACE RBRACE WHILE
+
+Expecting '}'.
+<3>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR QUOTE
+
+Assuming that the condition expression is complete, expecting ':', or a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON WHILE
+
+Expecting '('.
+
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN TYPE
+
+Expecting a statement.
+
+parse: FN IDENT LBRACE THROW_REF UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE THROW WHILE
+
+Expecting a tag name.
+
+parse: FN IDENT LBRACE THROW IDENT WHILE
+
+Expecting '('.
+
+parse: FN IDENT LBRACE THROW IDENT LPAREN UNREACHABLE
+
+Expecting an expression list.
+
+parse: FN IDENT LBRACE THROW IDENT LPAREN CHAR SHARP
+
+Assuming that the expression list is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LET WHILE
+
+Expecting '(', or a simple pattern.
+
+parse: FN IDENT LBRACE LET LPAREN WHILE
+
+Expecting a let pattern.
+
+parse: FN IDENT LBRACE LET LPAREN IDENT COLON WHILE
+
+Expecting a value type.
+
+parse: FN IDENT LBRACE LET LPAREN IDENT UNDERSCORE
+
+Assuming that the let pattern is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LET LPAREN RPAREN EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE LET IDENT EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE LET IDENT COLON WHILE
+
+Expecting a value type.
+
+parse: FN IDENT LBRACE LET IDENT COLON IDENT EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE IDENT EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE IDENT AMPERSANDEQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR_TABLE WHILE
+
+Expecting '['.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET WHILE
+
+Expecting a labels else.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET ELSE QUOTE AS WHILE
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE BR_TABLE LBRACKET ELSE QUOTE AS RBRACKET UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BR WHILE
+
+Expecting '''.
+
+parse: FN IDENT LBRACE BR QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT LBRACE BECOME UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE BECOME CHAR ELSE
+
+Syntax error
+
+parse: FN IDENT LBRACE BECOME CHAR LPAREN UNREACHABLE
+
+Expecting an argument list.
+
+parse: FN IDENT LBRACE BECOME CHAR LPAREN CHAR SHARP
+
+Assuming that the argument list is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE BECOME CHAR LPAREN RPAREN WHILE
+
+Syntax error
+
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN CHAR EQUAL
+
+Assuming that the statement is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN IDENT RPAREN WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN DO LBRACE RBRACE ELSE
+
+Syntax error
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY LBRACE RBRACE WHILE
+
+Expecting 'catch'.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY LBRACE RBRACE CATCH WHILE
+
+Expecting '{'.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE IDENT WHILE
+
+Expecting '=>'.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE IDENT FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY LBRACE RBRACE CATCH LBRACE WHILE
+
+Expecting '}', or a catch-all clause.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE UNDERSCORE WHILE
+
+Expecting '=>'.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE UNDERSCORE FATARROW WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY_LEGACY LBRACE RBRACE CATCH LBRACE UNDERSCORE FATARROW LBRACE RBRACE WHILE
+
+Expecting '}'.
+<3>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE WHILE
+
+Expecting 'catch'.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH WHILE
+
+Expecting '[', or '{'.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACKET COMMA
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACE WHILE
+
+Expecting '}', or a trycatch all.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE FATARROW LBRACE RBRACE WHILE
+
+Expecting '}'.
+<3>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE QUOTE AS COLON LOOP WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE QUOTE AS COLON LOOP IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON IF UNREACHABLE
+
+Expecting a condition expression.
+
+parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR QUOTE
+
+Assuming that the condition expression is complete, expecting '=>', or a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR FATARROW IDENT ARROW
+
+Expecting a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR LBRACE RBRACE ELSE WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE QUOTE AS COLON DO WHILE
+
+Expecting a block, or a block type.
+
+parse: FN IDENT LBRACE QUOTE AS COLON DO IDENT ARROW
+
+Expecting a block.
+
+parse: SHARP LBRACKET IDENT EQUAL CHAR QUOTE
+
+Assuming that the attribute expression is complete, expecting an attribute guard.
+
+parse: SHARP LBRACKET IMPORT COMMA WHILE
+
+Expecting 'if'.
+
+parse: SHARP LBRACKET IMPORT COMMA IF WHILE
+
+Expecting '('.
+
+parse: SHARP LBRACKET IMPORT COMMA IF LPAREN WHILE
+
+Expecting a condition.
+
+parse: SHARP LBRACKET IF LPAREN IDENT WHILE
+
+Expecting '(', ')', ',', or a comparison operator.
+
+parse: SHARP LBRACKET IF LPAREN IDENT LPAREN COMMA
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL WHILE
+
+Expecting a condition literal.
+
+parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL LPAREN WHILE
+
+Expecting an integer.
+
+parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL LPAREN INT WHILE
+
+Expecting ','.
+
+parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL LPAREN INT COMMA WHILE
+
+Expecting an integer.
+
+parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL LPAREN INT COMMA INT WHILE
+
+Expecting ','.
+
+parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL LPAREN INT COMMA INT COMMA WHILE
+
+Expecting an integer.
+
+parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL LPAREN INT COMMA INT COMMA INT WHILE
+
+Expecting ')'.
+<6>This '(' opens the enclosing construct.
+
+parse: SHARP LBRACKET IMPORT COMMA IF LPAREN IDENT COMMA
+
+Assuming that the condition is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: SHARP LBRACKET IDENT EQUAL CHAR COMMA IF LPAREN IDENT RPAREN WHILE
+
+Expecting ']'.
+<5>This '[' opens the enclosing construct.
+
+parse: SHARP LBRACKET IDENT COMMA IF LPAREN IDENT RPAREN WHILE
+
+Expecting ']'.
+<3>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SUSPEND IDENT LPAREN CHAR SHARP
+
+Assuming that the expression list is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE UNDERSCORE COLON WHILE
+
+Expecting a value type.
+
+parse: FN IDENT LBRACE UNDERSCORE COLON IDENT WHILE
+
+Expecting '='.
+
+parse: FN IDENT LBRACE UNDERSCORE COLON IDENT EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: FN IDENT LBRACE SHARP WHILE
+
+Expecting '['.
+
+parse: FN IDENT LBRACE SHARP LBRACKET WHILE
+
+Expecting 'else', 'if', 'import', or an identifier.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IF WHILE
+
+Expecting '('.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN WHILE
+
+Expecting a condition.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN IDENT COMMA
+
+Assuming that the condition is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN IDENT RPAREN WHILE
+
+Expecting ']'.
+<5>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN IDENT RPAREN RBRACKET WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE SHARP LBRACKET ELSE WHILE
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SHARP LBRACKET ELSE RBRACKET WHILE
+
+Expecting a block.
+
+parse: FN IDENT LBRACE CHAR EQUAL
+
+Assuming that the statement is complete, expecting ';'.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE ELSE
+
+Assuming that the statement list is complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE WHILE
+
+Expecting 'catch'.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH WHILE
+
+Expecting '{'.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE WHILE
+
+Expecting '}', or a catch-all clause.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE UNDERSCORE FATARROW LBRACE RBRACE WHILE
+
+Expecting '}'.
+<3>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE WHILE CHAR QUOTE
+
+Assuming that the condition expression is complete, expecting ':', or a block.
+
+parse: FN IDENT LBRACE WHILE CHAR COLON WHILE
+
+Expecting '('.
+
+parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN TYPE
+
+Expecting a statement.
+
+parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN CHAR EQUAL
+
+Assuming that the statement is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN IDENT RPAREN WHILE
+
+Expecting a block.
+
+parse: SHARP LBRACKET IMPORT EQUAL CHAR QUOTE
+
+Assuming that the attribute expression is complete, expecting an attribute guard.
+
+parse: SHARP LBRACKET IMPORT EQUAL CHAR COMMA IF LPAREN IDENT RPAREN WHILE
+
+Expecting ']'.
+<5>This '[' opens the enclosing construct.
+
+parse: SHARP LBRACKET IMPORT COMMA IF LPAREN IDENT RPAREN WHILE
+
+Expecting ']'.
+<3>This '[' opens the enclosing construct.
+
+parse: SHARP LBRACKET IF WHILE
+
+Expecting '('.
+
+parse: SHARP LBRACKET IF LPAREN WHILE
+
+Expecting a condition.
+
+parse: SHARP LBRACKET IF LPAREN IDENT COMMA
+
+Assuming that the condition is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: SHARP LBRACKET IF LPAREN IDENT RPAREN WHILE
+
+Expecting ']'.
+<5>This '[' opens the enclosing construct.
+
+parse: SHARP LBRACKET IF LPAREN IDENT RPAREN RBRACKET WHILE
+
+Expecting braced fields.
+
+parse: SHARP LBRACKET ELSE RBRACKET LBRACE WHILE
+
+Expecting '}', or a module field.
+<1>This '{' opens the enclosing construct.
+
+parse: SHARP LBRACKET ELSE RBRACKET LBRACE SEMI WHILE
+
+Expecting '}', or a module field.
+
+parse: REC WHILE
+
+Expecting '{'.
+
+parse: REC LBRACE WHILE
+
+Expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: IMPORT WHILE
+
+Expecting a string.
+
+parse: IMPORT STRING LBRACE WHILE
+
+Expecting '}', or an import item.
+<1>This '{' opens the enclosing construct.
+
+parse: IMPORT STRING LBRACE SEMI WHILE
+
+Expecting '}', or an import item.
+
+parse: IMPORT STRING WHILE
+
+Expecting an import declaration.
+
+parse: TAG WHILE
+
+Expecting a tag name.
+
+parse: TAG IDENT WHILE
+
+Expecting ':', or an optional function type.
+
+parse: TAG IDENT COLON WHILE
+
+Expecting a type name.
+
+parse: TAG IDENT COLON IDENT WHILE
+
+Expecting an optional function type.
+
+parse: IMPORT STRING TABLE WHILE
+
+Expecting an identifier.
+
+parse: IMPORT STRING TABLE IDENT WHILE
+
+Expecting ':'.
+
+parse: IMPORT STRING TABLE IDENT COLON WHILE
+
+Expecting a reference type, or an address type.
+
+parse: IMPORT STRING TABLE IDENT COLON AMPERSAND CONT WHILE
+
+Expecting ';', or memory limits.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET WHILE
+
+Expecting an integer.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT WHILE
+
+Expecting ',', or ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT COMMA WHILE
+
+Expecting an integer.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT COMMA INT WHILE
+
+Expecting ']'.
+<4>This '[' opens the enclosing construct.
+
+parse: IMPORT STRING TABLE IDENT COLON IDENT WHILE
+
+Expecting a reference type.
+
+parse: IMPORT STRING TABLE IDENT COLON IDENT AMPERSAND CONT WHILE
+
+Expecting ';', or memory limits.
+
+parse: IMPORT STRING MEMORY WHILE
+
+Expecting an identifier.
+
+parse: IMPORT STRING MEMORY IDENT WHILE
+
+Expecting ':'.
+
+parse: IMPORT STRING MEMORY IDENT COLON WHILE
+
+Expecting an address type.
+
+parse: IMPORT STRING MEMORY IDENT COLON IDENT WHILE
+
+Expecting ';', 'shared', a page-size clause, or memory limits.
+
+parse: MEMORY IDENT COLON IDENT PAGESIZE WHILE
+
+Expecting an integer.
+
+parse: IMPORT STRING MEMORY IDENT COLON IDENT PAGESIZE INT WHILE
+
+Expecting ';', or 'shared'.
+
+parse: IMPORT STRING MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET WHILE
+
+Expecting ';', 'shared', or a page-size clause.
+
+parse: IMPORT STRING MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET PAGESIZE INT WHILE
+
+Expecting ';', or 'shared'.
+
+parse: IMPORT STRING FN WHILE
+
+Expecting a function name.
+
+parse: IMPORT STRING FN IDENT WHILE
+
+Expecting '!', ':', or an optional function type.
+
+parse: IMPORT STRING FN IDENT BANG WHILE
+
+Expecting ':', or an optional function type.
+
+parse: IMPORT STRING FN IDENT COLON WHILE
+
+Expecting '!', or a type name.
+
+parse: IMPORT STRING FN IDENT COLON BANG WHILE
+
+Expecting a type name.
+
+parse: IMPORT STRING FN IDENT COLON IDENT WHILE
+
+Expecting an optional function type.
+
+parse: IMPORT STRING CONST IDENT COLON IDENT QUOTE
+
+Expecting ';'.
+
+parse: IMPORT STRING CONST WHILE
+
+Expecting an identifier.
+
+parse: IMPORT STRING CONST IDENT WHILE
+
+Expecting ':'.
+
+parse: IMPORT STRING CONST IDENT COLON WHILE
+
+Expecting a value type.
+
+parse: IMPORT STRING LBRACE TAG IDENT SEMI WHILE
+
+Expecting '}', or an import item.
+
+parse: SHARP LBRACKET ELSE RBRACKET LBRACE DATA IDENT SEMI WHILE
+
+Expecting '}', or a module field.
+
+parse: WHILE
+
+Expecting a definition.
+
+parse: TABLE WHILE
+
+Expecting an identifier.
+
+parse: TABLE IDENT WHILE
+
+Expecting ':'.
+
+parse: TABLE IDENT COLON WHILE
+
+Expecting a reference type, or an address type.
+
+parse: TABLE IDENT COLON AMPERSAND CONT WHILE
+
+Expecting ';', '=', or memory limits.
+
+parse: TABLE IDENT COLON AMPERSAND CONT EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: TABLE IDENT COLON AMPERSAND CONT EQUAL CHAR ELSE
+
+Syntax error
+
+parse: TABLE IDENT COLON AMPERSAND CONT LBRACKET INT RBRACKET WHILE
+
+Expecting ';', or '='.
+
+parse: TABLE IDENT COLON AMPERSAND CONT LBRACKET INT RBRACKET EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: TABLE IDENT COLON AMPERSAND CONT LBRACKET INT RBRACKET EQUAL CHAR ELSE
+
+Syntax error
+
+parse: TABLE IDENT COLON IDENT WHILE
+
+Expecting a reference type.
+
+parse: TABLE IDENT COLON IDENT AMPERSAND CONT WHILE
+
+Expecting ';', '=', or memory limits.
+
+parse: TABLE IDENT COLON IDENT AMPERSAND CONT EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: TABLE IDENT COLON IDENT AMPERSAND CONT EQUAL CHAR ELSE
+
+Syntax error
+
+parse: TABLE IDENT COLON IDENT AMPERSAND CONT LBRACKET INT RBRACKET WHILE
+
+Expecting ';', or '='.
+
+parse: TABLE IDENT COLON IDENT AMPERSAND CONT LBRACKET INT RBRACKET EQUAL UNREACHABLE
+
+Expecting an expression.
+
+parse: TABLE IDENT COLON IDENT AMPERSAND CONT LBRACKET INT RBRACKET EQUAL CHAR ELSE
+
+Syntax error
+
+parse: MEMORY WHILE
+
+Expecting an identifier.
+
+parse: MEMORY IDENT WHILE
+
+Expecting ':'.
+
+parse: MEMORY IDENT COLON WHILE
+
+Expecting an address type.
+
+parse: MEMORY IDENT COLON IDENT WHILE
+
+Expecting ';', 'shared', '{', a page-size clause, or memory limits.
+
+parse: MEMORY IDENT COLON IDENT PAGESIZE INT WHILE
+
+Expecting ';', 'shared', or '{'.
+
+parse: MEMORY IDENT COLON IDENT PAGESIZE INT SHARED WHILE
+
+Expecting ';', or '{'.
+
+parse: MEMORY IDENT COLON IDENT LBRACE DATA WHILE
+
+Expecting a data name.
+
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT WHILE
+
+Expecting '@'.
+
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT WHILE
+
+Expecting '['.
+
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET UNREACHABLE
+
+Expecting a constant expression.
+
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR QUOTE
+
+Assuming that the constant expression is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET WHILE
+
+Expecting ';', or '='.
+
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET EQUAL WHILE
+
+Expecting a data init.
+
+parse: DATA IDENT EQUAL LBRACKET WHILE
+
+Expecting an identifier.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT WHILE
+
+Expecting ':'.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT WHILE
+
+Expecting '('.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN COMMA
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON MINUS WHILE
+
+Expecting a raw number.
+
+parse: DATA IDENT EQUAL LBRACKET IDENT COLON COMMA
+
+Expecting ']'.
+<4>This '[' opens the enclosing construct.
+
+parse: DATA IDENT EQUAL STRING WHILE
+
+Expecting '++', or ';'.
+
+parse: DATA IDENT EQUAL STRING PLUSPLUS WHILE
+
+Expecting a data elem.
+
+parse: MEMORY IDENT COLON IDENT PAGESIZE INT LBRACE WHILE
+
+Expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET WHILE
+
+Expecting ';', 'shared', '{', or a page-size clause.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET PAGESIZE INT WHILE
+
+Expecting ';', 'shared', or '{'.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET PAGESIZE INT SHARED WHILE
+
+Expecting ';', or '{'.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET PAGESIZE INT LBRACE WHILE
+
+Expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET SHARED WHILE
+
+Expecting ';', or '{'.
+
+parse: MEMORY IDENT COLON IDENT LBRACKET INT RBRACKET LBRACE WHILE
+
+Expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: MEMORY IDENT COLON IDENT SHARED WHILE
+
+Expecting ';', or '{'.
+
+parse: MEMORY IDENT COLON IDENT LBRACE WHILE
+
+Expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN WHILE
+
+Expecting a function name.
+
+parse: FN IDENT WHILE
+
+Expecting '!', ':', or an optional function type.
+
+parse: FN IDENT BANG WHILE
+
+Expecting ':', or an optional function type.
+
+parse: FN IDENT COLON WHILE
+
+Expecting '!', or a type name.
+
+parse: FN IDENT COLON BANG WHILE
+
+Expecting a type name.
+
+parse: FN IDENT COLON IDENT WHILE
+
+Expecting an optional function type.
+
+parse: FN IDENT COLON IDENT LPAREN RPAREN SEMI
+
+Assuming that the optional function type is complete, expecting ''', or '{'.
+
+parse: FN IDENT COLON IDENT QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT COLON IDENT QUOTE AS WHILE
+
+Expecting ':'.
+
+parse: FN IDENT COLON IDENT QUOTE AS COLON WHILE
+
+Expecting '{'.
+
+parse: FN IDENT COLON IDENT QUOTE AS COLON LBRACE ELSE
+
+Assuming that the statement list is complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT COLON IDENT LBRACE ELSE
+
+Assuming that the statement list is complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LPAREN RPAREN STAR
+
+Assuming that the optional function type is complete, expecting ''', or '{'.
+
+parse: FN IDENT QUOTE UNDERSCORE
+
+Expecting a label name.
+
+parse: FN IDENT QUOTE AS WHILE
+
+Expecting ':'.
+
+parse: FN IDENT QUOTE AS COLON WHILE
+
+Expecting '{'.
+
+parse: FN IDENT QUOTE AS COLON LBRACE ELSE
+
+Assuming that the statement list is complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: FN IDENT LBRACE ELSE
+
+Assuming that the statement list is complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+
+parse: ELEM WHILE
+
+Expecting an identifier.
+
+parse: ELEM IDENT WHILE
+
+Expecting ':'.
+
+parse: ELEM IDENT COLON WHILE
+
+Expecting a reference type.
+
+parse: ELEM IDENT COLON AMPERSAND CONT WHILE
+
+Expecting '=', or '@'.
+
+parse: ELEM IDENT COLON AMPERSAND CONT EQUAL WHILE
+
+Expecting '['.
+
+parse: ELEM IDENT COLON AMPERSAND CONT EQUAL LBRACKET UNREACHABLE
+
+Expecting an expression list.
+
+parse: ELEM IDENT COLON AMPERSAND CONT EQUAL LBRACKET CHAR SHARP
+
+Assuming that the expression list is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: ELEM IDENT COLON AMPERSAND CONT EQUAL LBRACKET RBRACKET WHILE
+
+Expecting ';'.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT WHILE
+
+Expecting an identifier.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT WHILE
+
+Expecting '['.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET UNREACHABLE
+
+Expecting a constant expression.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR QUOTE
+
+Assuming that the constant expression is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET WHILE
+
+Expecting '='.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL WHILE
+
+Expecting '['.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL LBRACKET UNREACHABLE
+
+Expecting an expression list.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL LBRACKET CHAR SHARP
+
+Assuming that the expression list is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL LBRACKET RBRACKET WHILE
+
+Expecting ';'.
+
+parse: DATA WHILE
+
+Expecting a data name.
+
+parse: DATA IDENT WHILE
+
+Expecting ';', '=', or '@'.
+
+parse: DATA IDENT EQUAL WHILE
+
+Expecting a data init.
+
+parse: DATA IDENT AT WHILE
+
+Expecting an identifier.
+
+parse: DATA IDENT AT IDENT WHILE
+
+Expecting '['.
+
+parse: DATA IDENT AT IDENT LBRACKET UNREACHABLE
+
+Expecting a constant expression.
+
+parse: DATA IDENT AT IDENT LBRACKET CHAR QUOTE
+
+Assuming that the constant expression is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: DATA IDENT AT IDENT LBRACKET CHAR RBRACKET WHILE
+
+Expecting ';', or '='.
+
+parse: DATA IDENT AT IDENT LBRACKET CHAR RBRACKET EQUAL WHILE
+
+Expecting a data init.
+
+parse: TAG IDENT LPAREN RPAREN QUOTE
+
+Assuming that the tag sig is complete, expecting ';'.
+
+parse: CONST WHILE
+
+Expecting an identifier.
+
+parse: CONST IDENT WHILE
+
+Expecting ':', or '='.
+
+parse: CONST IDENT EQUAL UNREACHABLE
+
+Expecting a constant expression.
+
+parse: CONST IDENT EQUAL CHAR QUOTE
+
+Assuming that the constant expression is complete, expecting ';'.
+
+parse: CONST IDENT COLON WHILE
+
+Expecting a value type.
+
+parse: CONST IDENT COLON IDENT WHILE
+
+Expecting '='.
+
+parse: CONST IDENT COLON IDENT EQUAL UNREACHABLE
+
+Expecting a constant expression.
+
+parse: CONST IDENT COLON IDENT EQUAL CHAR QUOTE
+
+Assuming that the constant expression is complete, expecting ';'.
+
+parse: SHARP LBRACKET ELSE WHILE
+
+Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: SHARP LBRACKET ELSE RBRACKET WHILE
+
+Expecting braced fields.
+
+parse: SHARP BANG WHILE
+
+Expecting '['.
+
+parse: SHARP BANG LBRACKET WHILE
+
+Expecting an identifier.
+
+parse: SHARP BANG LBRACKET IDENT WHILE
+
+Expecting '=', or ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: SHARP BANG LBRACKET IDENT EQUAL UNREACHABLE
+
+Expecting an attribute expression.
+
+parse: SHARP BANG LBRACKET IDENT EQUAL CHAR QUOTE
+
+Assuming that the attribute expression is complete, expecting ']'.
+<4>This '[' opens the enclosing construct.
+
