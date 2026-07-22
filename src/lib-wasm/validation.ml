@@ -702,14 +702,16 @@ module Error = struct
       ((text "The lane index should be less than" ++ Message.int max_lane)
       ^^ text ".")
 
-  let inline_function_type_mismatch context ~location (f : functype) =
+  (* The definition's parameters/results are passed as source types (from its
+     declaration), not reconstructed from the resolved [functype] via
+     [source_of_valtype]: a definition may name a concrete reference ([(ref
+     $t)]/[(ref (exact $t))]), which [source_of_heaptype] cannot rebuild. *)
+  let inline_function_type_mismatch context ~location ~params ~results =
     report context ~location ~severity:Error
       (text
          "The inline function type does not match the type definition, whose \
           parameters are"
-       ++ sources (Array.map source_of_valtype f.params)
-       ++ text "and results are"
-       ++ sources (Array.map source_of_valtype f.results)
+       ++ sources params ++ text "and results are" ++ sources results
       ^^ text ".")
 
   let constant_expression_required context ~location =
@@ -1345,6 +1347,18 @@ let lookup_subtype_entry tc (idx : Ast.Text.idx) =
     | Id id -> Hashtbl.find_opt tc.label_mapping id
   with
   | Some (_, _, _, e) -> e
+  | None -> None
+
+(* The source [comptype] a type reference resolves to. Unlike the subtype entry
+   above, the source comptype is recorded for *every* mapped type, synthesized
+   ones included, so a resolved index always has one. *)
+let lookup_source_comptype tc (idx : Ast.Text.idx) =
+  match
+    match idx.desc with
+    | Num x -> Hashtbl.find_opt tc.index_mapping x
+    | Id id -> Hashtbl.find_opt tc.label_mapping id
+  with
+  | Some (_, _, ct, _) -> Some ct
   | None -> None
 
 (* If [source] is a value of a named reference type, record its type's
@@ -5506,8 +5520,17 @@ let check_syntax ctx lst =
         match functype ctx.diagnostics ctx.types target with
         | Some f' ->
             if f <> f' then
+              (* Render the definition's declared source signature — its concrete
+                 references have no source name to reconstruct from the resolved
+                 [f] (see [inline_function_type_mismatch]). The index resolved to
+                 a [Func] above, so its source comptype is a [Func] too. *)
+              let params, results =
+                match lookup_source_comptype ctx.types idx with
+                | Some (Func sft) -> functype_sources sft
+                | _ -> assert false
+              in
               Error.inline_function_type_mismatch ctx.diagnostics
-                ~location:idx.Ast.info f
+                ~location:idx.Ast.info ~params ~results
         | None -> ())
     | Struct _ | Array _ | Cont _ -> ()
   in
