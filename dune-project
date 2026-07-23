@@ -13,19 +13,11 @@
 (documentation "https://ocsigen.org/wax/")
 (license "Apache-2.0")
 
-(package
-  (name stele)
-  (synopsis "User-friendly syntax-error messages for any Menhir grammar")
-  (description "A build-time generator that turns a Menhir grammar's --list-errors output and its .cmly into readable syntax-error messages, with a golden/census/stats workflow, a soundness oracle, and a hand-override escape hatch; plus a small runtime helper (stele.runtime) that resolves the delimiter markers the generated messages carry. Configured per grammar by a text sidecar, so the tool itself is grammar-agnostic.")
-  (depends
-    (ocaml (>= 4.14))
-    (menhir (and :build (>= 20220210)))
-    (menhirSdk (>= 20220210))
-    (menhirLib (>= 20220210))
-    ; 2.0 for the Cmd.group subcommand CLI the generator exposes.
-    (cmdliner (>= 2.0.0))
-  )
-)
+; stele is developed here as a vendored sub-project (vendor/stele/, its own
+; dune-project) ahead of being split into a standalone package; vendor/dune
+; marks it vendored. It builds in the same workspace, so `(run stele …)` and the
+; `stele.runtime` library resolve across the boundary, but its own tests/lint
+; stay out of this project's `dune runtest`.
 
 (package
   (name wax-lib)
@@ -38,8 +30,9 @@
     (sedlex (>= 3.3))
     (menhir (and :build (>= 20220210)))
     (menhirLib (>= 20220210))
-    ; The parser's runtime resolution of stele's <N> delimiter markers.
-    (stele (= :version))
+    ; No dependency on stele: its runtime helper (stele.runtime, resolving the
+    ; <N> delimiter markers) is vendored under vendor/stele/ and ships in-tree,
+    ; so it is not fetched from opam.
     (re (>= 1.10.0))
     (yojson (>= 2.0.0))
     (uucp (and :with-dev-setup (>= 16.0.0)))

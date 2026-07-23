@@ -63,9 +63,9 @@
  (action
   (run menhir %{dep:parser.mly} --cmly --no-code-generation --base parser_msgs)))
 
-; The message generator is the standalone `stele` package (stele/; see
-; stele/README.md), driven here by path. Two per-grammar sidecars feed it, both
-; passed to every invocation below:
+; The message generator is the standalone `stele` package (vendor/stele/; see
+; vendor/stele/README.md), invoked here as `(run stele …)`. Two per-grammar
+; sidecars feed it, both passed to every invocation below:
 ;  - parser_messages.config (-config): readable names, token classes, and the
 ;    missed-hint opener-name nets — the tables the generator used to hard-code,
 ;    now grammar configuration.
