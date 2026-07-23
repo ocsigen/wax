@@ -1,0 +1,6 @@
+type ft = fn();
+type k = cont ft;
+#[export = "e"]
+fn entry(c: &k) {
+    c.switch().switch();
+}

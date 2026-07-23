@@ -5270,7 +5270,11 @@ and type_cont_method_call ctx i ~handlers recv meth args =
               ~prev_loc:t.info { dup with desc = "tag" };
             (Some t, rest)
         | [] ->
-            Error.switch_needs_tag ctx.diagnostics ~location:i.info;
+            (* Anchor at the [switch] method, not the whole call expression: a
+               chained [c.switch().switch()] would otherwise report this at the
+               shared chain-start column twice — two genuine (each switch needs a
+               tag), identically-rendered errors. *)
+            Error.switch_needs_tag ctx.diagnostics ~location:meth.info;
             (None, rest))
     | "resume_throw" -> (
         match args with

@@ -194,11 +194,11 @@ at their arities. Operand counts follow from the inferred types.
   Error:
     A 'switch' names its enabling tag as a labelled immediate, e.g.
     'c.switch(x, tag: t)'.
-    ──➤  surface-errors.wax:14:27
+    ──➤  surface-errors.wax:14:29
   12 │ 
   13 │ // switch requires its enabling tag as a labelled immediate
   14 │ fn no_tag(c: &k) -> i32 { c.switch(); }
-     ·                           ^^^^^^^^^^
+     ·                             ^^^^^^
   15 │ 
   16 │ // resume_throw takes its tag call-style, grouping the payload with the tag
   Error:
