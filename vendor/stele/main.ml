@@ -2548,28 +2548,31 @@ let tune_classify ~base ~trial =
       && base.tt_census = trial.tt_census
     then TDead
     else if (d_hints > 0 || d_cascade < 0) && d_template > 0 then
+      let pointers n =
+        if n = 1 then "1 message that points at the unclosed opener"
+        else Printf.sprintf "%d messages that point at the unclosed opener" n
+      in
       let gain =
         match (d_hints > 0, d_cascade < 0) with
         | true, true ->
             Printf.sprintf
-              "adds %d unclosed-delimiter pointer%s and removes %d deep \
-               \"Assuming ...\" chain%s"
-              d_hints
-              (if d_hints = 1 then "" else "s")
-              (-d_cascade)
+              "gains %s and un-stacks %d deep \"Assuming ...\" message%s"
+              (pointers d_hints) (-d_cascade)
               (if -d_cascade = 1 then "" else "s")
-        | true, false ->
-            Printf.sprintf "adds %d unclosed-delimiter pointer%s" d_hints
-              (if d_hints = 1 then "" else "s")
+        | true, false -> Printf.sprintf "gains %s" (pointers d_hints)
         | false, _ ->
-            Printf.sprintf "removes %d deep \"Assuming ...\" chain%s"
+            Printf.sprintf "un-stacks %d deep \"Assuming ...\" message%s"
               (-d_cascade)
               (if -d_cascade = 1 then "" else "s")
       in
+      let hedges =
+        if d_template = 1 then "an \"Assuming ... is complete\" hedge"
+        else "\"Assuming ... is complete\" hedges"
+      in
       TMixed
-        (Printf.sprintf "%s but also adds %d new \"Assuming ...\" message%s"
-           gain d_template
-           (if d_template = 1 then "" else "s"))
+        (Printf.sprintf "%s, but also turns %d message%s into %s" gain d_template
+           (if d_template = 1 then "" else "s")
+           hedges)
     else
       TNeutral
         (Printf.sprintf "no quality movement (template%d hints+%d cascade%d)"
@@ -2643,48 +2646,55 @@ let tune_vector_delta base trial =
   let counter d sing plur =
     if d <> 0 then add (tune_counter_clause d sing plur)
   in
-  counter (t.tv_over5 - b.tv_over5) "over-cap \"Syntax error\" state"
-    "over-cap \"Syntax error\" states";
-  counter (t.tv_empty - b.tv_empty) "empty-list \"Syntax error\" state"
-    "empty-list \"Syntax error\" states";
-  counter (t.tv_hints - b.tv_hints) "unclosed-delimiter pointer"
-    "unclosed-delimiter pointers";
+  counter
+    (t.tv_over5 - b.tv_over5)
+    "state that gives up with a bare \"Syntax error\" (too many options to list)"
+    "states that give up with a bare \"Syntax error\" (too many options to list)";
+  counter
+    (t.tv_empty - b.tv_empty)
+    "state that gives up with a bare \"Syntax error\" (nothing legal to list)"
+    "states that give up with a bare \"Syntax error\" (nothing legal to list)";
+  counter (t.tv_hints - b.tv_hints)
+    "message that points at the unclosed opener"
+    "messages that point at the unclosed opener";
   counter
     (t.tv_template - b.tv_template)
-    "\"Assuming ...\" message" "\"Assuming ...\" messages";
+    "\"Assuming ... is complete\" message" "\"Assuming ... is complete\" messages";
   counter
     (t.tv_cascade - b.tv_cascade)
-    "deep \"Assuming ...\" chain (depth >= 4)"
-    "deep \"Assuming ...\" chains (depth >= 4)";
+    "\"Assuming ...\" message stacked 4+ constructs deep"
+    "\"Assuming ...\" messages stacked 4+ constructs deep";
   (let d_e = t.tv_uncov_e - b.tv_uncov_e
    and d_t = t.tv_uncov_t - b.tv_uncov_t in
    if d_e <> 0 then
      let head =
-       tune_counter_clause d_e "state with uncovered actions"
-         "states with uncovered actions"
+       tune_counter_clause d_e "state whose \"Expecting\" list omits a legal token"
+         "states whose \"Expecting\" list omits a legal token"
      in
      if d_t <> 0 then
        add
-         (Printf.sprintf "%s (%d %s token%s)" head (abs d_t)
+         (Printf.sprintf "%s (%d %s omitted token%s in all)" head (abs d_t)
             (if d_t < 0 then "fewer" else "more")
             (if abs d_t = 1 then "" else "s"))
      else add head
    else if d_t <> 0 then
      add
-       (Printf.sprintf "%d %s uncovered-action token%s" (abs d_t)
+       (Printf.sprintf "%d %s omitted legal token%s" (abs d_t)
           (if d_t < 0 then "fewer" else "more")
           (if abs d_t = 1 then "" else "s")));
   counter
     (t.tv_jargon - b.tv_jargon)
-    "jargon-rendered token" "jargon-rendered tokens";
-  counter (t.tv_unsound - b.tv_unsound) "unsound claim" "unsound claims";
+    "token shown as raw grammar jargon" "tokens shown as raw grammar jargon";
+  counter (t.tv_unsound - b.tv_unsound)
+    "message listing a token the parser would refuse"
+    "messages listing a token the parser would refuse";
   if t.tv_entries <> b.tv_entries then
     add
-      (Printf.sprintf "error states %d \xe2\x86\x92 %d" b.tv_entries
+      (Printf.sprintf "distinct failure points: %d \xe2\x86\x92 %d" b.tv_entries
          t.tv_entries);
   if t.tv_withlist <> b.tv_withlist then
     add
-      (Printf.sprintf "states with an expected list %d \xe2\x86\x92 %d"
+      (Printf.sprintf "failure points that get an \"Expecting ...\" list: %d \xe2\x86\x92 %d"
          b.tv_withlist t.tv_withlist);
   match List.rev !clauses with
   | [] -> "    No counted change."
@@ -2796,13 +2806,12 @@ let tune_move ts op nt =
    the N hand-written messages (from the [.overrides] file) whose key sentences
    the trial's state merge/renumber changes. *)
 let tune_rekey_phrase rc =
-  if rc = 1 then "1 hand-written message (its key sentence changes)"
-  else Printf.sprintf "%d hand-written messages (their key sentences change)" rc
+  if rc = 1 then "1 hand-written override" else Printf.sprintf "%d hand-written overrides" rc
 
 let tune_dead_sweep ts =
   Printf.printf
-    "### DEAD SWEEP — remove each current annotation; a removal that changes \
-     nothing is dead\n";
+    "### DEAD SWEEP: which constructs on the list are not doing anything?\n\
+     Removing one that changes no message at all means it can be dropped.\n\n";
   let dead =
     List.fold_left
       (fun n nt ->
@@ -2815,15 +2824,15 @@ let tune_dead_sweep ts =
             if tune_classify ~base:ts.ts_base ~trial = TDead then begin
               Printf.printf
                 "  ---- remove %s\n\
-                \    DEAD: message text, census, and stats are all unchanged; \
-                 safe to delete\n"
+                \    DEAD: every generated message stays byte-identical; safe \
+                 to delete\n"
                 nt;
               n + 1
             end
             else n)
       0 ts.ts_annots
   in
-  Printf.printf "  dead annotations found: %d\n\n" dead
+  Printf.printf "  dead constructs found: %d\n\n" dead
 
 (* Rank every single add/remove move, bucketing each into improving,
    relocates-overridden (see the [rc = gn] note below), or mixed, and tallying
@@ -2831,7 +2840,10 @@ let tune_dead_sweep ts =
    improving-vs-relocates split at the [tune_gain] match. *)
 let tune_advisor ts candidates =
   Printf.printf
-    "### ADVISOR — single-move ranking (%d removals, %d additions)\n"
+    "### ADVISOR: should any single construct join or leave the list?\n\
+     Trying %d removal(s) and %d addition(s), one at a time. Each is scored only\n\
+     by how it changes the generated messages; the scores do not add up, so\n\
+     apply one, re-run, and see what opens up next.\n\n"
     (List.length ts.ts_annots) (List.length candidates);
   let improving = ref [] and relocates = ref [] and mixed = ref [] in
   let harmful = ref 0
@@ -2881,64 +2893,61 @@ let tune_advisor ts candidates =
     (List.length improving) (List.length relocates) (List.length mixed) !harmful
     !dead !neutral !skipped;
   Printf.printf
-    "  legend:\n\
-    \    improving            a single move that improves a quality counter \
-     with no regression\n\
-    \    relocates-overridden the whole improvement lands only on states that \
-     carry a hand-written message\n\
-    \    mixed                gains an unclosed-delimiter pointer but also \
-     adds a new \"Assuming ...\" message\n\
-    \    harmful              regresses a quality counter (a fallback, a lost \
-     pointer, a jargon token, an unsound claim)\n\
-    \    dead/no-op           leaves every counter, message, and census body \
-     unchanged\n\
-    \    neutral              counters shift but net quality is unchanged\n\
-    \    skipped              menhir rejected the mutated grammar\n\n";
+    "  what each group means, and what to do with it:\n\
+    \    improving             some message gets better, none gets worse; consider applying\n\
+    \    relocates-overridden  its only gains are on states you already hand-wrote\n\
+    \                          a message for; usually skip (details below)\n\
+    \    mixed                 helps one way and hurts another; read the wording\n\
+    \                          changes and judge (details below)\n\
+    \    harmful               some message gets worse; do not apply\n\
+    \    dead/no-op            no message changes at all; the construct is not earning\n\
+    \                          its place and can be dropped\n\
+    \    neutral               messages reshuffle with no net gain or loss; usually skip\n\
+    \    skipped               menhir rejected the grammar with this move; not applicable\n\n";
   if improving = [] then
     Printf.printf
-      "  No strictly-improving single move (expected right after a prune).\n"
+      "  No single move improves the messages outright (the usual result once\n\
+      \  the list is already well-tuned).\n"
   else begin
     Printf.printf
-      "  IMPROVING MOVES — each improves a quality counter (review \
-       individually; scores do not compose):\n";
+      "  IMPROVING: each of these makes some message better and none worse.\n\
+      \  Review one at a time (the scores do not add up):\n";
     List.iter
       (fun (label, _reason, rc, rot, vec, cen) ->
         Printf.printf "  ---- %s\n%s\n" label vec;
         if rc > 0 then begin
           Printf.printf
-            "    Also re-keys %s;\n\
-            \    the win does not fully account for them, so confirm the \
-             merged message still beats each:\n"
+            "    It also shifts the sample input that keys %s, so that\n\
+            \    hand-written message would need re-pointing; confirm the\n\
+            \    generated message still beats each (keyed by these inputs):\n"
             (tune_rekey_phrase rc);
           List.iter (fun k -> Printf.printf "      %s\n" k) rot
         end;
-        Printf.printf "    message-wording changes (census diff):\n%s\n" cen)
+        Printf.printf "    resulting wording changes:\n%s\n" cen)
       improving
   end;
   Printf.printf "\n";
   if relocates <> [] then begin
     Printf.printf
-      "  RELOCATES-OVERRIDDEN — the whole improvement lands on states that \
-       already\n\
-      \  carry a hand-written message, so the move merely relocates them. \
-       Apply only\n\
-      \  if the generated message would beat the hand-written one, not for the \
-       counter\n\
-      \  delta alone:\n";
+      "  RELOCATES-OVERRIDDEN: the improvement here lands entirely on states you\n\
+      \  have already hand-written a message for, so applying it would only move\n\
+      \  that hand-written work around, for no net gain. Apply only if the\n\
+      \  generated message would actually read better than the hand-written one:\n";
     List.iter
       (fun (label, _gk, rc, rot, vec) ->
         Printf.printf "  ---- %s\n%s\n" label vec;
-        Printf.printf "    Re-keys %s:\n" (tune_rekey_phrase rc);
+        Printf.printf
+          "    Re-points %s (each keyed by the sample input that triggers it):\n"
+          (tune_rekey_phrase rc);
         List.iter (fun k -> Printf.printf "      %s\n" k) rot)
       relocates;
     Printf.printf "\n"
   end;
   if mixed <> [] then begin
     Printf.printf
-      "  MIXED — needs a human eye: the move gains an unclosed-delimiter \
-       pointer but\n\
-      \  also adds a new \"Assuming ...\" message. Read the census diff and \
-       decide:\n";
+      "  MIXED: each of these helps one way and hurts another. It gains a\n\
+      \  message that points at the unclosed opener, but also turns another\n\
+      \  message into an \"Assuming ... is complete\" hedge. Judge case by case:\n";
     List.iter
       (fun (label, reason) -> Printf.printf "  ---- %s\n    %s\n" label reason)
       mixed;
@@ -2979,8 +2988,8 @@ let tune_parse_verdicts file =
    every disagreement — the deliverable of this part. *)
 let tune_calibrate ts ~kept ~removed =
   Printf.printf
-    "### CALIBRATION — replay the recorded keep/remove decisions\n\
-    \  (removing a kept annotation, or re-adding a removed one, must score \
+    "### CALIBRATION: replay the recorded keep/remove decisions\n\
+    \  (removing a kept construct, or re-adding a removed one, must score \
      non-improving)\n";
   let agree = ref 0 and total = ref 0 and disagree = ref [] in
   let is_improving = function TImproving _ -> true | _ -> false in
@@ -3035,8 +3044,16 @@ let run_tune mode ~menhir ~config_file ~overrides_file ~grammar_file =
       let ts =
         tune_setup ~menhir ~config_file ~overrides_file ~grammar_file ~scratch
       in
-      Printf.printf "grammar: %s\n" grammar_file;
-      Printf.printf "current %%on_error_reduce (%d): %s\n\n"
+      Printf.printf "grammar: %s\n\n" grammar_file;
+      Printf.printf
+        "This tool tunes one thing: the grammar's %%on_error_reduce list. For\n\
+         each construct on that list, when the parse fails just after the\n\
+         construct is complete, its error message reads \"Assuming that the\n\
+         <construct> is complete, expecting ...\" instead of listing everything\n\
+         the construct itself could have continued with. Adding a construct to\n\
+         the list trades a plain \"Expecting ...\" list for that \"Assuming ...\"\n\
+         phrasing; removing one does the reverse.\n\n";
+      Printf.printf "on the list now (%d): %s\n\n"
         (List.length ts.ts_annots)
         (String.concat " " ts.ts_annots);
       (match mode with
@@ -3052,7 +3069,7 @@ let run_tune mode ~menhir ~config_file ~overrides_file ~grammar_file =
       | Tune_calibrate verdicts_file ->
           let kept, removed = tune_parse_verdicts verdicts_file in
           tune_calibrate ts ~kept ~removed);
-      Printf.printf "sweep runtime: %.0fs\n" (Unix.gettimeofday () -. start))
+      Printf.printf "\nfinished in %.0fs\n" (Unix.gettimeofday () -. start))
 
 (* --- Command-line interface (cmdliner) --- *)
 

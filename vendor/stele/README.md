@@ -602,17 +602,19 @@ stele tune calibrate --grammar g.mly [--config g.config] --verdicts g.verdicts
   census, and message projection all unchanged is dead and reported for deletion.
 - **advise**: rank every single move (removing a current annotation, or adding
   one for a nonterminal reduced somewhere in the automaton). The report is
-  written for a human to paste into an issue: each move's counter shift is one
-  plain sentence naming only what moved (e.g. `One fewer over-cap "Syntax error"
-  state; error states 680 → 679.`), and every class carries a one-line legend.
-  Each improving move is also priced by how many **hand-written messages** (from
-  the `.overrides` file) it would **re-key**: the states whose representative
+  written for a non-expert to read: it opens with a plain-language note on what
+  the `%on_error_reduce` list does, groups the moves (improving / relocates-
+  overridden / mixed / harmful / dead / neutral / skipped) with a what-to-do
+  legend, and describes each move's effect in message terms (e.g. `One fewer
+  state that gives up with a bare "Syntax error" (too many options to list)`).
+  Each improving move is also priced by how many **hand-written overrides** (from
+  the `.overrides` file) it would **re-point**: the states whose representative
   sentence the trial's merge/renumber changes. A move whose whole improvement
   lands on already-hand-written states is reported separately as
   `RELOCATES-OVERRIDDEN` (apply only if the generated message would beat the
-  hand-written one). A move that gains an unclosed-delimiter pointer but also
-  adds a new `"Assuming ..."` message is reported as `MIXED` for a human to
-  judge against the census diff.
+  hand-written one). A move that gains a message pointing at the unclosed opener
+  but also turns another into an `"Assuming ..."` hedge is reported as `MIXED`
+  for a human to judge against the wording changes.
 - **calibrate**: replay a recorded keep/remove log (`--verdicts`); removing each
   `keep` annotation and re-adding each `removed` one must score non-improving.
   Reports the agreement fraction and every disagreement. The verdicts format is
