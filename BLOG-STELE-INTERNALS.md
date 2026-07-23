@@ -34,7 +34,7 @@ interesting; both grammars in the home repository (680 and 541 error
 states) regenerate in well under a second. The content is in the
 invariants.
 
-## 1. What can follow: the continuation walk
+## What can come next
 
 **Question.** In error state S, which symbols may come next?
 
@@ -76,7 +76,7 @@ result is a superset of the conservative one, the fallback never drops a
 symbol the smaller answer contained. One inequality buys completeness
 where it is affordable and honesty where it is not.
 
-## 2. From symbols to words: the rendering pipeline
+## From symbols to words
 
 **Question.** The walk produced `RPAREN`, `separated_list(COMMA,expr)`,
 `statement_list`. What words appear in the message?
@@ -104,7 +104,7 @@ A precedence chain, first match wins:
    every rendering with the pipeline stage that produced it and
    per-position usage counts) exists to catch the rest.
 
-## 3. Delimiters: pairs, the stack scan, and the depth marker
+## Which bracket is unclosed
 
 **Question.** The state expects `')'`. Which `(` is unclosed, and how do
 we tell the user?
@@ -130,22 +130,23 @@ the unmatched opener. The crucial subtlety is what "position" means: the
 suffix is a list of parser stack cells, where an already-reduced
 construct (with all its internal, balanced delimiters) occupies a single
 cell and is invisible to the balance count. The scan therefore reports a
-1-based stack cell index, emitted into the message as `<N>`. At runtime,
-a small helper resolves it against the live parser: cell N of the
-incremental engine's stack carries the opener's source position, and the
-CLI underlines it. When the closer has a unique mate, the hint names the
-mate's full alias and the underline spans its full width ("This '[|'
-opens ..."); a closer with many mates (WebAssembly's ')' closes 22
-different openers) names the shared bracket character. The same mechanism carries a
-second marker kind, `<^N>`, for hedge subjects, resolved to the full
-source span of a folded construct; a message may carry several labels.
+1-based stack cell index, emitted into the message as `<N>`.
+
+At runtime, a small helper resolves that marker against the live parser: cell N
+of the incremental engine's stack carries the opener's source position, and the
+CLI underlines it. When the closer has a unique mate, the hint names the mate's
+full alias and the underline spans its full width ("This '[|' opens ..."); a
+closer with many mates (WebAssembly's ')' closes 22 different openers) names the
+shared bracket character. The same mechanism carries a second marker kind,
+`<^N>`, for hedge subjects, resolved to the full source span of a folded
+construct; a message may carry several labels.
 
 The invariant that makes `<N>` safe: the generator computes depths over
 the known stack suffix and never over the raw sentence, because token
 positions stop corresponding to stack cells the moment any reduction has
 happened.
 
-## 4. Hedges: reporting past a fold
+## What to say after a fold
 
 **Question.** `%on_error_reduce` folded a completed construct before the
 error was reported. What may the message claim?
@@ -167,7 +168,7 @@ underline is skipped. And the subject marker always points at the top
 post-fold stack cell, verified against the reduction record rather than
 assumed.
 
-## 5. Trust: the oracle and the guards
+## Keeping the output honest
 
 Generated text lies in two ways: claiming a continuation the parser
 rejects (unsoundness) or omitting one it accepts (incompleteness). Both
@@ -196,7 +197,7 @@ terminal, an opener net matching nothing: each is a hard build error
 naming the stale entry. Hand-written text cannot drift silently; it can
 only be wrong out loud.
 
-## 6. Stability: why the goldens diff small
+## Why the diffs stay small
 
 The whole system is reviewed through three promoted golden files, so
 their diff behavior under grammar change is itself designed:
@@ -217,7 +218,7 @@ their diff behavior under grammar change is itself designed:
   a quality regression fails the build even when the message diff reads
   plausibly.
 
-## 7. Exploration: the tuner and the suggester
+## Tools that recommend, never apply
 
 Two tools recommend rather than apply.
 
@@ -246,7 +247,7 @@ cluster; that they should be two classes with two labels is semantic
 knowledge, which is why the tool emits a paste-ready block with the
 label left as a placeholder.
 
-## Closing
+## The pattern underneath
 
 None of these algorithms is deep; most are one fold over the grammar or
 the automaton with a stated invariant. The system's property comes from

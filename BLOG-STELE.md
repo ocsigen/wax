@@ -37,30 +37,31 @@ inline import.
 This post is about how we got there, and about stele, the tool we
 extracted so any Menhir grammar can do the same.
 
-## The approach in one paragraph
+## Generate them, then test them like code
 
 Menhir lets you attach a message to every error state of the LR automaton
-(`--list-errors`, `--compile-errors`). That machinery, and much of the
-method here, comes from François Pottier's CC 2016 paper "Reachability and
-Error Diagnosis in LR(1) Parsers", which enumerated every error state of
-CompCert's C parser and hand-wrote a complete, maintained message
-collection for it. stele mechanizes what the paper left to the human
-expert. The catch the paper's experts absorbed by hand is scale: our two
-grammars have 680 and 541 error states, and they change every time the
-grammar does. So we stopped writing messages and started generating them
-from the grammar itself, then treated the output like code: promoted
-golden files pin every message, a census golden pins the distinct
-wordings, and a stats golden pins every measurable quality property, so
-`dune runtest` fails on any regression. Hand-written text survives only
-where heuristics cannot serve, in a small overrides file whose entries
-fail the build if the grammar moves under them. Nothing depends on
-discipline; everything is a diff you review.
+(`--list-errors`, `--compile-errors`). That machinery, and much of the method
+here, comes from François Pottier's CC 2016 paper "Reachability and Error
+Diagnosis in LR(1) Parsers", which enumerated every error state of CompCert's C
+parser and hand-wrote a complete, maintained collection of messages for it.
 
-## What the generator knows
+stele mechanizes what that paper left to the human expert. The catch its experts
+absorbed by hand is scale: our two grammars have 680 and 541 error states, and
+they shift every time the grammar does. So we stopped writing messages and
+started generating them from the grammar itself.
 
-The generator reads two artifacts Menhir already produces: the error
-sentences (`--list-errors`) and the compiled grammar (`--cmly`, via
-menhirSdk). From those it derives, per error state:
+Then we treated the output like code. A promoted golden file pins every message,
+a census golden pins the distinct wordings, and a stats golden pins every
+measurable quality property, so `dune runtest` fails on any regression.
+Hand-written text survives only where the heuristics cannot, in a small
+overrides file whose entries fail the build if the grammar moves under them.
+Nothing depends on discipline; everything is a diff you review.
+
+## From grammar to message
+
+The generator reads two artifacts Menhir already produces: the error sentences
+(`--list-errors`) and the compiled grammar (`--cmly`, via menhirSdk). From those
+it works out, for each error state:
 
 - the expected continuations, computed with real nullability so a message
   can see past an optional list to the `'}'` behind it;
@@ -102,10 +103,10 @@ the results:
   sweep, a ranked advisor for additions and removals, and a calibration
   mode that reproduces the human audit's 75 verdicts at 100%.
 
-## Three war stories
+## Four bugs a human had to catch
 
-Honesty section. The machinery above did not spring fully formed, and
-its best parts exist because something embarrassing surfaced.
+None of this machinery sprang fully formed. Its best parts exist because
+something embarrassing surfaced, and a person, not a test, noticed first.
 
 **The hedge that never fired.** Menhir marks spurious reductions in its
 error sentences, and our hedge template was driven by that marker. For an
@@ -140,7 +141,7 @@ what you cannot judge.
 commented-out production, the one making a block's final semicolon
 optional, with a note that it ruined the error messages. That was true
 when it was written; nobody could say precisely how anymore. With the
-tooling in place we measured it: one regression, exactly located - a
+tooling in place we measured it: one regression, exactly located. A
 missing semicolon *between* statements stopped saying "expecting ';'"
 and started blaming the block's closing brace, because the error fold
 now ran past the statement. Three designs later (a reader caught two
@@ -148,7 +149,7 @@ more regressions in the diffs: the machine-applicable "insert ';'" fix
 vanished, and the unclosed-brace pointer went with it), the fix was a
 grammar restructure that stops the fold at the statement: the feature
 is on, the missing-semicolon message got *better* ("expecting ';', or
-'}'" - the brace is honestly legal now), and the recovery fix and
+'}'", since the brace is honestly legal now), and the recovery fix and
 which-brace pointer are untouched. Total reviewed diff: one line.
 Error-message quality had been a reason to constrain the language;
 now it is a measured property you can negotiate with.
