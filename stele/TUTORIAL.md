@@ -14,6 +14,10 @@ grammar, config, overrides, and dune rules, kept compiling and
 golden-checked by `dune runtest`. When in doubt, read those files; the
 tutorial is their story.
 
+Prerequisites: you should be able to run `menhir` and `dune`, and it helps to
+have written a Menhir grammar before. No parsing theory is assumed, and you do
+not need a grammar of your own; we build a tiny one here.
+
 ## Stage 1: the starting point
 
 A minimal calc grammar, tokens still bare:
@@ -56,10 +60,12 @@ introduced yet):
   (run menhir %{dep:parser.mly} --compile-errors %{dep:calc.messages})))
 ```
 
-`--list-errors` enumerates one representative sentence per error state;
-stele generates a message for each from the exact grammar in the `.cmly`;
-`--compile-errors` compiles the result into a `Parser_messages` module your
-driver queries by state number. Input A now says:
+An *error state* is one specific way the parse can fail; a realistic grammar
+has hundreds. `--list-errors` enumerates them, giving one sample input per
+state; stele generates a message for each from the exact grammar in the `.cmly`
+(the machine-readable grammar dump); and `--compile-errors` compiles the result
+into a `Parser_messages` module your driver queries by state number. Input A now
+says:
 
 ```
 Expecting 'plus', 'rparen', or 'star'.
@@ -112,8 +118,9 @@ module R = Parser_error_runtime.Make (Parser.MenhirInterpreter)
 let message, labels = R.resolve ~source ~env (Parser_messages.message state)
 ```
 
-`labels` carries a position and text for each marker. Rendered by a
-diagnostic front-end, input A now reads:
+`labels` carries a position and text for each marker. Feed the message and those
+labels to a source-diagnostics renderer (such as
+[Grace](https://github.com/johnyob/grace)) and input A now reads:
 
 ```
 Error: Expecting ')', '*', or '+'.
@@ -133,9 +140,13 @@ See "The runtime helper" in the README for the full signature.
 
 ## Stage 5: fold completed lists
 
-Input B still enumerates what a statement may start with. The user standing
-at a stray token after a complete list is better served by hearing where
-the block should end. One declaration:
+Input B still enumerates what a statement may start with. But the user is
+standing at a stray token *after* a complete list of statements; they are better
+served by hearing where the block should end than by a fresh list of what a
+statement can start with. The `%on_error_reduce` annotation tells menhir to
+finish (to "fold") any construct it has fully read before it reports the error,
+which lets stele phrase the message in terms of that finished construct. One
+declaration:
 
 ```
 %on_error_reduce stmts
@@ -154,13 +165,13 @@ The hedge ("Assuming that ...") is generated from menhir's own record of
 the fold, so it never claims more than the parser did. One blemish: "the
 stmts". Stage 7 fixes it.
 
-The `<^1>` line is the **hedge subject**: the runtime underlines the construct
-the hedge assumes complete (the finished statement list), stack cell 1 being the
-top of the post-reduction stack — the outermost fold's goto pushed it there. It
-resolves to that cell's full span, `these stmts` labelling it in the margin. An
-*empty* fold (a completed nullable list with no elements) has a zero-width span,
-so the runtime drops the label and the plain hedge stands alone. The census
-normalizes its depth (`<^_>`) just like the `<N>` hint's.
+The `<^1>` line is the **hedge subject**: at runtime it becomes an underline
+under the construct the hedge assumes complete (here, the finished statement
+list), with `these stmts` labelling it in the margin. The `1` is where that
+construct sits on the parser stack. An *empty* fold (a completed list that
+matched nothing) has nothing to underline, so the runtime drops the label and
+the plain hedge stands alone. The census normalizes the depth (`<^_>`) just like
+the `<N>` hint's.
 
 ## Stage 6: pin the output with goldens
 
