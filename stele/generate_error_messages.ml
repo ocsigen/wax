@@ -85,9 +85,23 @@ type config = {
   opener_nets : (char * net list) list;
       (** per opener character, the name-pattern nets that also count as an
           opener of that character in the missed-hint lint *)
+  wrappers : StringSet.t;
+      (** escape hatch for the structural wrapper classification:
+          parametric-rule base heads (the text before '(') listed here always
+          classify as a menhir-generated wrapper and expand through their
+          productions, even when the structural test (list- or option-shaped)
+          would keep them opaque. Empty for both real grammars — their
+          parameterized symbols are all genuine wrappers the structural test
+          already recognises. *)
 }
 
-let empty_config = { names = Hashtbl.create 1; classes = []; opener_nets = [] }
+let empty_config =
+  {
+    names = Hashtbl.create 1;
+    classes = [];
+    opener_nets = [];
+    wrappers = StringSet.empty;
+  }
 
 (* Read the [-config] file. Format (a hand-parsed line format, [#] comments,
    [[section]] headers), documented in stele's README:
@@ -95,6 +109,7 @@ let empty_config = { names = Hashtbl.create 1; classes = []; opener_nets = [] }
      [names]        NAME = readable phrase          (one per line)
      [class LABEL]  a member terminal per line       (repeatable header)
      [opener-nets]  OPENER_CHAR KIND ARG             (KIND = prefix|suffix|exact)
+     [wrappers]     a parametric-rule base head per line
 
    Blank lines and [#] comment lines are ignored anywhere. *)
 let load_config file =
@@ -105,6 +120,7 @@ let load_config file =
     (* (label, members ref), reversed *)
   in
   let nets = Hashtbl.create 8 in
+  let wrappers = ref StringSet.empty in
   let section = ref `None in
   List.iter
     (fun raw ->
@@ -113,6 +129,7 @@ let load_config file =
       else if line.[0] = '[' && line.[String.length line - 1] = ']' then
         let inner = String.sub line 1 (String.length line - 2) |> String.trim in
         if inner = "names" then section := `Names
+        else if inner = "wrappers" then section := `Wrappers
         else if inner = "opener-nets" then section := `Nets
         else if String.length inner >= 6 && String.sub inner 0 6 = "class " then (
           let label =
@@ -141,6 +158,7 @@ let load_config file =
             match !classes with
             | (_, members) :: _ -> members := StringSet.add line !members
             | [] -> assert false)
+        | `Wrappers -> wrappers := StringSet.add line !wrappers
         | `Nets -> (
             match
               String.split_on_char ' ' line |> List.filter (fun s -> s <> "")
@@ -168,6 +186,7 @@ let load_config file =
     names;
     classes = List.rev_map (fun (l, m) -> (l, !m)) !classes;
     opener_nets = Hashtbl.fold (fun c nets acc -> (c, nets) :: acc) nets [];
+    wrappers = !wrappers;
   }
 
 let net_matches token = function
@@ -191,13 +210,19 @@ type gram = {
   all_terminals : StringSet.t;
       (** every real terminal name (the error/EOF pseudo-tokens included), used
           by the config rot guard's [opener-nets] pattern check *)
+  all_nonterminals : StringSet.t;
+      (** every nonterminal name (parametric instantiations included), used by
+          the config rot guard's [wrappers] head check *)
   nullable : string -> bool;  (** false for terminals and unknown names *)
   productions : string -> string list list;
       (** each right-hand side as a list of surface symbol names *)
   is_generated : string -> bool;
-      (** menhir-generated (a parametric-rule instantiation or an inlined
-          anonymous rule) — expand it through its productions; a user-named
-          nonterminal stays opaque *)
+      (** a menhir-generated *wrapper* — an inlined anonymous rule, or a
+          parametric-rule instantiation whose body is list- or option-shaped
+          over its element (see [symbol_is_generated]). Expand it through its
+          productions. A user-named nonterminal, and a phantom-parameterized
+          instantiation whose body is a real construct (not a wrapper shape),
+          stay opaque and render by their base name. *)
 }
 
 (* The LR(1) automaton, read from the same [.cmly], keyed by the state number
@@ -226,16 +251,72 @@ type automaton = {
           menhir computes it through nullable prefixes already *)
 }
 
-(* A menhir-generated nonterminal is a parametric-rule instantiation
-   ([option(...)], [list(...)], the [separated_*] / [loption] / [boption]
-   wrappers, and the inlined [__anonymous_*] rules) — all of which carry a '(' in
-   their surface name — or a bare anonymous symbol. Such a symbol is expanded
-   through its productions; a user-named nonterminal ([expression],
-   [statement_list], …) is kept opaque, the deliberate design of naming the
-   construct rather than its FIRST set. *)
-let symbol_is_generated s =
-  String.contains s '('
-  || (String.length s >= 11 && String.sub s 0 11 = "__anonymous")
+(* Check if a symbol involves an anonymous symbol generated by Menhir (a bare
+   [__anonymous_N], or one that survived inside a wrapper instantiation like
+   [option(__anonymous_3)]); [__anonymous] can appear anywhere in the name. *)
+let involves_anonymous s =
+  let pattern = "__anonymous" in
+  let plen = String.length pattern in
+  let slen = String.length s in
+  let rec check i =
+    if i + plen > slen then false
+    else if String.sub s i plen = pattern then true
+    else check (i + 1)
+  in
+  check 0
+
+(* Does [s] contain [sub] as a substring? *)
+let contains_sub s sub =
+  let ls = String.length s and lsub = String.length sub in
+  let rec go i = i + lsub <= ls && (String.sub s i lsub = sub || go (i + 1)) in
+  go 0
+
+(* The base head of a (possibly parameterized) symbol: the text before the first
+   '(' ([function_type(in_type)] -> [function_type], [option(ID)] -> [option]).
+   An unparameterized symbol is returned unchanged. *)
+let base_symbol_name s =
+  match String.index_opt s '(' with Some i -> String.sub s 0 i | None -> s
+
+(* Is [s] a menhir-generated *wrapper* — a symbol to expand through its
+   productions rather than name opaquely? The classification is STRUCTURAL, not
+   nominal (the old test keyed on '(' alone, which cannot tell a stdlib wrapper
+   from a phantom-parameterized user rule like [function_type(in_type)] — see the
+   15c DONE note in ERROR-MESSAGES.md). Three ways to qualify:
+
+   - an inlined anonymous rule ([__anonymous_*], possibly nested inside an
+     instantiation) — always expanded, as before;
+   - a parametric instantiation (name carries '(') whose body is *list-shaped*
+     over its element: directly self-recursive ([list(X)], [nonempty_list(X)],
+     [semi_list(X)], [separated_nonempty_list(_,X)] and wax's own
+     [separated_nonempty_list_trailing(_,X)]), or a single production that IS a
+     stdlib list wrapper ([loption(separated_…)]);
+   - a parametric instantiation whose body is *option-shaped* ([ε | X]): an empty
+     production and every production empty or a single symbol ([option(X)],
+     [boption(TOKEN)], [loption(X)]).
+
+   Everything else — a user-named nonterminal, and a parametric instantiation
+   whose body is a real construct (the phantom-parameter case) — is opaque and
+   renders by its base name. The [wrappers] config set is an escape hatch: a base
+   head listed there is forced to expand (applied by [apply_wrapper_overrides] at
+   the call site, where the config is known). *)
+let symbol_is_generated ~productions s =
+  involves_anonymous s
+  || String.contains s '('
+     &&
+     let prods = productions s in
+     let self_recursive = List.exists (List.exists (fun x -> x = s)) prods in
+     let single_list_wrapper =
+       List.exists
+         (function
+           | [ x ] -> contains_sub x "list(" || contains_sub x "separated_"
+           | _ -> false)
+         prods
+     in
+     let option_shaped =
+       List.exists (function [] -> true | _ -> false) prods
+       && List.for_all (function [] | [ _ ] -> true | _ -> false) prods
+     in
+     self_recursive || single_list_wrapper || option_shaped
 
 (* Menhir stores a token alias with its surrounding quotes ("\"(\"" for "("). *)
 let strip_alias_quotes a =
@@ -273,6 +354,7 @@ let load_grammar cmly_file =
       in
       let existing = try Hashtbl.find prod_tbl lhs with Not_found -> [] in
       Hashtbl.replace prod_tbl lhs (existing @ [ rhs ]));
+  let productions_of s = try Hashtbl.find prod_tbl s with Not_found -> [] in
   let gram =
     {
       is_terminal = (fun s -> Hashtbl.mem terminal_names s);
@@ -281,11 +363,14 @@ let load_grammar cmly_file =
         Hashtbl.fold
           (fun n () acc -> StringSet.add n acc)
           terminal_names StringSet.empty;
+      all_nonterminals =
+        Hashtbl.fold
+          (fun n _ acc -> StringSet.add n acc)
+          prod_tbl StringSet.empty;
       nullable =
         (fun s -> try Hashtbl.find nullable_tbl s with Not_found -> false);
-      productions =
-        (fun s -> try Hashtbl.find prod_tbl s with Not_found -> []);
-      is_generated = symbol_is_generated;
+      productions = productions_of;
+      is_generated = symbol_is_generated ~productions:productions_of;
     }
   in
   (* Automaton view (soundness oracle). *)
@@ -350,18 +435,6 @@ let load_grammar cmly_file =
     }
   in
   (terminals, gram, auto)
-
-(* Check if a symbol involves an anonymous symbol generated by Menhir *)
-let involves_anonymous s =
-  let pattern = "__anonymous" in
-  let plen = String.length pattern in
-  let slen = String.length s in
-  let rec check i =
-    if i + plen > slen then false
-    else if String.sub s i plen = pattern then true
-    else check (i + 1)
-  in
-  check 0
 
 (* The opaque continuation symbols a symbol can begin with: terminals and
    user-named nonterminals. A menhir-generated symbol is expanded through its
@@ -618,6 +691,12 @@ let get_readable_name_src cfg terminals s =
   match Hashtbl.find_opt terminals s with
   | Some a -> (Printf.sprintf "'%s'" a, Alias)
   | None -> (
+      (* An opaque parameterized instantiation (a phantom-parameter split like
+         [function_type(in_type)]) renders by its base head: the [names] lookup
+         and the noun-phrase derivation see [function_type], not the argument
+         list. Terminals never carry a '(', so this only affects nonterminals;
+         wrapper instantiations are expanded upstream and never reach here. *)
+      let s = base_symbol_name s in
       match special_name cfg s with
       | Some name -> (name, Names_entry)
       | None ->
@@ -986,7 +1065,36 @@ let check_config_rot ~file gram cfg =
             in
             stale "opener-nets" pat)
         nets)
-    cfg.opener_nets
+    cfg.opener_nets;
+  (* A [wrappers] head must be the base of at least one parameterized nonterminal
+     (a lone head, no '(', is never itself a nonterminal), else the escape hatch
+     is dead. *)
+  StringSet.iter
+    (fun head ->
+      if
+        not
+          (StringSet.exists
+             (fun n -> String.contains n '(' && base_symbol_name n = head)
+             gram.all_nonterminals)
+      then stale "wrappers" head)
+    cfg.wrappers
+
+(* Fold the [wrappers] config escape hatch into a grammar's classification: a
+   parameterized instantiation whose base head is listed always classifies as a
+   wrapper (expand through productions), on top of the structural test. The config
+   is not known when [load_grammar] runs, so this is applied at the call site once
+   both are loaded; a no-op when [wrappers] is empty (both real grammars). *)
+let apply_wrapper_overrides cfg gram =
+  if StringSet.is_empty cfg.wrappers then gram
+  else
+    {
+      gram with
+      is_generated =
+        (fun s ->
+          gram.is_generated s
+          || String.contains s '('
+             && StringSet.mem (base_symbol_name s) cfg.wrappers);
+    }
 
 (* Report an override whose sentence matches no generated entry: the file must
    never drift silently, so a stale key fails the build. Called once the full
@@ -1899,16 +2007,17 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
   (* Rot protection: every override must still key a live error state, in every
      mode, so a stale entry can never sit silently in the file. *)
   check_override_rot overrides entries;
-  let terminals, grammar, auto = load_grammar cmly_file in
+  let terminals, grammar0, auto = load_grammar cmly_file in
   let cfg =
     if config_file = "" then empty_config
     else
       let cfg = load_config config_file in
       (* Rot protection: every config entry must still name a live grammar
          symbol, in every config-consuming mode. *)
-      check_config_rot ~file:config_file grammar cfg;
+      check_config_rot ~file:config_file grammar0 cfg;
       cfg
   in
+  let grammar = apply_wrapper_overrides cfg grammar0 in
   (* Closer terminals are derived from the token aliases, so a grammar that
      aliases its delimiters gets hints with no configuration. *)
   let closers = closers_of terminals in
@@ -2154,10 +2263,11 @@ let tune_run_trial ~menhir ~config_file ~mly ~outprefix : tune_trial option =
     else
       try
         let entries = Parse_messages.parse_file messages in
-        let terminals, grammar, auto = load_grammar cmly in
+        let terminals, grammar0, auto = load_grammar cmly in
         let cfg =
           if config_file = "" then empty_config else load_config config_file
         in
+        let grammar = apply_wrapper_overrides cfg grammar0 in
         let closers = closers_of terminals in
         let results =
           List.map

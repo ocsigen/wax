@@ -218,7 +218,7 @@ Everything grammar-specific that is not derivable from the `.cmly` lives in the
 `-config` sidecar, so the generator itself is grammar-agnostic. It is a small
 line format: `#` comments and blank lines anywhere, `[section]` headers, one
 entry per line. Absent, the generator falls back to no curated names, no
-classes, and alias-only delimiter hints. Three sections (all optional):
+classes, and alias-only delimiter hints. Four sections (all optional):
 
 ```
 # Readable names for symbols whose auto-derived rendering would be jargon or
@@ -241,6 +241,16 @@ STAR
 [opener-nets]
 ( prefix LPAREN
 { exact LBRACE
+
+# Escape hatch for the structural wrapper classification. A parametric-rule
+# base head (the text before '(') listed here always classifies as a
+# menhir-generated wrapper and is expanded through its productions, even when
+# the structural test (list- or option-shaped body) would keep it opaque. One
+# head per line. Empty for both real grammars — their parameterized symbols are
+# all genuine wrappers the structural test already recognises; it exists for a
+# grammar whose home-grown combinator the test misjudges.
+[wrappers]
+my_list_combinator
 ```
 
 Delimiter **closers** need no config at all: a terminal aliased `)` / `]` / `}`
@@ -253,7 +263,8 @@ has, so two grammars do not share one file.
 **Rot guard.** Like the `.overrides` file, the config is checked at load (in
 every config-consuming mode, which already reads the `.cmly`). A `[class]`
 member that is not a terminal, a `[names]` key that is neither a terminal nor a
-nonterminal, or an `[opener-nets]` pattern that matches no terminal is a hard
+nonterminal, an `[opener-nets]` pattern that matches no terminal, or a
+`[wrappers]` head that is the base of no parameterized nonterminal is a hard
 error naming the file, section, and stale entry, so a config left behind by a
 grammar change fails the build instead of firing on nothing. Use
 `stele suggest-classes` to discover new classes worth adding, and
@@ -328,22 +339,41 @@ Three techniques follow:
   `function_type` rule used both by a declaration (`fn f() -> t { ... }`,
   where only `->` and `{` can follow) and as a type inside expressions
   (where the surrounding expression's operators follow) produces one state
-  whose message offers both. Duplicate the rule under a second name with
-  textually identical productions:
+  whose message offers both.
+
+  The preferred fix is a **phantom parameter** (Pottier, "Reachability and
+  Error Diagnosis in LR(1) Parsers", CC 2016, §4 "Selective Duplication").
+  Parameterize the rule with an unused formal and instantiate it at each home
+  with a distinct empty-marker argument:
 
   ```
-  function_signature: (* the declaration's own copy *)
-    | "(" p = parameter_list ")" { ... }
-    | "(" p = parameter_list ")" "->" r = result_type { ... }
+  function_type(ctx):                (* ctx is unused — a phantom *)
+    | "(" p = parameter_list ")" ioption("->" result_type) { ... }
+  in_type: { () }                    (* empty phantom markers *)
+  in_declaration: { () }
   ```
 
-  Distinct nonterminals mean distinct LR items, so the states stop merging
-  and each home gets its own precise message ("Expecting '->', or '{'."
-  for the declaration). Same language; the cost is keeping the two copies
-  in step. The symptom to hunt: a message mixing vocabularies no single
-  context accepts. Nothing mechanical flags this class (a hand-written
-  override saying too much is sound token by token), so it is found by
-  reading the census, or an override against its own sentence.
+  used as `function_type(in_type)` at the type homes and
+  `function_type(in_declaration)` at the declaration. Menhir expands the two
+  instantiations to distinct automaton nonterminals with their own LR items,
+  so the states stop merging and each home gets its own precise message
+  ("Expecting '->', or '{'." for the declaration). One definition, no copies
+  to keep in step. Menhir warns that the markers are unreachable — harmless.
+  stele renders the instantiation opaquely by its base name ("a function
+  type"), because it classifies wrappers structurally (list- or option-shaped
+  bodies), not by the '(' in the name; a phantom split is neither shape, so it
+  stays a named construct. (If the structural test ever misjudged a real
+  wrapper as a construct, the `[wrappers]` config section forces it to expand.)
+
+  The **textual-duplication fallback** does the same split without a
+  parameter, for a grammar that cannot use the phantom form: copy the rule
+  under a second name with identical productions
+  (`function_signature: | "(" p = parameter_list ")" { ... } | ...`). Distinct
+  nonterminals, distinct LR items, same effect; the cost is keeping the two
+  copies in step. The symptom to hunt for either form: a message mixing
+  vocabularies no single context accepts. Nothing mechanical flags this class
+  (a hand-written override saying too much is sound token by token), so it is
+  found by reading the census, or an override against its own sentence.
 
   `%on_error_reduce` on the shared rule is the lighter alternative when
   the state has a completed production: the spurious reduction's goto

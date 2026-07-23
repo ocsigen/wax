@@ -127,9 +127,10 @@ Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 # definition ('type f = fn(…)') or a reference type inside an expression
 # ('x as &fn(…)'). A result type ('->') or, in the expression home, an operator /
 # a postfix / the enclosing block's '{' / the end of the expression may follow.
-# The function/tag *declaration* signature no longer merges here: it went to the
-# duplicated 'function_signature' rule (its own state auto-generates
-# "Expecting ''', '->', ';', or '{'."), so this state and its message are now the
+# The function/tag *declaration* signature no longer merges here: it is the
+# phantom-parameter instantiation 'function_type(in_declaration)' (this state is
+# 'function_type(in_type)'), whose own state auto-generates
+# "Expecting ''', '->', ';', or '{'.", so this state and its message are now the
 # type home alone.
 parse: TYPE IDENT EQUAL FN LPAREN RPAREN WHILE
 Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.

@@ -602,7 +602,7 @@ cast_type:
                   ($sloc,
            Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a cast type.\n" t) )) }
 | t = reference_type { Valtype (Ref t) }
-| "&" nullable = boption("?") FN s = function_type
+| "&" nullable = boption("?") FN s = function_type(in_type)
    { Functype { nullable; sign = s } }
 (*
 | functype { assert false }
@@ -617,7 +617,7 @@ result_type:
 | "(" l = result_type_ ")" { Array.of_list l }
 
 function_type_definition:
-| FN s = function_type
+| FN s = function_type(in_type)
   { s }
 
 storage_type:
@@ -733,31 +733,33 @@ parameter_list:
 | l = separated_list_trailing(",", function_parameter)
   { Array.of_list l }
 
-function_type:
+(* [ctx] is a phantom parameter (Pottier, "Reachability and Error Diagnosis in
+   LR(1) Parsers", CC 2016, §4 "Selective Duplication"): it is unused in the body,
+   but instantiating [function_type(in_type)] at the two type-position homes
+   ([cast_type]'s [&fn(…)] and [function_type_definition]'s [type … = fn(…)]) and
+   [function_type(in_declaration)] at the function/tag declaration signature (via
+   [optional_function_type]) makes menhir expand them to two distinct automaton
+   nonterminals with their own LR items. So the "after the parameter list" error
+   state of a *declaration* no longer merges with the type-position home, and
+   reports only the continuations a signature admits ('->', '{', ';') instead of
+   the union with an expression's operator FOLLOW. Never %inline: an inlined rule
+   vanishes from the automaton and the split disappears with it. This is the
+   single-definition form of the split; the earlier textual duplicate
+   [function_signature] is gone (see ERROR-MESSAGES.md 15c/19 — the stele renderer
+   now classifies wrappers structurally, so the [function_type(in_type)] head
+   still renders "a function type", not "'('"). [in_type]/[in_declaration] are
+   empty phantom markers, unreachable by design (menhir warns; harmless). *)
+function_type(ctx):
 | "(" params = parameter_list ")" results = ioption("->" r = result_type {r})
   { {params; results = Option.value ~default:[||] results} }
 
-(* A textual duplicate of [function_type] reserved for the function/tag
-   declaration signature (via [optional_function_type]). Keeping it a distinct
-   nonterminal gives the "after the parameter list" error state its own LR
-   items, so menhir does not merge it with the type-position home ([cast_type]'s
-   [&fn(…)] and [function_type_definition]'s [type … = fn(…)]). The declaration
-   state then reports only the continuations a signature admits ('->', '{', ';')
-   instead of the union with an expression's operator FOLLOW. Never %inline: an
-   inlined rule vanishes from the automaton and the split disappears with it. A
-   phantom-parameter form ([function_type(ctx)], Pottier CC 2016 §4) was trialled
-   and rejected: the instantiation names carry a '(', which the stele renderer's
-   [symbol_is_generated] treats as a menhir wrapper and expands, regressing the
-   "Expecting a function type." states to "Expecting '('." (see ERROR-MESSAGES.md
-   15c). *)
-function_signature:
-| "(" params = parameter_list ")" results = ioption("->" r = result_type {r})
-  { {params; results = Option.value ~default:[||] results} }
+in_type: { () }
+in_declaration: { () }
 
 function_name:
 | i = ident { i }
 
-optional_function_type: sign = option (function_signature) { sign }
+optional_function_type: sign = option (function_type(in_declaration)) { sign }
 
 %inline fundecl:
 | FN name = function_name
