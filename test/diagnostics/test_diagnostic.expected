@@ -20,11 +20,11 @@ Error: multi-line error
  ──➤  test.wax:2:8
 1 │ line 1
 2 │ line 2 start here
-  ·        ^^^^^^^^^^^
+  · ╭──────^
 3 │ line 3 middle
-  · ^^^^^^^^^^^^^^
+  · │
 4 │ line 4 end here
-  · ^^^^^^^^^^^^^^^
+  · ╰─────────────^
 5 │ line 5
 6 │ 
 
@@ -34,11 +34,11 @@ Error: error with multi-line secondary
 1 │ line 1
 2 │ line 2
 3 │ line 3 secondary start
-  ·        ^^^^^^^^^^^^^^^^
+  · ╭──────^
 4 │ line 4 secondary middle
-  · ^^^^^^^^^^^^^^^^^^^^^^^^
+  · │
 5 │ line 5 secondary end
-  · ^^^^^^^^^^^^^ multi-line secondary
+  · ╰───────────^ multi-line secondary
 6 │ line 6
 7 │ line 7 main error
   ·        ^^^^^
@@ -51,18 +51,18 @@ Error: long span error
  8 │ line 8
  9 │ line 9
 10 │ line 10
-   ·        ^
+   · ╭──────^
 11 │ line 11
-   · ^^^^^^^^
+   · │
 12 │ line 12
-   · ^^^^^^^^
+   · │
    · ...
 88 │ line 88
-   · ^^^^^^^^
+   · │
 89 │ line 89
-   · ^^^^^^^^
+   · │
 90 │ line 90
-   · ^^^^^^^
+   · ╰─────^
 91 │ line 91
 92 │ line 92
 

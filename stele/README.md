@@ -421,8 +421,9 @@ let main_message, labels =
   R.resolve ~source ~env (Parser_messages.message state)
 (* [labels] carries, per marker: for <N>, a one-character span at the opening
    delimiter (walked back over blanks when the cell's start is not itself the
-   delimiter); for <^N>, the whole construct's span (clamped to its first line
-   when it crosses several, and dropped when zero-width — an epsilon reduction),
+   delimiter); for <^N>, the whole construct's span (however many lines it
+   crosses — the diagnostic renderer draws a multi-line span as a spine — and
+   dropped when zero-width — an epsilon reduction),
    each with the marker's label text. Labels come back in emission order,
    subject before delimiter hint. *)
 ```

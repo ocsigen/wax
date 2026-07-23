@@ -346,10 +346,10 @@ order:
   2 │ 
   [128]
 
-A subject spanning several source lines is clamped to its first line: the
-completed statement list is `nop; nop;` across lines 2–3, but the underline is
-drawn only on line 2 (start..end-of-line), avoiding a full-height caret block
-under every line the construct covers:
+A subject spanning several source lines is underlined whole, as a spine (the
+diagnostic renderer's multi-line style): a corner `╭` opens on the first line at
+the construct's start, and `╰` closes on the last line with the label. Here the
+completed statement list is `nop; nop;` across lines 2–3:
 
   $ wax check subject-multiline.wax
   Error: Assuming that the statement list is complete, expecting '}'.
@@ -357,12 +357,36 @@ under every line the construct covers:
   1 │ fn f() {
     ·        ^ This '{' opens the enclosing construct.
   2 │   nop;
-    ·   ^^^^ this statement list
+    · ╭─^
   3 │   nop;
+    · ╰────^ this statement list
   4 │   @
     ·   ^
   5 │ }
   6 │ 
+  [128]
+
+A taller construct shows the spine's middle: each intervening line carries a
+vertical connector `│`, so the whole statement list `nop; nop; nop; nop;` (lines
+2–5) reads as one bracketed region:
+
+  $ wax check subject-multiline-tall.wax
+  Error: Assuming that the statement list is complete, expecting '}'.
+   ──➤  subject-multiline-tall.wax:6:3
+  1 │ fn f() {
+    ·        ^ This '{' opens the enclosing construct.
+  2 │   nop;
+    · ╭─^
+  3 │   nop;
+    · │
+  4 │   nop;
+    · │
+  5 │   nop;
+    · ╰────^ this statement list
+  6 │   @
+    ·   ^
+  7 │ }
+  8 │ 
   [128]
 
 The epsilon subject: `(global $g)` reduces an *empty* `exports` list, so the

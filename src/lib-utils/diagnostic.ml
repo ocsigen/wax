@@ -447,40 +447,52 @@ let output_error_with_source ?(output = channel_sink stderr) ~theme ~source
                 annotations
             in
             let num_annots = List.length line_annotations in
+            let vis_col col =
+              let col = min (String.length raw_content) col in
+              Unicode.terminal_width (String.sub raw_content 0 col)
+            in
             List.iteri
               (fun j a ->
                 let is_last_annot = is_last_line && j = num_annots - 1 in
                 let gutter_char = if is_last_annot then " " else "·" in
                 let is_start = !curr_line = a.start_line in
                 let is_end = !curr_line = a.end_line in
-                let visual_start, visual_len =
+                (* Emit the caret content for this annotation on this line. A
+                   single-line span is underlined with a run of '^'. A span that
+                   crosses several source lines is drawn as a spine (rustc's
+                   multi-line style, in wax's box-drawing house glyphs): the
+                   start line marks the construct's first column with a corner
+                   '╭' and a reach '─…^' from the left rail to it, each middle
+                   line carries a vertical connector '│', and the last line
+                   closes with '╰…^' reaching the final column, then the label.
+                   This replaces the earlier full-height caret block (a run of
+                   '^' under every covered line). *)
+                let carets =
                   if is_start && is_end then
-                    let start_col =
-                      min (String.length raw_content) a.start_col
+                    let start_vis = vis_col a.start_col in
+                    let end_vis = vis_col a.end_col in
+                    let underline =
+                      String.make (max 1 (end_vis - start_vis)) '^'
                     in
-                    let end_col = min (String.length raw_content) a.end_col in
-                    let prefix = String.sub raw_content 0 start_col in
-                    let visual_start = Unicode.terminal_width prefix in
-                    let len_bytes = max 0 (end_col - start_col) in
-                    let part = String.sub raw_content start_col len_bytes in
-                    (visual_start, Unicode.terminal_width part)
-                  else if is_start then
-                    let start_col =
-                      min (String.length raw_content) a.start_col
+                    String.make start_vis ' ' ^ underline
+                  else
+                    let reach caret =
+                      (* One box-drawing glyph is one display column, so a reach
+                         of [caret - 1] dashes lands the '^' at column [caret].
+                         A construct flush to column 0 has the corner itself sit
+                         on it, so no reach is drawn. *)
+                      if caret <= 0 then ""
+                      else
+                        let dashes =
+                          String.concat ""
+                            (List.init (caret - 1) (fun _ -> "─"))
+                        in
+                        dashes ^ "^"
                     in
-                    let prefix = String.sub raw_content 0 start_col in
-                    let visual_start = Unicode.terminal_width prefix in
-                    let len_bytes = String.length raw_content - start_col in
-                    let part = String.sub raw_content start_col len_bytes in
-                    (visual_start, Unicode.terminal_width part + 1)
-                  else if is_end then
-                    let end_col = min (String.length raw_content) a.end_col in
-                    let part = String.sub raw_content 0 end_col in
-                    (0, Unicode.terminal_width part)
-                  else (0, Unicode.terminal_width raw_content + 1)
-                in
-                let underline =
-                  with_style a.color (String.make (max 1 visual_len) '^')
+                    if is_start then "╭" ^ reach (vis_col a.start_col)
+                    else if is_end then
+                      "╰" ^ reach (max 1 (vis_col a.end_col) - 1)
+                    else "│"
                 in
                 let label =
                   match a.label with
@@ -492,7 +504,7 @@ let output_error_with_source ?(output = channel_sink stderr) ~theme ~source
                   | _ -> ""
                 in
                 print_line ~gutter_char gutter_padding
-                  (String.make visual_start ' ' ^ underline ^ label))
+                  (with_style a.color carets ^ label))
               line_annotations;
             curr_pos := min (String.length source) (next_eol + 1);
             incr curr_line

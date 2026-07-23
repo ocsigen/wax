@@ -58,29 +58,20 @@ module Make (E : ENGINE) = struct
                 let pos1, pos2 = E.positions el in
                 if is_subject then
                   if
-                    (* The subject label spans the construct's true start..end. An
-                     empty (epsilon) reduction — "the exports are complete" with
-                     zero exports assumed complete — leaves a zero-width span;
-                     underlining nothing is noise, so drop the label and let the
-                     hedge sentence stand on its own. A multi-line construct is
-                     clamped to its first line (start..end-of-line): the
-                     full-height underline the region renderer would otherwise
-                     draw across every line is heavy, and the first line already
-                     identifies the construct. *)
+                    (* The subject label spans the construct's true start..end,
+                     however many source lines it crosses — the diagnostic
+                     renderer draws a multi-line span as a spine, so the whole
+                     construct is underlined. An empty (epsilon) reduction — "the
+                     exports are complete" with zero exports assumed complete —
+                     leaves a zero-width span; underlining nothing is noise, so
+                     drop the label and let the hedge sentence stand on its
+                     own. *)
                     pos1.Lexing.pos_cnum >= pos2.Lexing.pos_cnum
                   then ()
                   else
-                    let loc_end =
-                      if pos1.Lexing.pos_lnum = pos2.Lexing.pos_lnum then pos2
-                      else
-                        let eol =
-                          try String.index_from source pos1.Lexing.pos_cnum '\n'
-                          with Not_found -> String.length source
-                        in
-                        { pos1 with Lexing.pos_cnum = eol }
-                    in
                     related :=
-                      { loc_start = pos1; loc_end; text = msg } :: !related
+                      { loc_start = pos1; loc_end = pos2; text = msg }
+                      :: !related
                 else
                   (* This hint points at a single opening delimiter, so underline
                      one character. The delimiter is normally the cell's start —

@@ -92,18 +92,18 @@ conditionals).
     Conditional annotations cannot be emitted to the WebAssembly binary format.
     ──➤  cond.wax:1:1
    1 │ #[if(ocaml_version >= (5, 1, 0))]
-     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     · ╭
    2 │ {
-     · ^^
+     · │
    3 │     const caml_marshal_header_size: i32 = 16;
-     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     · │
      · ...
    6 │ {
-     · ^^
+     · │
    7 │     const caml_marshal_header_size: i32 = 20;
-     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     · │
    8 │ }
-     · ^
+     · ╰
    9 │ 
   10 │ #[if(feature = "gc")]
   Hint:

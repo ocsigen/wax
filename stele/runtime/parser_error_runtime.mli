@@ -13,8 +13,8 @@
     build-time tool) cannot do it — the adopter's error handler must, at the
     point it holds the incremental engine's [env]. This library is that
     resolution, extracted once so every adopter shares the subtle half (the
-    walk-back-over-blanks-to-the-opening-delimiter refinement, the
-    epsilon/multi-line subject handling) rather than reimplementing it.
+    walk-back-over-blanks-to-the-opening-delimiter refinement, the epsilon
+    subject handling) rather than reimplementing it.
 
     A consumer reading an older generator's output sees only [<N>] markers; a
     generator carrying [<^N>] markers stays readable to a resolver that predates
@@ -50,8 +50,8 @@ module Make (E : ENGINE) : sig
   }
   (** A resolved marker and its own label text (the marker prefix and its bounds
       removed): a delimiter hint gives a one-character span at the opening
-      delimiter, a hedge subject the whole construct's span (clamped to its
-      first line when it crosses several). *)
+      delimiter, a hedge subject the whole construct's true span (rendered as a
+      multi-line spine when it crosses several lines). *)
 
   val resolve : source:string -> env:'a E.env -> string -> string * label list
   (** [resolve ~source ~env message] post-processes a stele-generated [message]
@@ -61,9 +61,9 @@ module Make (E : ENGINE) : sig
       - [<N>…] anchors at the [N]-th stack cell's opening delimiter (walking
         back over blanks to the [(] / [\[] / [{] when the cell's own start is
         not itself the delimiter);
-      - [<^N>…] anchors across the [N]-th stack cell's full span, clamped to its
-        first line for a multi-line construct, and {e dropped} when that span is
-        zero-width (an epsilon reduction — no construct to point at).
+      - [<^N>…] anchors across the [N]-th stack cell's full span (the whole
+        construct, however many lines it crosses), and {e dropped} when that
+        span is zero-width (an epsilon reduction — no construct to point at).
 
       Returns the main message (marker lines removed) and the located labels in
       the order the markers appear (subject before delimiter hint, matching the

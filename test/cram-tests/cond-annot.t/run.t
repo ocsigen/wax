@@ -33,15 +33,15 @@ They cannot be lowered to the binary format.
    ──➤  cond.wat:2:3
   1 │ (module
   2 │   (@if $oxcaml
-    ·   ^^^^^^^^^^^^^
+    · ╭─^
   3 │     (@then
-    · ^^^^^^^^^^^
+    · │
   4 │       (func $a (result i32) (i32.const 1)))
-    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    · │
   5 │     (@else
-    · ^^^^^^^^^^^
+    · │
   6 │       (func $a (result i32) (i32.const 2))))
-    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    · ╰──────────────────────────────────────────^
   7 │   (func $f (result i32)
   8 │     (@if (and $oxcaml
   Hint:
