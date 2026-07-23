@@ -587,16 +587,22 @@ typedef:
    distinct from the composite type's [(]. At the top level of a subtype an
    empty prefix would clash with [(sub …)] on [(], so the non-empty form is
    split out and the plain composite type kept as its own alternative. *)
+describes_clause:
+| "(describes" o = index ")" { o }
+
+descriptor_clause:
+| "(descriptor" d = index ")" { d }
+
 descriptor_clauses:
-| describes = ioption("(describes" o = index ")" { o })
-  descriptor = ioption("(descriptor" d = index ")" { d })
+| describes = ioption(describes_clause)
+  descriptor = ioption(descriptor_clause)
   { (describes, descriptor) }
 
 descriptor_clauses_nonempty:
-| "(describes" o = index ")"
-  descriptor = ioption("(descriptor" d = index ")" { d })
+| o = describes_clause
+  descriptor = ioption(descriptor_clause)
   { (Some o, descriptor) }
-| "(descriptor" d = index ")"
+| d = descriptor_clause
   { (None, Some d) }
 
 subtype:

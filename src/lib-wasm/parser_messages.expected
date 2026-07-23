@@ -2872,40 +2872,13 @@ parse_script: LPAREN_TYPE LPAREN SUB LPAREN WAIT
 
 Expecting 'array', 'cont', 'func', or 'struct'.
 
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR WAIT
-
-Expecting an index.
-
 parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES NAT RPAREN WAIT
 
-Expecting '(', or '(descriptor'.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIBES WAIT
-
-Expecting an index.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
+Expecting '(', or a descriptor clause.
 
 parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR NAT RPAREN WAIT
 
 Expecting a composite type.
-
-parse_script: LPAREN_TYPE LPAREN SUB LPAREN_DESCRIPTOR WAIT
-
-Expecting an index.
 
 parse_script: LPAREN_TYPE LPAREN SUB NAT NAT
 
@@ -2924,18 +2897,9 @@ parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT NAT
 Expecting ')'.
 <2>This '(' opens the enclosing construct.
 
-parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR NAT NAT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN LPAREN_DESCRIPTOR WAIT
-
-Expecting an index.
-
 parse_script: LPAREN_TYPE LPAREN_DESCRIBES NAT RPAREN WAIT
 
-Expecting '(', or '(descriptor'.
+Expecting '(', or a descriptor clause.
 
 parse_script: LPAREN_TYPE LPAREN_DESCRIBES WAIT
 

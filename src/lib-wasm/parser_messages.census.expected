@@ -65,9 +65,9 @@
     1x Expecting '(', 'declare', an element list, or an offset.
     1x Expecting '(', a 64-bit unsigned integer, or a page-size clause.
     1x Expecting '(', a block type, or a label.
-    2x Expecting '(', or '(descriptor'.
     1x Expecting '(', or ')'.
     1x Expecting '(', or a block type.
+    2x Expecting '(', or a descriptor clause.
     5x Expecting '('.
     1x Expecting '(then', or a folded instruction.
     1x Expecting ')', 'binary', 'quote', a module field, or an identifier ('$...').
@@ -165,7 +165,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or parameters and results.
        <_>This '(' opens the enclosing construct.
-  106x Expecting ')'.
+  102x Expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'and', 'not', 'or', a cmp op, or an integer.
     1x Expecting 'array', 'cont', 'func', 'struct', or 'sub'.
@@ -276,7 +276,7 @@
     2x Expecting an identifier ('$...').
     1x Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
     2x Expecting an index, or type use without bindings.
-   88x Expecting an index.
+   84x Expecting an index.
     1x Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     5x Expecting an integer.
     2x Expecting an offset.
