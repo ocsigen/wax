@@ -132,6 +132,5 @@ Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 # 'function_type(in_type)'), whose own state auto-generates
 # "Expecting ''', '->', ';', or '{'.", so this state and its message are now the
 # type home alone.
-parse: TYPE IDENT EQUAL FN LPAREN RPAREN WHILE
-Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
-
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN LPAREN RPAREN WHILE
+Expecting '->', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
