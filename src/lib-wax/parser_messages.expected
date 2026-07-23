@@ -335,7 +335,7 @@ Assuming that the constant expression is complete, expecting ']'.
 
 parse: DATA IDENT AT IDENT LBRACKET CHAR RBRACKET EQUAL WHILE
 
-Expecting a data elem.
+Expecting a data element.
 
 parse: DATA IDENT AT IDENT LBRACKET CHAR RBRACKET WHILE
 
@@ -397,7 +397,7 @@ Expecting an identifier.
 
 parse: DATA IDENT EQUAL STRING PLUSPLUS WHILE
 
-Expecting a data elem.
+Expecting a data element.
 
 parse: DATA IDENT EQUAL STRING WHILE
 
@@ -405,7 +405,7 @@ Expecting '++', or ';'.
 
 parse: DATA IDENT EQUAL WHILE
 
-Expecting a data elem.
+Expecting a data element.
 
 parse: DATA IDENT WHILE
 
@@ -702,7 +702,7 @@ Expecting '''.
 
 parse: FN IDENT LBRACE BR_TABLE LBRACKET QUOTE AS COMMA WHILE
 
-Expecting a labels else.
+Expecting case labels.
 
 parse: FN IDENT LBRACE BR_TABLE LBRACKET QUOTE AS WHILE
 
@@ -714,7 +714,7 @@ Expecting a label name.
 
 parse: FN IDENT LBRACE BR_TABLE LBRACKET WHILE
 
-Expecting a labels else.
+Expecting case labels.
 
 parse: FN IDENT LBRACE BR_TABLE WHILE
 
@@ -773,7 +773,7 @@ Expecting a label name.
 
 parse: FN IDENT LBRACE DISPATCH CHAR LBRACKET UNREACHABLE
 
-Expecting a labels else, or an index expression.
+Expecting an index expression, or case labels.
 
 parse: FN IDENT LBRACE DISPATCH UNREACHABLE
 
@@ -1122,7 +1122,7 @@ Expecting '}'.
 
 parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACE WHILE
 
-Expecting ';', '}', a trycatch all, or a trycatch arm.
+Expecting ';', '}', a catch arm, or a catch-all arm.
 <1>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE QUOTE AS COLON TRY LBRACE RBRACE CATCH LBRACKET WHILE
@@ -1311,7 +1311,7 @@ Expecting '=>'.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT FATARROW LBRACE RBRACE WHILE
 
-Expecting ';', '_', '}', or a trycatch arm.
+Expecting ';', '_', '}', or a catch arm.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE IDENT FATARROW WHILE
 
@@ -1323,7 +1323,7 @@ Expecting '&', or '=>'.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE SEMI WHILE
 
-Expecting ';', '_', '}', or a trycatch arm.
+Expecting ';', '_', '}', or a catch arm.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE UNDERSCORE AMPERSAND FATARROW WHILE
 
@@ -1348,7 +1348,7 @@ Expecting '&', or '=>'.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACE WHILE
 
-Expecting ';', '}', a trycatch all, or a trycatch arm.
+Expecting ';', '}', a catch arm, or a catch-all arm.
 <1>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE TRY LBRACE RBRACE CATCH LBRACKET IDENT AMPERSAND ARROW QUOTE UNDERSCORE
@@ -1745,7 +1745,7 @@ Assuming that the constant expression is complete, expecting ']'.
 
 parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET EQUAL WHILE
 
-Expecting a data elem.
+Expecting a data element.
 
 parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET SEMI WHILE
 
@@ -1859,11 +1859,11 @@ Expecting an identifier.
 
 parse: REC LBRACE TYPE IDENT EQUAL LBRACE RBRACE SEMI WHILE
 
-Expecting '}', or a typedef.
+Expecting '}', or a type definition.
 
 parse: REC LBRACE WHILE
 
-Expecting '}', or a typedef.
+Expecting '}', or a type definition.
 <1>This '{' opens the enclosing construct.
 
 parse: REC WHILE
@@ -2146,8 +2146,8 @@ Expecting a type name.
 
 parse: TAG IDENT LPAREN RPAREN QUOTE
 
-Assuming that the tag sig is complete, expecting ';'.
-<^1>this tag sig
+Assuming that the tag signature is complete, expecting ';'.
+<^1>this tag signature
 
 parse: TAG IDENT WHILE
 

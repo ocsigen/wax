@@ -69,8 +69,8 @@
     2x Assuming that the structure type is complete, expecting '}'.
        <^_>this structure type
        <_>This '{' opens the enclosing construct.
-    1x Assuming that the tag sig is complete, expecting ';'.
-       <^_>this tag sig
+    1x Assuming that the tag signature is complete, expecting ';'.
+       <^_>this tag signature
     1x Assuming that the then branch is complete, expecting ':'.
        <^_>this then branch
     1x Expecting '!', ''', ':', '{', or an optional function type.
@@ -137,17 +137,17 @@
    14x Expecting ':'.
     1x Expecting ';', '=', or '@'.
     2x Expecting ';', '=', or memory limits.
+    2x Expecting ';', '_', '}', or a catch arm.
     2x Expecting ';', '_', '}', or a catch clause.
-    2x Expecting ';', '_', '}', or a trycatch arm.
     2x Expecting ';', '_', or a match arm.
     1x Expecting ';', 'shared', '{', a page-size clause, or memory limits.
     1x Expecting ';', 'shared', '{', or a page-size clause.
     1x Expecting ';', 'shared', a page-size clause, or memory limits.
     2x Expecting ';', 'shared', or '{'.
     1x Expecting ';', 'shared', or a page-size clause.
-    2x Expecting ';', '}', a catch clause, or a catch-all clause.
+    2x Expecting ';', '}', a catch arm, or a catch-all arm.
        <_>This '{' opens the enclosing construct.
-    2x Expecting ';', '}', a trycatch all, or a trycatch arm.
+    2x Expecting ';', '}', a catch clause, or a catch-all clause.
        <_>This '{' opens the enclosing construct.
     2x Expecting ';', '}', or a dispatch arm.
     1x Expecting ';', '}', or a dispatch arm.
@@ -211,8 +211,8 @@
        <_>This '{' opens the enclosing construct.
     1x Expecting '}', or a structure type field.
        <_>This '{' opens the enclosing construct.
-    1x Expecting '}', or a typedef.
-    1x Expecting '}', or a typedef.
+    1x Expecting '}', or a type definition.
+    1x Expecting '}', or a type definition.
        <_>This '{' opens the enclosing construct.
     8x Expecting '}'.
        <_>This '{' opens the enclosing construct.
@@ -225,7 +225,7 @@
     1x Expecting a condition literal.
     3x Expecting a condition.
     5x Expecting a constant expression.
-    4x Expecting a data elem.
+    4x Expecting a data element.
     2x Expecting a data name.
     3x Expecting a descriptor operand.
     1x Expecting a dummy ctx.
@@ -235,8 +235,6 @@
     1x Expecting a heap type.
    18x Expecting a label name.
     1x Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
-    1x Expecting a labels else, or an index expression.
-    2x Expecting a labels else.
     3x Expecting a length expression.
     1x Expecting a parenthesized expression, or an expression.
     1x Expecting a raw number.
@@ -254,6 +252,7 @@
     3x Expecting an attribute expression.
    63x Expecting an expression.
    12x Expecting an identifier.
+    1x Expecting an index expression, or case labels.
     1x Expecting an index expression.
     6x Expecting an integer.
     1x Expecting an on-clause list.
@@ -261,3 +260,4 @@
     1x Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
        <_>This '(' opens the enclosing construct.
     2x Expecting braced fields.
+    2x Expecting case labels.

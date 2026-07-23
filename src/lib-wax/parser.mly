@@ -564,9 +564,9 @@ label_name:
 
 (* The comma-separated case labels of a [br_table]/[dispatch] bracket, ending
    in the mandatory [else <default>]: ['a, 'b, else 'd] or [else 'd]. *)
-labels_else:
+case_labels:
 | ELSE d = label { ([], d) }
-| x = label "," rest = labels_else
+| x = label "," rest = case_labels
   { let ls, d = rest in (x :: ls, d) }
 
 heap_type:
@@ -660,7 +660,7 @@ composite_type:
 type_name:
 | i = ident { i }
 
-typedef:
+type_definition:
 | TYPE name = type_name
   supertype = option(":" s = type_name { s })
   "=" op = boption(OPEN)
@@ -671,10 +671,11 @@ typedef:
         (name, {typ; supertype; final = not op; descriptor; describes}) }
 
 rectype:
-| REC "{" l = list(typedef) "}" { with_loc $loc($1) (Array.of_list l) }
-(* Reuse the typedef's own (already registered) location rather than register a
-   duplicate one for the same span, which would split trivia between them. *)
-| t = typedef { {desc = [|t|]; info = t.info} }
+| REC "{" l = list(type_definition) "}" { with_loc $loc($1) (Array.of_list l) }
+(* Reuse the type definition's own (already registered) location rather than
+   register a duplicate one for the same span, which would split trivia between
+   them. *)
+| t = type_definition { {desc = [|t|]; info = t.info} }
 
 attribute_expression: e = expression { e }
 
@@ -792,7 +793,7 @@ func:
 tag_name:
 | i = ident { i }
 
-tag_sig:
+tag_signature:
 | TAG name = tag_name
   t = ioption(":" t = type_name { t } )
   sign = optional_function_type
@@ -844,13 +845,13 @@ legacy_catch:
    the [&exn] is delivered above the payload); the catch-all ([_ => { … }],
    [_ & => { … }]) is grammar-enforced last, matching try_table's
    first-match-wins clause order. *)
-trycatch_arm:
+catch_arm:
 | t = ident "=>" l = braced_block
   { {arm_tag = Some t; arm_ref = false; arm_types = [||]; arm_body = l} }
 | t = ident "&" "=>" l = braced_block
   { {arm_tag = Some t; arm_ref = true; arm_types = [||]; arm_body = l} }
 
-trycatch_all:
+catch_all_arm:
 | "_" "=>" l = braced_block
   { {arm_tag = None; arm_ref = false; arm_types = [||]; arm_body = l} }
 | "_" "&" "=>" l = braced_block
@@ -910,7 +911,7 @@ blockinstr:
    block form. *)
 | h = branch_hint_attr i = blockinstr { hinted $sloc h i }
 | DISPATCH index = expression
-  "[" le = labels_else "]"
+  "[" le = case_labels "]"
   "{" arms = semi_list(dispatch_arm) "}"
   { let cases, default = le in
     with_loc $sloc (Dispatch {index; cases; default; arms}) }
@@ -943,7 +944,7 @@ blockinstr:
   { with_loc $sloc (TryTable {label; typ = blocktype bt; catches; block = l}) }
 | label = block_label TRY bt = option(block_type) l = braced_block
   CATCH
-  "{" arms = semi_list(trycatch_arm); catch_all = option(trycatch_all) "}"
+  "{" arms = semi_list(catch_arm); catch_all = option(catch_all_arm) "}"
   { with_loc $sloc
       (TryCatch {label; typ = blocktype bt; block = l;
                  arms = arms @ Option.to_list catch_all}) }
@@ -1149,7 +1150,7 @@ statement:
   { with_loc $sloc (Let (l, i)) }
 | BR l = label i = ioption(expression)
   { with_loc $sloc (Br (l, i)) }
-| BR_TABLE "[" le = labels_else "]" i = expression
+| BR_TABLE "[" le = case_labels "]" i = expression
   { let lst, l = le in with_loc $sloc (Br_table (lst @ [l], i)) }
 | RETURN i = ioption(expression) { with_loc $sloc (Return i) }
 | THROW t = tag_name "(" l = expression_list ")"
@@ -1221,7 +1222,7 @@ global:
   { fun attributes -> with_loc $sloc (Global {name; mut; typ; def; attributes}) }
 
 tag_def:
-| s = tag_sig ";"
+| s = tag_signature ";"
   { fun attributes ->
     let (name, typ, sign) = s in
     with_loc $sloc (Tag {name; typ; sign; attributes}) }
@@ -1257,9 +1258,9 @@ data_name:
    run [[f32: 1.5, nan]], or a [v128] constant), concatenated with [++]. See
    {!Ast.Data}. *)
 data_init:
-| l = separated_nonempty_list("++", data_elem) { l }
+| l = separated_nonempty_list("++", data_element) { l }
 
-data_elem:
+data_element:
 | s = STRING { Data_string s.desc }
 | "[" t = ident ":" l = separated_list_trailing(",", data_run_item) "]"
   { data_run $loc(t) t l }
@@ -1383,7 +1384,7 @@ import_kind_decl:
     (name, Import_func {typ; sign; exact}) }
 | mut = globalmut name = ident ":" typ = value_type
   { (name, Import_global {mut; typ}) }
-| s = tag_sig
+| s = tag_signature
   { let (name, typ, sign) = s in (name, Import_tag {typ; sign}) }
 | MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
   ps = ioption(mem_pagesize) sh = boption(SHARED)
