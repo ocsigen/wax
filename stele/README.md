@@ -34,7 +34,9 @@ state:
   the error sits inside ("`<2>This '{' opens the enclosing construct.`"), whose
   `<N>` marker the runtime helper resolves against the live parser stack;
 - a **hedge** for a state reached past an `%on_error_reduce` fold ("Assuming
-  that the statements are complete, expecting '}'.");
+  that the statements are complete, expecting '}'."), carrying a **subject
+  marker** `<^1>these statements` that the runtime helper resolves to an
+  underline spanning the whole construct the hedge assumes complete;
 - a **hand override** for the handful of states heuristics cannot serve.
 
 It also self-checks: a **soundness oracle** verifies every claimed continuation
@@ -344,21 +346,24 @@ Three techniques follow:
   The preferred fix is a **phantom parameter** (Pottier, "Reachability and
   Error Diagnosis in LR(1) Parsers", CC 2016, §4 "Selective Duplication").
   Parameterize the rule with an unused formal and instantiate it at each home
-  with a distinct empty-marker argument:
+  with a distinct argument:
 
   ```
   function_type(ctx):                (* ctx is unused — a phantom *)
     | "(" p = parameter_list ")" ioption("->" result_type) { ... }
-  in_type: { () }                    (* empty phantom markers *)
-  in_declaration: { () }
   ```
 
-  used as `function_type(in_type)` at the type homes and
-  `function_type(in_declaration)` at the declaration. Menhir expands the two
-  instantiations to distinct automaton nonterminals with their own LR items,
-  so the states stop merging and each home gets its own precise message
-  ("Expecting '->', or '{'." for the declaration). One definition, no copies
-  to keep in step. Menhir warns that the markers are unreachable — harmless.
+  used as, say, `function_type(TYPE)` at the type homes and
+  `function_type(FN)` at the declaration. Any two distinct symbols the
+  grammar already uses will do as arguments: the parameter never appears in
+  the body, and the instantiation name never reaches a message, so the
+  choice is cosmetic; pick evocative ones and leave a comment. (Fresh empty
+  marker nonterminals also work but make menhir warn that they are
+  unreachable, and there is no flag to silence that warning class.) Menhir
+  expands the two instantiations to distinct automaton nonterminals with
+  their own LR items, so the states stop merging and each home gets its own
+  precise message ("Expecting '->', or '{'." for the declaration). One
+  definition, no copies to keep in step.
   stele renders the instantiation opaquely by its base name ("a function
   type"), because it classifies wrappers structurally (list- or option-shaped
   bodies), not by the '(' in the name; a phantom split is neither shape, so it
@@ -394,12 +399,14 @@ prose.
 
 ## The runtime helper
 
-A generated message may carry a `<N>` marker, where `N` is a 1-based index into
-the parser's stack suffix. Resolving it needs the running parser's environment,
-so the adopter's error handler does it, once, via the `stele.runtime` library
-(`Parser_error_runtime`). It is a functor over the minimal slice of a Menhir
-incremental engine it needs, and depends on `menhirLib` and the standard library
-only (so it compiles under `js_of_ocaml` / `wasm_of_ocaml` too):
+A generated message may carry two marker kinds, both a 1-based index `N` into the
+parser's stack suffix: a **delimiter hint** `<N>This '(' opens …` and a **hedge
+subject** `<^N>this expression`. Resolving either needs the running parser's
+environment, so the adopter's error handler does it, once, via the
+`stele.runtime` library (`Parser_error_runtime`). It is a functor over the
+minimal slice of a Menhir incremental engine it needs, and depends on `menhirLib`
+and the standard library only (so it compiles under `js_of_ocaml` /
+`wasm_of_ocaml` too):
 
 ```ocaml
 module R = Parser_error_runtime.Make (struct
@@ -412,10 +419,17 @@ end)
 (* At a HandlingError checkpoint, with [env] the error environment: *)
 let main_message, labels =
   R.resolve ~source ~env (Parser_messages.message state)
-(* [labels] carries, per <N> marker, a one-character span at the opening
+(* [labels] carries, per marker: for <N>, a one-character span at the opening
    delimiter (walked back over blanks when the cell's start is not itself the
-   delimiter) and the marker's label text. *)
+   delimiter); for <^N>, the whole construct's span (clamped to its first line
+   when it crosses several, and dropped when zero-width — an epsilon reduction),
+   each with the marker's label text. Labels come back in emission order,
+   subject before delimiter hint. *)
 ```
+
+The two markers extend one vocabulary compatibly: a resolver that understands
+only `<N>` leaves a `<^N>` line inline (the `^`-tagged depth fails its integer
+parse), so a newer generator's output stays readable to an older helper.
 
 ## The annotation tuner
 

@@ -602,7 +602,7 @@ cast_type:
                   ($sloc,
            Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a cast type.\n" t) )) }
 | t = reference_type { Valtype (Ref t) }
-| "&" nullable = boption("?") FN s = function_type(in_type)
+| "&" nullable = boption("?") FN s = function_type(TYPE)
    { Functype { nullable; sign = s } }
 (*
 | functype { assert false }
@@ -617,7 +617,7 @@ result_type:
 | "(" l = result_type_ ")" { Array.of_list l }
 
 function_type_definition:
-| FN s = function_type(in_type)
+| FN s = function_type(TYPE)
   { s }
 
 storage_type:
@@ -735,9 +735,9 @@ parameter_list:
 
 (* [ctx] is a phantom parameter (Pottier, "Reachability and Error Diagnosis in
    LR(1) Parsers", CC 2016, §4 "Selective Duplication"): it is unused in the body,
-   but instantiating [function_type(in_type)] at the two type-position homes
+   but instantiating [function_type(TYPE)] at the two type-position homes
    ([cast_type]'s [&fn(…)] and [function_type_definition]'s [type … = fn(…)]) and
-   [function_type(in_declaration)] at the function/tag declaration signature (via
+   [function_type(FN)] at the function/tag declaration signature (via
    [optional_function_type]) makes menhir expand them to two distinct automaton
    nonterminals with their own LR items. So the "after the parameter list" error
    state of a *declaration* no longer merges with the type-position home, and
@@ -746,20 +746,24 @@ parameter_list:
    vanishes from the automaton and the split disappears with it. This is the
    single-definition form of the split; the earlier textual duplicate
    [function_signature] is gone (see ERROR-MESSAGES.md 15c/19 — the stele renderer
-   now classifies wrappers structurally, so the [function_type(in_type)] head
-   still renders "a function type", not "'('"). [in_type]/[in_declaration] are
-   empty phantom markers, unreachable by design (menhir warns; harmless). *)
+   now classifies wrappers structurally, so the [function_type(TYPE)] head still
+   renders "a function type", not "'('").
+
+   The two phantom actuals are the existing terminals [TYPE] and [FN], chosen only
+   as already-used symbols evocative of each home (a type position vs. an [fn]/[tag]
+   declaration): the parameter is never referenced in the body, and step-19's
+   base-name stripping keeps the instantiation name out of every rendered message,
+   so the choice is cosmetic. Earlier this used two purpose-made empty markers
+   [in_type]/[in_declaration], but those were unreachable nonterminals menhir warned
+   about on every build; reusing live terminals keeps the split with zero warnings. *)
 function_type(ctx):
 | "(" params = parameter_list ")" results = ioption("->" r = result_type {r})
   { {params; results = Option.value ~default:[||] results} }
 
-in_type: { () }
-in_declaration: { () }
-
 function_name:
 | i = ident { i }
 
-optional_function_type: sign = option (function_type(in_declaration)) { sign }
+optional_function_type: sign = option (function_type(FN)) { sign }
 
 %inline fundecl:
 | FN name = function_name
