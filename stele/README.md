@@ -196,8 +196,8 @@ Each alias re-runs and re-prints on every invocation (a `(universe)` dep), so
 there is nothing to clean between runs. The four inspection aliases are cheap.
 The two `tune` aliases re-run menhir once per trial (pinned to the switch's
 `menhir` via `%{bin:menhir}`) and take tens of seconds, so they run only when
-asked; `tune-advise` also reads the `.overrides` file to price each move's rot
-cost, `tune-dead` does not.
+asked; `tune-advise` also reads the `.overrides` file to price how many
+hand-written messages each move would re-key, `tune-dead` does not.
 
 ## The `.overrides` file
 
@@ -475,11 +475,18 @@ stele tune calibrate --grammar g.mly [--config g.config] --verdicts g.verdicts
 - **dead** — remove each current annotation; one whose removal leaves the stats,
   census, and message projection all unchanged is dead and reported for deletion.
 - **advise** — rank every single move (removing a current annotation, or adding
-  one for a nonterminal reduced somewhere in the automaton) by its stats-vector
-  delta. Each improving move is priced by its **override-rot cost** — the
-  `--overrides` sentence keys the trial's state re-pick would strand; a move whose
-  whole win lands on already-overridden states is reported separately as
-  `RELOCATES-OVERRIDDEN`.
+  one for a nonterminal reduced somewhere in the automaton). The report is
+  written for a human to paste into an issue: each move's counter shift is one
+  plain sentence naming only what moved (e.g. `One fewer over-cap "Syntax error"
+  state; error states 680 → 679.`), and every class carries a one-line legend.
+  Each improving move is also priced by how many **hand-written messages** (from
+  the `.overrides` file) it would **re-key** — states whose representative
+  sentence the trial's merge/renumber changes. A move whose whole improvement
+  lands on already-hand-written states is reported separately as
+  `RELOCATES-OVERRIDDEN` (apply only if the generated message would beat the
+  hand-written one). A move that gains an unclosed-delimiter pointer but also
+  adds a new `"Assuming ..."` message is reported as `MIXED` for a human to
+  judge against the census diff.
 - **calibrate** — replay a recorded keep/remove log (`--verdicts`); removing each
   `keep` annotation and re-adding each `removed` one must score non-improving.
   Reports the agreement fraction and every disagreement. The verdicts format is

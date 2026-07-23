@@ -37,7 +37,7 @@ keep argument
 keep separated_nonempty_list_trailing(",",argument)
 
 # --- removed (26) ---
-removed labels_else
+removed case_labels
 removed statement_list
 removed optional_function_type
 removed structure_type
@@ -45,7 +45,7 @@ removed result_type_
 removed expression_list
 removed structure
 removed argument_list
-removed list(typedef)
+removed list(type_definition)
 removed list(data_item)
 removed separated_nonempty_list_trailing(",",catch)
 removed loption(separated_nonempty_list_trailing(",",catch))
@@ -58,7 +58,7 @@ removed loption(separated_nonempty_list_trailing(",",data_run_item))
 removed separated_nonempty_list_trailing(",",on_clause)
 removed loption(separated_nonempty_list_trailing(",",on_clause))
 removed semi_list(legacy_catch)
-removed semi_list(trycatch_arm)
+removed semi_list(catch_arm)
 removed semi_list(match_arm)
 removed semi_list(dispatch_arm)
 removed block_type
