@@ -23,6 +23,25 @@ parse: CONST IDENT EQUAL CHAR AMPERSAND UNREACHABLE
 
 Expecting an expression.
 
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN LPAREN IDENT COMMA COMMA
+
+Assuming that the parameter list is complete, expecting ')'.
+<^1>this parameter list
+<2>This '(' opens the enclosing construct.
+
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN LPAREN RPAREN ARROW WHILE
+
+Expecting a result type.
+
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN LPAREN RPAREN WHILE
+
+Expecting '->', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
+
+parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN LPAREN WHILE
+
+Expecting ')', or a function parameter.
+<1>This '(' opens the enclosing construct.
+
 parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN WHILE
 
 Expecting a function type.
@@ -2217,7 +2236,7 @@ Expecting a result type.
 
 parse: TYPE IDENT EQUAL FN LPAREN RPAREN WHILE
 
-Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
+Expecting '->', or ';'.
 
 parse: TYPE IDENT EQUAL FN LPAREN WHILE
 

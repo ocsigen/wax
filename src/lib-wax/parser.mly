@@ -602,7 +602,7 @@ cast_type:
                   ($sloc,
            Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a cast type.\n" t) )) }
 | t = reference_type { Valtype (Ref t) }
-| "&" nullable = boption("?") FN s = function_type(TYPE)
+| "&" nullable = boption("?") FN s = function_type(AS)
    { Functype { nullable; sign = s } }
 (*
 | functype { assert false }
