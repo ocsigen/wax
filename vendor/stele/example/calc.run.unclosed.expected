@@ -1,0 +1,5 @@
+Error: Expecting ')', or an operator.
+ --> unclosed.calc:1:6
+1 | { (1 }
+  ·      ^
+  ·   ^ This '(' opens the enclosing construct.

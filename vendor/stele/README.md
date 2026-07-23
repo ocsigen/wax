@@ -23,7 +23,7 @@ language).
 New here? Start with [TUTORIAL.md](TUTORIAL.md): a ten-stage walkthrough
 that takes a tiny calculator grammar from menhir's bare "Syntax error" to
 the full setup, with the same error shown improving at every stage. Its
-final state is the tested example in `test/`.
+final state is the runnable example in `example/`.
 
 > Two honest caveats. The message templates are English-only. And the
 > heuristics are validated on exactly two grammars, so adopters will find edges.
@@ -150,7 +150,7 @@ flowchart LR
   M -->|"menhir --compile-errors"| P["Parser_messages.ml"]
 ```
 
-See [`test/dune`](test/dune) for the complete, runnable miniature. In outline:
+See [`example/dune`](example/dune) for the complete, runnable miniature. In outline:
 
 ```lisp
 ; 1. representative error sentences, one per error state
@@ -359,7 +359,7 @@ my_list_combinator
 ```
 
 For a complete, working example, see the calc grammar's
-[`test/calc.config`](test/calc.config): two sections, a dozen lines.
+[`example/calc.config`](example/calc.config): two sections, a dozen lines.
 
 Delimiter **closers** need no config at all: a terminal whose alias *ends* with
 `)` / `]` / `}` is a closer of that kind, mirroring the opener rule (an alias
@@ -672,11 +672,16 @@ stele/
   runtime/                   ; the stele.runtime helper library
     parser_error_runtime.ml{,i}
     dune
-  test/                      ; the toy calc grammar (the copyable template)
-    parser.mly  calc.config  calc.overrides
-    calc.expected  calc.stats.expected  calc.names.expected
+  example/                   ; a complete, runnable calc example (copyable template)
+    parser.mly  lexer.mll  calc.ml  ; grammar, lexer, and the parse+render driver
+    calc.config  calc.overrides
+    calc.expected  calc.stats.expected  calc.names.expected  ; generator goldens
+    calc.run.*.expected        ; the driver's output on good and broken inputs
+    ok.calc  unclosed.calc  stray.calc  garbage.calc  ; sample inputs
     calc-rot.config  calc-rot.expected  ; the config rot-guard case
     dune
+  test/                      ; stele's own regression tests
+    delim/                   ; the delimiter-coexistence grammar + runtime unit check
   README.md
 ```
 

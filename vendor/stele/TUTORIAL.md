@@ -9,8 +9,8 @@ the stage that produced it:
 - input B: `{ 1; ) }` (a stray token where a statement or `}` should be)
 - input C: `)` (garbage where the program should start)
 
-The destination is exactly `stele/test/` in this repository: the same
-grammar, config, overrides, and dune rules, kept compiling and
+The destination is exactly `example/` in the stele tree: the same
+grammar, lexer, driver, config, overrides, and dune rules, kept compiling and
 golden-checked by `dune runtest`. When in doubt, read those files; the
 tutorial is their story.
 
@@ -20,20 +20,24 @@ not need a grammar of your own; we build a tiny one here.
 
 ## Stage 1: the starting point
 
-A minimal calc grammar, tokens still bare:
+A minimal calc grammar, tokens still bare. The semantic actions evaluate the
+program (a `{`-delimited block of `;`-terminated expressions) to the list of
+statement values, so `calc` is a real little interpreter; but the error messages
+depend only on the grammar's *shape*, so none of what follows turns on the
+evaluation:
 
 ```
 %token <int> INT
 %token PLUS STAR SEMI LPAREN RPAREN LBRACE RBRACE EOF
-%start <unit> prog
+%start <int list> prog
 %left PLUS
 %left STAR
 %%
-prog:  | LBRACE stmts RBRACE EOF { () }
-stmts: | { () } | stmt stmts { () }
-stmt:  | e = expr SEMI { ignore e }
-expr:  | INT { () } | LPAREN expr RPAREN { () }
-       | expr PLUS expr { () } | expr STAR expr { () }
+prog:  | LBRACE s = stmts RBRACE EOF { s }
+stmts: | { [] } | v = stmt r = stmts { v :: r }
+stmt:  | e = expr SEMI { e }
+expr:  | i = INT { i } | LPAREN e = expr RPAREN { e }
+       | a = expr PLUS b = expr { a + b } | a = expr STAR b = expr { a * b }
 ```
 
 All three inputs produce the same thing: `Parser.Error`, rendered by most
@@ -43,7 +47,7 @@ have accepted; none of that knowledge reaches the user.
 ## Stage 2: wire the pipeline
 
 Three dune rules connect menhir's error machinery to stele (these are the
-first three rules of `stele/test/dune`, minus the options we have not
+first three rules of `example/dune`, minus the options we have not
 introduced yet):
 
 ```
@@ -108,14 +112,23 @@ an underline.
 ## Stage 4: resolve hints at runtime
 
 The `<N>` marker is resolved against the live parser by the runtime helper
-(library `stele.runtime`): instantiate its functor over your parser's
-incremental engine and call it in your error handler.
+(library `stele.runtime`): instantiate its functor over the slice of your
+parser's incremental engine it needs, and call it in your error handler. This is
+`calc.ml` in the example:
 
 ```ocaml
-module R = Parser_error_runtime.Make (Parser.MenhirInterpreter)
+module I = Parser.MenhirInterpreter
+
+module R = Parser_error_runtime.Make (struct
+  type 'a env = 'a I.env
+  type element = I.element
+
+  let get = I.get
+  let positions (I.Element (_, _, p1, p2)) = (p1, p2)
+end)
 
 (* In the HandlingError case, with the error [env] in hand: *)
-let message, labels = R.resolve ~source ~env (Parser_messages.message state)
+let main, labels = R.resolve ~source ~env (Parser_messages.message state)
 ```
 
 `labels` carries a position and text for each marker. Feed the message and those
@@ -271,8 +284,23 @@ stay with you; the goldens show you their consequences.
 
 ## Where you ended up
 
-The complete files are `stele/test/parser.mly`, `calc.config`,
-`calc.overrides`, and `dune`, with the goldens `calc.expected`,
-`calc.stats.expected`, and `calc.names.expected`. That directory is this
-tutorial's final state, compiled and diffed on every `dune runtest` of this
-repository, so the story above cannot silently drift from the truth.
+The complete files are `parser.mly`, the `lexer.mll` and driver `calc.ml`,
+`calc.config`, `calc.overrides`, and `dune`, with the generator goldens
+`calc.expected`, `calc.stats.expected`, `calc.names.expected` and the driver's
+own output on one good and three broken inputs (`calc.run.*`). That directory is
+this tutorial's final state: a runnable `calc` you can point at a file.
+
+```
+$ calc ok.calc
+=> 7
+=> 9
+$ calc unclosed.calc
+Error: Expecting ')', or an operator.
+ --> unclosed.calc:1:6
+1 | { (1 }
+  ·      ^
+  ·   ^ This '(' opens the enclosing construct.
+```
+
+Every golden is checked by `dune runtest`, so the story above cannot silently
+drift from the truth.

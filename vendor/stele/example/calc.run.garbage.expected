@@ -1,0 +1,4 @@
+Error: Expecting a program: a '{' block.
+ --> garbage.calc:1:1
+1 | )
+  · ^

@@ -1,19 +1,26 @@
-; Toy "calc" grammar exercising the whole stele pipeline end to end — the
-; template an adopter copies. A miniature of src/lib-wasm/dune.menhir:
-; menhir --list-errors and --cmly feed the stele generator, whose .messages
-; output menhir --compile-errors turns into a Parser_messages module compiled
-; alongside the parser. Two promoted goldens pin the result: calc.expected (the
-; four message shapes — a plain Expecting list, a delimiter hint, an
-; "Assuming … complete" hedge, and a hand override) and calc.stats.expected (the
-; quality ratchet). Accept changes with `dune promote`.
+; Toy "calc" grammar and interpreter: a complete, runnable stele example an
+; adopter can copy. A miniature of src/lib-wasm/dune.menhir — menhir
+; --list-errors and --cmly feed the stele generator, whose .messages output
+; menhir --compile-errors turns into a Parser_messages module — plus the pieces
+; that make it *run*: a lexer, the incremental parser (--table), and a driver
+; (calc.ml) that evaluates the program or, on a syntax error, resolves the
+; message's markers through stele.runtime and prints a located diagnostic.
+;
+; Goldens pinned with `dune promote`: the generator views (calc.expected — the
+; four message shapes; calc.stats.expected — the quality ratchet; calc.names),
+; and the driver's own output on one good and three broken inputs (calc.run.*),
+; which is exactly what the tutorial shows.
 
-(library
+(executable
  (name calc)
- (modules parser parser_messages)
- (libraries menhirLib))
+ (modules parser parser_messages lexer calc)
+ (libraries menhirLib stele.runtime))
+
+(ocamllex lexer)
 
 (menhir
- (modules parser))
+ (modules parser)
+ (flags --table))
 
 ; 1. The representative error sentences (one per error state).
 
@@ -127,7 +134,7 @@
   (diff calc-rot.expected calc-rot.actual)))
 
 ; 4. The full messages (with comments) fed to menhir --compile-errors, producing
-;    the Parser_messages module compiled into the library above — proof the
+;    the Parser_messages module compiled into the executable above — proof the
 ;    generated file is well-formed and links against the parser.
 
 (rule
@@ -148,3 +155,56 @@
  (with-stdout-to
   parser_messages.ml
   (run menhir %{dep:parser.mly} --compile-errors %{dep:calc.messages})))
+
+; 5. The driver's actual output on sample inputs, pinned as goldens — the
+;    end-to-end proof that the generated messages, the runtime marker
+;    resolution, and the renderer together produce what the tutorial shows. The
+;    good input evaluates (stdout); each broken input exits 1 with a rendered
+;    diagnostic (stderr). These are the same three broken inputs the tutorial
+;    follows: an unclosed '(', a stray token, and garbage at the start.
+
+(rule
+ (with-stdout-to
+  calc.run.ok
+  (run %{exe:calc.exe} %{dep:ok.calc})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.run.ok.expected calc.run.ok)))
+
+(rule
+ (with-stderr-to
+  calc.run.unclosed
+  (with-accepted-exit-codes
+   1
+   (run %{exe:calc.exe} %{dep:unclosed.calc}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.run.unclosed.expected calc.run.unclosed)))
+
+(rule
+ (with-stderr-to
+  calc.run.stray
+  (with-accepted-exit-codes
+   1
+   (run %{exe:calc.exe} %{dep:stray.calc}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.run.stray.expected calc.run.stray)))
+
+(rule
+ (with-stderr-to
+  calc.run.garbage
+  (with-accepted-exit-codes
+   1
+   (run %{exe:calc.exe} %{dep:garbage.calc}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.run.garbage.expected calc.run.garbage)))
