@@ -1,8 +1,8 @@
 # wax.verdicts — the WAX %on_error_reduce keep/remove log from the annotation
-# prune audit (ERROR-MESSAGES.md §4b), replayed by `stele tune calibrate`.
+# prune audit, replayed by `stele tune calibrate`.
 #
 #   keep NT     — NT is currently annotated; removing it must score non-improving.
-#   removed NT  — NT was annotated before 4b and removed; re-adding it must score
+#   removed NT  — NT was annotated once and removed; re-adding it must score
 #                 non-improving.
 #
 # 24 keep + 26 removed = 50 verdicts; the tuner must agree on all 50.

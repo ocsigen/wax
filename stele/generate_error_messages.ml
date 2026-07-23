@@ -14,11 +14,11 @@ module IntSet = Set.Make (Int)
 
 type status = Direct | Lookahead | Both
 
-(* --- Name-rendering provenance (the [names] review mode, step 12) --- *)
+(* --- Name-rendering provenance (the [names] review mode) --- *)
 
 (* The pipeline step that produced a rendered name, so [stele names] can report
    *how* every symbol reached its wording. Mirrors the precedence documented in
-   stele's README: a token alias, a [names] config entry, the 3b list-element
+   stele's README: a token alias, a [names] config entry, the list-element
    chase, the pluralised Assuming-subject rendering, the lowercase
    auto-derivation, a [class] label, or the last-resort quoted-lowercase
    fallback. Recorded alongside each rendered string by the [*_src] variants of
@@ -36,8 +36,8 @@ type name_source =
 let source_label = function
   | Alias -> "alias"
   | Names_entry -> "[names]"
-  | Chase -> "3b-chase"
-  | Plural_subject -> "plural-subj"
+  | Chase -> "list-element"
+  | Plural_subject -> "plural-subject"
   | Auto -> "auto-derived"
   | Class_label -> "[class]"
   | Fallback -> "quoted-fallback"
@@ -51,7 +51,7 @@ type position = Expecting | Assuming
 
 (* One rendering of one grammar symbol in one position of one message — the raw
    material [stele names] and the config-unused stat aggregate over. [nu_credit]
-   names the element a 3b chase resolved to and *its* real source: when
+   names the element a list-element chase resolved to and *its* real source: when
    [nu_source] is [Chase] the shown text comes from that element (e.g. the
    [locals] list chases to [local_decl], whose text is its [names] entry), so
    the config-unused stat credits the element and does not mis-report it as
@@ -387,7 +387,7 @@ and first_of_rhs gram visited = function
         StringSet.union f (first_of_rhs gram visited rest)
       else f
 
-(* --- List-element chase (step 3b: singular Expecting wording) --- *)
+(* --- List-element chase (singular Expecting wording) --- *)
 
 (* Is [nt] a genuinely *list-shaped* nonterminal — one whose "Expecting …"
    rendering should name a single element rather than the list? Two shapes
@@ -610,7 +610,7 @@ let classify_symbol cfg s =
       if StringSet.mem s members then Some label else None)
     cfg.classes
 
-(* Core rendering with provenance (step 12). Returns the readable string paired
+(* Core rendering with provenance. Returns the readable string paired
    with the pipeline step that produced it; [get_readable_name] projects the
    string. Precedence: token alias, [names] entry, lowercase auto-derivation,
    quoted-lowercase fallback. *)
@@ -653,7 +653,7 @@ let get_readable_name_src cfg terminals s =
             (* Keywords/Other Terminals: "TOKEN" -> "'token'" *)
             ("'" ^ String.lowercase_ascii s ^ "'", Fallback))
 
-(* Rendering for the *Expecting* position (step 3b). What the user types next is
+(* Rendering for the *Expecting* position. What the user types next is
    one element, so a list-shaped nonterminal is rendered as its singular element
    ("Expecting ')', or an instruction.") rather than the list ("… or
    instructions."). For a user-named, list-shaped nonterminal the chase names the
@@ -664,7 +664,7 @@ let get_readable_name_src cfg terminals s =
    (e.g. [list_of_indices] → "an index", [on_clauses] → the [on]/[[] opener),
    which is intentional; the curated forms remain in force for the Assuming
    subject, which names the whole completed sequence. *)
-(* Returns (rendered string, display source, credit). When the 3b chase fires
+(* Returns (rendered string, display source, credit). When the list-element chase fires
    the display source is [Chase] (so the review table shows the mechanism that
    overrode the list name), and the credit is the element the chase resolved to
    paired with its *real* source — what actually produced the text. *)
@@ -778,8 +778,8 @@ type message_stat = {
           soundness oracle checks each of these against the automaton. *)
   overridden : bool;
       (** The message was replaced by a hand-written entry from the per-grammar
-          [.overrides] file (step 5). An overridden entry is excluded from the
-          fallback counters (it is no longer a generic fallback) and from the
+          [.overrides] file. An overridden entry is excluded from the fallback
+          counters (it is no longer a generic fallback) and from the
           soundness/jargon self-lints, which cannot parse free prose — see the
           override-merge site in [generate_message] for the claim-soundness
           responsibility note. *)
@@ -809,11 +809,11 @@ type message_stat = {
       *)
   name_uses : name_use list;
       (** Every symbol this entry's *emitted* message actually rendered, with
-          its rendered form, provenance, and position (step 12). Empty for an
-          override (free prose) and for a generic fallback ("Syntax error", no
-          symbol shown) — except that an over-cap fallback under a spurious
-          reduction still shows its Assuming subject, which is recorded. The
-          [names] review and the config-unused stat aggregate over these. *)
+          its rendered form, provenance, and position. Empty for an override
+          (free prose) and for a generic fallback ("Syntax error", no symbol
+          shown) — except that an over-cap fallback under a spurious reduction
+          still shows its Assuming subject, which is recorded. The [names]
+          review and the config-unused stat aggregate over these. *)
 }
 
 (* Would [token] plausibly open the construct [closer] terminates? Broader than
@@ -868,7 +868,7 @@ let renders_as_jargon cfg terminals s =
   && special_name cfg s = None
   && String.contains s '_'
 
-(* --- Hand-written overrides (step 5, the sanctioned escape hatch) --- *)
+(* --- Hand-written overrides (the sanctioned escape hatch) --- *)
 
 (* A per-grammar [.overrides] file supplies hand-written messages for the states
    heuristics cannot serve — chiefly the structurally immovable over-5
@@ -1043,8 +1043,8 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
           | None -> acc)
         StringMap.empty expected_raw
     in
-    (* Per raw symbol, its rendered form and the pipeline step that produced it
-       (step 12): a class label when the class collapse fires (>=2 members
+    (* Per raw symbol, its rendered form and the pipeline step that produced it:
+       a class label when the class collapse fires (>=2 members
        present), else the Expecting-position rendering. Feeds both the shown
        [expected_symbols] and the [names] review's per-symbol provenance. *)
     let rendered =
@@ -1167,7 +1167,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
 
   (* The "Assuming that the X is complete" subject is the *outermost* spurious
      reduction (the last in menhir's innermost→outermost list). A/B'd against the
-     innermost in step 4b: outermost wins because the Expecting token is the
+     innermost during the prune audit: outermost wins because the Expecting token is the
      FOLLOW of the outermost frame, so naming that frame keeps hedge and
      expectation coherent ("the instructions are complete, expecting 'end'"),
      whereas the innermost names the construct at the edit point but pairs it with
@@ -1211,7 +1211,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
     | None -> message_body
   in
 
-  (* Hand-override merge (step 5): if the sanctioned [.overrides] file supplies a
+  (* Hand-override merge: if the sanctioned [.overrides] file supplies a
      message for this state's sentence, it replaces the generated one verbatim.
      The override text is the author's own prose — its claim-soundness is NOT
      machine-checked (the oracle keys on raw symbols, not sentences), only its
@@ -1257,7 +1257,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
         StringSet.empty expected_raw
     else StringSet.empty
   in
-  (* Per-symbol rendering provenance (step 12), one [name_use] per symbol the
+  (* Per-symbol rendering provenance, one [name_use] per symbol the
      *shown* message renders. The Expecting list surfaces only when emitted (the
      [rendered] list carries the chosen tier's symbols with their source); the
      Assuming subject surfaces whenever a spurious reduction was hedged and the
@@ -1321,7 +1321,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
       name_uses;
     }
   in
-  (* [full_message] is returned separately for the census (step 7), which counts
+  (* [full_message] is returned separately for the census, which counts
      distinct message bodies without the per-entry sentence header. *)
   (Buffer.contents buf, full_message, stat)
 
@@ -1468,13 +1468,13 @@ let check_entry gram auto (entry, stat) =
         in
         (unsound, StringSet.diff action_terms covered)
 
-(* --- Names review and staleness (step 12) --- *)
+(* --- Names review and staleness --- *)
 
 (* Per [names] config key, how many times its curated phrase was the *winning*
    rendering in each position (i.e. a [name_use] with source [Names_entry]). A
    key that wins in neither position fires nothing — the config-unused ratchet
    target — though that is not always a bug: a list-shaped name is
-   Expecting-dead because the 3b chase overrides it, yet can be Assuming-live as
+   Expecting-dead because the list-element chase overrides it, yet can be Assuming-live as
    the completed-construct subject. Returned sorted by key as
    (key, expecting_count, assuming_count) over *every* configured [names] entry,
    so an unused one shows (0, 0). *)
@@ -1523,7 +1523,7 @@ let output_stats cfg gram auto results =
   (* Cascade depth = the number of spurious reductions folded before the error
      is reported (the length of the "Assuming …" chain). A deep cascade means
      the hedge names a construct far from where the user was editing; the prune
-     audit (step 4b) watches these so over-annotation is measurable. *)
+     audit watches these so over-annotation is measurable. *)
   let cascade_depths =
     List.map
       (fun (entry, _) ->
@@ -1533,7 +1533,7 @@ let output_stats cfg gram auto results =
   Printf.printf "entries with cascade depth >= 4: %d\n"
     (List.length (List.filter (fun d -> d >= 4) cascade_depths));
   Printf.printf "max cascade depth: %d\n" (List.fold_left max 0 cascade_depths);
-  (* Hand-written overrides (step 5). The fallback counters below exclude these
+  (* Hand-written overrides. The fallback counters below exclude these
      (their [overflow_expected]/[empty_expected] are forced false), so
      "not overridden" is the new ratchet target: a genuinely un-overridable
      enumeration state that still degrades to "Syntax error". *)
@@ -1598,7 +1598,7 @@ let output_stats cfg gram auto results =
           entry.Parse_messages.sentence
           (String.concat " " (StringSet.elements unc)))
       with_uncovered;
-  (* Dormancy ratchet (step 10): one line per configured token class, in file
+  (* Dormancy ratchet: one line per configured token class, in file
      order, giving how many entries had the class collapse fire in their computed
      expected list (>=2 members co-occurring). This counts the collapse
      computation, not the shown text — an override or an over-cap overflow may
@@ -1612,7 +1612,7 @@ let output_stats cfg gram auto results =
       Printf.printf "class %S: collapsed in %d entries\n" label
         (count (fun s -> StringSet.mem label s.collapsed_classes)))
     cfg.classes;
-  (* Names-staleness ratchet (step 12): the [names] mode counts, per configured
+  (* Names-staleness ratchet: the [names] mode counts, per configured
      entry, how often its curated phrase actually won in each position. An entry
      unused in *both* positions fires nothing and is the ratchet target — going
      quiet after a grammar change becomes a failing runtest diff, like class
@@ -1630,7 +1630,7 @@ let output_stats cfg gram auto results =
       Printf.printf "  %s (expecting: %s, assuming: %s)\n" k (show e) (show a))
     unused
 
-(* The [names] review mode (step 12): a table of every symbol that surfaces in
+(* The [names] review mode: a table of every symbol that surfaces in
    the emitted messages — its rendered form, the pipeline step that produced it,
    and how many times it appears in each position — sorted by symbol, then an
    [unused [names] entries] section listing configured entries whose curated
@@ -1688,7 +1688,7 @@ let output_names cfg results =
           (match Hashtbl.find_opt cfg.names k with Some v -> v | None -> ""))
       unused
 
-(* --- Message census (step 7) --- *)
+(* --- Message census --- *)
 
 (* Normalize a message body for the census: collapse the state-specific depth in
    a delimiter hint ([<3>This '(' …] -> [<_>…]) so identical wordings at
@@ -1747,7 +1747,7 @@ let output_fallbacks results =
       Printf.printf "%s\n<YOUR SYNTAX ERROR MESSAGE HERE>\n\n" (header entry))
     fallbacks
 
-(* Discovery aid (step 10): propose new [class] blocks for the [-config] file by
+(* Discovery aid: propose new [class] blocks for the [-config] file by
    signature-clustering the raw expected sets. A terminal's *signature* is the
    set of entries whose raw expected list mentions it; terminals with the
    *identical* signature always co-occur, so collapsing them to one label never
@@ -1953,11 +1953,11 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
       | Transitions -> assert false)
 
 (* ============================================================================
-   The %on_error_reduce annotation tuner (`stele tune`, step 13)
+   The %on_error_reduce annotation tuner (`stele tune`)
    ============================================================================
 
    A read-only advisor that automates, at the level the evidence supports, the
-   hand A/B work of the annotation prune (see ERROR-MESSAGES.md §4b): it
+   hand A/B work of the annotation prune: it
    RECOMMENDS single [%on_error_reduce] moves; it NEVER applies them, and it
    NEVER touches the source tree — every trial runs against a *copy* of the
    grammar in a throwaway scratch dir (removed on exit, even on failure or
@@ -2242,7 +2242,7 @@ let tune_run_trial ~menhir ~config_file ~mly ~outprefix : tune_trial option =
   end
 
 (* A move's verdict, mirroring the shell tuner's classification model (matching
-   §4b's decision rule); the string is the short reason shown in the report. *)
+   the prune's decision rule); the string is the short reason shown in the report. *)
 type tune_verdict =
   | THarmful of string
   | TImproving of string
@@ -2510,7 +2510,7 @@ let tune_advisor ts candidates =
     !dead !neutral !skipped;
   if improving = [] then
     Printf.printf
-      "  No strictly-improving single move (expected right after a 4b prune).\n"
+      "  No strictly-improving single move (expected right after a prune).\n"
   else begin
     Printf.printf "  IMPROVING MOVES (review each — scores do not compose):\n";
     List.iter
@@ -2784,7 +2784,7 @@ let names_cmd =
       `P
         "Print a table of every grammar symbol that surfaces in the emitted \
          messages: its rendered form, the pipeline step that produced it \
-         (token alias, $(b,[names]) entry, the 3b list-element chase, the \
+         (token alias, $(b,[names]) entry, the list-element chase, the \
          Assuming-subject plural rendering, the lowercase auto-derivation, a \
          $(b,[class]) label, or the quoted-lowercase fallback), and how often \
          it appears in the Expecting list versus the Assuming subject. Usage \
@@ -2875,7 +2875,7 @@ let transitions_cmd =
   in
   Cmd.v (Cmd.info "transitions" ~doc ~man) term
 
-(* The [tune] subcommand group (step 13). Unlike the other modes it does not take
+(* The [tune] subcommand group. Unlike the other modes it does not take
    a prepared [--cmly]/[MESSAGES] pair — it generates those itself, per trial,
    from [--grammar] via a [--menhir] subprocess, in a scratch dir. *)
 let grammar_arg =

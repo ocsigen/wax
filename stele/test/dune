@@ -76,7 +76,7 @@
  (action
   (diff calc.stats.expected calc.stats)))
 
-; The names review (step 12): every rendered symbol with its provenance
+; The names review: every rendered symbol with its provenance
 ; (alias / [names] / [class] / auto-derived / quoted-fallback) and per-position
 ; usage, then any [names] entries that fired in neither position. Here `stmts`
 ; is [names]-rendered only as an Assuming subject (0 expecting, 1 assuming) —
