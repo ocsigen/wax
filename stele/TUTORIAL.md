@@ -1,0 +1,252 @@
+# Tutorial: from "Syntax error" to messages worth reading
+
+This walkthrough takes a tiny calculator grammar from menhir's bare parse
+failure to the full stele setup, one feature at a time. Three broken inputs
+stay with us the whole way, and every message shown below is real output of
+the stage that produced it:
+
+- input A: `{ (1 }` (an unclosed parenthesis inside a block)
+- input B: `{ 1; ) }` (a stray token where a statement or `}` should be)
+- input C: `)` (garbage where the program should start)
+
+The destination is exactly `stele/test/` in this repository: the same
+grammar, config, overrides, and dune rules, kept compiling and
+golden-checked by `dune runtest`. When in doubt, read those files; the
+tutorial is their story.
+
+## Stage 1: the starting point
+
+A minimal calc grammar, tokens still bare:
+
+```
+%token <int> INT
+%token PLUS STAR SEMI LPAREN RPAREN LBRACE RBRACE EOF
+%start <unit> prog
+%left PLUS
+%left STAR
+%%
+prog:  | LBRACE stmts RBRACE EOF { () }
+stmts: | { () } | stmt stmts { () }
+stmt:  | e = expr SEMI { ignore e }
+expr:  | INT { () } | LPAREN expr RPAREN { () }
+       | expr PLUS expr { () } | expr STAR expr { () }
+```
+
+All three inputs produce the same thing: `Parser.Error`, rendered by most
+drivers as "Syntax error". The parser knows exactly which tokens it would
+have accepted; none of that knowledge reaches the user.
+
+## Stage 2: wire the pipeline
+
+Three dune rules connect menhir's error machinery to stele (these are the
+first three rules of `stele/test/dune`, minus the options we have not
+introduced yet):
+
+```
+(rule (with-stdout-to calc.auto.messages
+  (run menhir %{dep:parser.mly} --list-errors)))
+
+(rule (target calc.cmly) (deps parser.mly)
+  (action (run menhir %{dep:parser.mly} --cmly --no-code-generation --base calc)))
+
+(rule (with-stdout-to calc.messages
+  (run stele generate --cmly %{dep:calc.cmly} %{dep:calc.auto.messages})))
+
+(rule (with-stdout-to parser_messages.ml
+  (run menhir %{dep:parser.mly} --compile-errors %{dep:calc.messages})))
+```
+
+`--list-errors` enumerates one representative sentence per error state;
+stele generates a message for each from the exact grammar in the `.cmly`;
+`--compile-errors` compiles the result into a `Parser_messages` module your
+driver queries by state number. Input A now says:
+
+```
+Expecting 'plus', 'rparen', or 'star'.
+```
+
+Already state-exact (`;` is rightly absent: we are inside parentheses), but
+the words are token names, not syntax. Input B says `Expecting 'rbrace', or
+a stmt.` Note "a stmt": a lowercase nonterminal renders as itself with an
+article, so grammar names leak straight into prose. Both problems are
+naming problems, and the next stages fix them without touching the
+generator.
+
+## Stage 3: alias the tokens
+
+Give every fixed-spelling token its source text:
+
+```
+%token PLUS "+"
+%token STAR "*"
+%token SEMI ";"
+%token LPAREN "("
+%token RPAREN ")"
+%token LBRACE "{"
+%token RBRACE "}"
+```
+
+Input A becomes:
+
+```
+Expecting ')', '*', or '+'.
+<2>This '(' opens the enclosing construct.
+```
+
+Two things happened. The renderings became source syntax, and a delimiter
+hint appeared for free: a terminal aliased `)` pairs automatically with the
+`(` opener alias, and stele locates the matching opener on the parser
+stack. The `<2>` marker means "stack cell 2"; the next stage turns it into
+an underline.
+
+## Stage 4: resolve hints at runtime
+
+The `<N>` marker is resolved against the live parser by the runtime helper
+(library `stele.runtime`): instantiate its functor over your parser's
+incremental engine and call it in your error handler.
+
+```ocaml
+module R = Parser_error_runtime.Make (Parser.MenhirInterpreter)
+
+(* In the HandlingError case, with the error [env] in hand: *)
+let message, labels = R.resolve ~source ~env (Parser_messages.message state)
+```
+
+`labels` carries a position and text for each marker. Rendered the way the
+wax CLI does it, input A now reads:
+
+```
+Error: Expecting ')', '*', or '+'.
+ --> input:1:6
+1 | { (1 }
+  ·      ^
+  ·   ^ This '(' opens the enclosing construct.
+```
+
+See "The runtime helper" in the README for the full signature.
+
+## Stage 5: fold completed lists
+
+Input B still enumerates what a statement may start with. The user standing
+at a stray token after a complete list is better served by hearing where
+the block should end. One declaration:
+
+```
+%on_error_reduce stmts
+```
+
+Now the parser folds the finished statement list before reporting, and
+input B says:
+
+```
+Assuming that the stmts are complete, expecting '}'.
+<2>This '{' opens the enclosing construct.
+```
+
+The hedge ("Assuming that ...") is generated from menhir's own record of
+the fold, so it never claims more than the parser did. One blemish: "the
+stmts". Stage 7 fixes it.
+
+## Stage 6: pin the output with goldens
+
+Messages are code now; test them like code. Two more rules diff the
+generated output against committed goldens (`dune promote` accepts a
+reviewed change):
+
+```
+(rule (with-stdout-to calc.actual
+  (run stele generate --no-comments --cmly %{dep:calc.cmly} %{dep:calc.auto.messages})))
+(rule (alias runtest) (action (diff calc.expected calc.actual)))
+```
+
+`--no-comments` strips the state-numbered comments and sorts by sentence,
+so the golden is stable under grammar edits: a renumbering diffs zero
+lines, a new construct diffs exactly its own entries. From here on, every
+change to the grammar shows you its message consequences in `dune runtest`
+before you commit it.
+
+## Stage 7: the config sidecar
+
+Grammar-specific wording lives in a small config file passed with
+`--config`:
+
+```
+[names]
+stmts = statements
+
+[class an operator]
+PLUS
+STAR
+```
+
+The `[names]` entry fixes the hedge: input B now says "Assuming that the
+statements are complete, ...". The class collapses the two infix operators
+wherever both are legal, so input A tightens to:
+
+```
+Expecting ')', or an operator.
+<2>This '(' opens the enclosing construct.
+```
+
+A class only fires when at least two members are legal in a state; a lone
+`+` keeps its own spelling. Config entries are rot-guarded: an entry naming
+a symbol the grammar no longer has fails the build with a one-line error.
+Before adding a `[names]` entry, consider renaming the nonterminal in the
+grammar instead; the README's "Naming" section explains when each is right.
+
+## Stage 8: hand-write the stubborn ones
+
+Input C hits the initial state, where the generated message can only name
+the start symbol: `Expecting a prog.` True, and useless. States beyond
+heuristics get a hand-written message in an `.overrides` file, keyed by the
+state's representative sentence:
+
+```
+prog: STAR
+Expecting a program: a '{' block.
+```
+
+Pass it with `--overrides`. The key is checked on every build: if a grammar
+change removes or re-keys the state, the build fails and tells you, so an
+override can never rot silently. For a large grammar, `stele fallbacks`
+prints a ready-to-paste override template for every state whose generated
+message degraded to "Syntax error"; calc has none, and the command reports
+exactly that:
+
+```
+0 fallback state(s) without an override
+```
+
+## Stage 9: the quality ratchet
+
+`stele stats` summarizes everything measurable: how many states have a real
+expected list, how many hedges and hints, whether any claim is unsound
+against the automaton, dormant classes, unused names. Pin it as a third
+golden (`calc.stats.expected`) and quality regressions fail `dune runtest`
+even when a message diff looks plausible. `stele census` (distinct message
+bodies with counts) and `stele names` (every rendering with its provenance
+and usage) are the review surfaces when a diff needs judgment.
+
+## Stage 10: keep the annotations honest
+
+As the grammar grows, `%on_error_reduce` choices age. `stele tune` explores
+them without touching your tree:
+
+```
+stele tune dead    --grammar parser.mly --config calc.config
+stele tune advise  --grammar parser.mly --config calc.config --overrides calc.overrides
+```
+
+`dead` finds annotations whose removal changes nothing; `advise` ranks
+add/remove candidates by measured effect, prices each move's override
+impact, and recommends rather than applies: a move whose whole win lands on
+hand-overridden states is classified as merely relocating them. Decisions
+stay with you; the goldens show you their consequences.
+
+## Where you ended up
+
+The complete files are `stele/test/parser.mly`, `calc.config`,
+`calc.overrides`, and `dune`, with the goldens `calc.expected`,
+`calc.stats.expected`, and `calc.names.expected`. That directory is this
+tutorial's final state, compiled and diffed on every `dune runtest` of this
+repository, so the story above cannot silently drift from the truth.

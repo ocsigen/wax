@@ -12,7 +12,12 @@ than as silent staleness.
 
 It powers the error messages of both grammars in the
 [Wax](https://github.com/ocsigen/wax) toolchain (WebAssembly text and the Wax
-language). The name is provisional.
+language).
+
+New here? Start with [TUTORIAL.md](TUTORIAL.md): a ten-stage walkthrough
+that takes a tiny calculator grammar from menhir's bare "Syntax error" to
+the full setup, with the same error shown improving at every stage. Its
+final state is the tested example in `test/`.
 
 > Two honest caveats. The message templates are English-only. And the
 > heuristics are validated on exactly two grammars, so adopters will find edges.
