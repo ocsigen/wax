@@ -1,13 +1,15 @@
-# Draft: announcement blog post for stele
-
-(Draft only. Venue to decide at release time: Tarides blog or a
-discuss.ocaml.org announcement, alongside the opam publication. Numbers
-below reflect the state of the `errors` branch at drafting time; refresh
-before publishing.)
-
+---
+title: "Stele: Parser Error Messages You Can Test Like Code"
+date: 2026-07-23 12:00:00+02:00
+categories: [Compilers, Parsing]
+tags: [ocaml, menhir, parsing, error-messages, webassembly]
+description: We stopped hand-writing the Wax toolchain's parser error messages and started generating them from the grammar, then guarding them like code with golden files, a soundness oracle, and a tuner. Stele packages this for any Menhir grammar.
+draft: true
+slug: "stele"
 ---
 
-# Stele: parser error messages you can test like code
+<!-- Draft: venue TBD (Tarides blog or a discuss.ocaml.org announcement),
+     alongside the opam publication. Numbers reflect the state at writing time. -->
 
 Here is what the Wax toolchain's WebAssembly text parser used to say when
 you wrote `(v128.const)` and forgot the shape:
@@ -39,12 +41,12 @@ extracted so any Menhir grammar can do the same.
 
 Menhir lets you attach a message to every error state of the LR automaton
 (`--list-errors`, `--compile-errors`). That machinery, and much of the
-method here, comes from Francois Pottier's CC 2016 paper "Reachability and
+method here, comes from François Pottier's CC 2016 paper "Reachability and
 Error Diagnosis in LR(1) Parsers", which enumerated every error state of
 CompCert's C parser and hand-wrote a complete, maintained message
 collection for it. stele mechanizes what the paper left to the human
 expert. The catch the paper's experts absorbed by hand is scale: our two
-grammars have 680 and 537 error states, and they change every time the
+grammars have 680 and 541 error states, and they change every time the
 grammar does. So we stopped writing messages and started generating them
 from the grammar itself, then treated the output like code: promoted
 golden files pin every message, a census golden pins the distinct
@@ -89,9 +91,9 @@ grammar says just "Syntax error".
 The campaign that produced all this was measured at every step. A few of
 the results:
 
-- 1,217 error states across the two grammars, every one with a reviewed
-  message; 226 and 181 distinct message bodies.
-- 330 delimiter hints, each resolving to an underline under the right
+- 1,221 error states across the two grammars, every one with a reviewed
+  message; 225 and 182 distinct message bodies.
+- 332 delimiter hints, each resolving to an underline under the right
   opener, including compound ones like `(@if` and `(export`.
 - The `%on_error_reduce` lists were audited by removal trial: 37 of 75
   annotations turned out to hide more than they helped and were dropped,
@@ -206,9 +208,15 @@ Assuming that the argument list is complete, expecting ')'.
   .           ^ This '(' opens the enclosing construct.
 ```
 
----
+If you want the mechanics rather than the story, the companion post,
+[*Inside Stele*](/posts/stele-internals/), walks through each algorithm and its
+invariant.
 
-Reference: Francois Pottier, [Reachability and Error Diagnosis in LR(1)
-Parsers](https://inria.hal.science/hal-01417004), CC 2016. Menhir's
-`--list-errors` is that paper's reachability algorithm; if you use stele,
-you are using it too.
+## References
+
+- François Pottier, [Reachability and Error Diagnosis in LR(1)
+  Parsers](https://inria.hal.science/hal-01417004), CC 2016. Menhir's
+  `--list-errors` is that paper's reachability algorithm, so if you use stele
+  you are using it too.
+- [Menhir](https://gitlab.inria.fr/fpottier/menhir), François Pottier and
+  Yann Régis-Gianas.

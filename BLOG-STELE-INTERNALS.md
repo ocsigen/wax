@@ -1,16 +1,18 @@
-# Draft: technical blog post on stele's algorithms
-
-(Companion to BLOG-STELE.md, for readers who want the mechanics. Same
-venue decision at release time. Describes the `errors` branch including
-the derived delimiter pairs; re-verify against the shipped code before
-publishing.)
-
+---
+title: "Inside Stele: The Algorithms Behind Generated Parser Error Messages"
+date: 2026-07-23 12:00:00+02:00
+categories: [Compilers, Parsing]
+tags: [ocaml, menhir, parsing, error-messages, lr-parsing]
+description: A walk through stele's passes over a Menhir grammar: the continuation walk, the symbol-to-words pipeline, delimiter pairing and the stack scan, hedges past a fold, the soundness oracle, golden-file stability, and the tuner. Each step is a small algorithm with a stated invariant.
+draft: true
+slug: "stele-internals"
 ---
 
-# Inside stele: the algorithms behind generated parser error messages
+<!-- Draft: companion to the announcement post. Re-verify against the shipped
+     code before publishing. -->
 
-The announcement post tells the story; this one explains the machinery.
-stele turns two artifacts Menhir already produces into error messages,
+The [announcement post](/posts/stele/) tells the story; this one explains the
+machinery. stele turns two artifacts Menhir already produces into error messages,
 and every step in between is a small algorithm with a stateable
 invariant. This post walks through each one: what question it answers,
 what rule it applies, and why the rule is safe.
@@ -20,7 +22,7 @@ The two inputs:
 - the error sentences (`menhir --list-errors`): one representative token
   sentence per error state of the LR(1) automaton, each annotated with
   the state's items, the known stack suffix, and any spurious reductions
-  performed on the way. This enumeration is Francois Pottier's
+  performed on the way. This enumeration is François Pottier's
   reachability algorithm (CC 2016); stele consumes its output and does
   not re-derive it.
 - the compiled grammar (`menhir --cmly`, read with menhirSdk): exact
@@ -28,7 +30,7 @@ The two inputs:
   automaton itself (items, transitions, reductions per state).
 
 Everything below is a pass over these. Nothing is asymptotically
-interesting; both grammars in the home repository (680 and 537 error
+interesting; both grammars in the home repository (680 and 541 error
 states) regenerate in well under a second. The content is in the
 invariants.
 
@@ -255,7 +257,9 @@ guards). The tutorial builds the whole pipeline on a fifteen-line
 grammar; the code is one OCaml file for the generator and one small
 functor for the runtime.
 
----
+## References
 
-Reference: Francois Pottier, [Reachability and Error Diagnosis in LR(1)
-Parsers](https://inria.hal.science/hal-01417004), CC 2016.
+- François Pottier, [Reachability and Error Diagnosis in LR(1)
+  Parsers](https://inria.hal.science/hal-01417004), CC 2016.
+- [Menhir](https://gitlab.inria.fr/fpottier/menhir), François Pottier and
+  Yann Régis-Gianas.
