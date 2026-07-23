@@ -73,12 +73,21 @@ module Make (E : ENGINE) = struct
                       { loc_start = pos1; loc_end = pos2; text = msg }
                       :: !related
                 else
-                  (* This hint points at a single opening delimiter, so underline
-                     one character. The delimiter is normally the cell's start —
-                     a compound opener ([(then]/[(param]/…) reports the '(' as its
-                     start — but a spurious reduction can surface a plain token
-                     (e.g. ELEM) sitting just past the '('; in that case walk the
-                     source back over blanks to the delimiter. *)
+                  (* This hint points at an opening delimiter. The delimiter is
+                     normally the cell's start — a compound opener
+                     ([(then]/[(param]/…) reports the '(' as its start — but a
+                     spurious reduction can surface a plain token (e.g. ELEM)
+                     sitting just past the '('; in that case walk the source back
+                     over blanks to the delimiter.
+
+                     The underline spans the FULL alias the label names, not a
+                     fixed single character (move 3): a multi-character opener
+                     like [\[|] underlines both of its characters. The width is
+                     read from the alias the label quotes ([This '[|' opens …] ->
+                     2, [This '(' opens …] -> 1), so the [<N>] marker itself
+                     carries no width and stays interchangeable with older
+                     output; a label with no quoted alias falls back to one
+                     character. *)
                   let cnum = pos1.Lexing.pos_cnum in
                   let is_delim c = c = '(' || c = '[' || c = '{' in
                   let blank c = c = ' ' || c = '\t' in
@@ -93,11 +102,19 @@ module Make (E : ENGINE) = struct
                       in
                       back (cnum - 1)
                   in
+                  let width =
+                    match String.index_opt msg '\'' with
+                    | Some i -> (
+                        match String.index_from_opt msg (i + 1) '\'' with
+                        | Some j -> max 1 (j - i - 1)
+                        | None -> 1)
+                    | None -> 1
+                  in
                   let start = { pos1 with Lexing.pos_cnum = dcnum } in
                   related :=
                     {
                       loc_start = start;
-                      loc_end = { start with Lexing.pos_cnum = dcnum + 1 };
+                      loc_end = { start with Lexing.pos_cnum = dcnum + width };
                       text = msg;
                     }
                     :: !related

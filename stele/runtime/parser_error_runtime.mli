@@ -4,7 +4,9 @@
     A stele-generated message may embed marker lines of two kinds, both anchored
     at a 1-based stack cell index [N] resolved against the running parser:
     - a {b delimiter hint} [<N>This '(' opens the enclosing construct.] —
-      underlines the single opening delimiter of the construct at cell [N];
+      underlines the opening delimiter of the construct at cell [N], spanning
+      the full alias the label names (one character for a plain [(], both
+      characters of a compound opener like [\[|]);
     - a {b hedge subject} [<^N>this expression] — underlines the {e whole}
       construct that cell [N] produced, the one a hedge ("Assuming that the X is
       complete, …") assumes finished.
@@ -49,9 +51,10 @@ module Make (E : ENGINE) : sig
     text : string;
   }
   (** A resolved marker and its own label text (the marker prefix and its bounds
-      removed): a delimiter hint gives a one-character span at the opening
-      delimiter, a hedge subject the whole construct's true span (rendered as a
-      multi-line spine when it crosses several lines). *)
+      removed): a delimiter hint gives a span at the opening delimiter as wide
+      as the alias its label names (one character for a plain [(], two for a
+      compound [\[|]), a hedge subject the whole construct's true span (rendered
+      as a multi-line spine when it crosses several lines). *)
 
   val resolve : source:string -> env:'a E.env -> string -> string * label list
   (** [resolve ~source ~env message] post-processes a stele-generated [message]

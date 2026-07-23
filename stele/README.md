@@ -255,9 +255,24 @@ STAR
 my_list_combinator
 ```
 
-Delimiter **closers** need no config at all: a terminal aliased `)` / `]` / `}`
-is paired with its `(` / `[` / `{` opener automatically. A grammar that aliases
-its delimiters gets hints for free; one that does not simply gets none.
+Delimiter **closers** need no config at all: a terminal whose alias *ends* with
+`)` / `]` / `}` is a closer of that kind, mirroring the opener rule (an alias
+*beginning* with `(` / `[` / `{`), so a multi-character delimiter like `[|` /
+`|]` is recognized just as a compound opener like `(then` is. A grammar that
+aliases its delimiters gets hints for free; one that does not simply gets none.
+
+The exact **opener↔closer pairs** are derived from the grammar's productions,
+not guessed from the shared bracket kind: in each production a closer mates the
+nearest still-open opener of the same character (a stack pop over the
+right-hand side), collected over every production. The balance scan then pairs
+per exact token, so a plain `[` `]` and a compound `[|` `|]` that share the `[`
+kind stay distinct — a `]` never matches a `[|`, and an invisible `|]` no longer
+walks the scan past the wrong opener. The hint names, and the runtime underlines,
+the opener's full alias: a closer with a unique mate prints that mate verbatim
+(`This '[|' opens …`, underlined two columns), a closer with several mates
+(wasm's `)` pairs with `(`, `(then`, `(param`, …) falls back to the shared
+opener character. The `[|`/`|]` coexistence is exercised by the `delim` test
+grammar under `stele/test/delim/`.
 
 The config is per-grammar: every entry must name a symbol that grammar actually
 has, so two grammars do not share one file.
@@ -419,8 +434,9 @@ end)
 (* At a HandlingError checkpoint, with [env] the error environment: *)
 let main_message, labels =
   R.resolve ~source ~env (Parser_messages.message state)
-(* [labels] carries, per marker: for <N>, a one-character span at the opening
-   delimiter (walked back over blanks when the cell's start is not itself the
+(* [labels] carries, per marker: for <N>, a span at the opening delimiter as
+   wide as the alias the label names (one column for a plain '(', two for a
+   compound '[|'; walked back over blanks when the cell's start is not itself the
    delimiter); for <^N>, the whole construct's span (however many lines it
    crosses — the diagnostic renderer draws a multi-line span as a spine — and
    dropped when zero-width — an epsilon reduction),

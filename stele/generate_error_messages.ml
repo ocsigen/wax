@@ -601,17 +601,21 @@ let opener_of_closer_char = function
   | '}' -> Some '{'
   | _ -> None
 
-(* Derive the closer terminals from the grammar's token aliases: any terminal
-   whose alias is a single closing-delimiter character, paired with the matching
-   opener character. Replaces the old hand-maintained RBRACE/RBRACKET/RPAREN name
-   table (which went stale) — a grammar that aliases its delimiters gets hints
-   for free, one that does not simply gets none. Sorted for a deterministic
-   tie-break order between closers valid in the same state. *)
+(* Derive the closer terminals from the grammar's token aliases (move 1, the
+   symmetric mirror of the opener rule): any terminal whose alias ENDS with a
+   closing-delimiter character, paired with the matching opener character — so a
+   multi-character closer like [|]] ('|]') is recognised just as a compound
+   opener like [(then] is by its first character. Replaces the old
+   hand-maintained RBRACE/RBRACKET/RPAREN name table (which went stale) — a
+   grammar that aliases its delimiters gets hints for free, one that does not
+   simply gets none. Sorted for a deterministic tie-break order between closers
+   valid in the same state. *)
 let closers_of terminals =
   Hashtbl.fold
     (fun name alias acc ->
-      if String.length alias = 1 then
-        match opener_of_closer_char alias.[0] with
+      let n = String.length alias in
+      if n >= 1 then
+        match opener_of_closer_char alias.[n - 1] with
         | Some o -> (name, o) :: acc
         | None -> acc
       else acc)
@@ -622,39 +626,110 @@ let closers_of terminals =
    ([List.assoc]-style): a ')' closes a '(', etc. *)
 let opener_char_of_closer closers closer = List.assoc_opt closer closers
 
-let opens_with terminals c token =
-  match Hashtbl.find_opt terminals token with
-  | Some a -> String.length a > 0 && a.[0] = c
-  | None -> false
+(* The opener character a token's alias begins with ([(]/[\[]/[{]), if any — the
+   opener-classification net, the mirror of [closers_of]'s closer test. *)
+let opener_char_of terminals name =
+  match Hashtbl.find_opt terminals name with
+  | Some a
+    when String.length a > 0 && (a.[0] = '(' || a.[0] = '[' || a.[0] = '{') ->
+      Some a.[0]
+  | _ -> None
+
+(* Move 2: EXACT opener<->closer pairs derived from the grammar's productions,
+   not guessed from the shared bracket kind. In each production's right-hand
+   side, a closer-classified symbol mates the nearest still-open
+   opener-classified symbol of the SAME bracket character (proper nesting within
+   the rhs — a stack pop); collected over every production. The result maps each
+   closer token to the SET of opener tokens that mate it (a set because an opener
+   may reach the same closer through several productions; a closer may have
+   several distinct opener mates, e.g. wasm's ')' pairs with '(', '(then',
+   '(param', …). This is what lets [find_matching_depth] balance per exact pair
+   so a plain '[' and a compound '[|' that share the '[' kind stop cross-matching.
+
+   Ambiguity: the nearest-following-closer-of-the-same-kind rule gives each
+   opener occurrence exactly one mate per production, so a production is never
+   ambiguous; an opener whose mate differs ACROSS productions simply contributes
+   several entries to the (set-valued) table, which is fine. In wax/wasm/calc no
+   opener reaches two different closers, so every mate set is a clean bracket
+   family. *)
+let mates_of grammar terminals closers =
+  let tbl = Hashtbl.create 16 in
+  let add closer opener =
+    let cur = try Hashtbl.find tbl closer with Not_found -> StringSet.empty in
+    Hashtbl.replace tbl closer (StringSet.add opener cur)
+  in
+  StringSet.iter
+    (fun nt ->
+      List.iter
+        (fun rhs ->
+          (* Stack of (opener_name, opener_char) still open in this rhs. *)
+          let stack = ref [] in
+          List.iter
+            (fun sym ->
+              match List.assoc_opt sym closers with
+              | Some oc ->
+                  (* A closer of opener-char [oc]: pop the nearest open opener of
+                     that character and record the mate. A closer with no open
+                     mate in this rhs (e.g. a stray ')' balanced by a different
+                     production) contributes nothing. *)
+                  let rec pop = function
+                    | (oname, ochar) :: rest when ochar = oc ->
+                        add sym oname;
+                        rest
+                    | keep :: rest -> keep :: pop rest
+                    | [] -> []
+                  in
+                  stack := pop !stack
+              | None -> (
+                  (* A closer classification wins over an opener one; only
+                     otherwise treat the symbol as a possible opener. *)
+                  match opener_char_of terminals sym with
+                  | Some c -> stack := (sym, c) :: !stack
+                  | None -> ()))
+            rhs)
+        (grammar.productions nt))
+    grammar.all_nonterminals;
+  tbl
+
+let mates_of_closer mates closer =
+  try Hashtbl.find mates closer with Not_found -> StringSet.empty
 
 (*
-   Find depth of the matching opener for a given closer.
-   Depth is defined as the 1-based index from the top of the stack (right end of the sentence).
-   Every token counts as depth 1.
+   Find the depth and matching opener token for a given closer, balancing per
+   EXACT pair (move 2): only a token in [closer]'s mate set counts as one of its
+   openers, and only [closer] itself counts as a nested same-pair closer — so
+   delimiters of any OTHER bracket pair are transparent to the scan (properly
+   nested by the LR grammar, they never straddle this pair's opener).
+
+   Invariant: scanning the (reversed) stack suffix from the top, [balance] is the
+   number of unmatched occurrences of [closer] seen so far. On each token: [closer]
+   raises the balance; a mate opener lowers it when balance > 0 (it closed a
+   nested [closer]) or, at balance 0, IS the opener we seek; any other token is
+   ignored. Depth is the 1-based index from the top of the stack; every token
+   counts as depth 1. Returns the opener's depth paired with its token name.
 *)
-let find_matching_depth closers terminals sentence closer =
+let find_matching_depth mates sentence closer =
   let tokens =
     String.split_on_char ' ' sentence
     |> List.map String.trim
     |> List.filter (fun s -> s <> "")
   in
   let reversed = List.rev tokens in
-
-  match opener_char_of_closer closers closer with
-  | None -> None
-  | Some opener_c ->
-      let rec scan depth balance items =
-        match items with
-        | [] -> None (* Not found *)
-        | token :: rest ->
-            let current_depth = depth + 1 in
-            if token = closer then scan current_depth (balance + 1) rest
-            else if opens_with terminals opener_c token then
-              if balance > 0 then scan current_depth (balance - 1) rest
-              else Some current_depth
-            else scan current_depth balance rest
-      in
-      scan 0 0 reversed
+  let openers = mates_of_closer mates closer in
+  if StringSet.is_empty openers then None
+  else
+    let rec scan depth balance items =
+      match items with
+      | [] -> None (* Not found *)
+      | token :: rest ->
+          let current_depth = depth + 1 in
+          if token = closer then scan current_depth (balance + 1) rest
+          else if StringSet.mem token openers then
+            if balance > 0 then scan current_depth (balance - 1) rest
+            else Some (current_depth, token)
+          else scan current_depth balance rest
+    in
+    scan 0 0 reversed
 
 (* --- Message Generation --- *)
 
@@ -1118,7 +1193,8 @@ let check_override_rot overrides entries =
              key))
     overrides
 
-let generate_message cfg closers grammar terminals ~comments ~overrides entry =
+let generate_message cfg closers mates grammar terminals ~comments ~overrides
+    entry =
   let d = entry.Parse_messages.data in
 
   (* Heuristic: Formatting Logic. [subject_name] renders the Assuming subject
@@ -1242,8 +1318,23 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
      tie-break order. *)
   let check_unclosed (closer, opener_char) =
     if List.mem closer valid_symbols then
-      match find_matching_depth closers terminals sentence closer with
-      | Some depth -> Some (depth, String.make 1 opener_char)
+      match find_matching_depth mates sentence closer with
+      | Some (depth, opener_tok) ->
+          (* The hint names — and the runtime underlines — the opener's FULL
+             alias (move 3). When the closer has a UNIQUE mate, that mate is the
+             opener, so print its alias verbatim (a compound '[|' reads "This
+             '[|' …", underlined two characters). When the closer has SEVERAL
+             mates (wasm's ')' pairs with '(', '(then', …), no single alias
+             names them, so fall back to the shared opener character — which is
+             exactly today's rendering, keeping those goldens byte-identical. *)
+          let alias =
+            if StringSet.cardinal (mates_of_closer mates closer) = 1 then
+              match Hashtbl.find_opt terminals opener_tok with
+              | Some a -> a
+              | None -> String.make 1 opener_char
+            else String.make 1 opener_char
+          in
+          Some (depth, alias)
       | None -> None
     else None
   in
@@ -1378,7 +1469,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
       List.filter
         (fun closer ->
           List.mem closer valid_symbols
-          && find_matching_depth closers terminals sentence closer = None
+          && find_matching_depth mates sentence closer = None
           && unmatched_opener_like cfg closers terminals closer
                (String.concat " " d.stack_suffix))
         (List.map fst closers)
@@ -1460,7 +1551,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
   (Buffer.contents buf, full_message, stat)
 
 (* Analysis: List all possible continuations for states, indicating spurious reductions. *)
-let analyze_transitions closers grammar terminals entries =
+let analyze_transitions closers mates grammar entries =
   let seen_states = Hashtbl.create 100 in
 
   Printf.printf "Transitions per state:\n";
@@ -1506,8 +1597,8 @@ let analyze_transitions closers grammar terminals entries =
 
           let warning =
             if List.mem_assoc s closers then
-              match find_matching_depth closers terminals sentence s with
-              | Some depth -> Printf.sprintf " [depth: %d]" depth
+              match find_matching_depth mates sentence s with
+              | Some (depth, _) -> Printf.sprintf " [depth: %d]" depth
               | None -> " [mismatch?]"
             else ""
           in
@@ -2049,8 +2140,9 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
   (* Closer terminals are derived from the token aliases, so a grammar that
      aliases its delimiters gets hints with no configuration. *)
   let closers = closers_of terminals in
+  let mates = mates_of grammar terminals closers in
   match mode with
-  | Transitions -> analyze_transitions closers grammar terminals entries
+  | Transitions -> analyze_transitions closers mates grammar entries
   | Generate _ | Stats | Census | Names | Fallbacks | Suggest_classes -> (
       let comments = match mode with Generate nc -> not nc | _ -> true in
       (match mode with
@@ -2060,7 +2152,7 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
         List.map
           (fun entry ->
             let text, body, stat =
-              generate_message cfg closers grammar terminals ~comments
+              generate_message cfg closers mates grammar terminals ~comments
                 ~overrides entry
             in
             (entry, (text, body, stat)))
@@ -2297,12 +2389,13 @@ let tune_run_trial ~menhir ~config_file ~mly ~outprefix : tune_trial option =
         in
         let grammar = apply_wrapper_overrides cfg grammar0 in
         let closers = closers_of terminals in
+        let mates = mates_of grammar terminals closers in
         let results =
           List.map
             (fun entry ->
               let text, body, stat =
-                generate_message cfg closers grammar terminals ~comments:false
-                  ~overrides:StringMap.empty entry
+                generate_message cfg closers mates grammar terminals
+                  ~comments:false ~overrides:StringMap.empty entry
               in
               (entry, text, body, stat))
             entries

@@ -1,0 +1,81 @@
+; Delimiter-coexistence grammar (ERROR-MESSAGES.md section 23): two bracket
+; pairs sharing the '[' kind — plain '[' ']' and compound '[|' '|]'. It pins the
+; generic opener<->closer pair derivation: the generated messages golden shows
+; '|]' recognised as a closer (move 1), the exact pairs keeping '[' and '[|'
+; distinct under nesting (move 2), and the hint naming the full opener alias,
+; "This '[|' opens …" (move 3). Accept changes with `dune promote`.
+
+(library
+ (name delim)
+ (modules parser parser_messages)
+ (libraries menhirLib))
+
+(menhir
+ (modules parser))
+
+; 1. The representative error sentences (one per error state).
+
+(rule
+ (with-stdout-to
+  delim.auto.messages
+  (run menhir %{dep:parser.mly} --list-errors)))
+
+; 2. The exact grammar (productions + token aliases) for the generator.
+
+(rule
+ (target delim.cmly)
+ (deps parser.mly)
+ (action
+  (run menhir %{dep:parser.mly} --cmly --no-code-generation --base delim)))
+
+; 3. The generated messages, comments stripped and sorted by sentence.
+
+(rule
+ (with-stdout-to
+  delim.actual
+  (run
+   %{project_root}/stele/generate_error_messages.exe
+   generate
+   --no-comments
+   --cmly
+   %{dep:delim.cmly}
+   --config
+   %{dep:delim.config}
+   %{dep:delim.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff delim.expected delim.actual)))
+
+; 4. The full messages fed to menhir --compile-errors, producing the
+;    Parser_messages module compiled into the library above — proof the
+;    generated file is well-formed and links against the parser.
+
+(rule
+ (with-stdout-to
+  delim.messages
+  (run
+   %{project_root}/stele/generate_error_messages.exe
+   generate
+   --cmly
+   %{dep:delim.cmly}
+   --config
+   %{dep:delim.config}
+   %{dep:delim.auto.messages})))
+
+(rule
+ (with-stdout-to
+  parser_messages.ml
+  (run menhir %{dep:parser.mly} --compile-errors %{dep:delim.messages})))
+
+; 5. A direct runtime-helper unit check: the delimiter-hint underline spans the
+;    FULL alias the label names — one column for '[', two for '[|' — driven
+;    through Parser_error_runtime against a stub engine (no lexer/parser needed
+;    to exercise the width logic, which is engine-agnostic). Pins move 3's
+;    runtime half; the generator half is pinned by delim.expected above.
+
+(test
+ (name test_underline)
+ (modules test_underline)
+ (libraries parser_error_runtime))

@@ -1,0 +1,20 @@
+main: INT RBRACKPIPE
+
+Expecting 'eof'.
+
+main: LBRACK RBRACKPIPE
+
+Assuming that the elements are complete, expecting ']'.
+<^1>these elements
+<2>This '[' opens the enclosing construct.
+
+main: LBRACKPIPE RBRACK
+
+Assuming that the elements are complete, expecting '|]'.
+<^1>these elements
+<2>This '[|' opens the enclosing construct.
+
+main: RBRACKPIPE
+
+Expecting a main.
+
