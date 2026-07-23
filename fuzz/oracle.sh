@@ -384,7 +384,7 @@ fi
 # [(@if …)], so this only fires on genuinely invalid emitted text.
 demit=(--desugar -i "$FMT" -f wat "$IN" -o "$WORK/cand.wat")
 if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
-   && ! grep -qE "likely-confusing unicode|expected at least one module field|non-constant operator: visit_cont_new" \
+   && ! grep -qE "likely-confusing unicode|expected at least one module field|non-constant operator: visit_cont_new|branch_hint annotation: duplicate annotation" \
         "$WORK/cand.wat.err" \
    && ! grep -qE '\(item \$|\(do( |\))' "$WORK/cand.wat"; then
   # Rejections that are not wax bugs — wasm-tools text is stricter than the spec,
@@ -405,6 +405,15 @@ if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
   #     WAT (wabt's wat2wasm and wax's own reader accept it; the binary
   #     validates), but wasm-tools 1.254's text parser only takes the unfolded
   #     legacy [try … catch … end] form.
+  #   * [branch_hint annotation: duplicate annotation] — a wasm-tools bug. The
+  #     proposal's own branch_hint.wast places [(@…)] *before* the folded group
+  #     and binds it to the branch opcode; wax and binaryen match that. wasm-tools
+  #     binds a folded annotation positionally to the group's first instruction
+  #     (the condition), so two hints on branches sharing a leading operand (a
+  #     hinted [if] as the condition of another hinted [if]) collapse onto one
+  #     offset and it rejects the module. wax encodes the two hints on distinct
+  #     [if] opcodes (the binary validates; binaryen and wasmtime accept the
+  #     text). See UPSTREAM-wasm-tools-branch-hint.md.
   finding FALSE_ACCEPT HIGH "$IN" \
     "wax accepted the module but emitted WAT text wasm-tools rejects: $(head -1 "$WORK/cand.wat.err")" \
     "$(repro "${demit[@]}") && wasm-tools validate --features all $WORK/cand.wat"
