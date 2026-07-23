@@ -16,6 +16,13 @@ each failure point would have accepted next, and phrases it in plain terms
 promoted golden files, so a grammar change shows up as a reviewable diff of the
 messages rather than as silent staleness.
 
+The approach builds directly on François Pottier's *Reachability and Error
+Diagnosis in LR(1) Parsers* (CC 2016), the work behind Menhir's `--list-errors`
+/ `--compile-errors`. That paper enumerated every error state of CompCert's C
+parser and hand-wrote a complete, maintained set of messages; stele mechanizes
+what the paper left to the human expert, and several of its message conventions
+come straight from the paper. See [Credit](#credit).
+
 It powers the error messages of both grammars in the
 [Wax](https://github.com/ocsigen/wax) toolchain (WebAssembly text and the Wax
 language).
@@ -686,6 +693,29 @@ stele/
     delim/                   ; the delimiter-coexistence grammar + runtime unit check
   README.md
 ```
+
+## Credit
+
+stele stands on François Pottier's *Reachability and Error Diagnosis in LR(1)
+Parsers* (CC 2016). Menhir's `--list-errors` is that paper's reachability
+algorithm, so if you use stele you are using it too. The paper enumerated every
+error state of CompCert's C parser and hand-wrote a complete, maintained message
+collection; stele mechanizes that, and treats the output like code. Three of its
+conventions are the paper's directly:
+
+- the **hedge** wording ("Assuming that the statements are complete, …") is the
+  paper's hypothetical form ("If this construct is complete, then …");
+- folding a completed construct before reporting the error (`%on_error_reduce`)
+  is its "spurious reductions considered beneficial";
+- splitting a rule shared across contexts so each home gets its own message is
+  its "selective duplication" (see [Naming](#naming)).
+
+Where the paper's CompCert messages *echo* the recognized construct back at the
+reader, stele *points* at it instead: the `<^N>` hedge underline marks the
+construct it assumes complete, in the margin.
+
+Reference: François Pottier, [Reachability and Error Diagnosis in LR(1)
+Parsers](https://inria.hal.science/hal-01417004), CC 2016.
 
 ---
 

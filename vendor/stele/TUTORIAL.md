@@ -304,3 +304,8 @@ Error: Expecting ')', or an operator.
 
 Every golden is checked by `dune runtest`, so the story above cannot silently
 drift from the truth.
+
+The method here builds on François Pottier's *Reachability and Error Diagnosis
+in LR(1) Parsers* (CC 2016), the paper behind Menhir's `--list-errors`; several
+of the message conventions you just saw are its own. See the README's
+[Credit](README.md#credit) section.
