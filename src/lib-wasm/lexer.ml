@@ -65,7 +65,7 @@ let rec comment_rec lexbuf =
       comment_rec lexbuf
   | _ ->
       let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
-      Parsing.syntax_error
+      Wax_utils.Parsing.syntax_error
         ~location:{ Wax_utils.Ast.loc_start; loc_end }
         ~hint:
           (Wax_utils.Message.text "A block comment must be closed with ';)'.")
@@ -83,7 +83,7 @@ let unicode_escape lexbuf s =
   | Some u -> u
   | None ->
       let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
-      Parsing.syntax_error
+      Wax_utils.Parsing.syntax_error
         ~location:{ Wax_utils.Ast.loc_start; loc_end }
         ~hint:
           (Wax_utils.Message.text
@@ -99,7 +99,7 @@ let rec string lexbuf =
       s
   | '"', ('"' | reserved) ->
       raise
-        (Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text
                (Printf.sprintf "Unknown token '%s'.\n"
@@ -137,7 +137,7 @@ let rec string lexbuf =
       string lexbuf
   | _ ->
       raise
-        (Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text (Printf.sprintf "Malformed string.\n") ))
 
@@ -148,7 +148,7 @@ let rec scan_string lexbuf =
   | any -> scan_string lexbuf
   | _ ->
       raise
-        (Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text
                (Printf.sprintf "Unclosed string in annotation.\n") ))
@@ -168,7 +168,7 @@ let rec skip_annotation depth lexbuf =
   | reserved | ';' -> skip_annotation depth lexbuf
   | _ ->
       raise
-        (Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text (Printf.sprintf "Illegal character.\n") ))
 
@@ -637,13 +637,13 @@ let rec token_rec ctx lexbuf =
       let s = with_loc ctx string lexbuf in
       if not (String.is_valid_utf_8 s.desc) then
         raise
-          (Parsing.syntax_error_pair
+          (Wax_utils.Parsing.syntax_error_pair
              ( (s.info.loc_start, s.info.loc_end),
                Wax_utils.Message.text
                  "Identifier contains malformed UTF-8 byte sequences" ));
       if s.desc = "" then
         raise
-          (Parsing.syntax_error_pair
+          (Wax_utils.Parsing.syntax_error_pair
              ( (s.info.loc_start, s.info.loc_end),
                Wax_utils.Message.text "An identifier cannot be the empty string"
              ));
@@ -683,14 +683,14 @@ let rec token_rec ctx lexbuf =
       else (
         if not (String.is_valid_utf_8 s) then
           raise
-            (Parsing.syntax_error_pair
+            (Wax_utils.Parsing.syntax_error_pair
                ( Sedlexing.lexing_bytes_positions lexbuf,
                  Wax_utils.Message.text
                    "The annotation id contains malformed UTF-8 byte sequences."
                ));
         if s = "" then
           raise
-            (Parsing.syntax_error_pair
+            (Wax_utils.Parsing.syntax_error_pair
                ( Sedlexing.lexing_bytes_positions lexbuf,
                  Wax_utils.Message.text
                    "An annotation id cannot be the empty string." ));
@@ -724,20 +724,20 @@ let rec token_rec ctx lexbuf =
       | Some tok -> tok
       | None ->
           raise
-            (Parsing.syntax_error_pair
+            (Wax_utils.Parsing.syntax_error_pair
                ( Sedlexing.lexing_bytes_positions lexbuf,
                  Wax_utils.Message.text
                    (Printf.sprintf "Unknown keyword '%s'.\n" s) )))
   | reserved, Opt '"' ->
       raise
-        (Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text
                (Printf.sprintf "Unknown token '%s'.\n"
                   (Sedlexing.Utf8.lexeme lexbuf)) ))
   | _ ->
       raise
-        (Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text (Printf.sprintf "Syntax error.\n") ))
 
@@ -750,7 +750,7 @@ let token ctx =
      lexbuf's reported start would be the keyword's, not the [(]'s. Capture the
      [(] position when it is stashed and, when the pair is combined into one
      token, report it as that token's start via [start_override] (read by the
-     supplier in [Parsing]). The combined token's span thus really begins at its
+     supplier in [Wax_utils.Parsing]). The combined token's span thus really begins at its
      opening parenthesis. *)
   let paren_start = ref Lexing.dummy_pos in
   let start_override = ref None in
@@ -774,7 +774,7 @@ let token ctx =
           | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON | LPAREN_DESCRIPTOR
           | LPAREN_DESCRIBES ) ) ->
           raise
-            (Parsing.syntax_error_pair
+            (Wax_utils.Parsing.syntax_error_pair
                ( Sedlexing.lexing_bytes_positions lexbuf,
                  Wax_utils.Message.text
                    (Printf.sprintf "Unexpected keyword '%s'.\n"

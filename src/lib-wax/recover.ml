@@ -8,7 +8,7 @@
    End-of-input stops recovery and everything not listed here is skipped while
    scanning for one of these boundaries. The kinds (all handled by the same
    "unwind the stack to a state that can shift this token, then shift it" step,
-   see {!Wax_wasm.Parsing.Make.parse_recover}):
+   see {!Wax_utils.Parsing.Make.parse_recover}):
 
    - Openers ([Open]: ["{"], ["("], ["["]) and closers ([Close]: ["}"], [")"],
      ["]"]). The skip is nesting-aware: an opener met while skipping descends a
@@ -26,7 +26,7 @@
      expression are included: the expression forms [if]/[loop]/[block]/[match]/
      [do]/[while] are left out, since in this expression-oriented grammar they
      can occur mid-expression and stopping at one would resync too early. *)
-let sync : Tokens.token -> Wax_wasm.Parsing.sync_class = function
+let sync : Tokens.token -> Wax_utils.Parsing.sync_class = function
   | Tokens.LBRACE | Tokens.LPAREN | Tokens.LBRACKET -> Open
   | Tokens.RBRACE | Tokens.RPAREN | Tokens.RBRACKET -> Close
   | Tokens.SEMI -> Boundary

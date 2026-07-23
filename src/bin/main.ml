@@ -4,7 +4,7 @@ open Term.Syntax
 (*** Parsers and I/O helpers ***)
 
 module Wat_parser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)
@@ -15,7 +15,7 @@ module Wat_parser =
     (Wax_wasm.Lexer)
 
 module Wax_parser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_lang.Ast.location Wax_lang.Ast.module_
     end)
@@ -750,7 +750,7 @@ let check format_opt strict color warnings features debug error_format defines
            [--all-errors] arms. *)
         let seed_recovery syntax_errors =
           List.iter
-            (fun (e : Wax_wasm.Parsing.syntax_error) ->
+            (fun (e : Wax_utils.Parsing.syntax_error) ->
               Wax_utils.Diagnostic.report d ~location:e.location
                 ~severity:Wax_utils.Diagnostic.Error ~related:e.related
                 ?hint:e.hint ?edit:e.fix ~message:e.message ())
@@ -1475,7 +1475,7 @@ let () =
      exception here. *)
   let code =
     try Cmd.eval ~catch:false ~argv main_cmd with
-    | Wax_wasm.Parsing.Syntax_error _ -> 128
+    | Wax_utils.Parsing.Syntax_error _ -> 128
     | e ->
         Printf.eprintf "wax: internal error, uncaught exception:\n%s\n"
           (Printexc.to_string e);

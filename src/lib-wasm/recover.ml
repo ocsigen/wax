@@ -1,5 +1,5 @@
 (* Token classification for the WAT parser's panic-mode error recovery
-   ({!Parsing.Make.parse_recover}). WAT is fully parenthesized, so unlike Wax
+   ({!Wax_utils.Parsing.Make.parse_recover}). WAT is fully parenthesized, so unlike Wax
    there are no [Boundary]/[Leader] anchors: every construct is [( … )], and the
    only resynchronization points are the parentheses. Recovery therefore leans on
    the nesting-aware skip and on [close_pending] auto-closing with [")"]: an
@@ -10,7 +10,7 @@
    Every opener — the bare [LPAREN] and the compound [(param]/[(result]/… tokens
    the lexer folds — is [Open]; [RPAREN] is [Close]; end-of-input is [Terminal];
    everything else (keywords, mnemonics, literals) is [Skip]. *)
-let sync : Tokens.token -> Parsing.sync_class = function
+let sync : Tokens.token -> Wax_utils.Parsing.sync_class = function
   | Tokens.LPAREN | Tokens.LPAREN_DESCRIPTOR | Tokens.LPAREN_DESCRIBES
   | Tokens.LPAREN_CATCH | Tokens.LPAREN_CATCH_ALL | Tokens.LPAREN_CATCH_ALL_REF
   | Tokens.LPAREN_CATCH_REF | Tokens.LPAREN_ON | Tokens.LPAREN_EXPORT
@@ -50,7 +50,7 @@ let insert =
 
 (* A missing closer — [(module (func … (func …] with a [)] left out — surfaces
    as a field-opening keyword offered where an instruction was expected. This
-   [barrier] lets [Parsing.parse_recover] close the enclosing field and restart
+   [barrier] lets [Wax_utils.Parsing.parse_recover] close the enclosing field and restart
    at the new one instead of letting paren-depth counting swallow it. It has
    three parts: the bare [(] to re-offer; the predicate recognizing a field
    keyword written after a bare [(] (offered as the pair [( ; keyword]); and the

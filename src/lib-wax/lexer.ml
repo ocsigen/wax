@@ -75,7 +75,7 @@ let rec comment_rec lexbuf =
       comment_rec lexbuf
   | _ ->
       let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
-      Wax_wasm.Parsing.syntax_error
+      Wax_utils.Parsing.syntax_error
         ~location:{ Wax_utils.Ast.loc_start; loc_end }
         ~hint:
           (Wax_utils.Message.text "A block comment must be closed with '*/'.")
@@ -93,7 +93,7 @@ let unicode_escape lexbuf s =
   | Some u -> u
   | None ->
       let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
-      Wax_wasm.Parsing.syntax_error
+      Wax_utils.Parsing.syntax_error
         ~location:{ Wax_utils.Ast.loc_start; loc_end }
         ~hint:
           (Wax_utils.Message.text
@@ -140,7 +140,7 @@ let rec string lexbuf =
       string lexbuf
   | _ ->
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text (Printf.sprintf "Malformed string.\n") ))
 
@@ -297,7 +297,7 @@ let rec token_rec ctx lexbuf =
           let p0 = { startp with Lexing.pos_cnum = startp.pos_cnum + off } in
           let p1 = { p0 with Lexing.pos_cnum = p0.pos_cnum + len } in
           raise
-            (Wax_wasm.Parsing.syntax_error_pair
+            (Wax_utils.Parsing.syntax_error_pair
                ( (p0, p1),
                  Wax_utils.Message.text
                    (Printf.sprintf "Unexpected character '%s'.\n"
@@ -324,7 +324,7 @@ let rec token_rec ctx lexbuf =
       let n = int_of_string ("0x" ^ s) in
       if n > 127 then
         raise
-          (Wax_wasm.Parsing.syntax_error_pair
+          (Wax_utils.Parsing.syntax_error_pair
              ( Sedlexing.lexing_bytes_positions lexbuf,
                Wax_utils.Message.text
                  (Printf.sprintf "Invalid Unicode character.\n") ));
@@ -332,14 +332,14 @@ let rec token_rec ctx lexbuf =
   | eof -> EOF
   | Compl 'x' ->
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text
                (Printf.sprintf "Unexpected character '%s'.\n"
                   (Sedlexing.Utf8.lexeme lexbuf)) ))
   | _ ->
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text (Printf.sprintf "Syntax error.\n") ))
 

@@ -390,7 +390,7 @@ module Error = struct
 
   let report context ~location ~severity ?warning ?universal ?hint ?related
       message =
-    (* In error-recovery mode (see [Parsing.parse_recover], used by the editor
+    (* In error-recovery mode (see [Wax_utils.Parsing.parse_recover], used by the editor
        to validate a best-effort partial AST across syntax errors) the module's
        whole-module analyses are unreliable, so suppress every warning — the same
        policy the Wax typer applies in recovery. Errors still surface, so a real

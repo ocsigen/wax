@@ -10,7 +10,7 @@ open Editor_common
 (* The Wasm-text parser, instantiated the same way (no fast parser). Its lexer,
    parser and {!Wax_wasm.Validation} are what make this module cover WAT too. *)
 module Wat_parser =
-  Wax_wasm.Parsing.Make
+  Wax_utils.Parsing.Make
     (struct
       type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)

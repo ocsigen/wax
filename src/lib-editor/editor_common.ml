@@ -56,7 +56,7 @@ let render_labels labels =
    and any machine-applicable quick [fix] (a recovery-derived text edit, surfaced
    as the diag's [edit] so it flows through the same code-action path as the
    typer's suggestions — see [Wax_editor.code_actions]). *)
-let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
+let syntax_error_diag (e : Wax_utils.Parsing.syntax_error) =
   {
     severity = Wax_utils.Diagnostic.Error;
     location = e.location;

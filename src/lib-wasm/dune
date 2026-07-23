@@ -6,20 +6,4 @@
  ; (modules :standard \ wasm_link)
  (libraries wax_utils sedlex menhirLib unix theo))
 
-; stele's runtime marker-resolution helper is vendored under vendor/stele/ (its
-; own package). Rather than depend on the stele.runtime *library* — which would
-; leak into wax-lib's installed metadata and force stele to be installed too — we
-; copy its single module in and compile it as one of wax_wasm's own modules.
-; vendor/stele/runtime/ stays the single source of truth (parsing.ml uses it as
-; the internal module Parser_error_runtime).
-(rule
- (copy
-  %{project_root}/vendor/stele/runtime/parser_error_runtime.ml
-  parser_error_runtime.ml))
-
-(rule
- (copy
-  %{project_root}/vendor/stele/runtime/parser_error_runtime.mli
-  parser_error_runtime.mli))
-
 (include dune.menhir)

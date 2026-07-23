@@ -125,7 +125,7 @@ val collector : ?parent:context -> ?source:string -> unit -> context
 val set_recovery : context -> bool -> unit
 (** Put [context] into (or out of) error-recovery mode. In recovery mode a
     consumer that type-checks a best-effort AST recovered past syntax errors
-    (see {!Wax_wasm.Parsing}'s [parse_recover]) has told the checker that name
+    (see {!Wax_utils.Parsing}'s [parse_recover]) has told the checker that name
     resolution is unreliable — content dropped at a sync boundary leaves its
     bindings absent — so "not bound" diagnostics are suppressed as likely
     cascades while real type errors still surface. Off by default. *)

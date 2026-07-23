@@ -231,7 +231,7 @@ module Fast_script_parser = struct
 end
 
 module ModuleParser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)
@@ -242,7 +242,7 @@ module ModuleParser =
     (Wax_wasm.Lexer)
 
 module ScriptParser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = script
     end)
@@ -253,7 +253,7 @@ module ScriptParser =
     (Wax_wasm.Lexer)
 
 module WaxParser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_lang.Ast.location Wax_lang.Ast.module_
     end)

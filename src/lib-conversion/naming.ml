@@ -1,4 +1,4 @@
-open Ast
+open Wax_wasm.Ast
 
 (* [Func] carries an inline record, so each field is rebound and the record
    reconstructed explicitly (an inline record cannot be captured with [as]). *)
@@ -8,7 +8,7 @@ let rec map_fields fields =
       match field.desc with
       | Text.Func { id = None; typ; locals; instrs; exports }
         when match exports with
-             | export :: _ -> Lexer.is_valid_identifier export.desc
+             | export :: _ -> Wax_wasm.Lexer.is_valid_identifier export.desc
              | [] -> false ->
           let export = List.hd exports in
           {

@@ -1,9 +1,9 @@
 type syntax_error = {
-  location : Wax_utils.Ast.location;
-  message : Wax_utils.Message.t;
-  related : Wax_utils.Diagnostic.label list;
-  hint : Wax_utils.Message.t option;
-  fix : Wax_utils.Diagnostic.edit option;
+  location : Ast.location;
+  message : Message.t;
+  related : Diagnostic.label list;
+  hint : Message.t option;
+  fix : Diagnostic.edit option;
 }
 
 exception Syntax_error of syntax_error
@@ -12,8 +12,8 @@ exception Syntax_error of syntax_error
    (the two lexers and both grammars' semantic actions) funnels through this —
    directly or via a per-file thin wrapper that turns a position pair into the
    [Ast.location] — so the payload shape is spelled once here. [related]/[hint]
-   enrich the diagnostic exactly as {!Wax_utils.Diagnostic} does; [fix] carries a
-   machine-applicable quick fix (a text edit), reusing {!Wax_utils.Diagnostic.edit}
+   enrich the diagnostic exactly as {!Diagnostic} does; [fix] carries a
+   machine-applicable quick fix (a text edit), reusing {!Diagnostic.edit}
    so the editor/LSP code-action path is shared with the typer's suggestions. *)
 let syntax_error ~location ?(related = []) ?hint ?fix message =
   raise (Syntax_error { location; message; related; hint; fix })
@@ -28,7 +28,7 @@ let syntax_error ~location ?(related = []) ?hint ?fix message =
 let syntax_error_pair ((loc_start, loc_end), message) =
   Syntax_error
     {
-      location = { Wax_utils.Ast.loc_start; loc_end };
+      location = { Ast.loc_start; loc_end };
       message;
       related = [];
       hint = None;
@@ -49,8 +49,8 @@ module Lu = MenhirLib.LexerUtil
 let succeed v = v
 
 let report_syntax_error ~color source (e : syntax_error) =
-  let theme = Wax_utils.Diagnostic.get_theme ?color () in
-  Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
+  let theme = Diagnostic.get_theme ?color () in
+  Diagnostic.output_error_with_source ~theme ~source ~severity:Error
     ~location:e.location ~related:e.related ?hint:e.hint ?edit:e.fix e.message;
   (* The diagnostic has been printed; re-raise so the caller decides how to
      terminate rather than exiting the process here. The CLI maps this to exit
@@ -88,7 +88,7 @@ end) (Tokens : sig
   type token
 end) (Parser : sig
   module Make (_ : sig
-    type t = Wax_utils.Trivia.context
+    type t = Trivia.context
 
     val context : t
   end) : sig
@@ -105,12 +105,12 @@ end) (Parser_messages : sig
   val message : int -> string
 end) (Lexer : sig
   val token :
-    Wax_utils.Trivia.context ->
+    Trivia.context ->
     (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 end) =
 struct
   module Inner (Context : sig
-    type t = Wax_utils.Trivia.context
+    type t = Trivia.context
 
     val context : t
   end) =
@@ -176,9 +176,9 @@ struct
         List.map
           (fun (l : Error_runtime.label) ->
             {
-              Wax_utils.Diagnostic.location =
-                { Wax_utils.Ast.loc_start = l.loc_start; loc_end = l.loc_end };
-              message = Wax_utils.Message.text l.text;
+              Diagnostic.location =
+                { Ast.loc_start = l.loc_start; loc_end = l.loc_end };
+              message = Message.text l.text;
             })
           labels
       in
@@ -191,8 +191,8 @@ struct
       raise
         (Detailed_error
            {
-             location = { Wax_utils.Ast.loc_start; loc_end };
-             message = Wax_utils.Message.text message;
+             location = { Ast.loc_start; loc_end };
+             message = Message.text message;
              related;
              hint = None;
              fix = None;
@@ -220,9 +220,9 @@ struct
           let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
           Error
             {
-              location = { Wax_utils.Ast.loc_start; loc_end };
+              location = { Ast.loc_start; loc_end };
               message =
-                Wax_utils.Message.text
+                Message.text
                   "Input file contains malformed UTF-8 byte sequences";
               related = [];
               hint = None;
@@ -308,10 +308,8 @@ struct
             resume ()
         | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
             let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
-            record_error
-              { Wax_utils.Ast.loc_start; loc_end }
-              (Wax_utils.Message.text
-                 "Input file contains malformed UTF-8 byte sequences");
+            record_error { Ast.loc_start; loc_end }
+              (Message.text "Input file contains malformed UTF-8 byte sequences");
             resume ()
       in
       let buffer, supplier = E.wrap_supplier recovering_supplier in
@@ -337,8 +335,8 @@ struct
         in
         errors :=
           {
-            location = { Wax_utils.Ast.loc_start; loc_end };
-            message = Wax_utils.Message.text message;
+            location = { Ast.loc_start; loc_end };
+            message = Message.text message;
             related;
             hint = None;
             fix = None;
@@ -366,10 +364,8 @@ struct
         let already_flagged =
           match !errors with
           | { location; _ } :: _ ->
-              let err_start =
-                location.Wax_utils.Ast.loc_start.Lexing.pos_cnum
-              in
-              let err_end = location.Wax_utils.Ast.loc_end.Lexing.pos_cnum in
+              let err_start = location.Ast.loc_start.Lexing.pos_cnum in
+              let err_end = location.Ast.loc_end.Lexing.pos_cnum in
               if
                 pos.Lexing.pos_cnum <= err_start
                 && err_end <= end_pos.Lexing.pos_cnum
@@ -380,7 +376,7 @@ struct
         if not already_flagged then
           errors :=
             {
-              location = { Wax_utils.Ast.loc_start = pos; loc_end = pos };
+              location = { Ast.loc_start = pos; loc_end = pos };
               message;
               related = [];
               hint = None;
@@ -408,8 +404,7 @@ struct
         else
           Some
             {
-              Wax_utils.Diagnostic.edit_location =
-                { Wax_utils.Ast.loc_start = pos; loc_end = pos };
+              Diagnostic.edit_location = { Ast.loc_start = pos; loc_end = pos };
               new_text = text;
             }
       in
@@ -568,7 +563,7 @@ struct
                         let caret = if move_pos then insert_pos else startp in
                         let fix =
                           {
-                            Wax_utils.Diagnostic.edit_location =
+                            Diagnostic.edit_location =
                               { loc_start = caret; loc_end = caret };
                             new_text;
                           }
@@ -989,8 +984,8 @@ struct
                    attach_fix
                      (Some
                         {
-                          Wax_utils.Diagnostic.edit_location =
-                            { Wax_utils.Ast.loc_start = sp; loc_end = ep };
+                          Diagnostic.edit_location =
+                            { Ast.loc_start = sp; loc_end = ep };
                           new_text = "";
                         })
                | _ -> ());
@@ -1019,10 +1014,8 @@ struct
             None
         | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
             let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
-            record_error
-              { Wax_utils.Ast.loc_start; loc_end }
-              (Wax_utils.Message.text
-                 "Input file contains malformed UTF-8 byte sequences");
+            record_error { Ast.loc_start; loc_end }
+              (Message.text "Input file contains malformed UTF-8 byte sequences");
             None
       in
       (ast, List.rev !errors)
@@ -1036,10 +1029,10 @@ struct
   end
 
   let parse_from_string ?color ~filename text =
-    Wax_utils.Debug.timed "parse" @@ fun () ->
-    let ctx = Wax_utils.Trivia.make () in
+    Debug.timed "parse" @@ fun () ->
+    let ctx = Trivia.make () in
     let module Context = struct
-      type t = Wax_utils.Trivia.context
+      type t = Trivia.context
 
       let context = ctx
     end in
@@ -1050,10 +1043,10 @@ struct
     parse_from_string ?color ~filename (read filename)
 
   let parse_diagnostics ~filename text =
-    Wax_utils.Debug.timed "parse" @@ fun () ->
-    let ctx = Wax_utils.Trivia.make () in
+    Debug.timed "parse" @@ fun () ->
+    let ctx = Trivia.make () in
     let module Context = struct
-      type t = Wax_utils.Trivia.context
+      type t = Trivia.context
 
       let context = ctx
     end in
@@ -1063,10 +1056,10 @@ struct
     | Error e -> Error e
 
   let parse_recover ~filename ~sync ?insert ?closers ?barrier text =
-    Wax_utils.Debug.timed "parse" @@ fun () ->
-    let ctx = Wax_utils.Trivia.make () in
+    Debug.timed "parse" @@ fun () ->
+    let ctx = Trivia.make () in
     let module Context = struct
-      type t = Wax_utils.Trivia.context
+      type t = Trivia.context
 
       let context = ctx
     end in
@@ -1090,7 +1083,7 @@ end) (Tokens : sig
   type token
 end) (Parser : sig
   module Make (_ : sig
-    type t = Wax_utils.Trivia.context
+    type t = Trivia.context
 
     val context : t
   end) : sig
@@ -1105,7 +1098,7 @@ end) (Parser : sig
   end
 end) (Fast_parser : sig
   module Make (_ : sig
-    type t = Wax_utils.Trivia.context
+    type t = Trivia.context
 
     val context : t
   end) : sig
@@ -1119,7 +1112,7 @@ end) (Parser_messages : sig
   val message : int -> string
 end) (Lexer : sig
   val token :
-    Wax_utils.Trivia.context ->
+    Trivia.context ->
     (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 end) =
 struct
@@ -1127,10 +1120,10 @@ struct
   include Core
 
   let parse_from_string ?color ~filename text =
-    Wax_utils.Debug.timed "parse" @@ fun () ->
-    let ctx = Wax_utils.Trivia.make () in
+    Debug.timed "parse" @@ fun () ->
+    let ctx = Trivia.make () in
     let module Context = struct
-      type t = Wax_utils.Trivia.context
+      type t = Trivia.context
 
       let context = ctx
     end in

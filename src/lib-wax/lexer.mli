@@ -8,5 +8,5 @@ val token :
   (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 (** [token ctx] returns the tokenizer closure and a [start_override] ref (always
     [None] here — the Wax lexer combines no tokens). The shape matches the
-    shared lexer interface consumed by {!Wax_wasm.Parsing}; see
+    shared lexer interface consumed by {!Wax_utils.Parsing}; see
     {!Wax_wasm.Lexer.token}. *)

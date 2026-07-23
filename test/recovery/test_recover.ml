@@ -48,7 +48,7 @@ let report name source =
     | None -> "none");
   Printf.printf "errors: %d\n" (List.length errors);
   List.iter
-    (fun (e : Wax_wasm.Parsing.syntax_error) ->
+    (fun (e : Wax_utils.Parsing.syntax_error) ->
       Printf.printf "  %s-%s: %s\n" (pos e.location.loc_start)
         (pos e.location.loc_end)
         (first_line (String.trim (Wax_utils.Message.to_plain_string e.message))))

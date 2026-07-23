@@ -218,7 +218,7 @@ let hinted loc h (i : _ instr) =
   if is_branch_hint_target i.desc then with_loc loc (Hinted (h, i))
   else
     raise
-      (Wax_wasm.Parsing.syntax_error_pair
+      (Wax_utils.Parsing.syntax_error_pair
          (loc,
            Wax_utils.Message.text ("A branch hint may only prefix a conditional branch (if, br_if, or \
            br_on_*).\n") ))
@@ -232,7 +232,7 @@ let branch_hint_of_attr loc (name, value, _guard) =
   | "unlikely", None -> false
   | _ ->
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            (loc,
            Wax_utils.Message.text ("Expected a branch hint '#[likely]' or '#[unlikely]'.\n") ))
 
@@ -274,7 +274,7 @@ let rec process_stmts = function
       :: process_stmts rest
   | RS_else (loc, _) :: _ ->
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            (loc,
            Wax_utils.Message.text ("An '#[else]' must directly follow an '#[if(...)]' group.\n") ))
 
@@ -332,7 +332,7 @@ let rec lower_fields = function
       :: lower_fields rest
   | RF_else (loc, _) :: _ ->
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            (loc,
            Wax_utils.Message.text ("An '#[else]' must directly follow an '#[if(...)]' field.\n") ))
 
@@ -350,7 +350,7 @@ let decl_sign loc t sign =
          (the caret [snd loc], right after the name or the [: type] reference),
          where an empty parameter list belongs. *)
       let caret = snd loc in
-      Wax_wasm.Parsing.syntax_error
+      Wax_utils.Parsing.syntax_error
         ~location:{ Wax_utils.Ast.loc_start = fst loc; loc_end = snd loc }
         ~fix:
           {
@@ -370,7 +370,7 @@ let decl_sign loc t sign =
    digit/hex only (never signed), so [is_int64] and [Uint64.of_string] agree. *)
 let u64_of_int_literal loc n =
   if not (Wax_wasm.Misc.is_int64 n) then
-    Wax_wasm.Parsing.syntax_error
+    Wax_utils.Parsing.syntax_error
       ~location:{ Wax_utils.Ast.loc_start = fst loc; loc_end = snd loc }
       ~hint:
         (Wax_utils.Message.text
@@ -383,7 +383,7 @@ let u64_of_int_literal loc n =
 module V128 = Wax_utils.V128
 
 let syntax_error loc (msg : Wax_utils.Message.t) =
-  raise (Wax_wasm.Parsing.syntax_error_pair (loc, msg))
+  raise (Wax_utils.Parsing.syntax_error_pair (loc, msg))
 
 (* A version component of a conditional-compilation predicate ([#[if version =
    (1, 2, 3)]]), converted to a native [int]. Guarded with [int_of_string_opt] so
@@ -480,7 +480,7 @@ let page_size_log2 loc n =
     exp v 0
   else
     raise
-      (Wax_wasm.Parsing.syntax_error_pair
+      (Wax_utils.Parsing.syntax_error_pair
          (loc,
            Wax_utils.Message.text ("The page size must be a power of two.\n") ))
 %}
@@ -580,7 +580,7 @@ reference_type:
         match (typ : heaptype) with
         | Type t -> Exact t
         | _ ->
-            raise (Wax_wasm.Parsing.syntax_error_pair
+            raise (Wax_utils.Parsing.syntax_error_pair
                      ($sloc,
            Wax_utils.Message.text ("Only a concrete type can be exact.\n") ))
       else typ
@@ -590,7 +590,7 @@ reference_type:
 value_type:
 | t = IDENT
    { try Hashtbl.find valtype_tbl t with Not_found ->
-       raise (Wax_wasm.Parsing.syntax_error_pair ($sloc,
+       raise (Wax_utils.Parsing.syntax_error_pair ($sloc,
            Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a value type.\n" t) )) }
 | t = reference_type { Ref t }
 
@@ -598,7 +598,7 @@ cast_type:
 | t = IDENT
    { try Valtype (Hashtbl.find valtype_tbl t) with Not_found ->
        try Hashtbl.find casttype_tbl t with Not_found ->
-         raise (Wax_wasm.Parsing.syntax_error_pair
+         raise (Wax_utils.Parsing.syntax_error_pair
                   ($sloc,
            Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a cast type.\n" t) )) }
 | t = reference_type { Valtype (Ref t) }
@@ -623,7 +623,7 @@ function_type_definition:
 storage_type:
 | t = IDENT
    { try Hashtbl.find storagetype_tbl t with Not_found ->
-       raise (Wax_wasm.Parsing.syntax_error_pair ($sloc,
+       raise (Wax_utils.Parsing.syntax_error_pair ($sloc,
            Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a storage type.\n" t) )) }
 | t = reference_type { Value (Ref t) }
 
@@ -774,7 +774,7 @@ optional_function_type: sign = option (function_type(FN)) { sign }
   { let ex2, t =
       match t with Some (e, t) -> (e, Some t) | None -> (false, None) in
     if ex1 && ex2 then
-      raise (Wax_wasm.Parsing.syntax_error_pair
+      raise (Wax_utils.Parsing.syntax_error_pair
                ($sloc,
            Wax_utils.Message.text ("Duplicate exact marker '!'.\n") ));
     (name, t, decl_sign $sloc t sign, ex1 || ex2) }
@@ -784,7 +784,7 @@ func:
   { fun attributes ->
     let (name, typ, sign, exact) = f in
     if exact then
-      raise (Wax_wasm.Parsing.syntax_error_pair
+      raise (Wax_utils.Parsing.syntax_error_pair
                ($sloc,
            Wax_utils.Message.text ("A function definition is always exact; the '!' marker \
                         is only allowed on an (imported) function declaration.\n") ));
@@ -829,7 +829,7 @@ on_clause:
   { if s.desc = "switch" then OnSwitch t
     else
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ($loc(s),
             Wax_utils.Message.(
               text "Expected a label or" ++ code "switch"
@@ -1242,7 +1242,7 @@ address_type:
     | "i32" -> `I32
     | "i64" -> `I64
     | _ ->
-        raise (Wax_wasm.Parsing.syntax_error_pair
+        raise (Wax_utils.Parsing.syntax_error_pair
                  ($sloc,
            Wax_utils.Message.text ("Expected a memory address type 'i32' or 'i64'.\n") )) }
 
@@ -1410,7 +1410,7 @@ condition:
     | "not", [c] -> Wax_wasm.Ast.Cond_not c
     | _ ->
       raise
-        (Wax_wasm.Parsing.syntax_error_pair
+        (Wax_utils.Parsing.syntax_error_pair
            ($loc,
            Wax_utils.Message.text ("Expected 'all', 'any', or 'not(<cond>)' in a condition.") )) }
 

@@ -3,7 +3,7 @@ type binary_module = Wax_wasm.Ast.location Wax_wasm.Ast.Binary.module_
 (* Pre-instantiated parsers, matching the wiring in [src/bin/main.ml]. *)
 
 module Wat_parser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)
@@ -14,7 +14,7 @@ module Wat_parser =
     (Wax_wasm.Lexer)
 
 module Wax_parser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_lang.Ast.location Wax_lang.Ast.module_
     end)
@@ -45,8 +45,7 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
           fst (Wax_wasm.Cond_specialize.module_ d defines ast))
   in
   let ast =
-    if name_functions then Wax_wasm.Naming.name_functions_from_exports ast
-    else ast
+    if name_functions then Naming.name_functions_from_exports ast else ast
   in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme

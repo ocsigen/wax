@@ -82,7 +82,7 @@ val render_labels :
 
 (* A syntax error, as a diagnostic, carrying its related labels, any prose hint,
    and any recovery-derived quick [fix] (surfaced as the diag's [edit]). *)
-val syntax_error_diag : Wax_wasm.Parsing.syntax_error -> diag
+val syntax_error_diag : Wax_utils.Parsing.syntax_error -> diag
 
 (* The errors and warnings a checker collected (without printing), as
    diagnostics carrying their hints and related labels. *)

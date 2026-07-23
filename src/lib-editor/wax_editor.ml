@@ -72,13 +72,13 @@
 open Editor_common
 
 (* The editor parses through [parse_diagnostics], which uses the incremental
-   parser directly, so it instantiates {!Wax_wasm.Parsing.Make} — the core
+   parser directly, so it instantiates {!Wax_utils.Parsing.Make} — the core
    functor without a [Fast_parser] parameter. That keeps [Wax_lang.Fast_parser]
    and its tables out of the linked program (the bytecode linker pulls in a whole
    compilation unit as soon as it is referenced, even only as a functor
    argument). *)
 module Wax_parser =
-  Wax_wasm.Parsing.Make
+  Wax_utils.Parsing.Make
     (struct
       type t = Wax_lang.Ast.location Wax_lang.Ast.module_
     end)

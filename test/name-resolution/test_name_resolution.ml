@@ -6,7 +6,7 @@
 open Wax_lang
 
 module P =
-  Wax_wasm.Parsing.Make
+  Wax_utils.Parsing.Make
     (struct
       type t = Ast.location Ast.module_
     end)

@@ -13,23 +13,23 @@ val wax_parse_recover :
   filename:string ->
   string ->
   Wax_lang.Ast.location Wax_lang.Ast.module_ option
-  * Wax_wasm.Parsing.syntax_error list
+  * Wax_utils.Parsing.syntax_error list
   * Wax_utils.Trivia.context
 (** Parse Wax [contents] with panic-mode error recovery, returning the
     best-effort AST ([None] if recovery could not reach an accepting state), the
     list of {e all} syntax errors in source order, and the trivia context. For
     in-process consumers such as a language server; see
-    {!Wax_wasm.Parsing.Make.parse_recover}. Wax resynchronizes on the statement,
-    block, paren and bracket closers and on the keywords that begin a new
-    top-level item or statement (see [wax_sync]). A lexer error (bad character,
-    malformed byte) is recorded as a diagnostic and skipped, so parsing resumes
-    past it rather than stopping. *)
+    {!Wax_utils.Parsing.Make.parse_recover}. Wax resynchronizes on the
+    statement, block, paren and bracket closers and on the keywords that begin a
+    new top-level item or statement (see [wax_sync]). A lexer error (bad
+    character, malformed byte) is recorded as a diagnostic and skipped, so
+    parsing resumes past it rather than stopping. *)
 
 val wat_parse_recover :
   filename:string ->
   string ->
   Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_ option
-  * Wax_wasm.Parsing.syntax_error list
+  * Wax_utils.Parsing.syntax_error list
   * Wax_utils.Trivia.context
 (** As {!wax_parse_recover}, for WAT. WAT is fully parenthesized, so recovery
     resynchronizes on the parentheses alone (see {!Wax_wasm.Recover}): the

@@ -30,7 +30,7 @@ open Ast
 let color = Wax_utils.Colors.Never
 
 module WaxParser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_lang.Ast.location Wax_lang.Ast.module_
     end)

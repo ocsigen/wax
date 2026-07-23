@@ -1,13 +1,34 @@
 (library
  (name wax_utils)
  (public_name wax-lib.utils)
- (libraries unix yojson)
+ ; menhirLib and sedlex are needed by the generic parsing infrastructure
+ ; (Parsing, and the copied-in Parser_error_runtime below): Parsing's Make
+ ; functor drives a Menhir incremental engine over a Sedlexing lexbuf. No
+ ; sedlex.ppx: Parsing takes the lexbuf as a functor input, it defines no lexer.
+ (libraries unix yojson menhirLib sedlex)
  (foreign_stubs
   (language c)
   (names pager_stubs))
  (wasm_of_ocaml
   (javascript_files pager_node.js)
   (wasm_files pager_node.wat)))
+
+; stele's runtime marker-resolution helper is vendored under vendor/stele/ (its
+; own package). Rather than depend on the stele.runtime *library* — which would
+; leak into wax-lib's installed metadata and force stele to be installed too — we
+; copy its single module in and compile it as one of wax_utils's own modules, so
+; the generic Parsing functor (which instantiates it) can live here too.
+; vendor/stele/runtime/ stays the single source of truth.
+
+(rule
+ (copy
+  %{project_root}/vendor/stele/runtime/parser_error_runtime.ml
+  parser_error_runtime.ml))
+
+(rule
+ (copy
+  %{project_root}/vendor/stele/runtime/parser_error_runtime.mli
+  parser_error_runtime.mli))
 
 ; unicode_widths.ml is a committed, generated table (character display
 ; widths). Its generator, scripts/build_unicode_width_table.exe, depends on

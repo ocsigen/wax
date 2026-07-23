@@ -217,7 +217,7 @@ let print_hint ?(output = channel_sink stderr) ~theme hint =
 (* Render a machine-applicable [edit] as a "help"-style line, describing the
    rewrite in prose (e.g. [Help: insert ';']). Only shown for an unnamed [Error]
    — i.e. a syntax error: it says what is wrong, not how to repair it, so the
-   derived quick fix (a recovery insertion, see [Wax_wasm.Parsing]) is worth
+   derived quick fix (a recovery insertion, see [Wax_utils.Parsing]) is worth
    spelling out. A [Suggestion] or [Warning] carrying an edit — even one promoted
    to [Error] severity by [-W name=error], which is why the guard also checks
    [warning = None] — already states its fix in its own message (see [suggest_*]
@@ -552,7 +552,7 @@ type context = {
          queued and flushed (see [output_errors]) once [max] accumulate. *)
   mutable recovery : bool;
       (* Error-recovery mode: the input had syntax errors and a best-effort AST
-         was recovered past them (see [Wax_wasm.Parsing.parse_recover]). Name
+         was recovered past them (see [Wax_utils.Parsing.parse_recover]). Name
          resolution is then unreliable — a construct dropped at a sync boundary
          leaves its bindings absent — so the "not bound" diagnostics are
          suppressed (see [unbound_name] in lib-wax/typing.ml) as likely cascades

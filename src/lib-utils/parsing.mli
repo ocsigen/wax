@@ -1,38 +1,37 @@
 (** Generic parsing utilities. *)
 
 type syntax_error = {
-  location : Wax_utils.Ast.location;
-  message : Wax_utils.Message.t;
-  related : Wax_utils.Diagnostic.label list;
-  hint : Wax_utils.Message.t option;
-  fix : Wax_utils.Diagnostic.edit option;
+  location : Ast.location;
+  message : Message.t;
+  related : Diagnostic.label list;
+  hint : Message.t option;
+  fix : Diagnostic.edit option;
 }
 (** A syntax error, both the payload of {!Syntax_error} and the value
     [parse_diagnostics] / [parse_recover] return: the location range, the
     human-readable message, any related labels (e.g. the matching opening
     delimiter), an optional prose [hint], and an optional machine-applicable
-    quick [fix] (a text edit, reusing {!Wax_utils.Diagnostic.edit} so a syntax
-    error's fix flows through the same editor/LSP code-action path as the
-    typer's suggestions). Recovery derives a [fix] mechanically from an
-    insertion repair (see {!Make.parse_recover}). *)
+    quick [fix] (a text edit, reusing {!Diagnostic.edit} so a syntax error's fix
+    flows through the same editor/LSP code-action path as the typer's
+    suggestions). Recovery derives a [fix] mechanically from an insertion repair
+    (see {!Make.parse_recover}). *)
 
 exception Syntax_error of syntax_error
 (** Raised when a syntax error occurs, carrying the structured payload above. *)
 
 val syntax_error :
-  location:Wax_utils.Ast.location ->
-  ?related:Wax_utils.Diagnostic.label list ->
-  ?hint:Wax_utils.Message.t ->
-  ?fix:Wax_utils.Diagnostic.edit ->
-  Wax_utils.Message.t ->
+  location:Ast.location ->
+  ?related:Diagnostic.label list ->
+  ?hint:Message.t ->
+  ?fix:Diagnostic.edit ->
+  Message.t ->
   'a
 (** [syntax_error ~location ?related ?hint ?fix message] raises {!Syntax_error}
     with the structured payload. Smart constructor used by every enriched raise
     site (the lexers and both grammars), so the payload shape is spelled once.
 *)
 
-val syntax_error_pair :
-  (Lexing.position * Lexing.position) * Wax_utils.Message.t -> exn
+val syntax_error_pair : (Lexing.position * Lexing.position) * Message.t -> exn
 (** [syntax_error_pair ((loc_start, loc_end), message)] builds (without raising)
     the {!Syntax_error} value from the legacy position-pair payload, with no
     [related]/[hint]/[fix]. It keeps the many pre-existing
@@ -83,7 +82,7 @@ end) (Tokens : sig
   type token
 end) (_ : sig
   module Make (_ : sig
-    type t = Wax_utils.Trivia.context
+    type t = Trivia.context
 
     val context : t
   end) : sig
@@ -100,23 +99,17 @@ end) (_ : sig
   val message : int -> string
 end) (_ : sig
   val token :
-    Wax_utils.Trivia.context ->
+    Trivia.context ->
     (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 end) : sig
   val parse :
-    ?color:Wax_utils.Colors.flag ->
-    filename:string ->
-    unit ->
-    Output.t * Wax_utils.Trivia.context
+    ?color:Colors.flag -> filename:string -> unit -> Output.t * Trivia.context
   (** Parse a file from a filename (reads from stdin if filename is empty or
       "-"). On a syntax error the diagnostic is printed and {!Syntax_error} is
       raised; the caller decides how to terminate (the CLI exits 128). *)
 
   val parse_from_string :
-    ?color:Wax_utils.Colors.flag ->
-    filename:string ->
-    string ->
-    Output.t * Wax_utils.Trivia.context
+    ?color:Colors.flag -> filename:string -> string -> Output.t * Trivia.context
   (** Parse from a string. On a syntax error the diagnostic is printed and
       {!Syntax_error} is raised; the caller decides how to terminate (the CLI
       exits 128). *)
@@ -124,7 +117,7 @@ end) : sig
   val parse_diagnostics :
     filename:string ->
     string ->
-    (Output.t * Wax_utils.Trivia.context, syntax_error) result
+    (Output.t * Trivia.context, syntax_error) result
   (** Parse from a string, returning [Ok (ast, context)] or [Error error]
       without printing or exiting. For in-process use — e.g. an editor that
       wants the syntax error as data to report as a diagnostic — where the
@@ -133,11 +126,11 @@ end) : sig
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:(Tokens.token * Wax_utils.Message.t * bool * string) list ->
+    ?insert:(Tokens.token * Message.t * bool * string) list ->
     ?closers:(Tokens.token * string) list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->
-    Output.t option * syntax_error list * Wax_utils.Trivia.context
+    Output.t option * syntax_error list * Trivia.context
   (** Parse with panic-mode error recovery, collecting {e every} syntax error
       instead of stopping at the first. On each error the parser stack is
       resynchronized: tokens are discarded up to the next boundary (as
@@ -208,7 +201,7 @@ end) (Tokens : sig
   type token
 end) (_ : sig
   module Make (_ : sig
-    type t = Wax_utils.Trivia.context
+    type t = Trivia.context
 
     val context : t
   end) : sig
@@ -223,7 +216,7 @@ end) (_ : sig
   end
 end) (_ : sig
   module Make (_ : sig
-    type t = Wax_utils.Trivia.context
+    type t = Trivia.context
 
     val context : t
   end) : sig
@@ -237,37 +230,31 @@ end) (_ : sig
   val message : int -> string
 end) (_ : sig
   val token :
-    Wax_utils.Trivia.context ->
+    Trivia.context ->
     (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 end) : sig
   val parse :
-    ?color:Wax_utils.Colors.flag ->
-    filename:string ->
-    unit ->
-    Output.t * Wax_utils.Trivia.context
+    ?color:Colors.flag -> filename:string -> unit -> Output.t * Trivia.context
   (** As {!Make.parse}, using the fast parser on the happy path. *)
 
   val parse_from_string :
-    ?color:Wax_utils.Colors.flag ->
-    filename:string ->
-    string ->
-    Output.t * Wax_utils.Trivia.context
+    ?color:Colors.flag -> filename:string -> string -> Output.t * Trivia.context
   (** As {!Make.parse_from_string}, using the fast parser on the happy path. *)
 
   val parse_diagnostics :
     filename:string ->
     string ->
-    (Output.t * Wax_utils.Trivia.context, syntax_error) result
+    (Output.t * Trivia.context, syntax_error) result
   (** As {!Make.parse_diagnostics}. *)
 
   val parse_recover :
     filename:string ->
     sync:(Tokens.token -> sync_class) ->
-    ?insert:(Tokens.token * Wax_utils.Message.t * bool * string) list ->
+    ?insert:(Tokens.token * Message.t * bool * string) list ->
     ?closers:(Tokens.token * string) list ->
     ?barrier:Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool) ->
     string ->
-    Output.t option * syntax_error list * Wax_utils.Trivia.context
+    Output.t option * syntax_error list * Trivia.context
   (** As {!Make.parse_recover}. (Recovery always uses the incremental engine;
       there is no fast-path variant.) *)
 end
