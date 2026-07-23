@@ -297,6 +297,30 @@ Three techniques follow:
 
   renders "an export" where the inline form rendered `'(export'`.
 
+- **Split a shared rule to unblend contexts.** When one nonterminal serves
+  several syntactic homes, menhir gives it merged error states whose
+  lookahead set is the union over all homes, and the message lists
+  continuations from contexts the user cannot be in. Example: a
+  `function_type` rule used both by a declaration (`fn f() -> t { ... }`,
+  where only `->` and `{` can follow) and as a type inside expressions
+  (where the surrounding expression's operators follow) produces one state
+  whose message offers both. Duplicate the rule under a second name with
+  textually identical productions:
+
+  ```
+  function_signature: (* the declaration's own copy *)
+    | "(" p = parameter_list ")" { ... }
+    | "(" p = parameter_list ")" "->" r = result_type { ... }
+  ```
+
+  Distinct nonterminals mean distinct LR items, so the states stop merging
+  and each home gets its own precise message ("Expecting '->', or '{'."
+  for the declaration). Same language; the cost is keeping the two copies
+  in step. The symptom to hunt: a message mixing vocabularies no single
+  context accepts. Nothing mechanical flags this class (a hand-written
+  override saying too much is sound token by token), so it is found by
+  reading the census, or an override against its own sentence.
+
 - **Alias every token with its source spelling**, including multi-character
   openers (`"(then"`, `"(@if"`). Aliases feed both the rendering and the
   delimiter-hint machinery for free.
