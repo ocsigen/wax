@@ -667,7 +667,7 @@ Common symptoms and where they are addressed above:
 ```
 stele/
   dune                       ; the `stele` executable
-  generate_error_messages.ml ; the generator (incl. the `stele tune` subcommand)
+  main.ml                    ; the generator (incl. the `stele tune` subcommand)
   parse_messages.ml{,i}      ; the --list-errors parser (a module of the exe)
   runtime/                   ; the stele.runtime helper library
     parser_error_runtime.ml{,i}

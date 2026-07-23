@@ -34,7 +34,7 @@
  (with-stdout-to
   delim.actual
   (run
-   %{project_root}/stele/generate_error_messages.exe
+   stele
    generate
    --no-comments
    --cmly
@@ -56,7 +56,7 @@
  (with-stdout-to
   delim.messages
   (run
-   %{project_root}/stele/generate_error_messages.exe
+   stele
    generate
    --cmly
    %{dep:delim.cmly}

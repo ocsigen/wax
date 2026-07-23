@@ -38,7 +38,7 @@
  (with-stdout-to
   calc.actual
   (run
-   %{project_root}/stele/generate_error_messages.exe
+   stele
    generate
    --no-comments
    --cmly
@@ -61,7 +61,7 @@
  (with-stdout-to
   calc.stats
   (run
-   %{project_root}/stele/generate_error_messages.exe
+   stele
    stats
    --cmly
    %{dep:calc.cmly}
@@ -86,7 +86,7 @@
  (with-stdout-to
   calc.names
   (run
-   %{project_root}/stele/generate_error_messages.exe
+   stele
    names
    --cmly
    %{dep:calc.cmly}
@@ -113,7 +113,7 @@
   (with-accepted-exit-codes
    1
    (run
-    %{project_root}/stele/generate_error_messages.exe
+    stele
     stats
     --cmly
     %{dep:calc.cmly}
@@ -134,7 +134,7 @@
  (with-stdout-to
   calc.messages
   (run
-   %{project_root}/stele/generate_error_messages.exe
+   stele
    generate
    --cmly
    %{dep:calc.cmly}
