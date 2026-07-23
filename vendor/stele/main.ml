@@ -2293,8 +2293,18 @@ let tune_rm_rf dir =
    [at_exit] hook covers an uncaught exception that skips the [finally]; and the
    SIGINT handler turns Ctrl-C into a normal [exit], which runs [at_exit]. So the
    source tree is byte-identical after any run. *)
+(* A fresh uniquely-named scratch directory. [Filename.temp_dir] would do this
+   but is OCaml 5.1+, and stele supports 4.14; so create a unique temp *file*
+   (atomic), drop it, and mkdir in its place. The tiny race window is harmless
+   for a build-time tool. *)
+let tune_temp_dir () =
+  let base = Filename.temp_file "stele-tune-" "" in
+  Sys.remove base;
+  Unix.mkdir base 0o700;
+  base
+
 let tune_with_scratch f =
-  let dir = Filename.temp_dir "stele-tune-" "" in
+  let dir = tune_temp_dir () in
   at_exit (fun () -> tune_rm_rf dir);
   let prev = Sys.signal Sys.sigint (Sys.Signal_handle (fun _ -> exit 130)) in
   Fun.protect
