@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d9d9bb08.js";
+            window.path_to_searchindex_js = "searchindex-26488f1b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e20ab12e.js"></script>
@@ -552,10 +552,12 @@ branch. The
 flags a trapping or effectful operation in a <code>?:</code> branch.</p>
 </blockquote>
 <h2 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h2>
-<p>Statements are terminated by <code>;</code>, including the final one that produces the
-block’s or function’s value. Unlike Rust, this trailing <code>;</code> is required and does
-not discard that value: the value stays on the stack and becomes the result.
-The block-shaped statements below
+<p>Statements are separated by <code>;</code>. The final <code>;</code> of a block is optional: a
+block’s last statement may omit it. Unlike Rust, writing that trailing <code>;</code> does
+not discard the statement’s value — the value stays on the stack and becomes the
+block’s or function’s result either way (a trailing <code>;</code> is just an empty
+statement, which contributes nothing). The formatter always writes the canonical
+trailing <code>;</code>. The block-shaped statements below
 (<code>do</code>, <code>if</code>, <code>while</code>, <code>loop</code>, <code>dispatch</code>, <code>match</code>, and <code>try</code>) are the
 exception: their closing <code>}</code> ends the statement, so no <code>;</code> is needed. A bare
 <code>;</code> is an empty statement (it does nothing), so a redundant one is harmless
