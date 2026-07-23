@@ -93,9 +93,9 @@ stele emits three views of the same generation; pin each as a promoted golden:
 
 | Golden | Mode | What it pins |
 |---|---|---|
-| `parser_messages.expected` | `-generate-messages -no-comments` | the sentence to message projection (sorted by sentence, so a state renumber does not churn it) |
-| `parser_messages.stats.expected` | `-stats` | the quality counters and self-lints (the ratchet) |
-| `parser_messages.census.expected` | `-census` | the distinct message bodies with counts (the compact wording surface) |
+| `parser_messages.expected` | `stele generate --no-comments` | the sentence to message projection (sorted by sentence, so a state renumber does not churn it) |
+| `parser_messages.stats.expected` | `stele stats` | the quality counters and self-lints (the ratchet) |
+| `parser_messages.census.expected` | `stele census` | the distinct message bodies with counts (the compact wording surface) |
 
 The loop for any grammar or generator change: `dune runtest`, read the three
 diffs, then `dune promote`. A message diff you agree with is fine; a **stats**
@@ -227,7 +227,78 @@ member that is not a terminal, a `[names]` key that is neither a terminal nor a
 nonterminal, or an `[opener-nets]` pattern that matches no terminal is a hard
 error naming the file, section, and stale entry, so a config left behind by a
 grammar change fails the build instead of firing on nothing. Use
-`-suggest-classes` to discover new classes worth adding.
+`stele suggest-classes` to discover new classes worth adding, and
+`stele names` to audit the whole naming surface.
+
+## Naming
+
+How a symbol becomes words in a message, in precedence order:
+
+1. A token alias renders as the quoted alias: `')'`, `'(export'`.
+2. A `[names]` config entry renders as its phrase.
+3. In the "Expecting" position, a list-shaped nonterminal is chased to its
+   leftmost mandatory symbol, so the message names one element (or the
+   leading keyword) instead of the list: "a parameter" rather than
+   "a parameter list". The chase only fires when every non-empty production
+   starts with the same symbol; a list with several distinct element openers
+   keeps its list name, which is the honest reading.
+4. A lowercase nonterminal is auto-derived: underscores become spaces and an
+   article is added (`condition_expression` reads "a condition expression").
+   A plural head drops the article and agrees in the "Assuming that the X
+   are complete" template.
+5. A `[class LABEL]` collapses its member tokens into the label.
+6. An unaliased ALL-CAPS terminal falls back to its quoted lowercase name.
+   This is right for keywords (`'func'`, `'mut'`) and wrong for value tokens
+   (an identifier token would read `'id'` as if the user should type the
+   letters). The jargon lint flags multi-word cases; single-word cases need
+   the `stele names` audit.
+
+The practical consequence: **your nonterminal names are the message
+vocabulary**. The generator deliberately keeps a user-named nonterminal
+opaque, saying "an expression" rather than enumerating its FIRST set, so a
+name that reads as a noun phrase is a better error message with no further
+work.
+
+Three techniques follow:
+
+- **Add a rule purely to name a construct.** Instead of inlining a wrapper
+  at the use site:
+
+  ```
+  structure: "{" separated_list_trailing(",", structure_type_field) "}"
+  ```
+
+  factor it through a named nonterminal:
+
+  ```
+  structure: "{" l = structure_type "}"
+  structure_type: separated_list_trailing(",", structure_type_field)
+  ```
+
+  Messages now say "a structure type" instead of exposing wrapper internals.
+  The named rule is also a valid `%on_error_reduce` target, which gives the
+  hedge a good subject. Do not `%inline` such a rule: an inlined rule
+  vanishes from the automaton, and the name only exists if the nonterminal
+  does.
+
+- **Name the element of a list.** A list rule whose element is spelled out
+  inline chases to the element's first token; factoring the element into its
+  own rule makes the chase land on the construct name:
+
+  ```
+  exports: /* empty */ | n = export r = exports
+  export: "(export" n = name ")"
+  ```
+
+  renders "an export" where the inline form rendered `'(export'`.
+
+- **Alias every token with its source spelling**, including multi-character
+  openers (`"(then"`, `"(@if"`). Aliases feed both the rendering and the
+  delimiter-hint machinery for free.
+
+Prefer a grammar rename over a `[names]` entry when both would work; the
+config entry is for names that are right for the grammar but wrong for
+prose.
 
 ## The runtime helper
 
