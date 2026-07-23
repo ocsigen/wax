@@ -321,6 +321,15 @@ Three techniques follow:
   override saying too much is sound token by token), so it is found by
   reading the census, or an override against its own sentence.
 
+  `%on_error_reduce` on the shared rule is the lighter alternative when
+  the state has a completed production: the spurious reduction's goto
+  lands in a context-specific state, so the report unblends without
+  duplicating anything. The trade: continuations still inside the
+  construct fold into the hedge ("Assuming that the function type is
+  complete, expecting '{'." hides the '->' option), so prefer the
+  annotation when the completed reading dominates, and duplication when
+  in-construct continuations must stay visible.
+
 - **Alias every token with its source spelling**, including multi-character
   openers (`"(then"`, `"(@if"`). Aliases feed both the rendering and the
   delimiter-hint machinery for free.
