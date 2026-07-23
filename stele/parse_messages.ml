@@ -141,6 +141,14 @@ let parse_lr1_item line =
       lookaheads;
     }
 
+(* Parse the [##] comment block menhir writes under each error sentence into
+   [comment_data]. The block is a sequence of sections, in this order: a
+   "Ends in an error in state: N" line; optionally a "known suffix of the stack"
+   section; optionally a "spurious reductions" warning section; and the LR(1)
+   items. Each section runs as [## …] lines until a bare [##] closes it. This is
+   a small line-by-line state machine: [in_stack] / [in_spurious_text] track
+   which section we are currently inside, and a line that is neither a section
+   marker nor inside a section is parsed as an LR(1) item. *)
 let parse_comment lines =
   let state = ref (-1) in
   let items = ref [] in
@@ -240,8 +248,6 @@ let parse_file filename =
         pair_blocks (entry :: acc) rest
     | [] -> List.rev acc
     | [ _ ] -> failwith "Orphan sentence block at end of file"
-    (* Printf.eprintf "Warning: Orphan sentence block at end of file\n";
-        List.rev acc *)
   in
 
   pair_blocks [] blocks

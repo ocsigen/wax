@@ -1,11 +1,11 @@
-(* 
-   Analysis and Error Message Generation for Menhir .messages files.
-   
-   This tool provides functionality to:
-   1. Parse .messages files.
-   2. Analyze grammar to understand symbol expansions.
-   3. Generate user-friendly error messages using heuristics.
-*)
+(* stele's generator: turns a Menhir grammar's [--list-errors] sentences and its
+   [.cmly] into user-friendly syntax-error messages, and also drives the
+   stats/census/names review modes and the [stele tune] annotation advisor. The
+   generation heuristics, the sidecar file formats, and the review workflow are
+   documented for users in stele's README and TUTORIAL; this file implements
+   them. Orientation: [generate_message] is the core per-state rendering,
+   [run] the entry point for every generation/review mode, and [run_tune] the
+   entry point for the tuner. *)
 
 module StringSet = Set.Make (String)
 module StringMap = Map.Make (String)
@@ -551,10 +551,9 @@ let add_status s status map =
 let union_status map1 map2 =
   StatusMap.fold (fun s status acc -> add_status s status acc) map2 map1
 
-(* 
-   Collect all possible next symbols (continuations) given the RHS after the dot.
-   Handles nullability to look past nullable symbols.
-*)
+(* The FIRST set of a single symbol (its opaque continuations, via
+   [expand_symbol]), each tagged [Direct] in a [StatusMap]. This is the base case
+   [collect_continuations] builds a whole right-hand side out of. *)
 let direct_firsts gram symbol =
   StringSet.fold
     (fun s acc -> add_status s Direct acc)
@@ -2504,6 +2503,10 @@ let tune_classify ~base ~trial =
   and d_uncov_t = t.tv_uncov_t - b.tv_uncov_t
   and d_template = t.tv_template - b.tv_template
   and d_cascade = t.tv_cascade - b.tv_cascade in
+  (* Regression dominates: any single regressed counter classifies the move
+     THarmful, tested before any improving signal, so a move that both regresses
+     and improves is still reported HARMFUL. Only a move with zero regressions
+     reaches the improving / dead / mixed / neutral analysis in the [else]. *)
   if d_over5 > 0 then THarmful (Printf.sprintf "+%d over-5 fallback(s)" d_over5)
   else if d_empty > 0 then
     THarmful (Printf.sprintf "+%d empty-list fallback(s)" d_empty)
@@ -2762,7 +2765,11 @@ let tune_setup ~menhir ~config_file ~overrides_file ~grammar_file ~scratch =
     ts_base_cmly = base_prefix ^ ".cmly";
   }
 
-(* Build the trial grammar for a move and evaluate it. [op] is `Remove or `Add. *)
+(* Build the trial grammar for a move and evaluate it. [op] is `Remove or `Add.
+   Every trial reuses the single "trial" scratch prefix, overwriting the previous
+   trial's artifacts — trials run sequentially, so this bounds scratch growth;
+   the baseline keeps its own "base" prefix ([ts_base_cmly]) so its .cmly
+   survives for candidate enumeration across all trials. *)
 let tune_move ts op nt =
   let newlist =
     match op with
@@ -2808,6 +2815,10 @@ let tune_dead_sweep ts =
   in
   Printf.printf "  dead annotations found: %d\n\n" dead
 
+(* Rank every single add/remove move, bucketing each into improving,
+   relocates-overridden (see the [rc = gn] note below), or mixed, and tallying
+   the harmful / neutral / dead / skipped rest. The subtlest step is the
+   improving-vs-relocates split at the [tune_gain] match. *)
 let tune_advisor ts candidates =
   Printf.printf
     "### ADVISOR — single-move ranking (%d removals, %d additions)\n"
@@ -2836,6 +2847,12 @@ let tune_advisor ts candidates =
             let rc = List.length rot in
             let gain = tune_gain ~base:ts.ts_base ~trial in
             let vec = tune_vector_delta ts.ts_base trial in
+            (* Exact equality [rc = gn] means the whole measurable win lands on
+               states the [.overrides] file already serves, so applying the move
+               relocates hand-written work without net gain: RELOCATES-OVERRIDDEN.
+               When the rot is smaller than the gain ([rc < gn]) the surplus falls
+               on fresh states, so the move stays IMPROVING and is only
+               rot-flagged (the [| _ ->] branch). *)
             match gain with
             | Some (gk, gn) when rc > 0 && gn > 0 && rc = gn ->
                 relocates := (label, gk, rc, rot, vec) :: !relocates
@@ -2960,7 +2977,11 @@ let tune_calibrate ts ~kept ~removed =
   List.iter
     (fun nt ->
       match tune_move ts `Remove nt with
-      | None -> () (* menhir failure on removing a listed annotation is inert *)
+      (* A kept annotation menhir won't let us remove is inert: skip it (not even
+         counted in [total]). This is asymmetric with the removed branch below,
+         where a name menhir won't re-accept is a real disagreement — it means
+         the logged nonterminal is stale or renamed. *)
+      | None -> ()
       | Some trial ->
           incr total;
           if is_improving (tune_classify ~base:ts.ts_base ~trial) then
