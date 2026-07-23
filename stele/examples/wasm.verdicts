@@ -1,0 +1,41 @@
+# wasm.verdicts — the WASM %on_error_reduce keep/remove log from the annotation
+# prune audit (ERROR-MESSAGES.md §4b), replayed by `stele tune calibrate`.
+#
+#   keep NT     — NT is currently annotated; removing it must score non-improving
+#                 (4b kept it: removal creates a fallback, loses a hint, or drops
+#                 a good message).
+#   removed NT  — NT was annotated before 4b and removed; re-adding it must score
+#                 non-improving (4b removed it as dead, or as an improvement over
+#                 the hedge that revealed the element continuation directly).
+#
+# 14 keep + 11 removed = 25 verdicts; the tuner must agree on all 25.
+# The `keep` names are spelled exactly as the grammar's %on_error_reduce line.
+
+# --- kept (14) ---
+keep plain_instruction
+keep limits
+keep list(elemexpr)
+keep list(module_field)
+keep nonempty_list(f64)
+keep nonempty_list(float_or_nan)
+keep nonempty_list(result_pat)
+keep list(cmd)
+keep nonempty_list(index)
+keep exports
+keep catches
+keep on_clauses
+keep locals
+keep select_result_type
+
+# --- removed (11) ---
+removed string_list
+removed list(STRING)
+removed list(value_type)
+removed list(field_type)
+removed list(field)
+removed list(folded_instruction)
+removed list(typedef)
+removed list(const)
+removed list(result_pat)
+removed nonempty_list(module_field)
+removed list(index)

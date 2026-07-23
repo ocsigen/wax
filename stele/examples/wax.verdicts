@@ -1,0 +1,65 @@
+# wax.verdicts — the WAX %on_error_reduce keep/remove log from the annotation
+# prune audit (ERROR-MESSAGES.md §4b), replayed by `stele tune calibrate`.
+#
+#   keep NT     — NT is currently annotated; removing it must score non-improving.
+#   removed NT  — NT was annotated before 4b and removed; re-adding it must score
+#                 non-improving.
+#
+# 24 keep + 26 removed = 50 verdicts; the tuner must agree on all 50.
+# The `keep` names are spelled exactly as the grammar's %on_error_reduce line;
+# the `,` token may be spelled "," or COMMA interchangeably (menhir canonicalises
+# a token's alias and its name).
+
+# --- kept (24) ---
+keep statement
+keep plaininstr
+keep separated_nonempty_list_trailing(",",structure_type_field)
+keep semi_list(module_field)
+keep separated_nonempty_list_trailing(",",value_type)
+keep separated_nonempty_list_trailing(",",function_parameter)
+keep list(attribute)
+keep separated_nonempty_list_trailing(",",let_pattern)
+keep separated_nonempty_list_trailing(",",block_param_type)
+keep blockinstr
+keep raw_statement_list
+keep semi_list(import_item)
+keep separated_nonempty_list_trailing(",",expression)
+keep structure_field
+keep separated_nonempty_list_trailing(",",structure_field)
+keep constant_expression
+keep attribute_expression
+keep parenthesized_expression
+keep index_expression
+keep then_branch
+keep condition_expression
+keep length_expression
+keep argument
+keep separated_nonempty_list_trailing(",",argument)
+
+# --- removed (26) ---
+removed labels_else
+removed statement_list
+removed optional_function_type
+removed structure_type
+removed result_type_
+removed expression_list
+removed structure
+removed argument_list
+removed list(typedef)
+removed list(data_item)
+removed separated_nonempty_list_trailing(",",catch)
+removed loption(separated_nonempty_list_trailing(",",catch))
+removed separated_nonempty_list_trailing(",",condition)
+removed loption(separated_nonempty_list_trailing(",",condition))
+removed separated_nonempty_list_trailing(",",data_number)
+removed loption(separated_nonempty_list_trailing(",",data_number))
+removed separated_nonempty_list_trailing(",",data_run_item)
+removed loption(separated_nonempty_list_trailing(",",data_run_item))
+removed separated_nonempty_list_trailing(",",on_clause)
+removed loption(separated_nonempty_list_trailing(",",on_clause))
+removed semi_list(legacy_catch)
+removed semi_list(trycatch_arm)
+removed semi_list(match_arm)
+removed semi_list(dispatch_arm)
+removed block_type
+removed let_pattern

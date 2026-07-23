@@ -82,6 +82,11 @@ positional `.messages` file — so every command line reads
 exactly one mode; the modes do not compose in a single invocation (the earlier
 single-dash CLI concatenated their output, but nothing used the combination).
 
+One further command, `stele tune`, is itself a group (`dead` / `advise` /
+`calibrate`) with a different input shape — it generates the `.cmly` and
+`.messages` itself, per trial, from a `--grammar FILE.mly` via a `--menhir`
+subprocess. See [The annotation tuner](#the-annotation-tuner).
+
 ## The three-goldens promote loop
 
 stele emits three views of the same generation; pin each as a promoted golden:
@@ -251,22 +256,73 @@ let main_message, labels =
 
 ## The annotation tuner
 
-[`tune_on_error_reduce.sh`](tune_on_error_reduce.sh) is a standalone review tool
-(bash driving menhir plus the generator on a scratch grammar copy; it mutates
-nothing and is wired into no runtest alias). It sweeps the grammar's
-`%on_error_reduce` list for dead annotations, advises single add/remove moves by
-their stats-vector delta and census diff, and can calibrate itself against a
-recorded keep/remove log. Run it on demand when the grammar has grown. It
-recommends; it never applies.
+`stele tune` is a read-only advisor for a grammar's `%on_error_reduce` list. It
+recommends single add/remove moves; it never applies them and never touches the
+source tree. It is wired into no runtest alias (the three promoted goldens
+already guard the committed state); run it on demand when the grammar has grown.
+
+Each trial re-runs `menhir` (a subprocess: `--list-errors` and `--cmly`) on a
+scratch copy of the grammar with one annotation added or removed, then
+regenerates the messages **in-process** (the same generator internals the other
+modes use) and classifies the move by its effect on the quality counters. The
+scratch directory is removed on exit, on failure, and on Ctrl-C, so the source
+tree is byte-identical after any run.
+
+Three subcommands, all sharing `--grammar FILE.mly` (the source, copied and
+mutated in scratch), `--config`, and `--menhir CMD` (default `menhir`; a clear
+error if not executable):
+
+```
+stele tune dead     --grammar g.mly [--config g.config]
+stele tune advise   --grammar g.mly [--config g.config] [--overrides g.overrides]
+stele tune calibrate --grammar g.mly [--config g.config] --verdicts g.verdicts
+```
+
+- **dead** — remove each current annotation; one whose removal leaves the stats,
+  census, and message projection all unchanged is dead and reported for deletion.
+- **advise** — rank every single move (removing a current annotation, or adding
+  one for a nonterminal reduced somewhere in the automaton) by its stats-vector
+  delta. Each improving move is priced by its **override-rot cost** — the
+  `--overrides` sentence keys the trial's state re-pick would strand; a move whose
+  whole win lands on already-overridden states is reported separately as
+  `RELOCATES-OVERRIDDEN`.
+- **calibrate** — replay a recorded keep/remove log (`--verdicts`); removing each
+  `keep` annotation and re-adding each `removed` one must score non-improving.
+  Reports the agreement fraction and every disagreement. The verdicts format is
+  one `keep NONTERMINAL` / `removed NONTERMINAL` per line, `#` comments and blanks
+  ignored; the wax/wasm prune-audit logs ship as
+  [`examples/wax.verdicts`](examples/wax.verdicts) and
+  [`examples/wasm.verdicts`](examples/wasm.verdicts) (50/50 and 25/25 agreement).
+
+**Why trials run override-free.** Changing the annotation list merges/renumbers
+states, so `menhir --list-errors` re-picks its per-state representative sentence,
+which can make a sentence-keyed `.overrides` entry fail the generator's rot guard
+and kill the trial. So every generation here runs *without* overrides, baseline
+and trials alike; the would-be-overridden states then sit uniformly on both sides
+of every comparison. Consequence: `advise`'s "over 5" fallback figure is the raw
+pre-override number (18 wasm / 34 wax), not the post-override 0. The overrides are
+still read (via `--overrides`) only to price each move's rot cost.
+
+**The wax toolchain runs two grammars** — one command each:
+
+```
+stele tune advise --grammar src/lib-wasm/parser.mly \
+  --config src/lib-wasm/parser_messages.config \
+  --overrides src/lib-wasm/parser_messages.overrides
+stele tune advise --grammar src/lib-wax/parser.mly \
+  --config src/lib-wax/parser_messages.config \
+  --overrides src/lib-wax/parser_messages.overrides
+```
 
 ## Layout
 
 ```
 stele/
   dune                       ; the `stele` executable
-  generate_error_messages.ml ; the generator
+  generate_error_messages.ml ; the generator (incl. the `stele tune` subcommand)
   parse_messages.ml{,i}      ; the --list-errors parser (a module of the exe)
-  tune_on_error_reduce.sh    ; the annotation tuner
+  examples/                  ; the annotation-tuner calibration logs
+    wax.verdicts  wasm.verdicts
   runtime/                   ; the stele.runtime helper library
     parser_error_runtime.ml{,i}
     dune

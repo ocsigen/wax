@@ -1952,6 +1952,708 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
       | Suggest_classes -> output_suggest_classes cfg (stats_of ())
       | Transitions -> assert false)
 
+(* ============================================================================
+   The %on_error_reduce annotation tuner (`stele tune`, step 13)
+   ============================================================================
+
+   A read-only advisor that automates, at the level the evidence supports, the
+   hand A/B work of the annotation prune (see ERROR-MESSAGES.md §4b): it
+   RECOMMENDS single [%on_error_reduce] moves; it NEVER applies them, and it
+   NEVER touches the source tree — every trial runs against a *copy* of the
+   grammar in a throwaway scratch dir (removed on exit, even on failure or
+   Ctrl-C). It is wired into no runtest alias; the three promoted goldens already
+   guard the committed state. Single-move scores DO NOT compose (the
+   [list(index)]/[list(elemexpr)] interaction proved it): any applied *set* needs
+   a fresh combined re-check.
+
+   This is the in-process successor of the old [tune_on_error_reduce.sh]. Menhir
+   is a runtime subprocess for this subcommand only (each trial re-runs
+   [--list-errors] and [--cmly] on the mutated grammar copy). Everything else is
+   in-process: the same [Parse_messages.parse_file], [load_grammar],
+   [load_config], [generate_message]/[message_stat], and [load_overrides] key
+   parser the other modes use — so a stats addition can never break a text-format
+   coupling, and the override-rot column shares [check_override_rot]'s notion of
+   an override key.
+
+   THE NO-OVERRIDES TRIAL CONSTRAINT (important — read before changing this).
+   A trial that changes the annotation list can merge/renumber automaton states,
+   which makes [menhir --list-errors] re-pick its representative sentence per
+   state. The step-5 [.overrides] files are keyed by sentence, so a re-picked
+   sentence can fail the generator's hard rot check ([check_override_rot]) and
+   kill the trial. Therefore EVERY generation here runs WITHOUT overrides
+   ([~overrides:StringMap.empty]), baseline and trials alike; the ~52
+   would-be-overridden states then sit uniformly on both sides of every
+   comparison and the deltas stay meaningful. Consequence: the "over 5" fallback
+   counter shows the raw pre-override figure (18 wasm / 34 wax), not the
+   post-override 0 — expected and correct for A/B deltas.
+
+   THE PIPELINE PER TRIAL: [menhir COPY.mly --list-errors] and [menhir COPY.mly
+   --cmly --no-code-generation --base X] into the scratch dir, then the in-process
+   generator against those two artifacts and the grammar's [.config] (the config
+   carries the readable names/classes the goldens use, so a trial without it would
+   diff spuriously). Candidate ADDITIONS are the nonterminals reduced somewhere in
+   the automaton ([reducible_nonterminals], the SDK analogue of the LHS of every
+   [reduce production] line in [menhir --dump]) minus the current list and the
+   [__anonymous_*] internals.
+
+   THE OVERRIDE-ROT COST. The trials run override-free, so a move's scored "win"
+   is in the *generated* view only — it cannot see that the win merely relocates
+   or re-keys a state the [.overrides] file already serves with a hand message.
+   Every IMPROVING move is therefore also priced by its override-rot cost: the
+   override keys ([--overrides]) that head an entry in the baseline no-comments
+   projection but no longer head one in the trial. A move whose single improving
+   signal (over-5/uncovered/template) has magnitude exactly equal to its rot is
+   reclassified IMPROVING -> RELOCATES-OVERRIDDEN (neutral): the whole win lands
+   on already-overridden states, a wash unless the merged message beats the hand
+   override (a human call). A move with rot the win does not fully account for
+   stays IMPROVING but is flagged prominently. Rot is priced only for IMPROVING
+   moves, never for calibration, so the calibration agreement is untouched. *)
+
+(* The stats vector consumed in-process (no output parsing). Each field is a
+   plain count computed from the [message_stat] records and the soundness oracle,
+   the exact quantities the old shell tuner scraped from [-stats] text. *)
+type tune_vec = {
+  tv_entries : int;
+  tv_withlist : int;
+  tv_template : int;
+  tv_cascade : int;
+  tv_empty : int;
+  tv_over5 : int;
+  tv_hints : int;
+  tv_missed : int;
+  tv_jargon : int;
+  tv_unsound : int;
+  tv_uncov_e : int;
+  tv_uncov_t : int;
+}
+
+(* One evaluated grammar variant: its stats vector, its set of [entry_point:
+   sentence] header keys (for override-rot), its sorted no-comments message
+   projection and its census (both for the zero-diff DEAD test — the structured
+   equivalents of the three promoted goldens). *)
+type tune_trial = {
+  tt_vec : tune_vec;
+  tt_headers : StringSet.t;
+  tt_actual : string list;
+  tt_census : (string * int) list;
+}
+
+(* --- scratch + subprocess plumbing --- *)
+
+let tune_read_file f = In_channel.with_open_bin f In_channel.input_all
+
+let tune_write_file f s =
+  Out_channel.with_open_bin f (fun oc -> Out_channel.output_string oc s)
+
+let tune_rm_rf dir =
+  if Sys.file_exists dir then
+    ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote dir)))
+
+(* Run [f] with a fresh scratch dir, guaranteed removed afterwards. [Fun.protect]
+   covers a normal return or an exception (a bad grammar, a rot failure); the
+   [at_exit] hook covers an uncaught exception that skips the [finally]; and the
+   SIGINT handler turns Ctrl-C into a normal [exit], which runs [at_exit]. So the
+   source tree is byte-identical after any run. *)
+let tune_with_scratch f =
+  let dir = Filename.temp_dir "stele-tune-" "" in
+  at_exit (fun () -> tune_rm_rf dir);
+  let prev = Sys.signal Sys.sigint (Sys.Signal_handle (fun _ -> exit 130)) in
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.set_signal Sys.sigint prev;
+      tune_rm_rf dir)
+    (fun () -> f dir)
+
+(* Verify the menhir command actually runs; a clear failure otherwise (caught at
+   the top level and printed as a one-line [stele:] error). *)
+let tune_check_menhir menhir =
+  let cmd =
+    Printf.sprintf "%s --version >/dev/null 2>&1" (Filename.quote menhir)
+  in
+  if Sys.command cmd <> 0 then
+    failwith
+      (Printf.sprintf
+         "menhir command %S is not executable (pass --menhir, or run under the \
+          opam switch that provides menhir)"
+         menhir)
+
+(* Nonterminals reduced somewhere in the automaton — the SDK analogue of the LHS
+   of every [reduce production ...] line [menhir --dump] prints, and so the same
+   candidate universe the shell tuner enumerated. *)
+let reducible_nonterminals cmly_file =
+  let module G = MenhirSdk.Cmly_read.Read (struct
+    let filename = cmly_file
+  end) in
+  let open G in
+  let s = ref StringSet.empty in
+  let add p = s := StringSet.add (Nonterminal.name (Production.lhs p)) !s in
+  Lr1.iter (fun st ->
+      (match Lr1.default_reduction st with Some p -> add p | None -> ());
+      List.iter (fun (_, p) -> add p) (Lr1.get_reductions st));
+  !s
+
+(* The current [%on_error_reduce] list, and the grammar with that list replaced.
+   One line per grammar (both wax and wasm carry exactly one). *)
+let tune_oer_prefix = "%on_error_reduce "
+
+let tune_current_annotations src =
+  String.split_on_char '\n' src
+  |> List.find_opt (fun l -> String.starts_with ~prefix:tune_oer_prefix l)
+  |> function
+  | None -> failwith "grammar has no %on_error_reduce declaration"
+  | Some line ->
+      String.sub line
+        (String.length tune_oer_prefix)
+        (String.length line - String.length tune_oer_prefix)
+      |> String.split_on_char ' '
+      |> List.filter (fun s -> String.trim s <> "")
+
+let tune_replace_annotations src newlist =
+  String.split_on_char '\n' src
+  |> List.map (fun l ->
+      if String.starts_with ~prefix:tune_oer_prefix l then
+        tune_oer_prefix ^ String.concat " " newlist
+      else l)
+  |> String.concat "\n"
+
+(* Run one grammar variant through menhir (subprocess) then the generator
+   (in-process, override-free), returning its [tune_trial], or [None] when menhir
+   rejected the mutated grammar (an invalid candidate name — the caller skips
+   it). [mly] is the grammar file; [outprefix] names the scratch artifacts. *)
+let tune_run_trial ~menhir ~config_file ~mly ~outprefix : tune_trial option =
+  let q = Filename.quote in
+  let messages = outprefix ^ ".messages" in
+  let cmly = outprefix ^ ".cmly" in
+  if
+    Sys.command
+      (Printf.sprintf "%s %s --list-errors > %s 2>/dev/null" (q menhir) (q mly)
+         (q messages))
+    <> 0
+  then None
+  else begin
+    (* [--cmly] exits 1 (it also runs the code back-end, which dune's type
+       inference would feed) but still writes the .cmly; check the file, not the
+       exit code — exactly as the build rules and the old shell tuner do. *)
+    ignore
+      (Sys.command
+         (Printf.sprintf
+            "%s %s --cmly --no-code-generation --base %s >/dev/null 2>&1"
+            (q menhir) (q mly) (q outprefix)));
+    if not (Sys.file_exists cmly) then None
+    else
+      try
+        let entries = Parse_messages.parse_file messages in
+        let terminals, grammar, auto = load_grammar cmly in
+        let cfg =
+          if config_file = "" then empty_config else load_config config_file
+        in
+        let closers = closers_of terminals in
+        let results =
+          List.map
+            (fun entry ->
+              let text, body, stat =
+                generate_message cfg closers grammar terminals ~comments:false
+                  ~overrides:StringMap.empty entry
+              in
+              (entry, text, body, stat))
+            entries
+        in
+        let count f =
+          List.length (List.filter (fun (_, _, _, s) -> f s) results)
+        in
+        let cascade =
+          List.length
+            (List.filter
+               (fun (e, _, _, _) ->
+                 List.length e.Parse_messages.data.spurious_reductions >= 4)
+               results)
+        in
+        let missed =
+          List.fold_left
+            (fun a (_, _, _, s) -> a + List.length s.missed_hints)
+            0 results
+        in
+        let jargon =
+          List.fold_left
+            (fun a (_, _, _, s) -> StringSet.union a s.jargon)
+            StringSet.empty results
+          |> StringSet.cardinal
+        in
+        let oracle =
+          List.map (fun (e, _, _, s) -> check_entry grammar auto (e, s)) results
+        in
+        let unsound =
+          List.fold_left (fun a (u, _) -> a + List.length u) 0 oracle
+        in
+        let uncov_e =
+          List.length
+            (List.filter (fun (_, unc) -> not (StringSet.is_empty unc)) oracle)
+        in
+        let uncov_t =
+          List.fold_left (fun a (_, unc) -> a + StringSet.cardinal unc) 0 oracle
+        in
+        let vec =
+          {
+            tv_entries = List.length results;
+            tv_withlist = count (fun s -> s.expecting);
+            tv_template = count (fun s -> s.assuming);
+            tv_cascade = cascade;
+            tv_empty = count (fun s -> s.empty_expected);
+            tv_over5 = count (fun s -> s.overflow_expected);
+            tv_hints = count (fun s -> s.hinted);
+            tv_missed = missed;
+            tv_jargon = jargon;
+            tv_unsound = unsound;
+            tv_uncov_e = uncov_e;
+            tv_uncov_t = uncov_t;
+          }
+        in
+        let headers =
+          List.fold_left
+            (fun acc (e, _, _, _) ->
+              StringSet.add
+                (e.Parse_messages.entry_point ^ ": " ^ e.Parse_messages.sentence)
+                acc)
+            StringSet.empty results
+        in
+        let actual =
+          List.map (fun (_, text, _, _) -> text) results
+          |> List.sort String.compare
+        in
+        let ctbl = Hashtbl.create 256 in
+        List.iter
+          (fun (_, _, body, _) ->
+            let k = census_normalize body in
+            Hashtbl.replace ctbl k
+              (1 + try Hashtbl.find ctbl k with Not_found -> 0))
+          results;
+        let census =
+          Hashtbl.fold (fun m c acc -> (m, c) :: acc) ctbl []
+          |> List.sort (fun (a, _) (b, _) -> String.compare a b)
+        in
+        Some
+          {
+            tt_vec = vec;
+            tt_headers = headers;
+            tt_actual = actual;
+            tt_census = census;
+          }
+      with _ -> None
+  end
+
+(* A move's verdict, mirroring the shell tuner's classification model (matching
+   §4b's decision rule); the string is the short reason shown in the report. *)
+type tune_verdict =
+  | THarmful of string
+  | TImproving of string
+  | TDead
+  | TMixed of string
+  | TNeutral of string
+
+let tune_classify ~base ~trial =
+  let b = base.tt_vec and t = trial.tt_vec in
+  let d_over5 = t.tv_over5 - b.tv_over5
+  and d_empty = t.tv_empty - b.tv_empty
+  and d_hints = t.tv_hints - b.tv_hints
+  and d_jargon = t.tv_jargon - b.tv_jargon
+  and d_unsound = t.tv_unsound - b.tv_unsound
+  and d_missed = t.tv_missed - b.tv_missed
+  and d_uncov_e = t.tv_uncov_e - b.tv_uncov_e
+  and d_uncov_t = t.tv_uncov_t - b.tv_uncov_t
+  and d_template = t.tv_template - b.tv_template
+  and d_cascade = t.tv_cascade - b.tv_cascade in
+  if d_over5 > 0 then THarmful (Printf.sprintf "+%d over-5 fallback(s)" d_over5)
+  else if d_empty > 0 then
+    THarmful (Printf.sprintf "+%d empty-list fallback(s)" d_empty)
+  else if d_hints < 0 then
+    THarmful (Printf.sprintf "%d delimiter hint(s)" d_hints)
+  else if d_jargon > 0 then
+    THarmful (Printf.sprintf "+%d jargon token(s)" d_jargon)
+  else if d_unsound > 0 then
+    THarmful (Printf.sprintf "+%d unsound claim(s)" d_unsound)
+  else if d_missed > 0 then
+    THarmful (Printf.sprintf "+%d missed hint(s)" d_missed)
+  else if d_uncov_e > 0 || d_uncov_t > 0 then
+    THarmful
+      (Printf.sprintf "+%d uncovered entries / +%d tokens" d_uncov_e d_uncov_t)
+  else
+    let why = Buffer.create 32 in
+    if d_template < 0 then
+      Buffer.add_string why (Printf.sprintf " template%d" d_template);
+    if d_uncov_e < 0 then
+      Buffer.add_string why (Printf.sprintf " uncov_e%d" d_uncov_e);
+    if d_uncov_t < 0 then
+      Buffer.add_string why (Printf.sprintf " uncov_t%d" d_uncov_t);
+    if d_over5 < 0 then
+      Buffer.add_string why (Printf.sprintf " over5%d" d_over5);
+    if Buffer.length why > 0 then TImproving (String.trim (Buffer.contents why))
+    else if
+      base.tt_vec = trial.tt_vec
+      && base.tt_actual = trial.tt_actual
+      && base.tt_census = trial.tt_census
+    then TDead
+    else if (d_hints > 0 || d_cascade < 0) && d_template > 0 then
+      TMixed
+        (Printf.sprintf "+%d hints / cascade%d but +%d hedge(s)" d_hints
+           d_cascade d_template)
+    else
+      TNeutral
+        (Printf.sprintf "no quality movement (template%d hints+%d cascade%d)"
+           d_template d_hints d_cascade)
+
+(* The single mechanically-clear improving signal of a move (over-5 / uncovered /
+   template) and its magnitude, or [None] when several signals mix (not
+   attributable, so it stays IMPROVING and is only rot-flagged). *)
+let tune_gain ~base ~trial =
+  let b = base.tt_vec and t = trial.tt_vec in
+  let d_over5 = t.tv_over5 - b.tv_over5
+  and d_uncov_e = t.tv_uncov_e - b.tv_uncov_e
+  and d_template = t.tv_template - b.tv_template in
+  if d_over5 < 0 && d_uncov_e = 0 && d_template = 0 then
+    Some ("over-5 fallback", -d_over5)
+  else if d_uncov_e < 0 && d_over5 = 0 && d_template = 0 then
+    Some ("uncovered action", -d_uncov_e)
+  else if d_template < 0 && d_over5 = 0 && d_uncov_e = 0 then
+    Some ("hedge template", -d_template)
+  else None
+
+(* The override-rot cost: the override keys (from [--overrides], parsed by the
+   real [load_overrides]) that head an entry in the baseline projection but no
+   longer head one in the trial's — sentences the trial's state merge/renumber
+   made [--list-errors] drop or re-pick, on states the [.overrides] file serves. *)
+let tune_compute_rot override_keys ~base ~trial =
+  List.filter
+    (fun k ->
+      StringSet.mem k base.tt_headers && not (StringSet.mem k trial.tt_headers))
+    override_keys
+
+let tune_vector_delta base trial =
+  let b = base.tt_vec and t = trial.tt_vec in
+  Printf.sprintf
+    "    \xce\x94 over5=%+d empty=%+d hints=%+d template=%+d cascade=%+d \
+     uncov=%+d/%+d jargon=%+d unsound=%+d | entries %d\xe2\x86\x92%d withlist \
+     %d\xe2\x86\x92%d"
+    (t.tv_over5 - b.tv_over5) (t.tv_empty - b.tv_empty) (t.tv_hints - b.tv_hints)
+    (t.tv_template - b.tv_template)
+    (t.tv_cascade - b.tv_cascade)
+    (t.tv_uncov_e - b.tv_uncov_e)
+    (t.tv_uncov_t - b.tv_uncov_t)
+    (t.tv_jargon - b.tv_jargon)
+    (t.tv_unsound - b.tv_unsound)
+    b.tv_entries t.tv_entries b.tv_withlist t.tv_withlist
+
+(* A census diff (baseline vs trial), keyed by normalized body: one [-]/[+] pair
+   per body whose count changed, sorted by body. The structured mirror of the
+   old shell tuner's [diff] over the census golden. *)
+let tune_census_diff base trial =
+  let bm =
+    List.fold_left
+      (fun m (k, v) -> StringMap.add k v m)
+      StringMap.empty base.tt_census
+  in
+  let tm =
+    List.fold_left
+      (fun m (k, v) -> StringMap.add k v m)
+      StringMap.empty trial.tt_census
+  in
+  let keys =
+    StringSet.union
+      (StringSet.of_list (List.map fst base.tt_census))
+      (StringSet.of_list (List.map fst trial.tt_census))
+  in
+  let render sign body count =
+    match String.split_on_char '\n' body with
+    | [] -> ""
+    | first :: rest ->
+        let head = Printf.sprintf "      %s %5dx %s" sign count first in
+        String.concat "\n"
+          (head :: List.map (fun l -> Printf.sprintf "               %s" l) rest)
+  in
+  StringSet.elements keys
+  |> List.filter_map (fun k ->
+      let bc = try StringMap.find k bm with Not_found -> 0 in
+      let tc = try StringMap.find k tm with Not_found -> 0 in
+      if bc = tc then None
+      else
+        let lines =
+          (if bc > 0 then [ render "-" k bc ] else [])
+          @ if tc > 0 then [ render "+" k tc ] else []
+        in
+        Some (String.concat "\n" lines))
+  |> String.concat "\n"
+
+(* Read the current annotations and the (optional) override keys off a grammar,
+   copy it into scratch, and compute the override-free baseline. *)
+type tune_setup = {
+  ts_src : string;
+  ts_annots : string list;
+  ts_mly : string;  (** the scratch grammar copy, mutated per trial *)
+  ts_config : string;
+  ts_menhir : string;
+  ts_base : tune_trial;
+  ts_override_keys : string list;
+  ts_base_cmly : string;
+}
+
+let tune_setup ~menhir ~config_file ~overrides_file ~grammar_file ~scratch =
+  let src = tune_read_file grammar_file in
+  let annots = tune_current_annotations src in
+  let mly = Filename.concat scratch "parser.mly" in
+  tune_write_file mly src;
+  let base_prefix = Filename.concat scratch "base" in
+  let base =
+    match tune_run_trial ~menhir ~config_file ~mly ~outprefix:base_prefix with
+    | Some t -> t
+    | None ->
+        failwith
+          "baseline pipeline failed (menhir could not process the grammar)"
+  in
+  let override_keys =
+    if overrides_file = "" then []
+    else
+      StringMap.fold
+        (fun k _ acc -> k :: acc)
+        (load_overrides overrides_file)
+        []
+  in
+  {
+    ts_src = src;
+    ts_annots = annots;
+    ts_mly = mly;
+    ts_config = config_file;
+    ts_menhir = menhir;
+    ts_base = base;
+    ts_override_keys = override_keys;
+    ts_base_cmly = base_prefix ^ ".cmly";
+  }
+
+(* Build the trial grammar for a move and evaluate it. [op] is `Remove or `Add. *)
+let tune_move ts op nt =
+  let newlist =
+    match op with
+    | `Remove -> List.filter (fun a -> a <> nt) ts.ts_annots
+    | `Add -> ts.ts_annots @ [ nt ]
+  in
+  tune_write_file ts.ts_mly (tune_replace_annotations ts.ts_src newlist);
+  tune_run_trial ~menhir:ts.ts_menhir ~config_file:ts.ts_config ~mly:ts.ts_mly
+    ~outprefix:(Filename.concat (Filename.dirname ts.ts_mly) "trial")
+
+(* --- the three report parts --- *)
+
+let tune_dead_sweep ts =
+  Printf.printf
+    "### DEAD SWEEP — remove each current annotation, expect a diff\n";
+  let dead =
+    List.fold_left
+      (fun n nt ->
+        match tune_move ts `Remove nt with
+        | None ->
+            Printf.printf "  (skip: removing %s made menhir fail)\n" nt;
+            n
+        | Some trial ->
+            if tune_classify ~base:ts.ts_base ~trial = TDead then begin
+              Printf.printf
+                "  DEAD: %s (zero diff on all three goldens — report for \
+                 deletion)\n"
+                nt;
+              n + 1
+            end
+            else n)
+      0 ts.ts_annots
+  in
+  Printf.printf "  dead annotations found: %d\n\n" dead
+
+let tune_advisor ts candidates =
+  Printf.printf
+    "### ADVISOR — single-move ranking (%d removals, %d additions)\n"
+    (List.length ts.ts_annots) (List.length candidates);
+  let improving = ref [] and relocates = ref [] and mixed = ref [] in
+  let harmful = ref 0
+  and neutral = ref 0
+  and dead = ref 0
+  and skipped = ref 0 in
+  let do_move op nt =
+    match tune_move ts op nt with
+    | None -> incr skipped
+    | Some trial -> (
+        let label =
+          (match op with `Remove -> "remove " | `Add -> "add ") ^ nt
+        in
+        match tune_classify ~base:ts.ts_base ~trial with
+        | THarmful _ -> incr harmful
+        | TDead -> incr dead
+        | TNeutral _ -> incr neutral
+        | TMixed reason -> mixed := (label, reason) :: !mixed
+        | TImproving reason -> (
+            let rot =
+              tune_compute_rot ts.ts_override_keys ~base:ts.ts_base ~trial
+            in
+            let rc = List.length rot in
+            let gain = tune_gain ~base:ts.ts_base ~trial in
+            let vec = tune_vector_delta ts.ts_base trial in
+            match gain with
+            | Some (gk, gn) when rc > 0 && gn > 0 && rc = gn ->
+                relocates := (label, gk, rc, rot, vec) :: !relocates
+            | _ ->
+                let cen = tune_census_diff ts.ts_base trial in
+                improving := (label, reason, rc, rot, vec, cen) :: !improving))
+  in
+  List.iter (fun nt -> do_move `Remove nt) ts.ts_annots;
+  List.iter (fun nt -> do_move `Add nt) candidates;
+  let improving = List.rev !improving
+  and relocates = List.rev !relocates
+  and mixed = List.rev !mixed in
+  Printf.printf
+    "  summary: improving=%d relocates-overridden=%d mixed=%d harmful=%d \
+     dead/no-op=%d neutral=%d skipped=%d\n\n"
+    (List.length improving) (List.length relocates) (List.length mixed) !harmful
+    !dead !neutral !skipped;
+  if improving = [] then
+    Printf.printf
+      "  No strictly-improving single move (expected right after a 4b prune).\n"
+  else begin
+    Printf.printf "  IMPROVING MOVES (review each — scores do not compose):\n";
+    List.iter
+      (fun (label, reason, rc, rot, vec, cen) ->
+        Printf.printf "  ---- %s  [%s]\n%s\n" label reason vec;
+        if rc > 0 then begin
+          Printf.printf
+            "    override-rot: %d keys (COLLATERAL — the win does not fully \
+             map to these; a human must confirm the merged message still beats \
+             each hand override):\n"
+            rc;
+          List.iter (fun k -> Printf.printf "      %s\n" k) rot
+        end;
+        Printf.printf "    census diff:\n%s\n" cen)
+      improving
+  end;
+  Printf.printf "\n";
+  if relocates <> [] then begin
+    Printf.printf
+      "  RELOCATES-OVERRIDDEN (neutral) — the whole win lands on hand-overridden\n\
+      \  states, so it merely relocates them; the state already carries a step-5\n\
+      \  message. Apply only if the generated merge-target message beats the\n\
+      \  override (human call), not for the counter delta alone:\n";
+    List.iter
+      (fun (label, gk, rc, rot, vec) ->
+        Printf.printf
+          "  ---- %s  [%s gain \xe2\x88\x92%d, all %d on overridden states]\n\
+           %s\n"
+          label gk rc rc vec;
+        Printf.printf "    override-rot: %d keys\n" rc;
+        List.iter (fun k -> Printf.printf "      %s\n" k) rot)
+      relocates;
+    Printf.printf "\n"
+  end;
+  if mixed <> [] then begin
+    Printf.printf
+      "  MIXED — needs a human eye (a hint/cascade gain bundled with a new \
+       hedge):\n";
+    List.iter
+      (fun (label, reason) -> Printf.printf "    %s (%s)\n" label reason)
+      mixed;
+    Printf.printf "\n"
+  end
+
+(* Parse a verdicts file: lines [keep NT] / [removed NT], [#] comments and blanks
+   ignored. Returns (kept, removed). *)
+let tune_parse_verdicts file =
+  Parse_messages.read_lines file
+  |> List.fold_left
+       (fun (kept, removed) line ->
+         let t = String.trim line in
+         if t = "" || t.[0] = '#' then (kept, removed)
+         else
+           match String.index_opt t ' ' with
+           | None ->
+               failwith (Printf.sprintf "verdicts: malformed line %S" line)
+           | Some i -> (
+               let verb = String.sub t 0 i in
+               let nt = String.trim (String.sub t i (String.length t - i)) in
+               if nt = "" then
+                 failwith (Printf.sprintf "verdicts: malformed line %S" line);
+               match verb with
+               | "keep" -> (nt :: kept, removed)
+               | "removed" -> (kept, nt :: removed)
+               | _ ->
+                   failwith
+                     (Printf.sprintf
+                        "verdicts: unknown verb %S (expected 'keep' or \
+                         'removed')"
+                        verb)))
+       ([], [])
+  |> fun (kept, removed) -> (List.rev kept, List.rev removed)
+
+(* Replay a recorded keep/remove log: removing a KEPT annotation and re-adding a
+   REMOVED one should each be non-improving. Reports the agreement fraction and
+   every disagreement — the deliverable of this part. *)
+let tune_calibrate ts ~kept ~removed =
+  Printf.printf "### CALIBRATION — replay the keep/remove log\n";
+  let agree = ref 0 and total = ref 0 and disagree = ref [] in
+  let is_improving = function TImproving _ -> true | _ -> false in
+  List.iter
+    (fun nt ->
+      match tune_move ts `Remove nt with
+      | None -> () (* menhir failure on removing a listed annotation is inert *)
+      | Some trial ->
+          incr total;
+          if is_improving (tune_classify ~base:ts.ts_base ~trial) then
+            disagree :=
+              Printf.sprintf "KEPT-but-removal-scored-IMPROVING: %s" nt
+              :: !disagree
+          else incr agree)
+    kept;
+  List.iter
+    (fun nt ->
+      match tune_move ts `Add nt with
+      | None ->
+          incr total;
+          disagree :=
+            Printf.sprintf "REMOVED-unmatched(menhir rejected): %s" nt
+            :: !disagree
+      | Some trial ->
+          incr total;
+          if is_improving (tune_classify ~base:ts.ts_base ~trial) then
+            disagree :=
+              Printf.sprintf "REMOVED-but-re-add-scored-IMPROVING: %s" nt
+              :: !disagree
+          else incr agree)
+    removed;
+  Printf.printf "  agreement: %d / %d\n" !agree !total;
+  if !disagree <> [] then begin
+    Printf.printf "  disagreements:\n";
+    List.iter (fun d -> Printf.printf "    %s\n" d) (List.rev !disagree)
+  end;
+  Printf.printf "\n"
+
+type tune_mode = Tune_dead | Tune_advise | Tune_calibrate of string
+
+let run_tune mode ~menhir ~config_file ~overrides_file ~grammar_file =
+  tune_check_menhir menhir;
+  let start = Unix.gettimeofday () in
+  tune_with_scratch (fun scratch ->
+      let ts =
+        tune_setup ~menhir ~config_file ~overrides_file ~grammar_file ~scratch
+      in
+      Printf.printf "grammar: %s\n" grammar_file;
+      Printf.printf "current %%on_error_reduce (%d): %s\n\n"
+        (List.length ts.ts_annots)
+        (String.concat " " ts.ts_annots);
+      (match mode with
+      | Tune_dead -> tune_dead_sweep ts
+      | Tune_advise ->
+          let candidates =
+            reducible_nonterminals ts.ts_base_cmly
+            |> StringSet.elements
+            |> List.filter (fun nt ->
+                (not (involves_anonymous nt)) && not (List.mem nt ts.ts_annots))
+          in
+          tune_advisor ts candidates
+      | Tune_calibrate verdicts_file ->
+          let kept, removed = tune_parse_verdicts verdicts_file in
+          tune_calibrate ts ~kept ~removed);
+      Printf.printf "sweep runtime: %.0fs\n" (Unix.gettimeofday () -. start))
+
 (* --- Command-line interface (cmdliner) --- *)
 
 open Cmdliner
@@ -2173,6 +2875,137 @@ let transitions_cmd =
   in
   Cmd.v (Cmd.info "transitions" ~doc ~man) term
 
+(* The [tune] subcommand group (step 13). Unlike the other modes it does not take
+   a prepared [--cmly]/[MESSAGES] pair — it generates those itself, per trial,
+   from [--grammar] via a [--menhir] subprocess, in a scratch dir. *)
+let grammar_arg =
+  let doc =
+    "Path to the grammar's $(b,.mly) source. The tuner copies it into a \
+     scratch directory and edits the $(b,%on_error_reduce) line for each \
+     trial; the source tree is never touched. One grammar per invocation."
+  in
+  Arg.(required & opt (some string) None & info [ "grammar" ] ~docv:"FILE" ~doc)
+
+let menhir_arg =
+  let doc =
+    "The $(b,menhir) command to run for each trial (a runtime subprocess: \
+     $(b,--list-errors) and $(b,--cmly)). A clear error is reported if it is \
+     not executable."
+  in
+  Arg.(value & opt string "menhir" & info [ "menhir" ] ~docv:"CMD" ~doc)
+
+let verdicts_arg =
+  let doc =
+    "Path to a recorded keep/remove log: lines $(b,keep NONTERMINAL) / \
+     $(b,removed NONTERMINAL) ($(b,#) comments and blanks ignored). Removing a \
+     $(b,keep) annotation and re-adding a $(b,removed) one must each score \
+     non-improving; the command reports the agreement fraction and every \
+     disagreement."
+  in
+  Arg.(
+    required & opt (some string) None & info [ "verdicts" ] ~docv:"FILE" ~doc)
+
+let tune_dead_cmd =
+  let doc = "Find %on_error_reduce annotations whose removal changes nothing" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Remove each current $(b,%on_error_reduce) annotation in turn and \
+         regenerate; an annotation whose removal leaves the stats, census, and \
+         message projection all unchanged is dead and reported for deletion. \
+         Trials run override-free (an annotation change re-picks the \
+         sentence-keyed overrides), so nothing but the annotation moves.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ grammar = grammar_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ menhir = menhir_arg in
+    run_tune Tune_dead ~menhir ~config_file:config ~overrides_file:overrides
+      ~grammar_file:grammar
+  in
+  Cmd.v (Cmd.info "dead" ~doc ~man) term
+
+let tune_advise_cmd =
+  let doc = "Rank single add/remove moves by their stats-vector delta" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "For each single move — removing a current annotation, or adding one \
+         for a nonterminal reduced somewhere in the automaton — compute the \
+         stats-vector delta and classify it (harmful / improving / dead / \
+         mixed / neutral), matching the prune audit's decision rule. Each \
+         improving move is priced by its $(b,override-rot) cost (the \
+         $(b,--overrides) keys the trial's state re-pick would strand); a move \
+         whose whole win lands on already-overridden states is reported \
+         separately as $(b,RELOCATES-OVERRIDDEN). The tuner recommends; it \
+         never applies, and single-move scores do not compose.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ grammar = grammar_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ menhir = menhir_arg in
+    run_tune Tune_advise ~menhir ~config_file:config ~overrides_file:overrides
+      ~grammar_file:grammar
+  in
+  Cmd.v (Cmd.info "advise" ~doc ~man) term
+
+let tune_calibrate_cmd =
+  let doc = "Replay a recorded keep/remove log and report agreement" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Replay a recorded keep/remove verdict log ($(b,--verdicts)): removing \
+         each $(b,keep) annotation and re-adding each $(b,removed) one should \
+         score non-improving. Report the agreement fraction and every \
+         disagreement — the way to confirm the classifier still reproduces a \
+         trusted human audit after the grammar or the stats have changed.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ grammar = grammar_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ menhir = menhir_arg
+    and+ verdicts = verdicts_arg in
+    run_tune (Tune_calibrate verdicts) ~menhir ~config_file:config
+      ~overrides_file:overrides ~grammar_file:grammar
+  in
+  Cmd.v (Cmd.info "calibrate" ~doc ~man) term
+
+let tune_cmd =
+  let doc = "Advise on %on_error_reduce annotation moves (read-only)" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "A read-only advisor for a grammar's $(b,%on_error_reduce) list. Each \
+         trial re-runs $(b,menhir) (a subprocess) on a scratch copy of the \
+         grammar with one annotation added or removed, regenerates the \
+         messages in-process, and classifies the move by its effect on the \
+         quality counters. It recommends moves; it never applies them and \
+         never touches the source tree.";
+      `P
+        "Trials run WITHOUT the $(b,.overrides) file: an annotation change \
+         re-picks the sentence-keyed overrides, so a trial that loaded them \
+         could fail the rot guard. The overrides are still read (via \
+         $(b,--overrides)) to price each improving move's override-rot cost.";
+      `S Manpage.s_commands;
+    ]
+  in
+  Cmd.group
+    (Cmd.info "tune" ~doc ~man)
+    [ tune_dead_cmd; tune_advise_cmd; tune_calibrate_cmd ]
+
 let main_cmd =
   let doc = "User-friendly syntax-error messages for a Menhir grammar" in
   let man =
@@ -2208,6 +3041,7 @@ let main_cmd =
       fallbacks_cmd;
       suggest_classes_cmd;
       transitions_cmd;
+      tune_cmd;
     ]
 
 (* A stale-sidecar rot guard (config or overrides) raises [Failure]; render it
