@@ -19,8 +19,8 @@
        <_>This '(' opens the enclosing construct.
     1x Assuming that the catches are complete, expecting 'end', or instructions.
        <^_>these catches
-    2x Assuming that the cmds are complete, expecting ')'.
-       <^_>these cmds
+    2x Assuming that the commands are complete, expecting ')'.
+       <^_>these commands
        <_>This '(' opens the enclosing construct.
     4x Assuming that the element list is complete, expecting ')'.
        <^_>this element list
@@ -89,9 +89,9 @@
     7x Assuming that the type use is complete, expecting ')'.
        <^_>this type use
        <_>This '(' opens the enclosing construct.
-    1x Expecting '(', ')', a data elem, an identifier ('$...'), or an offset.
+    1x Expecting '(', ')', a data element, an identifier ('$...'), or an offset.
        <_>This '(' opens the enclosing construct.
-    1x Expecting '(', ')', a data elem, or an offset.
+    1x Expecting '(', ')', a data element, or an offset.
        <_>This '(' opens the enclosing construct.
     1x Expecting '(', ')', a type use, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
@@ -116,9 +116,9 @@
        <_>This '(' opens the enclosing construct.
     2x Expecting ')', a block type, or instructions.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', a cmd, a shared clause, or an identifier ('$...').
+    1x Expecting ')', a command, a shared clause, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', a cmd, or an identifier ('$...').
+    1x Expecting ')', a command, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', a field type, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
@@ -136,23 +136,23 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', an element list, or an index.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', an identifier ('$...'), or an unnamed param.
+    1x Expecting ')', an identifier ('$...'), or an unnamed parameter.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a cond else.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a cond.
-    1x Expecting ')', or a const.
-    1x Expecting ')', or a const.
+    1x Expecting ')', or a condition.
+    1x Expecting ')', or a constant.
+    1x Expecting ')', or a constant.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a data elem.
-    6x Expecting ')', or a data elem.
+    1x Expecting ')', or a data element.
+    6x Expecting ')', or a data element.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a field type.
     1x Expecting ')', or a field.
     1x Expecting ')', or a field.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a float lit.
-    2x Expecting ')', or a float lit.
+    1x Expecting ')', or a float literal.
+    2x Expecting ')', or a float literal.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a folded else.
        <_>This '(' opens the enclosing construct.
@@ -166,10 +166,10 @@
     1x Expecting ')', or a string.
     5x Expecting ')', or a string.
        <_>This '(' opens the enclosing construct.
-    4x Expecting ')', or a type use.
+    1x Expecting ')', or a type definition.
+    1x Expecting ')', or a type definition.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a typedef.
-    1x Expecting ')', or a typedef.
+    4x Expecting ')', or a type use.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a v128 const body.
     1x Expecting ')', or a value type.
@@ -182,15 +182,15 @@
     1x Expecting ')', or an identifier ('$...').
     3x Expecting ')', or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or an import group elem.
+    1x Expecting ')', or an import group item.
     2x Expecting ')', or an index.
-    1x Expecting ')', or an int lit.
-    3x Expecting ')', or an int lit.
+    1x Expecting ')', or an integer literal.
+    3x Expecting ')', or an integer literal.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or an integer.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or an unnamed param.
-    1x Expecting ')', or an unnamed param.
+    1x Expecting ')', or an unnamed parameter.
+    1x Expecting ')', or an unnamed parameter.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or cond else fields.
        <_>This '(' opens the enclosing construct.
@@ -203,7 +203,7 @@
        <_>This '(' opens the enclosing construct.
   102x Expecting ')'.
        <_>This '(' opens the enclosing construct.
-    1x Expecting 'and', 'not', 'or', a cmp op, or an integer.
+    1x Expecting 'and', 'not', 'or', a comparison operator, or an integer.
     1x Expecting 'array', 'cont', 'func', 'struct', or 'sub'.
     1x Expecting 'array', 'cont', 'func', or 'struct'.
     2x Expecting 'data', or 'pagesize'.
@@ -258,7 +258,7 @@
     1x Expecting a composite type, or descriptor clauses.
     2x Expecting a composite type.
     1x Expecting a cond then.
-    7x Expecting a cond.
+    7x Expecting a condition.
     1x Expecting a constant: 'i32.const', 'i64.const', 'f32.const', 'f64.const', 'v128.const', 'ref.null', 'ref.host', or 'ref.extern'.
     1x Expecting a data element type: 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'.
     1x Expecting a dummy ctx.
@@ -279,7 +279,7 @@
     1x Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', or 'rec'.
     4x Expecting a module.
     1x Expecting a name, or an identifier ('$...').
-    1x Expecting a name, or an import group elem.
+    1x Expecting a name, or an import group item.
     6x Expecting a name.
     1x Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
     2x Expecting a parameter group.
@@ -298,10 +298,12 @@
     1x Expecting a subtype.
     1x Expecting a table type, or an identifier ('$...').
     2x Expecting a table type.
+    2x Expecting a type use, or an index.
+    2x Expecting a type use.
     1x Expecting a v128 const body.
     1x Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
     3x Expecting a value type.
-    2x Expecting a vec shape.
+    2x Expecting a vector shape.
    32x Expecting an 8-bit signed integer.
    26x Expecting an 8-bit unsigned integer.
     5x Expecting an action.
@@ -311,7 +313,6 @@
     3x Expecting an identifier ('$...'), or an inline export.
     2x Expecting an identifier ('$...').
     1x Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
-    2x Expecting an index, or type use without bindings.
    84x Expecting an index.
     1x Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     5x Expecting an integer.
@@ -321,6 +322,4 @@
     1x Expecting end of file.
     1x Expecting instructions, or legacy catches.
     5x Expecting instructions.
-    1x Expecting parameters and results without bindings.
-    1x Expecting parameters and results.
-    2x Expecting type use without bindings.
+    2x Expecting parameters and results.

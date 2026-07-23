@@ -13,6 +13,6 @@ state/automaton item-set match: 680/680
 unsound claims: 0
 entries with uncovered actions: 24
 uncovered action tokens (total): 1641
-names configured: 25, unused: 2
+names configured: 27, unused: 2
   FLOAT (expecting: unused, assuming: unused)
   INT (expecting: unused, assuming: unused)

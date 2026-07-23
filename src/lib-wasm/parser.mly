@@ -219,7 +219,7 @@
 %token INPUT
 %token OUTPUT
 
-%on_error_reduce plain_instruction limits list(elemexpr) list(module_field) nonempty_list(f64) nonempty_list(float_or_nan) nonempty_list(result_pat) list(cmd) nonempty_list(index) exports catches on_clauses locals select_result_type
+%on_error_reduce plain_instruction limits list(elemexpr) list(module_field) nonempty_list(f64) nonempty_list(float_or_nan) nonempty_list(result_pat) list(command) nonempty_list(index) exports catches on_clauses locals select_result_type
 
 %parameter <Context : sig type t = Wax_utils.Trivia.context val context : t end>
 
@@ -511,7 +511,7 @@ functype:
 (* A single unnamed parameter, located at its value type, so an anonymous
    [(param t1 t2 …)] yields one located entry per type (distinct spans, unlike
    the [field] case which shares one span and must fall back to no location). *)
-unnamed_param:
+unnamed_parameter:
 | t = value_type { with_loc $sloc (None, t) }
 
 (* A single [(param …)] group. Kept non-recursive so its [$sloc] spans just the
@@ -520,14 +520,14 @@ unnamed_param:
    location would overlap every following one. *)
 param_group:
 | LPAREN_PARAM i = ID t = value_type ")" { [ with_loc $sloc (Some i, t) ] }
-| LPAREN_PARAM l = unnamed_param * ")" { l }
+| LPAREN_PARAM l = unnamed_parameter * ")" { l }
 
 parameters:
 | { [] }
 | g = param_group rem = parameters { g @ rem }
 
 param_group_without_bindings:
-| LPAREN_PARAM l = unnamed_param * ")" { l }
+| LPAREN_PARAM l = unnamed_parameter * ")" { l }
 
 parameters_without_bindings:
 | { [] }
@@ -573,11 +573,11 @@ composite_type:
 | t = functype { Func t }
 
 rectype:
-| "(" REC l = typedef * ")"
+| "(" REC l = type_definition * ")"
   { with_loc $sloc (Types (Array.of_list l)) }
-| t = typedef { {t with desc = Types [| t |]} }
+| t = type_definition { {t with desc = Types [| t |]} }
 
-typedef:
+type_definition:
 | LPAREN_TYPE name = ID ? t = subtype ")"
  { with_loc $sloc (name, t) }
 
@@ -917,17 +917,17 @@ string_list: l = list(STRING) { l }
 (* Conditional annotations, as used by the js_of_ocaml WAT preprocessor.
    The condition is parsed and preserved but not evaluated. *)
 
-cond:
+condition:
 | s = STRING { Ast.Cond_string s }
 | v = ID { Ast.Cond_var v }
 | "(" maj = NAT min = NAT pat = NAT ")"
     { Ast.Cond_version (int_of_string maj, int_of_string min, int_of_string pat) }
-| "(" AND l = cond+ ")" { Ast.Cond_and l }
-| "(" OR l = cond+ ")" { Ast.Cond_or l }
-| "(" NOT e = cond ")" { Ast.Cond_not e }
-| "(" op = cmp_op a = cond b = cond ")" { Ast.Cond_cmp (op, a, b) }
+| "(" AND l = condition+ ")" { Ast.Cond_and l }
+| "(" OR l = condition+ ")" { Ast.Cond_or l }
+| "(" NOT e = condition ")" { Ast.Cond_not e }
+| "(" op = comparison_operator a = condition b = condition ")" { Ast.Cond_cmp (op, a, b) }
 
-cmp_op:
+comparison_operator:
 | CMP_EQ { Ast.Eq }
 | CMP_NE { Ast.Ne }
 | CMP_LT { Ast.Lt }
@@ -945,7 +945,7 @@ cond_else:
 | ELSE_ANNOT e = instructions ")" { with_loc $sloc e }
 
 cond_instr:
-| IF_ANNOT c = cond
+| IF_ANNOT c = condition
   then_body = cond_then
   else_body = option(cond_else)
   ")"
@@ -1049,10 +1049,10 @@ import:
 | LPAREN_IMPORT module_ = name name = name desc = external_type ")"
     { let (id, desc) = desc in
       with_loc $sloc (Import {module_; name; id; desc; exports = [] }) }
-| LPAREN_IMPORT module_ = name elems = nonempty_list(import_group_elem) ")"
+| LPAREN_IMPORT module_ = name elems = nonempty_list(import_group_item) ")"
     { with_loc $sloc (compact_import $sloc module_ elems) }
 
-import_group_elem:
+import_group_item:
 | "(" ITEM id = ioption(ID) name = name t = ioption(external_type) ")"
     { `Item (id, name, t) }
 | e = external_type { `Type e }
@@ -1254,35 +1254,35 @@ offset:
    kept as raw literal strings; they are range-checked here and encoded little-
    endian at lowering. *)
 data_string:
-| l = list(data_elem) { l }
+| l = list(data_element) { l }
 
-data_elem:
+data_element:
 | s = STRING { { s with Ast.desc = Str s.Ast.desc } }
-| "(" t = PACKEDTYPE l = list(int_lit) ")"
+| "(" t = PACKEDTYPE l = list(integer_literal) ")"
   { List.iter
       (check_constant (match t with I8 -> Misc.is_int8 | I16 -> Misc.is_int16) $sloc)
       l;
     with_loc $sloc (Numlist (Packed t, l)) }
-| "(" I32 l = list(int_lit) ")"
+| "(" I32 l = list(integer_literal) ")"
   { List.iter (check_constant Misc.is_int32 $sloc) l;
     with_loc $sloc (Numlist (Value I32, l)) }
-| "(" I64 l = list(int_lit) ")"
+| "(" I64 l = list(integer_literal) ")"
   { List.iter (check_constant Misc.is_int64 $sloc) l;
     with_loc $sloc (Numlist (Value I64, l)) }
-| "(" F32 l = list(float_lit) ")"
+| "(" F32 l = list(float_literal) ")"
   { List.iter (check_constant Misc.is_float32 $sloc) l;
     with_loc $sloc (Numlist (Value F32, l)) }
-| "(" F64 l = list(float_lit) ")"
+| "(" F64 l = list(float_literal) ")"
   { List.iter (check_constant Misc.is_float64 $sloc) l;
     with_loc $sloc (Numlist (Value F64, l)) }
 | "(" V128 l = nonempty_list(v128_const_body) ")"
   { with_loc $sloc (V128list l) }
 
-int_lit:
+integer_literal:
 | n = NAT { n }
 | n = INT { n }
 
-float_lit:
+float_literal:
 | f = NAT { f }
 | f = INT { f }
 | f = FLOAT { f }
@@ -1339,7 +1339,7 @@ cond_else_fields:
 | ELSE_ANNOT e = list(module_field) ")" { with_loc $sloc e }
 
 cond_module_field:
-| IF_ANNOT c = cond
+| IF_ANNOT c = condition
   then_fields = cond_then_fields
   else_fields = option(cond_else_fields)
   ")"
@@ -1357,12 +1357,12 @@ parse_script:
 | inline_module EOF { [] }
 
 script:
-| c = cmd* { List.concat c }
+| c = command* { List.concat c }
 
 inline_module:
 | l = module_field + { [(`Valid, `Parsed (None, l))] }
 
-cmd:
+command:
 | m = module_ { m `Valid }
 | instance { [] }
 | register { [] }
@@ -1376,7 +1376,7 @@ cmd:
    $M)) …)] with [(wait $T)] barriers. We don't run threads, so both are parsed
    and ignored (their inner modules are not tested). *)
 thread:
-| "(" THREAD ID? ioption(shared_clause) cmd* ")" {}
+| "(" THREAD ID? ioption(shared_clause) command* ")" {}
 
 shared_clause:
 | "(" SHARED nonempty_list("(" MODULE ID ")" {}) ")" {}
@@ -1406,22 +1406,22 @@ register:
 | "(" REGISTER STRING ID ? ")" {}
 
 action:
-| "(" INVOKE ID ? STRING const * ")"
+| "(" INVOKE ID ? STRING constant * ")"
 | "(" GET ID? STRING ")"
 {}
 
-const:
+constant:
 | "(" I32_CONST i32 ")"
 | "(" I64_CONST i64 ")"
 | "(" F32_CONST f32 ")"
 | "(" F64_CONST f64 ")"
-| "(" V128_CONST vec_shape f64+ ")"
+| "(" V128_CONST vector_shape f64+ ")"
 | "(" REF_NULL heap_type ")"
 | "(" REF_HOST NAT ")"
 | "(" REF_EXTERN NAT ")"
 {}
 
-vec_shape:
+vector_shape:
 | I8X16
 | I16X8
 | I32X4
@@ -1461,7 +1461,7 @@ result_pat:
 | "(" F32_CONST NAN ")"
 | "(" F64_CONST f64 ")"
 | "(" F64_CONST NAN ")"
-| "(" V128_CONST vec_shape float_or_nan+ ")"
+| "(" V128_CONST vector_shape float_or_nan+ ")"
 | "(" REF ")"
 | "(" REF_NULL ")"
 | "(" REF_FUNC ")"
