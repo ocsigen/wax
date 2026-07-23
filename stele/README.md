@@ -173,6 +173,30 @@ Useful modes while working:
   a signature and land in one cluster; splitting them into two readable labels is
   the human decision the config records.
 
+## Day-to-day commands (in the wax tree)
+
+Every stele mode is wired as a per-grammar dune alias, defined once in the
+shared `src/lib-wasm/dune.menhir` and instantiated by both grammar directories,
+so you never retype the four artifact paths (and cannot silently drop
+`--overrides`). Prefix the alias with the grammar directory: `src/lib-wasm` for
+the WebAssembly text grammar, `src/lib-wax` for the Wax language grammar.
+
+| Alias | Example run | Answers |
+|---|---|---|
+| `names` | `dune build @src/lib-wasm/names` | how every symbol reaches its wording, and any unused `[names]` entry |
+| `fallbacks` | `dune build @src/lib-wax/fallbacks` | which fallback states still need an override (empty output means none) |
+| `suggest-classes` | `dune build @src/lib-wasm/suggest-classes` | candidate `[class]` blocks worth adding to the config |
+| `transitions` | `dune build @src/lib-wax/transitions` | the raw per-state continuation dump (debug) |
+| `tune-dead` | `dune build @src/lib-wasm/tune-dead` | which `%on_error_reduce` annotations are dead (slow: tens of seconds) |
+| `tune-advise` | `dune build @src/lib-wax/tune-advise` | ranked single `%on_error_reduce` moves (slow: tens of seconds) |
+
+Each alias re-runs and re-prints on every invocation (a `(universe)` dep), so
+there is nothing to clean between runs. The four inspection aliases are cheap.
+The two `tune` aliases re-run menhir once per trial (pinned to the switch's
+`menhir` via `%{bin:menhir}`) and take tens of seconds, so they run only when
+asked; `tune-advise` also reads the `.overrides` file to price each move's rot
+cost, `tune-dead` does not.
+
 ## The `.overrides` file
 
 A per-grammar sidecar of hand-written messages for states heuristics cannot

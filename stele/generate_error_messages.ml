@@ -1638,7 +1638,7 @@ let output_stats cfg gram auto results =
    awkward auto-derived or fallback renderings that deserve a [names] entry, and
    [names] entries nothing uses. Output is plain aligned text, grep-able and
    stable (no box drawing). *)
-let output_names cfg results =
+let output_names ~overrides_active cfg results =
   let uses = List.concat_map (fun (_, s) -> s.name_uses) results in
   (* Aggregate by (symbol, rendered, source): a symbol that renders one way in
      the Expecting list and another as an Assuming subject (a list-shaped name)
@@ -1686,7 +1686,16 @@ let output_names cfg results =
       (fun (k, _, _) ->
         Printf.printf "  %s = %s\n" k
           (match Hashtbl.find_opt cfg.names k with Some v -> v | None -> ""))
-      unused
+      unused;
+  (* When an [.overrides] file is in effect, its entries carry hand-written prose
+     whose per-symbol renderings the naming table does not record; note their
+     count so a hand run of [names] is self-describing about the surface the
+     table does not cover. Absent [--overrides] the trailer is suppressed, so an
+     override-less adopter's output is byte-identical. *)
+  if overrides_active then
+    Printf.printf
+      "\noverridden entries: %d (hand-written prose, renderings not recorded)\n"
+      (List.length (List.filter (fun (_, s) -> s.overridden) results))
 
 (* --- Message census --- *)
 
@@ -1947,7 +1956,9 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
       | Census ->
           output_census (List.map (fun (_, (_, body, _)) -> body) results)
       | Stats -> output_stats cfg grammar auto (stats_of ())
-      | Names -> output_names cfg (stats_of ())
+      | Names ->
+          output_names ~overrides_active:(overrides_file <> "") cfg
+            (stats_of ())
       | Fallbacks -> output_fallbacks (stats_of ())
       | Suggest_classes -> output_suggest_classes cfg (stats_of ())
       | Transitions -> assert false)
