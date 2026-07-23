@@ -722,7 +722,7 @@ Expecting '['.
 
 parse: FN IDENT LBRACE CHAR EQUAL
 
-Assuming that the statement is complete, expecting ';'.
+Assuming that the statement is complete, expecting ';', or '}'.
 <^1>this statement
 
 parse: FN IDENT LBRACE DISPATCH CHAR ELSE

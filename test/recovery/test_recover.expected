@@ -47,7 +47,7 @@ errors: 1
 === unhelpful insertion is rejected, not reported ===
 AST: recovered (1 defs)
 errors: 1
-  2:14-2:15: Assuming that the statement is complete, expecting ';'.
+  2:14-2:15: Assuming that the statement is complete, expecting ';', or '}'.
 
 === skip crosses a nested group to the outer boundary ===
 AST: recovered (1 defs)

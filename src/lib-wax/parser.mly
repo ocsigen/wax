@@ -1165,9 +1165,6 @@ statement_list:
 
 raw_statement_list:
 | { [] }
-(*
-| i = statement { [i] }
-*)
 (* A bare [;] is an empty statement: it contributes nothing to the list. This
    makes a redundant [;] harmless anywhere — most usefully after a block-shaped
    statement ([do]/[if]/[while]/[loop]/[dispatch]/[match]/[try]), which needs
@@ -1180,8 +1177,29 @@ raw_statement_list:
    (which continues a plaininstr on an operator, never on [;]). *)
 | ";" l = raw_statement_list { l }
 | i = blockinstr l = raw_statement_list { RS_plain i :: l }
-| i = statement ";" l = raw_statement_list { RS_plain i :: l }
 | i = cond_stmt l = raw_statement_list { i :: l }
+(* A statement is followed by an optional [";" more-statements]: the final [;]
+   of a block is OPTIONAL (a statement may close the list with no trailing
+   separator). ERROR-MESSAGES.md step 22 re-enabled this optionality, which had
+   been commented out because it degraded the most common parse error (a missing
+   [;] BETWEEN statements). The split keeps the error QUALITY: this optional part
+   is deliberately NOT under [%on_error_reduce] (unlike [raw_statement_list]), so
+   a missing [;] stops at this post-statement state — where [";"] is still
+   shiftable — and reports "the statement is
+   complete, expecting ';', or '}'" with the statement itself as the subject,
+   rather than folding on into the enclosing block. The recursive tail after a
+   [";"]/block/[;]/conditional is a plain [raw_statement_list], which STAYS
+   annotated, so an unclosed block ([{ nop; <EOF>]) still folds its empty tail
+   and names the missing [}] with the opener hint. The optional part is the
+   stdlib [option(...)] wrapper — NOT [ioption], which is [%inline] and would
+   re-expand into a direct [raw_statement_list -> statement] production,
+   re-annotating the fold and losing the split. [option(...)] stays a real
+   nonterminal, and being an option-shaped generated wrapper it is expanded to
+   its first token by the message generator (ERROR-MESSAGES.md step 19), so the
+   post-statement Expecting position reads as the literal [';'], not a jargon
+   nonterminal name. *)
+| i = statement rest = option(";" l = raw_statement_list { l })
+  { RS_plain i :: (match rest with Some l -> l | None -> []) }
 
 (* Instruction-level conditional annotation. Braces are required, so the body
    is a transparent statement list (not a block). Each [#[if]]/[#[else]] group is

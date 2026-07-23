@@ -55,7 +55,7 @@
     2x Assuming that the statement is complete, expecting ')'.
        <^_>this statement
        <_>This '(' opens the enclosing construct.
-    1x Assuming that the statement is complete, expecting ';'.
+    1x Assuming that the statement is complete, expecting ';', or '}'.
        <^_>this statement
     5x Assuming that the statement list is complete, expecting '}'.
        <^_>this statement list

@@ -323,7 +323,7 @@ the whole `let` statement `let x = 1 + 2 * 3` is underlined — a subject with n
 delimiter hint (an `if`/`let` head opens no bracket):
 
   $ wax check subject.wax
-  Error: Assuming that the statement is complete, expecting ';'.
+  Error: Assuming that the statement is complete, expecting ';', or '}'.
    ──➤  subject.wax:1:28
   1 │ fn f() { let x = 1 + 2 * 3 nop; }
     ·                            ^^^

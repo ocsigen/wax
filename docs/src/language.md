@@ -492,10 +492,12 @@ This maps directly to Wasm's `select` instruction.
 
 ## Control Flow
 
-Statements are terminated by `;`, including the final one that produces the
-block's or function's value. Unlike Rust, this trailing `;` is required and does
-not discard that value: the value stays on the stack and becomes the result.
-The block-shaped statements below
+Statements are separated by `;`. The final `;` of a block is optional: a
+block's last statement may omit it. Unlike Rust, writing that trailing `;` does
+not discard the statement's value — the value stays on the stack and becomes the
+block's or function's result either way (a trailing `;` is just an empty
+statement, which contributes nothing). The formatter always writes the canonical
+trailing `;`. The block-shaped statements below
 (`do`, `if`, `while`, `loop`, `dispatch`, `match`, and `try`) are the
 exception: their closing `}` ends the statement, so no `;` is needed. A bare
 `;` is an empty statement (it does nothing), so a redundant one is harmless

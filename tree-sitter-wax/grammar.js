@@ -506,7 +506,13 @@ module.exports = grammar({
 
     block: $ => seq(optional($.block_label), $._braced_block),
 
-    _braced_block: $ => seq('{', repeat($._block_item), '}'),
+    // The final ';' of a block is optional (a block's last statement may omit
+    // it), so a bare trailing `_statement` (no ';') may follow the ';'-separated
+    // items. Mirrors the wax grammar's `raw_statement_list -> statement
+    // option(';' ...)` (src/lib-wax/parser.mly; ERROR-MESSAGES.md step 22). A
+    // non-final non-block statement still needs its ';' (it can only be a
+    // `_block_item`), so a genuinely missing internal ';' still fails to parse.
+    _braced_block: $ => seq('{', repeat($._block_item), optional($._statement), '}'),
 
     block_label: $ => seq($.label, ':'),
 
