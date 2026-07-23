@@ -6989,7 +6989,7 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
                 (List.exists
                    (fun ((l : Ast.ident), _) -> l.desc = "lane")
                    labelled)
-         then Error.missing_lane_immediate ctx.diagnostics ~location:i.info
+         then Error.missing_lane_immediate ctx.diagnostics ~location:meth.info
      | Some lane -> (
          let max_lane = 16 / mop.m_nat_align in
          (* Compare unsigned, and reject an [Ast.Int] too large even for [u64]

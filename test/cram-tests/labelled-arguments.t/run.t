@@ -140,11 +140,11 @@ A SIMD lane access needs its lane immediate:
   > EOF
   $ wax check nolane.wax
   Error: This memory access needs a 'lane:' immediate (e.g. 'lane: 0').
-   ──➤  nolane.wax:3:5
+   ──➤  nolane.wax:3:7
   1 │ memory m: i32 [1];
   2 │ fn f(p: i32, v: v128) -> v128 {
   3 │     m.load8_lane(p, v, offset: 16);
-    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·       ^^^^^^^^^^
   4 │ }
   5 │ 
   [128]
