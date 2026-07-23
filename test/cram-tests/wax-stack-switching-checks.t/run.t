@@ -204,11 +204,11 @@ at their arities. Operand counts follow from the inferred types.
   Error:
     'resume_throw' raises a tag applied to its payload, e.g.
     'c.resume_throw(exc(x))'.
-    ──➤  surface-errors.wax:17:38
+    ──➤  surface-errors.wax:17:40
   15 │ 
   16 │ // resume_throw takes its tag call-style, grouping the payload with the tag
   17 │ fn bad_throw(c: &k, x: i32) -> i32 { c.resume_throw(x); }
-     ·                                      ^^^^^^^^^^^^^^^^^
+     ·                                        ^^^^^^^^^^^^
   18 │ 
   19 │ // T:: members exist only on continuation types, and only new/bind
   Error: There is no 'k::renew' intrinsic.

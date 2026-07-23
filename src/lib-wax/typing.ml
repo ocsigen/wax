@@ -5281,7 +5281,10 @@ and type_cont_method_call ctx i ~handlers recv meth args =
         | [ { desc = Call ({ desc = Get t; _ }, payload); _ } ] ->
             (Some t, payload)
         | _ ->
-            Error.resume_throw_needs_tag ctx.diagnostics ~location:i.info;
+            (* At the method, not the call expression: as for [switch_needs_tag]
+               above, a chained [c.resume_throw().resume_throw()] would otherwise
+               report this twice at the shared chain-start column. *)
+            Error.resume_throw_needs_tag ctx.diagnostics ~location:meth.info;
             (None, args))
     | _ -> (None, args)
   in
