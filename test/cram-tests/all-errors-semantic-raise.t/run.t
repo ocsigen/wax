@@ -62,8 +62,8 @@ and recovery goes on to report the type-less `(global $g)`:
   3 │   (func $f (result i32) (i32.const 1))
   4 │   (global $g)
   Error:
-    Assuming that the exports are complete, expecting '(import', or a global
-    type.
+    Assuming that the exports are complete, expecting a global type, or an
+    inline import.
    ──➤  pagesize.wat:4:13
   2 │   (memory (pagesize 3))
   3 │   (func $f (result i32) (i32.const 1))

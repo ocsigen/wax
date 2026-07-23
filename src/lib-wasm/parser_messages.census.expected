@@ -16,13 +16,13 @@
        <_>This '(' opens the enclosing construct.
     2x Assuming that the elemexprs are complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
-    1x Assuming that the exports are complete, expecting '(', '(import', a memory type, a page-size clause, or an address type.
-    1x Assuming that the exports are complete, expecting '(import', ')', a local declaration, a type use, or instructions.
+    1x Assuming that the exports are complete, expecting '(', a memory type, a page-size clause, an address type, or an inline import.
+    1x Assuming that the exports are complete, expecting ')', a local declaration, a type use, an inline import, or instructions.
        <_>This '(' opens the enclosing construct.
-    1x Assuming that the exports are complete, expecting '(import', ')', or a type use.
+    1x Assuming that the exports are complete, expecting ')', a type use, or an inline import.
        <_>This '(' opens the enclosing construct.
-    1x Assuming that the exports are complete, expecting '(import', a reference type, a table type, or an address type.
-    1x Assuming that the exports are complete, expecting '(import', or a global type.
+    1x Assuming that the exports are complete, expecting a global type, or an inline import.
+    1x Assuming that the exports are complete, expecting a reference type, a table type, an address type, or an inline import.
     4x Assuming that the expression is complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Assuming that the float or NaNs are complete, expecting ')'.
@@ -69,11 +69,6 @@
     1x Expecting '(', or ')'.
     1x Expecting '(', or a block type.
     5x Expecting '('.
-    1x Expecting '(export', '(import', ')', a type use, or an identifier ('$...').
-       <_>This '(' opens the enclosing construct.
-    1x Expecting '(export', '(import', a global type, or an identifier ('$...').
-    3x Expecting '(export', or an identifier ('$...').
-    1x Expecting '(param'.
     1x Expecting '(then', or a folded instruction.
     1x Expecting ')', 'binary', 'quote', a module field, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
@@ -96,6 +91,8 @@
     1x Expecting ')', a string, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
     2x Expecting ')', a string, or an index.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', a type use, an identifier ('$...'), an inline export, or an inline import.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', a type use, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
@@ -168,7 +165,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or parameters and results.
        <_>This '(' opens the enclosing construct.
-  110x Expecting ')'.
+  106x Expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'and', 'not', 'or', a cmp op, or an integer.
     1x Expecting 'array', 'cont', 'func', 'struct', or 'sub'.
@@ -231,6 +228,7 @@
     1x Expecting a dummy ctx.
     2x Expecting a field type.
     1x Expecting a float or NaN.
+    1x Expecting a global type, an identifier ('$...'), an inline export, or an inline import.
     1x Expecting a global type, or an identifier ('$...').
     2x Expecting a global type.
     3x Expecting a heap type.
@@ -246,9 +244,9 @@
     4x Expecting a module.
     1x Expecting a name, or an identifier ('$...').
     1x Expecting a name, or an import group elem.
-   14x Expecting a name.
+    6x Expecting a name.
     1x Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
-    1x Expecting a parameter group.
+    2x Expecting a parameter group.
    11x Expecting a reference type.
     1x Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
     1x Expecting a result pattern.
@@ -274,6 +272,7 @@
     2x Expecting an element list.
     1x Expecting an extern index.
     1x Expecting an external type.
+    3x Expecting an identifier ('$...'), or an inline export.
     2x Expecting an identifier ('$...').
     1x Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
     2x Expecting an index, or type use without bindings.

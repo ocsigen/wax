@@ -779,7 +779,7 @@ Expecting a 64-bit signed integer.
 
 parse: LPAREN FUNC ID WAIT
 
-Assuming that the exports are complete, expecting '(import', ')', a local declaration, a type use, or instructions.
+Assuming that the exports are complete, expecting ')', a local declaration, a type use, an inline import, or instructions.
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC IF CALL_INDIRECT RPAREN
@@ -904,7 +904,7 @@ Assuming that the type use is complete, expecting ')'.
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT RPAREN WAIT
 
 Expecting ')'.
-<12>This '(' opens the enclosing construct.
+<9>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT WAIT
 
@@ -918,25 +918,12 @@ Expecting 'exact'.
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
-<9>This '(' opens the enclosing construct.
+<6>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN WAIT
 
 Expecting '(', ')', or a type use.
-<8>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC LPAREN_IMPORT STRING STRING WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN FUNC LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN FUNC LPAREN_IMPORT WAIT
-
-Expecting a name.
+<5>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_LOCAL ANYREF WAIT
 
@@ -1237,7 +1224,7 @@ Expecting an index.
 
 parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM RPAREN WAIT
 
-Expecting '(param'.
+Expecting a parameter group.
 
 parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM WAIT
 
@@ -1555,7 +1542,7 @@ Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an 
 
 parse: LPAREN FUNC WAIT
 
-Expecting '(export', or an identifier ('$...').
+Expecting an identifier ('$...'), or an inline export.
 
 parse: LPAREN GLOBAL ANYREF CALL_INDIRECT END
 
@@ -1569,7 +1556,7 @@ Expecting ')', or an expression.
 
 parse: LPAREN GLOBAL ID WAIT
 
-Assuming that the exports are complete, expecting '(import', or a global type.
+Assuming that the exports are complete, expecting a global type, or an inline import.
 
 parse: LPAREN GLOBAL LPAREN MUT ANYREF WAIT
 
@@ -1587,28 +1574,15 @@ Expecting 'mut', or 'ref'.
 parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING RPAREN ANYREF WAIT
 
 Expecting ')'.
-<9>This '(' opens the enclosing construct.
+<6>This '(' opens the enclosing construct.
 
 parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING RPAREN WAIT
 
 Expecting a global type.
 
-parse: LPAREN GLOBAL LPAREN_IMPORT STRING STRING WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN GLOBAL LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN GLOBAL LPAREN_IMPORT WAIT
-
-Expecting a name.
-
 parse: LPAREN GLOBAL WAIT
 
-Expecting '(export', '(import', a global type, or an identifier ('$...').
+Expecting a global type, an identifier ('$...'), an inline export, or an inline import.
 
 parse: LPAREN MEMORY I32 LPAREN DATA RPAREN WAIT
 
@@ -1648,7 +1622,7 @@ Expecting '(', a 64-bit unsigned integer, or a page-size clause.
 
 parse: LPAREN MEMORY ID WAIT
 
-Assuming that the exports are complete, expecting '(', '(import', a memory type, a page-size clause, or an address type.
+Assuming that the exports are complete, expecting '(', a memory type, a page-size clause, an address type, or an inline import.
 
 parse: LPAREN MEMORY LPAREN DATA RPAREN WAIT
 
@@ -1694,24 +1668,11 @@ Expecting 'data', or 'pagesize'.
 parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING RPAREN NAT LPAREN PAGESIZE NAT RPAREN WAIT
 
 Expecting ')'.
-<9>This '(' opens the enclosing construct.
+<6>This '(' opens the enclosing construct.
 
 parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING RPAREN WAIT
 
 Expecting a memory type.
-
-parse: LPAREN MEMORY LPAREN_IMPORT STRING STRING WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN MEMORY LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN MEMORY LPAREN_IMPORT WAIT
-
-Expecting a name.
 
 parse: LPAREN MEMORY NAT LPAREN PAGESIZE NAT RPAREN WAIT
 
@@ -1732,7 +1693,7 @@ Assuming that the limits are complete, expecting ')', 'shared', or a page-size c
 
 parse: LPAREN MEMORY WAIT
 
-Expecting '(export', or an identifier ('$...').
+Expecting an identifier ('$...'), or an inline export.
 
 parse: LPAREN MODULE ID WAIT
 
@@ -1828,7 +1789,7 @@ Expecting a 64-bit unsigned integer, or a reference type.
 
 parse: LPAREN TABLE ID WAIT
 
-Assuming that the exports are complete, expecting '(import', a reference type, a table type, or an address type.
+Assuming that the exports are complete, expecting a reference type, a table type, an address type, or an inline import.
 
 parse: LPAREN TABLE LPAREN WAIT
 
@@ -1837,24 +1798,11 @@ Expecting 'ref'.
 parse: LPAREN TABLE LPAREN_IMPORT STRING STRING RPAREN NAT ANYREF WAIT
 
 Expecting ')'.
-<9>This '(' opens the enclosing construct.
+<6>This '(' opens the enclosing construct.
 
 parse: LPAREN TABLE LPAREN_IMPORT STRING STRING RPAREN WAIT
 
 Expecting a table type.
-
-parse: LPAREN TABLE LPAREN_IMPORT STRING STRING WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse: LPAREN TABLE LPAREN_IMPORT STRING WAIT
-
-Expecting a name.
-
-parse: LPAREN TABLE LPAREN_IMPORT WAIT
-
-Expecting a name.
 
 parse: LPAREN TABLE NAT ANYREF CALL_INDIRECT END
 
@@ -1872,11 +1820,11 @@ Assuming that the limits are complete, expecting a reference type.
 
 parse: LPAREN TABLE WAIT
 
-Expecting '(export', or an identifier ('$...').
+Expecting an identifier ('$...'), or an inline export.
 
 parse: LPAREN TAG ID WAIT
 
-Assuming that the exports are complete, expecting '(import', ')', or a type use.
+Assuming that the exports are complete, expecting ')', a type use, or an inline import.
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_EXPORT STRING WAIT
@@ -1891,12 +1839,12 @@ Expecting a name.
 parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
-<9>This '(' opens the enclosing construct.
+<6>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN WAIT
 
 Expecting ')', or a type use.
-<8>This '(' opens the enclosing construct.
+<5>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_IMPORT STRING STRING WAIT
 
@@ -1962,7 +1910,7 @@ Expecting an index.
 
 parse: LPAREN TAG WAIT
 
-Expecting '(export', '(import', ')', a type use, or an identifier ('$...').
+Expecting ')', a type use, an identifier ('$...'), an inline export, or an inline import.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN WAIT

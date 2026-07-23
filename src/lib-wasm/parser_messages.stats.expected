@@ -1,18 +1,18 @@
-entries: 700
-with an expected list: 681
+entries: 688
+with an expected list: 669
 using the spurious-reduction template: 72
 entries with cascade depth >= 4: 40
 max cascade depth: 9
 overridden: 19
 generic fallback (empty expected list, not overridden): 0
 generic fallback (expected list over 5, not overridden): 0
-delimiter hints: 234
+delimiter hints: 230
 missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
-state/automaton item-set match: 700/700
+state/automaton item-set match: 688/688
 unsound claims: 0
 entries with uncovered actions: 24
 uncovered action tokens (total): 1641
-names configured: 24, unused: 2
+names configured: 25, unused: 2
   FLOAT (expecting: unused, assuming: unused)
   INT (expecting: unused, assuming: unused)

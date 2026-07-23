@@ -526,10 +526,13 @@ parameters:
 | { [] }
 | g = param_group rem = parameters { g @ rem }
 
+param_group_without_bindings:
+| LPAREN_PARAM l = unnamed_param * ")" { l }
+
 parameters_without_bindings:
 | { [] }
-| LPAREN_PARAM l = unnamed_param * ")" rem = parameters_without_bindings
-  { l @ rem }
+| g = param_group_without_bindings rem = parameters_without_bindings
+  { g @ rem }
 
 results:
 | { [] }
@@ -1067,19 +1070,30 @@ func:
    locals = locals instrs = instructions ")"
   { with_loc $sloc (Func {id; typ; locals; instrs; exports}) }
 | "(" FUNC id = ID ?
-  exports = exports LPAREN_IMPORT module_ = name name = name ")"
+  exports = exports imp = inline_import
   t = type_use ")"
-  { with_loc $sloc
+  { let (module_, name) = imp in
+    with_loc $sloc
       (Import {module_; name; id; desc = Func { exact = false; typ = t }; exports }) }
 | "(" FUNC id = ID ?
-  exports = exports LPAREN_IMPORT module_ = name name = name ")"
+  exports = exports imp = inline_import
   "(" EXACT t = type_use ")" ")"
-  { with_loc $sloc
+  { let (module_, name) = imp in
+    with_loc $sloc
       (Import {module_; name; id; desc = Func { exact = true; typ = t }; exports }) }
 
 exports:
 | { [] }
-| LPAREN_EXPORT n = name ")" r = exports { n :: r }
+| n = inline_export r = exports { n :: r }
+
+inline_export:
+| LPAREN_EXPORT n = name ")" { n }
+
+(* The inline import shorthand shared by func/memory/table/tag/global; factored
+   into a named rule so a message reads "an inline import" rather than the bare
+   '(import' opener. *)
+inline_import:
+| LPAREN_IMPORT module_ = name name = name ")" { (module_, name) }
 
 locals:
 | { [] }
@@ -1117,8 +1131,9 @@ memory:
          shared = false} in
     with_loc $sloc (Memory {id; limits; init = Some s; exports}) }
 | "(" MEMORY id = ID ?
-  exports = exports LPAREN_IMPORT module_ = name name = name ")" t = memory_type ")"
-  { with_loc $sloc (Import {module_; name; id; desc = Memory t; exports}) }
+  exports = exports imp = inline_import t = memory_type ")"
+  { let (module_, name) = imp in
+    with_loc $sloc (Import {module_; name; id; desc = Memory t; exports}) }
 
 table:
 | "(" TABLE id = ID? exports = exports typ = table_type e = expression ")"
@@ -1146,25 +1161,28 @@ table:
       (Table {id; typ = { limits; reftype };
               init = Init_segment elem; exports}) }
 | "(" TABLE id = ID ?
-  exports = exports LPAREN_IMPORT module_ = name name = name ")"
+  exports = exports imp = inline_import
   t = table_type ")"
-  { with_loc $sloc (Import {module_; name; id; desc = Table t; exports }) }
+  { let (module_, name) = imp in
+    with_loc $sloc (Import {module_; name; id; desc = Table t; exports }) }
 
 tag:
 | "(" TAG id = ID ? exports = exports typ = type_use ")"
     { with_loc $sloc (Tag {id; typ; exports}) }
 | "(" TAG id = ID ?
-  exports = exports LPAREN_IMPORT module_ = name name = name ")"
+  exports = exports imp = inline_import
   typ = type_use")"
-  { with_loc $sloc (Import {module_; name; id; desc = Tag typ; exports }) }
+  { let (module_, name) = imp in
+    with_loc $sloc (Import {module_; name; id; desc = Tag typ; exports }) }
 
 global:
 | "(" GLOBAL id = ID ? exports = exports typ = global_type init = expression ")"
   { with_loc $sloc (Global {id; typ; init; exports}) }
 | "(" GLOBAL id = ID ?
-  exports = exports LPAREN_IMPORT module_ = name name = name ")"
+  exports = exports imp = inline_import
   typ = global_type ")"
-  { with_loc $sloc (Import {module_; name; id; desc = Global typ; exports }) }
+  { let (module_, name) = imp in
+    with_loc $sloc (Import {module_; name; id; desc = Global typ; exports }) }
 
 global_type:
 | typ = value_type { {mut = false; typ} }
