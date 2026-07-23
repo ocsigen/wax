@@ -1,4 +1,4 @@
-; Delimiter-coexistence grammar (ERROR-MESSAGES.md section 23): two bracket
+; Delimiter-coexistence grammar: two bracket
 ; pairs sharing the '[' kind — plain '[' ']' and compound '[|' '|]'. It pins the
 ; generic opener<->closer pair derivation: the generated messages golden shows
 ; '|]' recognised as a closer (move 1), the exact pairs keeping '[' and '[|'

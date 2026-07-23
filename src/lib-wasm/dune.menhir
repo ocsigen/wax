@@ -70,7 +70,7 @@
 ;    missed-hint opener-name nets — the tables the generator used to hard-code,
 ;    now grammar configuration.
 ;  - parser_messages.overrides (-overrides): the sanctioned hand-edit surface for
-;    the messages themselves (ERROR-MESSAGES.md step 5) — sentence-keyed
+;    the messages themselves — sentence-keyed
 ;    replacement messages for the structurally immovable over-5 "enumeration"
 ;    fallbacks, merged after generation. A stale override (its sentence no longer
 ;    keys any error state) fails the build, so the file cannot rot silently.
@@ -125,13 +125,25 @@
  (action
   (diff parser_messages.census.expected parser_messages.census)))
 
-; --- Inspection aliases (ERROR-MESSAGES.md step 18) ---
+; --- Inspection aliases ---
 ; The stele inspection modes as per-grammar dune aliases: the four artifact
 ; paths (cmly, config, overrides, auto.messages) are baked in once here, so a
 ; hand run cannot silently drop --overrides and change the question answered.
 ; Defined once in this shared file; each grammar directory that includes it
 ; instantiates them, so `dune build @src/lib-wasm/names`, `@src/lib-wax/fallbacks`
 ; etc. resolve per directory. These print to stdout and pin no golden.
+;
+; Day-to-day: prefix each alias with the grammar directory (src/lib-wasm for the
+; WebAssembly text grammar, src/lib-wax for the Wax language grammar). What each
+; answers:
+;   names            how every symbol reaches its wording, and any unused [names]
+;   fallbacks        which fallback states still need an override (empty = none)
+;   suggest-classes  candidate [class] blocks worth adding to the config
+;   transitions      the raw per-state continuation dump (debug)
+;   tune-dead        which %on_error_reduce annotations are dead (slow)
+;   tune-advise      ranked single %on_error_reduce moves (slow)
+; The four inspection aliases are cheap; the two tune aliases re-run menhir once
+; per trial and take tens of seconds, so run them only when asked.
 ;
 ; (universe) marks each action perpetually out of date so it re-runs — and
 ; re-prints — on every invocation instead of being cached silent after the
@@ -164,13 +176,24 @@
  (action
   (run %{project_root}/stele/generate_error_messages.exe transitions --cmly %{dep:parser_msgs.cmly} --config %{dep:parser_messages.config} --overrides %{dep:parser_messages.overrides} %{dep:parser_messages.auto.messages})))
 
-; --- Tuner aliases (ERROR-MESSAGES.md step 18) ---
+; --- Tuner aliases ---
 ; `stele tune` generates its own cmly/messages per trial from --grammar via a
 ; menhir subprocess, so these take parser.mly (not the cmly) and pin the
 ; subprocess to the switch's menhir with %{bin:menhir}. tune-advise also reads
 ; --overrides to price each move's override-rot cost; tune-dead does not. Both
 ; are slow (tens of seconds — every trial re-runs menhir on the whole grammar);
 ; they run only when explicitly asked. (universe) keeps a re-run re-printing.
+;
+; The aliases wrap the common invocations; run the underlying tool directly for
+; anything the aliases do not cover, one command per grammar, e.g.:
+;   stele tune advise --grammar src/lib-wasm/parser.mly \
+;     --config src/lib-wasm/parser_messages.config \
+;     --overrides src/lib-wasm/parser_messages.overrides
+;   stele tune advise --grammar src/lib-wax/parser.mly \
+;     --config src/lib-wax/parser_messages.config \
+;     --overrides src/lib-wax/parser_messages.overrides
+; `stele tune calibrate --grammar … --verdicts parser_messages.verdicts` replays
+; the per-grammar keep/remove audit log kept beside each grammar.
 
 (rule
  (alias tune-dead)

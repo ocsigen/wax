@@ -1,7 +1,6 @@
 ; The stele generator: turns a menhir grammar's --list-errors output plus its
 ; .cmly into user-friendly syntax-error messages, with a stats/census/overrides
-; workflow. Installed as the `stele` executable; also driven by path from the wax
-; parser dune rules (src/lib-wasm/dune.menhir).
+; workflow. Installed as the `stele` executable.
 
 (executable
  (name generate_error_messages)

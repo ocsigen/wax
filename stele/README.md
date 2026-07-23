@@ -61,14 +61,14 @@ The generator is a build-time tool. Wire four menhir/stele steps; see
 
 ; 3. the generated messages, comments stripped and sorted — the golden projection
 (rule (with-stdout-to g.actual
-        (run %{project_root}/stele/generate_error_messages.exe generate
+        (run stele generate
              --no-comments --cmly %{dep:g.cmly} --config %{dep:parser_messages.config}
              --overrides %{dep:parser_messages.overrides} %{dep:g.auto.messages})))
 (rule (alias runtest) (action (diff parser_messages.expected g.actual)))
 
 ; 4. the full messages (with comments), compiled into a Parser_messages module
 (rule (with-stdout-to g.messages
-        (run %{project_root}/stele/generate_error_messages.exe generate
+        (run stele generate
              --cmly %{dep:g.cmly} --config %{dep:parser_messages.config}
              --overrides %{dep:parser_messages.overrides} %{dep:g.auto.messages})))
 (rule (with-stdout-to parser_messages.ml
@@ -175,29 +175,11 @@ Useful modes while working:
   a signature and land in one cluster; splitting them into two readable labels is
   the human decision the config records.
 
-## Day-to-day commands (in the wax tree)
-
-Every stele mode is wired as a per-grammar dune alias, defined once in the
-shared `src/lib-wasm/dune.menhir` and instantiated by both grammar directories,
-so you never retype the four artifact paths (and cannot silently drop
-`--overrides`). Prefix the alias with the grammar directory: `src/lib-wasm` for
-the WebAssembly text grammar, `src/lib-wax` for the Wax language grammar.
-
-| Alias | Example run | Answers |
-|---|---|---|
-| `names` | `dune build @src/lib-wasm/names` | how every symbol reaches its wording, and any unused `[names]` entry |
-| `fallbacks` | `dune build @src/lib-wax/fallbacks` | which fallback states still need an override (empty output means none) |
-| `suggest-classes` | `dune build @src/lib-wasm/suggest-classes` | candidate `[class]` blocks worth adding to the config |
-| `transitions` | `dune build @src/lib-wax/transitions` | the raw per-state continuation dump (debug) |
-| `tune-dead` | `dune build @src/lib-wasm/tune-dead` | which `%on_error_reduce` annotations are dead (slow: tens of seconds) |
-| `tune-advise` | `dune build @src/lib-wax/tune-advise` | ranked single `%on_error_reduce` moves (slow: tens of seconds) |
-
-Each alias re-runs and re-prints on every invocation (a `(universe)` dep), so
-there is nothing to clean between runs. The four inspection aliases are cheap.
-The two `tune` aliases re-run menhir once per trial (pinned to the switch's
-`menhir` via `%{bin:menhir}`) and take tens of seconds, so they run only when
-asked; `tune-advise` also reads the `.overrides` file to price how many
-hand-written messages each move would re-key, `tune-dead` does not.
+Wiring each mode as a per-grammar dune alias — with the four artifact paths
+baked in once and a `(universe)` dep so a re-run re-prints — saves retyping them
+and stops a hand run from silently dropping `--overrides`. The inspection modes
+are cheap; the two `tune` modes re-run menhir once per trial and take tens of
+seconds, so wire them to run only when asked.
 
 ## The `.overrides` file
 
@@ -248,9 +230,9 @@ STAR
 # base head (the text before '(') listed here always classifies as a
 # menhir-generated wrapper and is expanded through its productions, even when
 # the structural test (list- or option-shaped body) would keep it opaque. One
-# head per line. Empty for both real grammars — their parameterized symbols are
-# all genuine wrappers the structural test already recognises; it exists for a
-# grammar whose home-grown combinator the test misjudges.
+# head per line. Usually empty — most parameterized symbols are genuine wrappers
+# the structural test already recognises; it exists for a grammar whose
+# home-grown combinator the test misjudges.
 [wrappers]
 my_list_combinator
 ```
@@ -270,8 +252,8 @@ kind stay distinct — a `]` never matches a `[|`, and an invisible `|]` no long
 walks the scan past the wrong opener. The hint names, and the runtime underlines,
 the opener's full alias: a closer with a unique mate prints that mate verbatim
 (`This '[|' opens …`, underlined two columns), a closer with several mates
-(wasm's `)` pairs with `(`, `(then`, `(param`, …) falls back to the shared
-opener character. The `[|`/`|]` coexistence is exercised by the `delim` test
+(a `)` that pairs with `(`, `(then`, `(param`, … across productions) falls back
+to the shared opener character. The `[|`/`|]` coexistence is exercised by the `delim` test
 grammar under `stele/test/delim/`.
 
 The config is per-grammar: every entry must name a symbol that grammar actually
@@ -491,9 +473,8 @@ stele tune calibrate --grammar g.mly [--config g.config] --verdicts g.verdicts
   `keep` annotation and re-adding each `removed` one must score non-improving.
   Reports the agreement fraction and every disagreement. The verdicts format is
   one `keep NONTERMINAL` / `removed NONTERMINAL` per line, `#` comments and blanks
-  ignored; the wax/wasm prune-audit logs ship as
-  [`examples/wax.verdicts`](examples/wax.verdicts) and
-  [`examples/wasm.verdicts`](examples/wasm.verdicts) (50/50 and 25/25 agreement).
+  ignored; a consuming grammar keeps its own prune-audit log beside its grammar
+  and replays it here.
 
 **Why trials run override-free.** Changing the annotation list merges/renumbers
 states, so `menhir --list-errors` re-picks its per-state representative sentence,
@@ -501,19 +482,11 @@ which can make a sentence-keyed `.overrides` entry fail the generator's rot guar
 and kill the trial. So every generation here runs *without* overrides, baseline
 and trials alike; the would-be-overridden states then sit uniformly on both sides
 of every comparison. Consequence: `advise`'s "over 5" fallback figure is the raw
-pre-override number (18 wasm / 34 wax), not the post-override 0. The overrides are
+pre-override number, not the post-override zero. The overrides are
 still read (via `--overrides`) only to price each move's rot cost.
 
-**The wax toolchain runs two grammars** — one command each:
-
-```
-stele tune advise --grammar src/lib-wasm/parser.mly \
-  --config src/lib-wasm/parser_messages.config \
-  --overrides src/lib-wasm/parser_messages.overrides
-stele tune advise --grammar src/lib-wax/parser.mly \
-  --config src/lib-wax/parser_messages.config \
-  --overrides src/lib-wax/parser_messages.overrides
-```
+A toolchain with several grammars runs one `stele tune advise` per grammar,
+each pointed at that grammar's own `--config` and `--overrides` sidecars.
 
 ## Layout
 
@@ -522,8 +495,6 @@ stele/
   dune                       ; the `stele` executable
   generate_error_messages.ml ; the generator (incl. the `stele tune` subcommand)
   parse_messages.ml{,i}      ; the --list-errors parser (a module of the exe)
-  examples/                  ; the annotation-tuner calibration logs
-    wax.verdicts  wasm.verdicts
   runtime/                   ; the stele.runtime helper library
     parser_error_runtime.ml{,i}
     dune

@@ -1,5 +1,5 @@
 (* A delimiter-coexistence grammar: the case the generic-pair derivation
-   (ERROR-MESSAGES.md section 23) exists for. Two bracket pairs share the '['
+   exists for. Two bracket pairs share the '['
    kind — a plain '[' ']' and a compound '[|' '|]' — and nest in either order.
    The kind-based balance scan cannot tell them apart (it would pair a plain ']'
    with a '[|' opener and walk straight through an invisible '|]'); the exact

@@ -280,14 +280,14 @@ let base_symbol_name s =
 (* Is [s] a menhir-generated *wrapper* — a symbol to expand through its
    productions rather than name opaquely? The classification is STRUCTURAL, not
    nominal (the old test keyed on '(' alone, which cannot tell a stdlib wrapper
-   from a phantom-parameterized user rule like [function_type(in_type)] — see the
-   15c DONE note in ERROR-MESSAGES.md). Three ways to qualify:
+   from a phantom-parameterized user rule like [function_type(in_type)]). Three
+   ways to qualify:
 
    - an inlined anonymous rule ([__anonymous_*], possibly nested inside an
      instantiation) — always expanded, as before;
    - a parametric instantiation (name carries '(') whose body is *list-shaped*
      over its element: directly self-recursive ([list(X)], [nonempty_list(X)],
-     [semi_list(X)], [separated_nonempty_list(_,X)] and wax's own
+     [semi_list(X)], [separated_nonempty_list(_,X)] and a grammar's own
      [separated_nonempty_list_trailing(_,X)]), or a single production that IS a
      stdlib list wrapper ([loption(separated_…)]);
    - a parametric instantiation whose body is *option-shaped* ([ε | X]): an empty
@@ -649,9 +649,9 @@ let opener_char_of terminals name =
    Ambiguity: the nearest-following-closer-of-the-same-kind rule gives each
    opener occurrence exactly one mate per production, so a production is never
    ambiguous; an opener whose mate differs ACROSS productions simply contributes
-   several entries to the (set-valued) table, which is fine. In wax/wasm/calc no
-   opener reaches two different closers, so every mate set is a clean bracket
-   family. *)
+   several entries to the (set-valued) table, which is fine. In the grammars
+   tested, no opener reaches two different closers, so every mate set is a clean
+   bracket family. *)
 let mates_of grammar terminals closers =
   let tbl = Hashtbl.create 16 in
   let add closer opener =
@@ -1372,7 +1372,7 @@ let generate_message cfg closers mates grammar terminals ~comments ~overrides
      whereas the innermost names the construct at the edit point but pairs it with
      a FOLLOW token from a wider frame ("the parameters without bindings are
      complete, expecting 'end'" — incoherent, and jargon). Outermost also keeps
-     the step-4 "block type is complete" messages and avoids the raw-grammar
+     the "block type is complete" hedge messages and avoids the raw-grammar
      "plaininstr"/"parameters without bindings" subjects the innermost surfaced on
      the deep cascades. *)
   let message_body, subject_marker =
@@ -1827,7 +1827,7 @@ let output_stats cfg gram auto results =
      order, giving how many entries had the class collapse fire in their computed
      expected list (>=2 members co-occurring). This counts the collapse
      computation, not the shown text — an override or an over-cap overflow may
-     supersede the phrase (as every wax operator state currently does), yet the
+     supersede the phrase (as an operator state can), yet the
      class is live while its members still co-occur. N=0 is legitimate (a class
      waiting for a qualifying state) but now visible, so a class that goes quiet
      after a grammar change shows up as a golden diff. A grammar with no classes
@@ -2218,13 +2218,13 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
    THE NO-OVERRIDES TRIAL CONSTRAINT (important — read before changing this).
    A trial that changes the annotation list can merge/renumber automaton states,
    which makes [menhir --list-errors] re-pick its representative sentence per
-   state. The step-5 [.overrides] files are keyed by sentence, so a re-picked
+   state. The [.overrides] files are keyed by sentence, so a re-picked
    sentence can fail the generator's hard rot check ([check_override_rot]) and
    kill the trial. Therefore EVERY generation here runs WITHOUT overrides
    ([~overrides:StringMap.empty]), baseline and trials alike; the ~52
    would-be-overridden states then sit uniformly on both sides of every
    comparison and the deltas stay meaningful. Consequence: the "over 5" fallback
-   counter shows the raw pre-override figure (18 wasm / 34 wax), not the
+   counter shows the raw pre-override figure, not the
    post-override 0 — expected and correct for A/B deltas.
 
    THE PIPELINE PER TRIAL: [menhir COPY.mly --list-errors] and [menhir COPY.mly
@@ -2333,7 +2333,7 @@ let reducible_nonterminals cmly_file =
   !s
 
 (* The current [%on_error_reduce] list, and the grammar with that list replaced.
-   One line per grammar (both wax and wasm carry exactly one). *)
+   One line per grammar (each grammar carries exactly one). *)
 let tune_oer_prefix = "%on_error_reduce "
 
 let tune_current_annotations src =

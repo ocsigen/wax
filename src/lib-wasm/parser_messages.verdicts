@@ -1,4 +1,4 @@
-# wasm.verdicts — the WASM %on_error_reduce keep/remove log from the annotation
+# parser_messages.verdicts — the WASM %on_error_reduce keep/remove log from the annotation
 # prune audit, replayed by `stele tune calibrate`.
 #
 #   keep NT     — NT is currently annotated; removing it must score non-improving

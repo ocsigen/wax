@@ -112,8 +112,8 @@ module R = Parser_error_runtime.Make (Parser.MenhirInterpreter)
 let message, labels = R.resolve ~source ~env (Parser_messages.message state)
 ```
 
-`labels` carries a position and text for each marker. Rendered the way the
-wax CLI does it, input A now reads:
+`labels` carries a position and text for each marker. Rendered by a
+diagnostic front-end, input A now reads:
 
 ```
 Error: Expecting ')', '*', or '+'.
