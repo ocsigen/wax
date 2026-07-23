@@ -22,5 +22,8 @@ test/cram-tests/parse-error-messages.t/limits.wax
 test/cram-tests/parse-error-messages.t/nested-brace.wax
 test/cram-tests/parse-error-messages.t/onclause.wax
 test/cram-tests/parse-error-messages.t/struct-type.wax
+test/cram-tests/parse-error-messages.t/subject-hint.wax
+test/cram-tests/parse-error-messages.t/subject-multiline.wax
+test/cram-tests/parse-error-messages.t/subject.wax
 test/cram-tests/unicode-identifier.t/bad.wax
 test/cram-tests/wax-conditional.t/bad.wax

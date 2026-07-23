@@ -38,39 +38,78 @@ module Make (E : ENGINE) = struct
         if len > 2 && line.[0] = '<' then
           try
             let i = String.index line '>' in
-            let depth = int_of_string (String.sub line 1 (i - 1)) in
+            let tag = String.sub line 1 (i - 1) in
             let msg = String.trim (String.sub line (i + 1) (len - i - 1)) in
+            (* Two marker kinds share the [<…>text] shape. A bare number [<N>]
+               is a delimiter hint: underline the single opening delimiter of
+               the construct at stack cell [N]. A caret-tagged number [<^N>] is
+               the *subject* of a hedge ("Assuming that the X is complete, …"):
+               underline the whole construct that cell [N] produced. A consumer
+               that only understands [<N>] fails [int_of_string "^N"] and leaves
+               the line inline in the message — graceful degradation. *)
+            let is_subject = String.length tag > 0 && tag.[0] = '^' in
+            let depth =
+              int_of_string
+                (if is_subject then String.sub tag 1 (String.length tag - 1)
+                 else tag)
+            in
             match E.get (depth - 1) env with
             | Some el ->
-                (* This hint points at a single opening delimiter, so underline
-                   one character. The delimiter is normally the cell's start —
-                   a compound opener ([(then]/[(param]/…) reports the '(' as its
-                   start — but a spurious reduction can surface a plain token
-                   (e.g. ELEM) sitting just past the '('; in that case walk the
-                   source back over blanks to the delimiter. *)
-                let pos1, _pos2 = E.positions el in
-                let cnum = pos1.Lexing.pos_cnum in
-                let is_delim c = c = '(' || c = '[' || c = '{' in
-                let blank c = c = ' ' || c = '\t' in
-                let dcnum =
-                  if cnum < String.length source && is_delim source.[cnum] then
-                    cnum
+                let pos1, pos2 = E.positions el in
+                if is_subject then
+                  if
+                    (* The subject label spans the construct's true start..end. An
+                     empty (epsilon) reduction — "the exports are complete" with
+                     zero exports assumed complete — leaves a zero-width span;
+                     underlining nothing is noise, so drop the label and let the
+                     hedge sentence stand on its own. A multi-line construct is
+                     clamped to its first line (start..end-of-line): the
+                     full-height underline the region renderer would otherwise
+                     draw across every line is heavy, and the first line already
+                     identifies the construct. *)
+                    pos1.Lexing.pos_cnum >= pos2.Lexing.pos_cnum
+                  then ()
                   else
-                    let rec back i =
-                      if i < 0 || not (blank source.[i]) then
-                        if i >= 0 && is_delim source.[i] then i else cnum
-                      else back (i - 1)
+                    let loc_end =
+                      if pos1.Lexing.pos_lnum = pos2.Lexing.pos_lnum then pos2
+                      else
+                        let eol =
+                          try String.index_from source pos1.Lexing.pos_cnum '\n'
+                          with Not_found -> String.length source
+                        in
+                        { pos1 with Lexing.pos_cnum = eol }
                     in
-                    back (cnum - 1)
-                in
-                let start = { pos1 with Lexing.pos_cnum = dcnum } in
-                related :=
-                  {
-                    loc_start = start;
-                    loc_end = { start with Lexing.pos_cnum = dcnum + 1 };
-                    text = msg;
-                  }
-                  :: !related
+                    related :=
+                      { loc_start = pos1; loc_end; text = msg } :: !related
+                else
+                  (* This hint points at a single opening delimiter, so underline
+                     one character. The delimiter is normally the cell's start —
+                     a compound opener ([(then]/[(param]/…) reports the '(' as its
+                     start — but a spurious reduction can surface a plain token
+                     (e.g. ELEM) sitting just past the '('; in that case walk the
+                     source back over blanks to the delimiter. *)
+                  let cnum = pos1.Lexing.pos_cnum in
+                  let is_delim c = c = '(' || c = '[' || c = '{' in
+                  let blank c = c = ' ' || c = '\t' in
+                  let dcnum =
+                    if cnum < String.length source && is_delim source.[cnum]
+                    then cnum
+                    else
+                      let rec back i =
+                        if i < 0 || not (blank source.[i]) then
+                          if i >= 0 && is_delim source.[i] then i else cnum
+                        else back (i - 1)
+                      in
+                      back (cnum - 1)
+                  in
+                  let start = { pos1 with Lexing.pos_cnum = dcnum } in
+                  related :=
+                    {
+                      loc_start = start;
+                      loc_end = { start with Lexing.pos_cnum = dcnum + 1 };
+                      text = msg;
+                    }
+                    :: !related
             | None -> main_message := line :: !main_message
           with _ -> main_message := line :: !main_message
         else main_message := line :: !main_message)

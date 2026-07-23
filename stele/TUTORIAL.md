@@ -123,6 +123,12 @@ Error: Expecting ')', '*', or '+'.
   ·   ^ This '(' opens the enclosing construct.
 ```
 
+The same helper resolves a second marker kind, `<^N>`, that the next stage
+introduces: where `<N>` underlines one opening delimiter, `<^N>` underlines a
+whole construct's span. A resolver that only knows `<N>` leaves a `<^N>` line
+inline (the `^`-tagged depth fails the integer parse), so the vocabulary
+extends compatibly.
+
 See "The runtime helper" in the README for the full signature.
 
 ## Stage 5: fold completed lists
@@ -140,12 +146,21 @@ input B says:
 
 ```
 Assuming that the stmts are complete, expecting '}'.
+<^1>these stmts
 <2>This '{' opens the enclosing construct.
 ```
 
 The hedge ("Assuming that ...") is generated from menhir's own record of
 the fold, so it never claims more than the parser did. One blemish: "the
 stmts". Stage 7 fixes it.
+
+The `<^1>` line is the **hedge subject**: the runtime underlines the construct
+the hedge assumes complete (the finished statement list), stack cell 1 being the
+top of the post-reduction stack — the outermost fold's goto pushed it there. It
+resolves to that cell's full span, `these stmts` labelling it in the margin. An
+*empty* fold (a completed nullable list with no elements) has a zero-width span,
+so the runtime drops the label and the plain hedge stands alone. The census
+normalizes its depth (`<^_>`) just like the `<N>` hint's.
 
 ## Stage 6: pin the output with goldens
 

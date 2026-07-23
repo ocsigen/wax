@@ -12,6 +12,7 @@ A block-shaped construct is "a block", not "a braced block" / "a blockinstr":
   1 │ #[export = "f"]
   2 │ fn f() -> i32 { if 1 5 }
     ·                      ^
+    ·                    ^ this condition expression
   3 │ 
   [128]
 
@@ -54,6 +55,7 @@ underlines just the '(' — not the whole `(elem` region:
   2 │   (func $f)
   3 │   (table funcref (elem $f (nop))))
     ·                            ^^^
+    ·                        ^^ this list of indices
     ·                  ^ This '(' opens the enclosing construct.
   4 │ 
   [128]
@@ -90,6 +92,12 @@ produce, exercising the full chain — the message text, the `<N>` depth-marker
 resolution against the live parser stack, and the delimiter underline position.
 Each case names the shape it pins and the step (1–5) that introduced it.
 
+Every hedged case below also carries a second underline — `^^^ this X` — under
+the construct the hedge assumes complete (ERROR-MESSAGES.md step 20): the
+generator emits a `<^N>` subject marker beside the `<N>` delimiter hint, and the
+runtime resolves it to the construct's full span. Section 20 at the end pins that
+underline on its own.
+
 --- Delimiter hints: caret lands on the innermost open delimiter (step 1a/1d) ---
 
 The `<N>` marker is the riskiest link: the generator computes a stack-cell depth
@@ -119,6 +127,7 @@ function body's '{'. The hedge is the %on_error_reduce statement-list reduction
   2 │   do {
     ·      ^ This '{' opens the enclosing construct.
   3 │     nop;
+    ·     ^^^^ this statement list
   4 │     @
     ·     ^
   5 │   }
@@ -134,6 +143,7 @@ step-7 census's largest shape family):
    ──➤  struct-type.wax:1:19
   1 │ type t = { a: i32 b: i32 };
     ·                   ^
+    ·            ^^^^^^ this structure type
     ·          ^ This '{' opens the enclosing construct.
   2 │ 
   [128]
@@ -146,6 +156,7 @@ completing `)` / `}` / `]` coverage:
    ──➤  array.wax:1:27
   1 │ fn f() { let a = [1, 2, 3 }; }
     ·                           ^
+    ·                   ^^^^^^^ this array body
     ·                  ^ This '[' opens the enclosing construct.
   2 │ 
   [128]
@@ -179,6 +190,7 @@ hint back at its `(block` opener:
    ──➤  block-type.wat:1:35
   1 │ (module (func (block (result i32) end extra)))
     ·                                   ^^^
+    ·                     ^^^^^^^^^^^^^ this block type
     ·               ^ This '(' opens the enclosing construct.
   2 │ 
   [128]
@@ -298,4 +310,74 @@ override:
     ·       ^
   3 │ }
   4 │ 
+  [128]
+
+--- Section 20: underline the construct a hedge assumes complete ---
+
+When a message hedges ("Assuming that the X is complete, …"), the completed
+construct X is the top cell of the post-reduction stack (the outermost spurious
+reduction's goto). The generator emits a `<^1>` subject marker; the runtime
+underlines that cell's full span with a deictic `this X` / `these X` label. The
+underline is the deixis, so the sentence keeps its plain "the X" phrasing. Here
+the whole `let` statement `let x = 1 + 2 * 3` is underlined — a subject with no
+delimiter hint (an `if`/`let` head opens no bracket):
+
+  $ wax check subject.wax
+  Error: Assuming that the statement is complete, expecting ';'.
+   ──➤  subject.wax:1:28
+  1 │ fn f() { let x = 1 + 2 * 3 nop; }
+    ·                            ^^^
+    ·          ^^^^^^^^^^^^^^^^^ this statement
+  2 │ 
+  [128]
+
+Both markers on one message: the completed argument list `1, 2` is underlined
+(subject), and the `(` that opens it is pointed at (delimiter hint). The labels
+are ordered subject-first, opener-second, matching the generator's emission
+order:
+
+  $ wax check subject-hint.wax
+  Error: Assuming that the argument list is complete, expecting ')'.
+   ──➤  subject-hint.wax:1:17
+  1 │ fn f() { g(1, 2 3) }
+    ·                 ^
+    ·            ^^^^ this argument list
+    ·           ^ This '(' opens the enclosing construct.
+  2 │ 
+  [128]
+
+A subject spanning several source lines is clamped to its first line: the
+completed statement list is `nop; nop;` across lines 2–3, but the underline is
+drawn only on line 2 (start..end-of-line), avoiding a full-height caret block
+under every line the construct covers:
+
+  $ wax check subject-multiline.wax
+  Error: Assuming that the statement list is complete, expecting '}'.
+   ──➤  subject-multiline.wax:4:3
+  1 │ fn f() {
+    ·        ^ This '{' opens the enclosing construct.
+  2 │   nop;
+    ·   ^^^^ this statement list
+  3 │   nop;
+  4 │   @
+    ·   ^
+  5 │ }
+  6 │ 
+  [128]
+
+The epsilon subject: `(global $g)` reduces an *empty* `exports` list, so the
+"Assuming that the exports are complete" subject cell has a zero-width span.
+There is nothing to underline, so the runtime drops the subject label (the
+`<^1>` marker resolves to a skip) and the plain hedge stands alone — no dangling
+`this X` deixis. (This is the same fixture as the step-4 epsilon case above; it
+gains no subject underline.)
+
+  $ wax check global.wat
+  Error:
+    Assuming that the exports are complete, expecting a global type, or an
+    inline import.
+   ──➤  global.wat:1:19
+  1 │ (module (global $g))
+    ·                   ^
+  2 │ 
   [128]

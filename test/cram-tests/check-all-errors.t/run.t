@@ -109,6 +109,7 @@ same error state also arises for an invalid token inside an already-closed block
   1 │ fn f() -> i32 {
     ·               ^ This '{' opens the enclosing construct.
   2 │     let x = 1;
+    ·     ^^^^^^^^^^ this statement list
   3 │ 
       ^
   Help: insert '}'

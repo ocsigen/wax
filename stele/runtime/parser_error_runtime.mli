@@ -1,15 +1,25 @@
-(** Runtime resolution of the [<N>] delimiter markers stele's generated messages
+(** Runtime resolution of the [<N>] / [<^N>] markers stele's generated messages
     carry.
 
-    A stele-generated message may embed a marker line
-    [<N>This '(' opens the enclosing construct.], where [N] is a 1-based index
-    into the parser's stack suffix at the error. Resolving it needs the running
-    parser's environment, so the generator (a build-time tool) cannot do it —
-    the adopter's error handler must, at the point it holds the incremental
-    engine's [env]. This library is that resolution, extracted once so every
-    adopter shares the subtle half (the
-    walk-back-over-blanks-to-the-opening-delimiter refinement in particular)
-    rather than reimplementing it.
+    A stele-generated message may embed marker lines of two kinds, both anchored
+    at a 1-based stack cell index [N] resolved against the running parser:
+    - a {b delimiter hint} [<N>This '(' opens the enclosing construct.] —
+      underlines the single opening delimiter of the construct at cell [N];
+    - a {b hedge subject} [<^N>this expression] — underlines the {e whole}
+      construct that cell [N] produced, the one a hedge ("Assuming that the X is
+      complete, …") assumes finished.
+
+    Resolving either needs the running parser's environment, so the generator (a
+    build-time tool) cannot do it — the adopter's error handler must, at the
+    point it holds the incremental engine's [env]. This library is that
+    resolution, extracted once so every adopter shares the subtle half (the
+    walk-back-over-blanks-to-the-opening-delimiter refinement, the
+    epsilon/multi-line subject handling) rather than reimplementing it.
+
+    A consumer reading an older generator's output sees only [<N>] markers; a
+    generator carrying [<^N>] markers stays readable to a resolver that predates
+    them (the [^]-tagged depth fails the plain integer parse and the line is
+    left inline), so the marker vocabulary extends compatibly.
 
     It depends on [menhirLib] and the standard library only, so it compiles
     under [wasm_of_ocaml] / [js_of_ocaml] as well as native. *)
@@ -38,17 +48,26 @@ module Make (E : ENGINE) : sig
     loc_end : Lexing.position;
     text : string;
   }
-  (** A resolved delimiter marker: a one-character span at the opening
-      delimiter, and the marker's own label text (the ['<N>'] and its bounds
-      removed). *)
+  (** A resolved marker and its own label text (the marker prefix and its bounds
+      removed): a delimiter hint gives a one-character span at the opening
+      delimiter, a hedge subject the whole construct's span (clamped to its
+      first line when it crosses several). *)
 
   val resolve : source:string -> env:'a E.env -> string -> string * label list
   (** [resolve ~source ~env message] post-processes a stele-generated [message]
       against the error environment [env] and the whole source text [source]: it
-      expands any Menhir [$i] source-slice references, then turns each [<N>…]
-      marker line into a {!label} anchored at the [N]-th stack cell's opening
-      delimiter (walking back over blanks to the [(] / [\[] / [{] when the
-      cell's own start is not itself the delimiter). Returns the main message
-      (marker lines removed) and the located labels in source order. A marker
-      whose depth exceeds the live stack is left inline in the main message. *)
+      expands any Menhir [$i] source-slice references, then turns each marker
+      line into a {!label}:
+      - [<N>…] anchors at the [N]-th stack cell's opening delimiter (walking
+        back over blanks to the [(] / [\[] / [{] when the cell's own start is
+        not itself the delimiter);
+      - [<^N>…] anchors across the [N]-th stack cell's full span, clamped to its
+        first line for a multi-line construct, and {e dropped} when that span is
+        zero-width (an epsilon reduction — no construct to point at).
+
+      Returns the main message (marker lines removed) and the located labels in
+      the order the markers appear (subject before delimiter hint, matching the
+      generator's emission). A marker whose depth exceeds the live stack, or
+      whose depth field it does not recognise, is left inline in the main
+      message. *)
 end

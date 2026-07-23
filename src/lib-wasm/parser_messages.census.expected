@@ -1,57 +1,93 @@
     1x Assuming that the 64-bit floats are complete, expecting ')'.
+       <^_>these 64-bit floats
        <_>This '(' opens the enclosing construct.
     1x Assuming that the block type is complete, expecting '('.
+       <^_>this block type
     2x Assuming that the block type is complete, expecting ')', or instructions.
+       <^_>this block type
        <_>This '(' opens the enclosing construct.
     1x Assuming that the block type is complete, expecting 'else', 'end', or instructions.
+       <^_>this block type
     2x Assuming that the block type is complete, expecting 'end', or instructions.
+       <^_>this block type
     1x Assuming that the block type is complete, expecting a folded instruction, or a folded then.
+       <^_>this block type
     1x Assuming that the block type is complete, expecting instructions, or legacy catches.
+       <^_>this block type
     1x Assuming that the catches are complete, expecting ')', or instructions.
+       <^_>these catches
        <_>This '(' opens the enclosing construct.
     1x Assuming that the catches are complete, expecting 'end', or instructions.
+       <^_>these catches
     2x Assuming that the cmds are complete, expecting ')'.
+       <^_>these cmds
        <_>This '(' opens the enclosing construct.
     4x Assuming that the element list is complete, expecting ')'.
+       <^_>this element list
        <_>This '(' opens the enclosing construct.
     2x Assuming that the elemexprs are complete, expecting ')'.
+       <^_>these elemexprs
        <_>This '(' opens the enclosing construct.
     1x Assuming that the exports are complete, expecting '(', a memory type, a page-size clause, an address type, or an inline import.
+       <^_>these exports
     1x Assuming that the exports are complete, expecting ')', a local declaration, a type use, an inline import, or instructions.
+       <^_>these exports
        <_>This '(' opens the enclosing construct.
     1x Assuming that the exports are complete, expecting ')', a type use, or an inline import.
+       <^_>these exports
        <_>This '(' opens the enclosing construct.
     1x Assuming that the exports are complete, expecting a global type, or an inline import.
+       <^_>these exports
     1x Assuming that the exports are complete, expecting a reference type, a table type, an address type, or an inline import.
+       <^_>these exports
     4x Assuming that the expression is complete, expecting ')'.
+       <^_>this expression
        <_>This '(' opens the enclosing construct.
     1x Assuming that the float or NaNs are complete, expecting ')'.
+       <^_>these float or NaNs
        <_>This '(' opens the enclosing construct.
    11x Assuming that the instructions are complete, expecting ')'.
+       <^_>these instructions
        <_>This '(' opens the enclosing construct.
     1x Assuming that the instructions are complete, expecting 'else', or 'end'.
+       <^_>these instructions
     5x Assuming that the instructions are complete, expecting 'end'.
+       <^_>these instructions
     2x Assuming that the instructions are complete, expecting legacy catches.
+       <^_>these instructions
     1x Assuming that the limits are complete, expecting ')', 'shared', or a page-size clause.
+       <^_>these limits
     1x Assuming that the limits are complete, expecting a reference type.
+       <^_>these limits
     2x Assuming that the list of indices is complete, expecting ')'.
+       <^_>this list of indices
        <_>This '(' opens the enclosing construct.
     1x Assuming that the locals are complete, expecting ')', or instructions.
+       <^_>these locals
        <_>This '(' opens the enclosing construct.
     4x Assuming that the module fields are complete, expecting ')'.
+       <^_>these module fields
        <_>This '(' opens the enclosing construct.
     1x Assuming that the module fields are complete, expecting end of file.
+       <^_>these module fields
     1x Assuming that the parameters and results are complete, expecting ')'.
+       <^_>these parameters and results
        <_>This '(' opens the enclosing construct.
     1x Assuming that the plain instruction is complete, expecting ')', or a folded instruction.
+       <^_>this plain instruction
        <_>This '(' opens the enclosing construct.
     2x Assuming that the plain instruction is complete, expecting instructions.
+       <^_>this plain instruction
     1x Assuming that the result patterns are complete, expecting ')'.
+       <^_>these result patterns
        <_>This '(' opens the enclosing construct.
     1x Assuming that the script is complete, expecting ')'.
+       <^_>this script
        <_>This '(' opens the enclosing construct.
     1x Assuming that the script is complete, expecting end of file.
+       <^_>this script
     7x Assuming that the type use is complete, expecting ')'.
+       <^_>this type use
        <_>This '(' opens the enclosing construct.
     1x Expecting '(', ')', a data elem, an identifier ('$...'), or an offset.
        <_>This '(' opens the enclosing construct.

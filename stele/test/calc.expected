@@ -30,6 +30,7 @@ Expecting 'eof'.
 prog: LBRACE STAR
 
 Assuming that the statements are complete, expecting '}'.
+<^1>these statements
 <2>This '{' opens the enclosing construct.
 
 prog: STAR

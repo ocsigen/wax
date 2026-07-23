@@ -5,6 +5,7 @@ Expecting a dummy ctx.
 parse: CONST IDENT COLON IDENT EQUAL CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ';'.
+<^1>this constant expression
 
 parse: CONST IDENT COLON IDENT EQUAL UNREACHABLE
 
@@ -65,6 +66,7 @@ Expecting 'descriptor', or an identifier.
 parse: CONST IDENT EQUAL CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ';'.
+<^1>this constant expression
 
 parse: CONST IDENT EQUAL CHAR EQUALEQUAL CHAR EQUAL
 
@@ -129,6 +131,7 @@ Expecting a reference type.
 parse: CONST IDENT EQUAL CHAR LBRACKET CHAR EQUAL
 
 Assuming that the index expression is complete, expecting ']'.
+<^1>this index expression
 <2>This '[' opens the enclosing construct.
 
 parse: CONST IDENT EQUAL CHAR LBRACKET CHAR RBRACKET EQUAL UNREACHABLE
@@ -166,6 +169,7 @@ Expecting an expression.
 parse: CONST IDENT EQUAL CHAR LPAREN CHAR SHARP
 
 Assuming that the argument list is complete, expecting ')'.
+<^1>this argument list
 <2>This '(' opens the enclosing construct.
 
 parse: CONST IDENT EQUAL CHAR LPAREN IDENT COLON UNREACHABLE
@@ -265,6 +269,7 @@ Expecting an expression.
 parse: CONST IDENT EQUAL CHAR QUESTIONMARK CHAR EQUAL
 
 Assuming that the then branch is complete, expecting ':'.
+<^1>this then branch
 
 parse: CONST IDENT EQUAL CHAR QUESTIONMARK UNREACHABLE
 
@@ -325,6 +330,7 @@ Expecting an identifier.
 parse: DATA IDENT AT IDENT LBRACKET CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ']'.
+<^1>this constant expression
 <2>This '[' opens the enclosing construct.
 
 parse: DATA IDENT AT IDENT LBRACKET CHAR RBRACKET EQUAL WHILE
@@ -412,11 +418,13 @@ Expecting a data name.
 parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ']'.
+<^1>this constant expression
 <2>This '[' opens the enclosing construct.
 
 parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL LBRACKET CHAR SHARP
 
 Assuming that the expression list is complete, expecting ']'.
+<^1>this expression list
 <2>This '[' opens the enclosing construct.
 
 parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR RBRACKET EQUAL LBRACKET RBRACKET WHILE
@@ -451,6 +459,7 @@ Expecting an identifier.
 parse: ELEM IDENT COLON AMPERSAND CONT EQUAL LBRACKET CHAR SHARP
 
 Assuming that the expression list is complete, expecting ']'.
+<^1>this expression list
 <2>This '[' opens the enclosing construct.
 
 parse: ELEM IDENT COLON AMPERSAND CONT EQUAL LBRACKET RBRACKET WHILE
@@ -493,15 +502,18 @@ Expecting a type name.
 parse: FN IDENT COLON IDENT LBRACE ELSE
 
 Assuming that the statement list is complete, expecting '}'.
+<^1>this statement list
 <2>This '{' opens the enclosing construct.
 
 parse: FN IDENT COLON IDENT LPAREN RPAREN SEMI
 
 Assuming that the optional function type is complete, expecting ''', or '{'.
+<^1>this optional function type
 
 parse: FN IDENT COLON IDENT QUOTE AS COLON LBRACE ELSE
 
 Assuming that the statement list is complete, expecting '}'.
+<^1>this statement list
 <2>This '{' opens the enclosing construct.
 
 parse: FN IDENT COLON IDENT QUOTE AS COLON WHILE
@@ -535,6 +547,7 @@ Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on',
 parse: FN IDENT LBRACE BECOME CHAR LPAREN CHAR SHARP
 
 Assuming that the argument list is complete, expecting ')'.
+<^1>this argument list
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE BECOME CHAR LPAREN RPAREN WHILE
@@ -710,6 +723,7 @@ Expecting '['.
 parse: FN IDENT LBRACE CHAR EQUAL
 
 Assuming that the statement is complete, expecting ';'.
+<^1>this statement
 
 parse: FN IDENT LBRACE DISPATCH CHAR ELSE
 
@@ -776,6 +790,7 @@ Expecting a block, or a block type.
 parse: FN IDENT LBRACE ELSE
 
 Assuming that the statement list is complete, expecting '}'.
+<^1>this statement list
 <2>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE IDENT AMPERSANDEQUAL UNREACHABLE
@@ -789,6 +804,7 @@ Expecting an expression.
 parse: FN IDENT LBRACE IF CHAR EQUAL
 
 Assuming that the condition expression is complete, expecting '=>', or a block.
+<^1>this condition expression
 
 parse: FN IDENT LBRACE IF CHAR FATARROW IDENT WHILE
 
@@ -819,6 +835,7 @@ Expecting '}'.
 parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE IDENT IDENT
 
 Assuming that the structure is complete, expecting '}'.
+<^1>this structure
 <4>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE WHILE
@@ -846,6 +863,7 @@ Expecting '}'.
 parse: FN IDENT LBRACE LBRACE IDENT COLON CHAR COLON
 
 Assuming that the structure field is complete, expecting ',', or '}'.
+<^1>this structure field
 <2>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE IDENT COLON UNREACHABLE
@@ -855,6 +873,7 @@ Expecting an expression.
 parse: FN IDENT LBRACE LBRACE IDENT COMMA IDENT IDENT
 
 Assuming that the structure is complete, expecting '}'.
+<^1>this structure
 <4>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE IDENT COMMA WHILE
@@ -870,6 +889,7 @@ Expecting '}'.
 parse: FN IDENT LBRACE LBRACE IDENT PIPE IDENT IDENT
 
 Assuming that the structure is complete, expecting '}'.
+<^1>this structure
 <4>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACE IDENT PIPE WHILE
@@ -910,11 +930,13 @@ Expecting an expression.
 parse: FN IDENT LBRACE LBRACKET IDENT EQUAL
 
 Assuming that the array body is complete, expecting ']'.
+<^1>this array body
 <2>This '[' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACKET IDENT PIPE IDENT EQUAL
 
 Assuming that the array body is complete, expecting ']'.
+<^1>this array body
 <4>This '[' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACKET IDENT PIPE UNREACHABLE
@@ -950,6 +972,7 @@ Expecting a value type.
 parse: FN IDENT LBRACE LET LPAREN IDENT COMMA COMMA
 
 Assuming that the let pattern is complete, expecting ')'.
+<^1>this let pattern
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LET LPAREN IDENT WHILE
@@ -980,6 +1003,7 @@ Expecting a block, or a block type.
 parse: FN IDENT LBRACE LPAREN CHAR COMMA CHAR SHARP
 
 Assuming that the expression list is complete, expecting ')'.
+<^1>this expression list
 <4>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LPAREN CHAR COMMA UNREACHABLE
@@ -990,6 +1014,7 @@ Expecting ')', or an expression.
 parse: FN IDENT LBRACE LPAREN CHAR SEMI
 
 Assuming that the parenthesized expression is complete, expecting ')'.
+<^1>this parenthesized expression
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LPAREN UNREACHABLE
@@ -1064,6 +1089,7 @@ Expecting a block, or a block type.
 parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR EQUAL
 
 Assuming that the condition expression is complete, expecting '=>', or a block.
+<^1>this condition expression
 
 parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR FATARROW IDENT WHILE
 
@@ -1149,6 +1175,7 @@ Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN CHAR EQUAL
 
 Assuming that the statement is complete, expecting ')'.
+<^1>this statement
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN IDENT RPAREN WHILE
@@ -1166,6 +1193,7 @@ Expecting '('.
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR EQUAL
 
 Assuming that the condition expression is complete, expecting ':', or a block.
+<^1>this condition expression
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE UNREACHABLE
 
@@ -1191,6 +1219,7 @@ Expecting ']'.
 parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN IDENT COMMA
 
 Assuming that the condition is complete, expecting ')'.
+<^1>this condition
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN IDENT RPAREN RBRACKET WHILE
@@ -1229,6 +1258,7 @@ Expecting '['.
 parse: FN IDENT LBRACE SUSPEND IDENT LPAREN CHAR SHARP
 
 Assuming that the expression list is complete, expecting ')'.
+<^1>this expression list
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE SUSPEND IDENT LPAREN UNREACHABLE
@@ -1247,6 +1277,7 @@ Expecting a tag name.
 parse: FN IDENT LBRACE THROW IDENT LPAREN CHAR SHARP
 
 Assuming that the expression list is complete, expecting ')'.
+<^1>this expression list
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE THROW IDENT LPAREN UNREACHABLE
@@ -1400,6 +1431,7 @@ Expecting a block.
 parse: FN IDENT LBRACE TRY_LEGACY LBRACE ELSE
 
 Assuming that the statement list is complete, expecting '}'.
+<^1>this statement list
 <2>This '{' opens the enclosing construct.
 
 parse: FN IDENT LBRACE TRY_LEGACY LBRACE RBRACE CATCH LBRACE IDENT FATARROW LBRACE RBRACE WHILE
@@ -1447,6 +1479,7 @@ Expecting 'catch'.
 parse: FN IDENT LBRACE TRY_LEGACY LPAREN IDENT WHILE
 
 Assuming that the parameter types are complete, expecting ')'.
+<^1>these parameter types
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE TRY_LEGACY LPAREN RPAREN ARROW WHILE
@@ -1485,6 +1518,7 @@ Expecting an expression.
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN CHAR EQUAL
 
 Assuming that the statement is complete, expecting ')'.
+<^1>this statement
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN DO LBRACE RBRACE ELSE
@@ -1506,6 +1540,7 @@ Expecting '('.
 parse: FN IDENT LBRACE WHILE CHAR EQUAL
 
 Assuming that the condition expression is complete, expecting ':', or a block.
+<^1>this condition expression
 
 parse: FN IDENT LBRACE WHILE UNREACHABLE
 
@@ -1518,6 +1553,7 @@ Expecting a value type.
 parse: FN IDENT LPAREN IDENT COMMA COMMA
 
 Assuming that the parameter list is complete, expecting ')'.
+<^1>this parameter list
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LPAREN IDENT WHILE
@@ -1527,6 +1563,7 @@ Expecting ')', ',', or ':'.
 parse: FN IDENT LPAREN RPAREN ARROW LPAREN IDENT WHILE
 
 Assuming that the result type is complete, expecting ')'.
+<^1>this result type
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LPAREN RPAREN ARROW LPAREN WHILE
@@ -1541,6 +1578,7 @@ Expecting a result type.
 parse: FN IDENT LPAREN RPAREN SEMI
 
 Assuming that the optional function type is complete, expecting ''', or '{'.
+<^1>this optional function type
 
 parse: FN IDENT LPAREN RPAREN WHILE
 
@@ -1554,6 +1592,7 @@ Expecting ')', or a function parameter.
 parse: FN IDENT QUOTE AS COLON LBRACE ELSE
 
 Assuming that the statement list is complete, expecting '}'.
+<^1>this statement list
 <2>This '{' opens the enclosing construct.
 
 parse: FN IDENT QUOTE AS COLON WHILE
@@ -1692,6 +1731,7 @@ Expecting an identifier.
 parse: IMPORT STRING WHILE
 
 Assuming that the attributes are complete, expecting an import declaration.
+<^1>these attributes
 
 parse: IMPORT WHILE
 
@@ -1700,6 +1740,7 @@ Expecting a string.
 parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ']'.
+<^1>this constant expression
 <2>This '[' opens the enclosing construct.
 
 parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR RBRACKET EQUAL WHILE
@@ -1832,6 +1873,7 @@ Expecting '{'.
 parse: SHARP BANG LBRACKET IDENT EQUAL CHAR EQUAL
 
 Assuming that the attribute expression is complete, expecting ']'.
+<^1>this attribute expression
 <4>This '[' opens the enclosing construct.
 
 parse: SHARP BANG LBRACKET IDENT EQUAL UNREACHABLE
@@ -1886,6 +1928,7 @@ Expecting ']'.
 parse: SHARP LBRACKET IDENT EQUAL CHAR EQUAL
 
 Assuming that the attribute expression is complete, expecting ']', or an attribute guard.
+<^1>this attribute expression
 <4>This '[' opens the enclosing construct.
 
 parse: SHARP LBRACKET IDENT EQUAL UNREACHABLE
@@ -1929,6 +1972,7 @@ Expecting a condition literal.
 parse: SHARP LBRACKET IF LPAREN IDENT COMMA
 
 Assuming that the condition is complete, expecting ')'.
+<^1>this condition
 <2>This '(' opens the enclosing construct.
 
 parse: SHARP LBRACKET IF LPAREN IDENT LPAREN IDENT BANGEQUAL STRING WHILE
@@ -1968,6 +2012,7 @@ Expecting '('.
 parse: SHARP LBRACKET IMPORT COMMA IF LPAREN IDENT COMMA
 
 Assuming that the condition is complete, expecting ')'.
+<^1>this condition
 <2>This '(' opens the enclosing construct.
 
 parse: SHARP LBRACKET IMPORT COMMA IF LPAREN IDENT RPAREN WHILE
@@ -1995,6 +2040,7 @@ Expecting ']'.
 parse: SHARP LBRACKET IMPORT EQUAL CHAR EQUAL
 
 Assuming that the attribute expression is complete, expecting ']', or an attribute guard.
+<^1>this attribute expression
 <4>This '[' opens the enclosing construct.
 
 parse: SHARP LBRACKET IMPORT EQUAL UNREACHABLE
@@ -2101,6 +2147,7 @@ Expecting a type name.
 parse: TAG IDENT LPAREN RPAREN QUOTE
 
 Assuming that the tag sig is complete, expecting ';'.
+<^1>this tag sig
 
 parse: TAG IDENT WHILE
 
@@ -2161,6 +2208,7 @@ Expecting a type name.
 parse: TYPE IDENT EQUAL FN LPAREN IDENT COMMA COMMA
 
 Assuming that the parameter list is complete, expecting ')'.
+<^1>this parameter list
 <2>This '(' opens the enclosing construct.
 
 parse: TYPE IDENT EQUAL FN LPAREN RPAREN ARROW WHILE
@@ -2183,6 +2231,7 @@ Expecting a function type.
 parse: TYPE IDENT EQUAL LBRACE DOTDOT COMMA IDENT COLON IDENT IDENT
 
 Assuming that the structure type is complete, expecting '}'.
+<^1>this structure type
 <4>This '{' opens the enclosing construct.
 
 parse: TYPE IDENT EQUAL LBRACE DOTDOT COMMA WHILE
@@ -2198,6 +2247,7 @@ Expecting ',', or '}'.
 parse: TYPE IDENT EQUAL LBRACE IDENT COLON IDENT IDENT
 
 Assuming that the structure type is complete, expecting '}'.
+<^1>this structure type
 <2>This '{' opens the enclosing construct.
 
 parse: TYPE IDENT EQUAL LBRACE IDENT COLON WHILE
@@ -2249,4 +2299,5 @@ Expecting a type name.
 parse: WHILE
 
 Assuming that the attributes are complete, expecting a definition.
+<^1>these attributes
 

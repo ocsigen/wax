@@ -10,6 +10,7 @@ Expecting '(', ')', a data elem, or an offset.
 parse: LPAREN DATA LPAREN BLOCK CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <5>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN BLOCK ID LPAREN_THEN
@@ -20,6 +21,7 @@ Expecting ')', a block type, or instructions.
 parse: LPAREN DATA LPAREN BLOCK LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the block type is complete, expecting ')', or instructions.
+<^1>this block type
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN BLOCK WAIT
@@ -62,15 +64,18 @@ Expecting a block type, a folded instruction, or a folded then.
 parse: LPAREN DATA LPAREN IF LPAREN_RESULT RPAREN LPAREN_CATCH_REF
 
 Assuming that the block type is complete, expecting a folded instruction, or a folded then.
+<^1>this block type
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN ELSE CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN LPAREN ELSE RPAREN WAIT
@@ -108,6 +113,7 @@ Expecting a block type, a folded instruction, a folded then, or a label.
 parse: LPAREN DATA LPAREN LOOP CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <5>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN LOOP ID LPAREN_THEN
@@ -118,6 +124,7 @@ Expecting ')', a block type, or instructions.
 parse: LPAREN DATA LPAREN LOOP LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the block type is complete, expecting ')', or instructions.
+<^1>this block type
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN LOOP WAIT
@@ -146,6 +153,7 @@ Expecting an index.
 parse: LPAREN DATA LPAREN OFFSET CALL_INDIRECT END
 
 Assuming that the expression is complete, expecting ')'.
+<^1>this expression
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN OFFSET WAIT
@@ -165,6 +173,7 @@ Expecting ')', or an int lit.
 parse: LPAREN DATA LPAREN SELECT MEM_ALIGN
 
 Assuming that the plain instruction is complete, expecting ')', or a folded instruction.
+<^1>this plain instruction
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY ID RPAREN
@@ -174,11 +183,13 @@ Expecting '(', or a block type.
 parse: LPAREN DATA LPAREN TRY LPAREN DO CALL_INDIRECT CATCH_ALL
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT NAT
@@ -197,6 +208,7 @@ Expecting an index.
 parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH_ALL RPAREN WAIT
@@ -226,6 +238,7 @@ Expecting 'do'.
 parse: LPAREN DATA LPAREN TRY LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the block type is complete, expecting '('.
+<^1>this block type
 
 parse: LPAREN DATA LPAREN TRY WAIT
 
@@ -234,6 +247,7 @@ Expecting '(', a block type, or a label.
 parse: LPAREN DATA LPAREN TRY_TABLE CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <6>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY_TABLE ID END
@@ -244,6 +258,7 @@ Expecting ')', a block type, catches, or instructions.
 parse: LPAREN DATA LPAREN TRY_TABLE LPAREN_RESULT RPAREN END
 
 Assuming that the catches are complete, expecting ')', or instructions.
+<^1>these catches
 <5>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY_TABLE WAIT
@@ -428,6 +443,7 @@ Expecting '(', ')', a data elem, an identifier ('$...'), or an offset.
 parse: LPAREN ELEM ANYREF LPAREN ITEM CALL_INDIRECT END
 
 Assuming that the expression is complete, expecting ')'.
+<^1>this expression
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN ELEM ANYREF LPAREN ITEM WAIT
@@ -442,11 +458,13 @@ Expecting 'item', or an instruction ('block', 'loop', 'if', 'try', 'try_table', 
 parse: LPAREN ELEM ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
+<^1>this element list
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN ELEM DECLARE ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
+<^1>this element list
 <5>This '(' opens the enclosing construct.
 
 parse: LPAREN ELEM DECLARE WAIT
@@ -490,6 +508,7 @@ Expecting 'offset', or an instruction ('block', 'loop', 'if', 'try', 'try_table'
 parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
+<^1>this element list
 <9>This '(' opens the enclosing construct.
 
 parse: LPAREN ELEM LPAREN TABLE NAT RPAREN STRING_ANNOT RPAREN WAIT
@@ -511,6 +530,7 @@ Expecting 'table', 'offset', 'ref', or an instruction ('block', 'loop', 'if', 't
 parse: LPAREN ELEM STRING_ANNOT RPAREN ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
+<^1>this element list
 <5>This '(' opens the enclosing construct.
 
 parse: LPAREN ELEM STRING_ANNOT RPAREN WAIT
@@ -593,6 +613,7 @@ Expecting an index.
 parse: LPAREN FUNC BLOCK CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting 'end'.
+<^1>these instructions
 
 parse: LPAREN FUNC BLOCK END WAIT
 
@@ -605,6 +626,7 @@ Expecting 'end', a block type, or instructions.
 parse: LPAREN FUNC BLOCK LPAREN_RESULT RPAREN RPAREN
 
 Assuming that the block type is complete, expecting 'end', or instructions.
+<^1>this block type
 
 parse: LPAREN FUNC BLOCK WAIT
 
@@ -617,6 +639,7 @@ Expecting an index.
 parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN SELECT MEM_ALIGN
 
 Assuming that the plain instruction is complete, expecting instructions.
+<^1>this plain instruction
 
 parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN STRING_ANNOT RPAREN WAIT
 
@@ -710,6 +733,7 @@ Expecting an index.
 parse: LPAREN FUNC CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <7>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC CALL_INDIRECT NAT NAT
@@ -780,15 +804,18 @@ Expecting a 64-bit signed integer.
 parse: LPAREN FUNC ID WAIT
 
 Assuming that the exports are complete, expecting ')', a local declaration, a type use, an inline import, or instructions.
+<^1>these exports
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC IF CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting 'else', or 'end'.
+<^1>these instructions
 
 parse: LPAREN FUNC IF ELSE CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting 'end'.
+<^1>these instructions
 
 parse: LPAREN FUNC IF ELSE END WAIT
 
@@ -813,6 +840,7 @@ Expecting 'else', 'end', a block type, or instructions.
 parse: LPAREN FUNC IF LPAREN_RESULT RPAREN LPAREN_LOCAL
 
 Assuming that the block type is complete, expecting 'else', 'end', or instructions.
+<^1>this block type
 
 parse: LPAREN FUNC IF WAIT
 
@@ -821,11 +849,13 @@ Expecting 'else', 'end', a block type, a label, or instructions.
 parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
+<^1>these instructions
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT RPAREN WAIT
@@ -875,6 +905,7 @@ Expecting an index.
 parse: LPAREN FUNC LOOP CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting 'end'.
+<^1>these instructions
 
 parse: LPAREN FUNC LOOP END WAIT
 
@@ -887,6 +918,7 @@ Expecting 'end', a block type, or instructions.
 parse: LPAREN FUNC LOOP LPAREN_RESULT RPAREN RPAREN
 
 Assuming that the block type is complete, expecting 'end', or instructions.
+<^1>this block type
 
 parse: LPAREN FUNC LOOP WAIT
 
@@ -899,6 +931,7 @@ Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcod
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
+<^1>this type use
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN EXACT RPAREN WAIT
@@ -918,6 +951,7 @@ Expecting 'exact'.
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
+<^1>this type use
 <6>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_IMPORT STRING STRING RPAREN WAIT
@@ -941,6 +975,7 @@ Expecting a value type.
 parse: LPAREN FUNC LPAREN_LOCAL RPAREN LPAREN_THEN
 
 Assuming that the locals are complete, expecting ')', or instructions.
+<^1>these locals
 <6>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC LPAREN_LOCAL WAIT
@@ -1051,6 +1086,7 @@ Expecting ')', or a value type.
 parse: LPAREN FUNC SELECT MEM_ALIGN
 
 Assuming that the plain instruction is complete, expecting instructions.
+<^1>this plain instruction
 
 parse: LPAREN FUNC STRING_ANNOT NAT NAT
 
@@ -1125,10 +1161,12 @@ Expecting an index.
 parse: LPAREN FUNC TRY CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting legacy catches.
+<^1>these instructions
 
 parse: LPAREN FUNC TRY CATCH NAT CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting legacy catches.
+<^1>these instructions
 
 parse: LPAREN FUNC TRY CATCH NAT NAT
 
@@ -1141,6 +1179,7 @@ Expecting an index.
 parse: LPAREN FUNC TRY CATCH_ALL CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting 'end'.
+<^1>these instructions
 
 parse: LPAREN FUNC TRY CATCH_ALL WAIT
 
@@ -1157,6 +1196,7 @@ Expecting a block type, instructions, or legacy catches.
 parse: LPAREN FUNC TRY LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the block type is complete, expecting instructions, or legacy catches.
+<^1>this block type
 
 parse: LPAREN FUNC TRY WAIT
 
@@ -1165,6 +1205,7 @@ Expecting a block type, a label, instructions, or legacy catches.
 parse: LPAREN FUNC TRY_TABLE CALL_INDIRECT RPAREN
 
 Assuming that the instructions are complete, expecting 'end'.
+<^1>these instructions
 
 parse: LPAREN FUNC TRY_TABLE END ID LPAREN_THEN
 
@@ -1234,6 +1275,7 @@ Expecting ')', or an unnamed param.
 parse: LPAREN FUNC TRY_TABLE LPAREN_RESULT RPAREN RPAREN
 
 Assuming that the catches are complete, expecting 'end', or instructions.
+<^1>these catches
 
 parse: LPAREN FUNC TRY_TABLE LPAREN_TYPE NAT NAT
 
@@ -1547,6 +1589,7 @@ Expecting an identifier ('$...'), or an inline export.
 parse: LPAREN GLOBAL ANYREF CALL_INDIRECT END
 
 Assuming that the expression is complete, expecting ')'.
+<^1>this expression
 <6>This '(' opens the enclosing construct.
 
 parse: LPAREN GLOBAL ANYREF WAIT
@@ -1557,6 +1600,7 @@ Expecting ')', or an expression.
 parse: LPAREN GLOBAL ID WAIT
 
 Assuming that the exports are complete, expecting a global type, or an inline import.
+<^1>these exports
 
 parse: LPAREN GLOBAL LPAREN MUT ANYREF WAIT
 
@@ -1623,6 +1667,7 @@ Expecting '(', a 64-bit unsigned integer, or a page-size clause.
 parse: LPAREN MEMORY ID WAIT
 
 Assuming that the exports are complete, expecting '(', a memory type, a page-size clause, an address type, or an inline import.
+<^1>these exports
 
 parse: LPAREN MEMORY LPAREN DATA RPAREN WAIT
 
@@ -1690,6 +1735,7 @@ Expecting ')', or a page-size clause.
 parse: LPAREN MEMORY NAT WAIT
 
 Assuming that the limits are complete, expecting ')', 'shared', or a page-size clause.
+<^1>these limits
 
 parse: LPAREN MEMORY WAIT
 
@@ -1698,6 +1744,7 @@ Expecting an identifier ('$...'), or an inline export.
 parse: LPAREN MODULE ID WAIT
 
 Assuming that the module fields are complete, expecting ')'.
+<^1>these module fields
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN MODULE RPAREN WAIT
@@ -1730,6 +1777,7 @@ Expecting an index.
 parse: LPAREN TABLE ANYREF LPAREN ELEM NAT MEM_OFFSET
 
 Assuming that the list of indices is complete, expecting ')'.
+<^1>this list of indices
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN TABLE ANYREF LPAREN ELEM NAT RPAREN WAIT
@@ -1745,6 +1793,7 @@ Expecting ')'.
 parse: LPAREN TABLE ANYREF LPAREN ELEM WAIT
 
 Assuming that the elemexprs are complete, expecting ')'.
+<^1>these elemexprs
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN TABLE ANYREF LPAREN WAIT
@@ -1758,6 +1807,7 @@ Expecting '('.
 parse: LPAREN TABLE I32 ANYREF LPAREN ELEM NAT MEM_OFFSET
 
 Assuming that the list of indices is complete, expecting ')'.
+<^1>this list of indices
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN TABLE I32 ANYREF LPAREN ELEM NAT RPAREN WAIT
@@ -1773,6 +1823,7 @@ Expecting ')'.
 parse: LPAREN TABLE I32 ANYREF LPAREN ELEM WAIT
 
 Assuming that the elemexprs are complete, expecting ')'.
+<^1>these elemexprs
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN TABLE I32 ANYREF LPAREN WAIT
@@ -1790,6 +1841,7 @@ Expecting a 64-bit unsigned integer, or a reference type.
 parse: LPAREN TABLE ID WAIT
 
 Assuming that the exports are complete, expecting a reference type, a table type, an address type, or an inline import.
+<^1>these exports
 
 parse: LPAREN TABLE LPAREN WAIT
 
@@ -1807,6 +1859,7 @@ Expecting a table type.
 parse: LPAREN TABLE NAT ANYREF CALL_INDIRECT END
 
 Assuming that the expression is complete, expecting ')'.
+<^1>this expression
 <6>This '(' opens the enclosing construct.
 
 parse: LPAREN TABLE NAT ANYREF WAIT
@@ -1817,6 +1870,7 @@ Expecting ')', or an expression.
 parse: LPAREN TABLE NAT WAIT
 
 Assuming that the limits are complete, expecting a reference type.
+<^1>these limits
 
 parse: LPAREN TABLE WAIT
 
@@ -1825,6 +1879,7 @@ Expecting an identifier ('$...'), or an inline export.
 parse: LPAREN TAG ID WAIT
 
 Assuming that the exports are complete, expecting ')', a type use, or an inline import.
+<^1>these exports
 <4>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_EXPORT STRING WAIT
@@ -1839,6 +1894,7 @@ Expecting a name.
 parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
+<^1>this type use
 <6>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_IMPORT STRING STRING RPAREN WAIT
@@ -1884,6 +1940,7 @@ Expecting ')', an identifier ('$...'), or an unnamed param.
 parse: LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
+<^1>this type use
 <5>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_RESULT RPAREN WAIT
@@ -1920,6 +1977,7 @@ Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'e
 parse: WAIT
 
 Assuming that the module fields are complete, expecting end of file.
+<^1>these module fields
 
 parse_script: FEATURE_ANNOT STRING WAIT
 
@@ -1938,6 +1996,7 @@ Expecting ')'.
 parse_script: IF_ANNOT ID THEN_ANNOT RPAREN ELSE_ANNOT WAIT
 
 Assuming that the module fields are complete, expecting ')'.
+<^1>these module fields
 <2>This '(' opens the enclosing construct.
 
 parse_script: IF_ANNOT ID THEN_ANNOT RPAREN WAIT
@@ -1948,6 +2007,7 @@ Expecting ')', or cond else fields.
 parse_script: IF_ANNOT ID THEN_ANNOT WAIT
 
 Assuming that the module fields are complete, expecting ')'.
+<^1>these module fields
 <2>This '(' opens the enclosing construct.
 
 parse_script: IF_ANNOT ID WAIT
@@ -2095,6 +2155,7 @@ Expecting a module.
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER LPAREN INSTR RPAREN WAIT
 
 Assuming that the result patterns are complete, expecting ')'.
+<^1>these result patterns
 <3>This '(' opens the enclosing construct.
 
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER WAIT
@@ -2208,6 +2269,7 @@ Expecting ')'.
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 FLOAT WAIT
 
 Assuming that the float or NaNs are complete, expecting ')'.
+<^1>these float or NaNs
 <4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 WAIT
@@ -2404,6 +2466,7 @@ Expecting a heap type.
 parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 FLOAT WAIT
 
 Assuming that the 64-bit floats are complete, expecting ')'.
+<^1>these 64-bit floats
 <4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 WAIT
@@ -2440,6 +2503,7 @@ Expecting ')', 'binary', 'quote', a module field, or an identifier ('$...').
 parse_script: LPAREN MODULE ID WAIT
 
 Assuming that the module fields are complete, expecting ')'.
+<^1>these module fields
 <5>This '(' opens the enclosing construct.
 
 parse_script: LPAREN MODULE INSTANCE ID ID WAIT
@@ -2502,6 +2566,7 @@ Expecting a string.
 parse_script: LPAREN SCRIPT ID STRING_ANNOT
 
 Assuming that the script is complete, expecting ')'.
+<^1>this script
 <4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
@@ -2516,11 +2581,13 @@ Expecting ')', a cmd, or an identifier ('$...').
 parse_script: LPAREN THREAD ID WAIT
 
 Assuming that the cmds are complete, expecting ')'.
+<^1>these cmds
 <4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN RPAREN WAIT
 
 Assuming that the cmds are complete, expecting ')'.
+<^1>these cmds
 <5>This '(' opens the enclosing construct.
 
 parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN WAIT
@@ -2637,6 +2704,7 @@ Expecting '(', ')', or a type use.
 parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
+<^1>this type use
 <3>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN EXACT RPAREN WAIT
@@ -2656,6 +2724,7 @@ Expecting 'exact'.
 parse_script: LPAREN_IMPORT STRING LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
+<^1>this type use
 <4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_IMPORT STRING LPAREN FUNC RPAREN WAIT
@@ -2746,6 +2815,7 @@ Expecting ')', or a type use.
 parse_script: LPAREN_IMPORT STRING LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
+<^1>this type use
 <4>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_IMPORT STRING LPAREN TAG WAIT
@@ -2816,6 +2886,7 @@ Expecting an index.
 parse_script: LPAREN_TYPE LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the parameters and results are complete, expecting ')'.
+<^1>these parameters and results
 <3>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_TYPE LPAREN FUNC RPAREN WAIT
@@ -2925,6 +2996,7 @@ Expecting a subtype, or an identifier ('$...').
 parse_script: RPAREN
 
 Assuming that the script is complete, expecting end of file.
+<^1>this script
 
 parse_script: STRING_ANNOT ID NAT NAT
 

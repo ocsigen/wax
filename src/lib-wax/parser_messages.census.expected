@@ -1,50 +1,78 @@
     2x Assuming that the argument list is complete, expecting ')'.
+       <^_>this argument list
        <_>This '(' opens the enclosing construct.
     2x Assuming that the array body is complete, expecting ']'.
+       <^_>this array body
        <_>This '[' opens the enclosing construct.
     2x Assuming that the attribute expression is complete, expecting ']', or an attribute guard.
+       <^_>this attribute expression
        <_>This '[' opens the enclosing construct.
     1x Assuming that the attribute expression is complete, expecting ']'.
+       <^_>this attribute expression
        <_>This '[' opens the enclosing construct.
     1x Assuming that the attributes are complete, expecting a definition.
+       <^_>these attributes
     1x Assuming that the attributes are complete, expecting an import declaration.
+       <^_>these attributes
     2x Assuming that the condition expression is complete, expecting ':', or a block.
+       <^_>this condition expression
     2x Assuming that the condition expression is complete, expecting '=>', or a block.
+       <^_>this condition expression
     3x Assuming that the condition is complete, expecting ')'.
+       <^_>this condition
        <_>This '(' opens the enclosing construct.
     2x Assuming that the constant expression is complete, expecting ';'.
+       <^_>this constant expression
     3x Assuming that the constant expression is complete, expecting ']'.
+       <^_>this constant expression
        <_>This '[' opens the enclosing construct.
     3x Assuming that the expression list is complete, expecting ')'.
+       <^_>this expression list
        <_>This '(' opens the enclosing construct.
     2x Assuming that the expression list is complete, expecting ']'.
+       <^_>this expression list
        <_>This '[' opens the enclosing construct.
     1x Assuming that the index expression is complete, expecting ']'.
+       <^_>this index expression
        <_>This '[' opens the enclosing construct.
     1x Assuming that the let pattern is complete, expecting ')'.
+       <^_>this let pattern
        <_>This '(' opens the enclosing construct.
     2x Assuming that the optional function type is complete, expecting ''', or '{'.
+       <^_>this optional function type
     2x Assuming that the parameter list is complete, expecting ')'.
+       <^_>this parameter list
        <_>This '(' opens the enclosing construct.
     1x Assuming that the parameter types are complete, expecting ')'.
+       <^_>these parameter types
        <_>This '(' opens the enclosing construct.
     1x Assuming that the parenthesized expression is complete, expecting ')'.
+       <^_>this parenthesized expression
        <_>This '(' opens the enclosing construct.
     1x Assuming that the result type is complete, expecting ')'.
+       <^_>this result type
        <_>This '(' opens the enclosing construct.
     2x Assuming that the statement is complete, expecting ')'.
+       <^_>this statement
        <_>This '(' opens the enclosing construct.
     1x Assuming that the statement is complete, expecting ';'.
+       <^_>this statement
     5x Assuming that the statement list is complete, expecting '}'.
+       <^_>this statement list
        <_>This '{' opens the enclosing construct.
     1x Assuming that the structure field is complete, expecting ',', or '}'.
+       <^_>this structure field
        <_>This '{' opens the enclosing construct.
     3x Assuming that the structure is complete, expecting '}'.
+       <^_>this structure
        <_>This '{' opens the enclosing construct.
     2x Assuming that the structure type is complete, expecting '}'.
+       <^_>this structure type
        <_>This '{' opens the enclosing construct.
     1x Assuming that the tag sig is complete, expecting ';'.
+       <^_>this tag sig
     1x Assuming that the then branch is complete, expecting ':'.
+       <^_>this then branch
     1x Expecting '!', ''', ':', '{', or an optional function type.
     1x Expecting '!', ':', ';', or an optional function type.
     1x Expecting '!', '?', 'fn', or a heap type.

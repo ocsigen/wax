@@ -81,6 +81,7 @@ closes with a single `}`:
   1 │ fn f() {
     ·        ^ This '{' opens the enclosing construct.
   2 │     nop;
+    ·     ^^^^ this statement list
   3 │ 
       ^
   Help: insert '}'
@@ -103,6 +104,7 @@ its enclosing function body both close with `}}`:
   2 │     if x {
     ·          ^ This '{' opens the enclosing construct.
   3 │         nop;
+    ·         ^^^^ this statement list
   4 │ 
       ^
   Help: insert '}}'
@@ -128,7 +130,7 @@ The closer fix is a zero-width insertion edit at the caret, serialized in JSON
 just like the missing-`;` one:
 
   $ wax check --all-errors --error-format json close-one.wax
-  {"severity":"error","file":"close-one.wax","startLine":3,"startColumn":0,"endLine":3,"endColumn":0,"startOffset":18,"endOffset":18,"message":"Assuming that the statement list is complete, expecting '}'.","warning":null,"hint":null,"related":[{"startLine":1,"startColumn":7,"endLine":1,"endColumn":8,"startOffset":7,"endOffset":8,"message":"This '{' opens the enclosing construct."}],"edit":{"startLine":3,"startColumn":0,"endLine":3,"endColumn":0,"startOffset":18,"endOffset":18,"newText":"}"}}
+  {"severity":"error","file":"close-one.wax","startLine":3,"startColumn":0,"endLine":3,"endColumn":0,"startOffset":18,"endOffset":18,"message":"Assuming that the statement list is complete, expecting '}'.","warning":null,"hint":null,"related":[{"startLine":2,"startColumn":4,"endLine":2,"endColumn":8,"startOffset":13,"endOffset":17,"message":"this statement list"},{"startLine":1,"startColumn":7,"endLine":1,"endColumn":8,"startOffset":7,"endOffset":8,"message":"This '{' opens the enclosing construct."}],"edit":{"startLine":3,"startColumn":0,"endLine":3,"endColumn":0,"startOffset":18,"endOffset":18,"newText":"}"}}
   [128]
 
 Recovery also derives a *deletion* fix for the unambiguous single-token case: a

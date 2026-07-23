@@ -1284,9 +1284,9 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
      the step-4 "block type is complete" messages and avoids the raw-grammar
      "plaininstr"/"parameters without bindings" subjects the innermost surfaced on
      the deep cascades. *)
-  let message_body =
+  let message_body, subject_marker =
     match List.rev d.spurious_reductions with
-    | [] -> base_message
+    | [] -> (base_message, None)
     | last :: _ ->
         let raw_name = fst (subject_name_src last.symbol) in
         let name, verb =
@@ -1298,25 +1298,51 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
           then (raw_name, "is")
           else (raw_name, "are")
         in
-        Printf.sprintf "Assuming that the %s %s complete, %s" name verb
-          (if base_message = "Syntax error" then "syntax error."
-           else String.uncapitalize_ascii base_message)
+        let body =
+          Printf.sprintf "Assuming that the %s %s complete, %s" name verb
+            (if base_message = "Syntax error" then "syntax error."
+             else String.uncapitalize_ascii base_message)
+        in
+        (* Emit a [<^N>] subject marker so the runtime underlines the completed
+           construct itself. Its stack cell is the top of the post-reduction
+           stack (depth 1): the *outermost* spurious reduction (this [last] one,
+           the outermost of menhir's innermost→outermost record) did the last
+           goto, pushing its LHS on top. The marker resolves that cell — it does
+           not consume a stack slot, so any [<N>] delimiter-hint depth is
+           unaffected. The label wording is deictic ("this"/"these", agreeing
+           with the sentence's is/are); the sentence itself keeps the plain "the
+           X is complete" phrasing, so an epsilon subject the runtime drops (a
+           zero-width span, e.g. empty exports) leaves a coherent message with no
+           dangling deixis. *)
+        let deictic =
+          if verb = "are" then "these " ^ name else "this " ^ name
+        in
+        (body, Some (Printf.sprintf "<^1>%s" deictic))
   in
 
-  (* Append Hint if an unclosed delimiter was detected on the stack context *)
+  (* Append the located markers under the message: the [<^N>] hedge subject
+     first, then any [<N>] delimiter hint. The order is the order the runtime
+     surfaces the labels (subject before opener). *)
   let generated_message =
-    match unclosed_details with
-    | Some (depth, opener) ->
-        (* Locate the opener of the construct the error sits inside, without
-           claiming it is unmatched: the same error state is reached both when
-           the construct is genuinely unclosed (an EOF cut it short) and when a
-           later token inside an already-closed construct is invalid, so a
-           "might be unmatched" reading would be false in the latter, common
-           case. A purely locational hint is true in both. *)
-        message_body ^ "\n"
-        ^ Printf.sprintf "<%d>This '%s' opens the enclosing construct." depth
-            opener
-    | None -> message_body
+    let subject_lines =
+      match subject_marker with Some m -> [ m ] | None -> []
+    in
+    let hint_lines =
+      match unclosed_details with
+      | Some (depth, opener) ->
+          (* Locate the opener of the construct the error sits inside, without
+             claiming it is unmatched: the same error state is reached both when
+             the construct is genuinely unclosed (an EOF cut it short) and when a
+             later token inside an already-closed construct is invalid, so a
+             "might be unmatched" reading would be false in the latter, common
+             case. A purely locational hint is true in both. *)
+          [
+            Printf.sprintf "<%d>This '%s' opens the enclosing construct." depth
+              opener;
+          ]
+      | None -> []
+    in
+    String.concat "\n" ((message_body :: subject_lines) @ hint_lines)
   in
 
   (* Hand-override merge: if the sanctioned [.overrides] file supplies a
@@ -1808,12 +1834,14 @@ let output_names ~overrides_active cfg results =
 (* --- Message census --- *)
 
 (* Normalize a message body for the census: collapse the state-specific depth in
-   a delimiter hint ([<3>This '(' …] -> [<_>…]) so identical wordings at
-   different stack depths count as one census line and a depth shift does not
-   churn the counts. Kept verbatim, that depth would fragment one wording into
-   several census entries. *)
+   a delimiter hint ([<3>This '(' …] -> [<_>…]) and in a hedge-subject marker
+   ([<^1>this expression] -> [<^_>…]) so identical wordings at different stack
+   depths count as one census line and a depth shift does not churn the counts.
+   The [^] kind tag is preserved, keeping the two marker families distinct in the
+   census. Kept verbatim, the depth would fragment one wording into several
+   census entries. *)
 let census_normalize body =
-  Str.global_replace (Str.regexp "<[0-9]+>") "<_>" body
+  Str.global_replace (Str.regexp "<\\(\\^?\\)[0-9]+>") "<\\1_>" body
 
 (* Emit the message census: each distinct (depth-normalized) message body once,
    prefixed by its occurrence count, sorted by the message text. Entry sentences
