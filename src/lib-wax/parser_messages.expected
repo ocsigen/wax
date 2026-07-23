@@ -2,7 +2,7 @@ dummy_ctx: WHILE
 
 Expecting a dummy ctx.
 
-parse: CONST IDENT COLON IDENT EQUAL CHAR QUOTE
+parse: CONST IDENT COLON IDENT EQUAL CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ';'.
 
@@ -42,7 +42,7 @@ parse: CONST IDENT EQUAL CHAR AS WHILE
 
 Expecting '?', a cast type, or a descriptor operand.
 
-parse: CONST IDENT EQUAL CHAR BANGEQUAL CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR BANGEQUAL CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -62,7 +62,11 @@ parse: CONST IDENT EQUAL CHAR DOT WHILE
 
 Expecting 'descriptor', or an identifier.
 
-parse: CONST IDENT EQUAL CHAR EQUALEQUAL CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR EQUAL
+
+Assuming that the constant expression is complete, expecting ';'.
+
+parse: CONST IDENT EQUAL CHAR EQUALEQUAL CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -70,7 +74,7 @@ parse: CONST IDENT EQUAL CHAR EQUALEQUAL UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR GE CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GE CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -78,7 +82,7 @@ parse: CONST IDENT EQUAL CHAR GE UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR GES CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GES CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -86,7 +90,7 @@ parse: CONST IDENT EQUAL CHAR GES UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR GEU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GEU CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -94,7 +98,7 @@ parse: CONST IDENT EQUAL CHAR GEU UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR GT CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GT CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -102,7 +106,7 @@ parse: CONST IDENT EQUAL CHAR GT UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR GTS CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GTS CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -110,7 +114,7 @@ parse: CONST IDENT EQUAL CHAR GTS UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR GTU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GTU CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -122,7 +126,7 @@ parse: CONST IDENT EQUAL CHAR IS WHILE
 
 Expecting a reference type.
 
-parse: CONST IDENT EQUAL CHAR LBRACKET CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LBRACKET CHAR EQUAL
 
 Assuming that the index expression is complete, expecting ']'.
 <2>This '[' opens the enclosing construct.
@@ -135,7 +139,7 @@ parse: CONST IDENT EQUAL CHAR LBRACKET UNREACHABLE
 
 Expecting an index expression.
 
-parse: CONST IDENT EQUAL CHAR LE CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LE CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -143,7 +147,7 @@ parse: CONST IDENT EQUAL CHAR LE UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR LES CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LES CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -151,7 +155,7 @@ parse: CONST IDENT EQUAL CHAR LES UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR LEU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LEU CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -181,7 +185,7 @@ parse: CONST IDENT EQUAL CHAR LPAREN UNREACHABLE
 Expecting ')', or an argument.
 <1>This '(' opens the enclosing construct.
 
-parse: CONST IDENT EQUAL CHAR LT CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LT CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -189,7 +193,7 @@ parse: CONST IDENT EQUAL CHAR LT UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR LTS CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LTS CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -197,7 +201,7 @@ parse: CONST IDENT EQUAL CHAR LTS UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR LTU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LTU CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -258,17 +262,13 @@ parse: CONST IDENT EQUAL CHAR QUESTIONMARK CHAR COLON UNREACHABLE
 
 Expecting an expression.
 
-parse: CONST IDENT EQUAL CHAR QUESTIONMARK CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR QUESTIONMARK CHAR EQUAL
 
 Assuming that the then branch is complete, expecting ':'.
 
 parse: CONST IDENT EQUAL CHAR QUESTIONMARK UNREACHABLE
 
 Expecting a then branch.
-
-parse: CONST IDENT EQUAL CHAR QUOTE
-
-Assuming that the constant expression is complete, expecting ';'.
 
 parse: CONST IDENT EQUAL CHAR SHL UNREACHABLE
 
@@ -322,7 +322,7 @@ parse: CONST WHILE
 
 Expecting an identifier.
 
-parse: DATA IDENT AT IDENT LBRACKET CHAR QUOTE
+parse: DATA IDENT AT IDENT LBRACKET CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ']'.
 <2>This '[' opens the enclosing construct.
@@ -409,7 +409,7 @@ parse: DATA WHILE
 
 Expecting a data name.
 
-parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR QUOTE
+parse: ELEM IDENT COLON AMPERSAND CONT AT IDENT LBRACKET CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ']'.
 <2>This '[' opens the enclosing construct.
@@ -558,7 +558,7 @@ parse: FN IDENT LBRACE BR WHILE
 
 Expecting '''.
 
-parse: FN IDENT LBRACE BR_IF QUOTE AS CHAR QUOTE
+parse: FN IDENT LBRACE BR_IF QUOTE AS CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -574,7 +574,7 @@ parse: FN IDENT LBRACE BR_IF WHILE
 
 Expecting '''.
 
-parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -582,7 +582,7 @@ parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -606,7 +606,7 @@ parse: FN IDENT LBRACE BR_ON_CAST WHILE
 
 Expecting '''.
 
-parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -614,7 +614,7 @@ parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -638,7 +638,7 @@ parse: FN IDENT LBRACE BR_ON_CAST_FAIL WHILE
 
 Expecting '''.
 
-parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -654,7 +654,7 @@ parse: FN IDENT LBRACE BR_ON_NON_NULL WHILE
 
 Expecting '''.
 
-parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS CHAR EQUAL
 
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
@@ -786,6 +786,10 @@ parse: FN IDENT LBRACE IDENT EQUAL UNREACHABLE
 
 Expecting an expression.
 
+parse: FN IDENT LBRACE IF CHAR EQUAL
+
+Assuming that the condition expression is complete, expecting '=>', or a block.
+
 parse: FN IDENT LBRACE IF CHAR FATARROW IDENT WHILE
 
 Expecting a block.
@@ -797,10 +801,6 @@ Expecting a block type.
 parse: FN IDENT LBRACE IF CHAR LBRACE RBRACE ELSE WHILE
 
 Expecting a block.
-
-parse: FN IDENT LBRACE IF CHAR QUOTE
-
-Assuming that the condition expression is complete, expecting '=>', or a block.
 
 parse: FN IDENT LBRACE IF UNREACHABLE
 
@@ -816,7 +816,7 @@ parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE DOTDOT WHILE
 Expecting '}'.
 <4>This '{' opens the enclosing construct.
 
-parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE IDENT QUOTE
+parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR RPAREN PIPE IDENT IDENT
 
 Assuming that the structure is complete, expecting '}'.
 <4>This '{' opens the enclosing construct.
@@ -852,7 +852,7 @@ parse: FN IDENT LBRACE LBRACE IDENT COLON UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE LBRACE IDENT COMMA IDENT QUOTE
+parse: FN IDENT LBRACE LBRACE IDENT COMMA IDENT IDENT
 
 Assuming that the structure is complete, expecting '}'.
 <4>This '{' opens the enclosing construct.
@@ -867,7 +867,7 @@ parse: FN IDENT LBRACE LBRACE IDENT PIPE DOTDOT WHILE
 Expecting '}'.
 <4>This '{' opens the enclosing construct.
 
-parse: FN IDENT LBRACE LBRACE IDENT PIPE IDENT QUOTE
+parse: FN IDENT LBRACE LBRACE IDENT PIPE IDENT IDENT
 
 Assuming that the structure is complete, expecting '}'.
 <4>This '{' opens the enclosing construct.
@@ -907,7 +907,12 @@ parse: FN IDENT LBRACE LBRACKET IDENT AT UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE LBRACKET IDENT PIPE IDENT QUOTE
+parse: FN IDENT LBRACE LBRACKET IDENT EQUAL
+
+Assuming that the array body is complete, expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE LBRACKET IDENT PIPE IDENT EQUAL
 
 Assuming that the array body is complete, expecting ']'.
 <4>This '[' opens the enclosing construct.
@@ -916,11 +921,6 @@ parse: FN IDENT LBRACE LBRACKET IDENT PIPE UNREACHABLE
 
 Expecting ']', or an array body.
 <3>This '[' opens the enclosing construct.
-
-parse: FN IDENT LBRACE LBRACKET IDENT QUOTE
-
-Assuming that the array body is complete, expecting ']'.
-<2>This '[' opens the enclosing construct.
 
 parse: FN IDENT LBRACE LBRACKET IDENT SEMI UNREACHABLE
 
@@ -987,7 +987,7 @@ parse: FN IDENT LBRACE LPAREN CHAR COMMA UNREACHABLE
 Expecting ')', or an expression.
 <3>This '(' opens the enclosing construct.
 
-parse: FN IDENT LBRACE LPAREN CHAR QUOTE
+parse: FN IDENT LBRACE LPAREN CHAR SEMI
 
 Assuming that the parenthesized expression is complete, expecting ')'.
 <2>This '(' opens the enclosing construct.
@@ -1061,6 +1061,10 @@ parse: FN IDENT LBRACE QUOTE AS COLON DO WHILE
 
 Expecting a block, or a block type.
 
+parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR EQUAL
+
+Assuming that the condition expression is complete, expecting '=>', or a block.
+
 parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR FATARROW IDENT WHILE
 
 Expecting a block.
@@ -1068,10 +1072,6 @@ Expecting a block.
 parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR LBRACE RBRACE ELSE WHILE
 
 Expecting a block.
-
-parse: FN IDENT LBRACE QUOTE AS COLON IF CHAR QUOTE
-
-Assuming that the condition expression is complete, expecting '=>', or a block.
 
 parse: FN IDENT LBRACE QUOTE AS COLON IF UNREACHABLE
 
@@ -1163,7 +1163,7 @@ parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON WHILE
 
 Expecting '('.
 
-parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR QUOTE
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR EQUAL
 
 Assuming that the condition expression is complete, expecting ':', or a block.
 
@@ -1503,7 +1503,7 @@ parse: FN IDENT LBRACE WHILE CHAR COLON WHILE
 
 Expecting '('.
 
-parse: FN IDENT LBRACE WHILE CHAR QUOTE
+parse: FN IDENT LBRACE WHILE CHAR EQUAL
 
 Assuming that the condition expression is complete, expecting ':', or a block.
 
@@ -1538,13 +1538,13 @@ parse: FN IDENT LPAREN RPAREN ARROW WHILE
 
 Expecting a result type.
 
-parse: FN IDENT LPAREN RPAREN STAR
+parse: FN IDENT LPAREN RPAREN SEMI
 
 Assuming that the optional function type is complete, expecting ''', or '{'.
 
 parse: FN IDENT LPAREN RPAREN WHILE
 
-Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
+Expecting ''', '->', ';', or '{'.
 
 parse: FN IDENT LPAREN WHILE
 
@@ -1697,7 +1697,7 @@ parse: IMPORT WHILE
 
 Expecting a string.
 
-parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR QUOTE
+parse: MEMORY IDENT COLON IDENT LBRACE DATA IDENT AT LBRACKET CHAR EQUAL
 
 Assuming that the constant expression is complete, expecting ']'.
 <2>This '[' opens the enclosing construct.
@@ -1829,7 +1829,7 @@ parse: REC WHILE
 
 Expecting '{'.
 
-parse: SHARP BANG LBRACKET IDENT EQUAL CHAR QUOTE
+parse: SHARP BANG LBRACKET IDENT EQUAL CHAR EQUAL
 
 Assuming that the attribute expression is complete, expecting ']'.
 <4>This '[' opens the enclosing construct.
@@ -1883,7 +1883,7 @@ parse: SHARP LBRACKET IDENT EQUAL CHAR COMMA IF LPAREN IDENT RPAREN WHILE
 Expecting ']'.
 <5>This '[' opens the enclosing construct.
 
-parse: SHARP LBRACKET IDENT EQUAL CHAR QUOTE
+parse: SHARP LBRACKET IDENT EQUAL CHAR EQUAL
 
 Assuming that the attribute expression is complete, expecting ']', or an attribute guard.
 <4>This '[' opens the enclosing construct.
@@ -1992,7 +1992,7 @@ parse: SHARP LBRACKET IMPORT EQUAL CHAR COMMA IF LPAREN IDENT RPAREN WHILE
 Expecting ']'.
 <5>This '[' opens the enclosing construct.
 
-parse: SHARP LBRACKET IMPORT EQUAL CHAR QUOTE
+parse: SHARP LBRACKET IMPORT EQUAL CHAR EQUAL
 
 Assuming that the attribute expression is complete, expecting ']', or an attribute guard.
 <4>This '[' opens the enclosing construct.
@@ -2157,6 +2157,24 @@ Expecting a composite type.
 parse: TYPE IDENT EQUAL DESCRIPTOR WHILE
 
 Expecting a type name.
+
+parse: TYPE IDENT EQUAL FN LPAREN IDENT COMMA COMMA
+
+Assuming that the parameter list is complete, expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: TYPE IDENT EQUAL FN LPAREN RPAREN ARROW WHILE
+
+Expecting a result type.
+
+parse: TYPE IDENT EQUAL FN LPAREN RPAREN WHILE
+
+Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
+
+parse: TYPE IDENT EQUAL FN LPAREN WHILE
+
+Expecting ')', or a function parameter.
+<1>This '(' opens the enclosing construct.
 
 parse: TYPE IDENT EQUAL FN WHILE
 

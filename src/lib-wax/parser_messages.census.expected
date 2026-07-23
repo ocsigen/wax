@@ -24,7 +24,7 @@
     1x Assuming that the let pattern is complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
     2x Assuming that the optional function type is complete, expecting ''', or '{'.
-    1x Assuming that the parameter list is complete, expecting ')'.
+    2x Assuming that the parameter list is complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Assuming that the parameter types are complete, expecting ')'.
        <_>This '(' opens the enclosing construct.
@@ -55,6 +55,7 @@
     2x Expecting '!', or a type name.
     2x Expecting '&', or '->'.
     2x Expecting '&', or '=>'.
+    1x Expecting ''', '->', ';', or '{'.
     1x Expecting ''', ':', '{', or an optional function type.
     1x Expecting ''', '{', or an optional function type.
     1x Expecting ''', or an identifier.
@@ -70,7 +71,7 @@
     1x Expecting ')', or a data number.
     1x Expecting ')', or a data number.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a function parameter.
+    2x Expecting ')', or a function parameter.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a let pattern.
        <_>This '(' opens the enclosing construct.
@@ -213,7 +214,7 @@
     1x Expecting a raw number.
     2x Expecting a reference type, or an address type.
     5x Expecting a reference type.
-    2x Expecting a result type.
+    3x Expecting a result type.
     2x Expecting a statement.
     1x Expecting a storage type.
     2x Expecting a string.

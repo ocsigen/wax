@@ -10,51 +10,54 @@
 # infix operator, one of the postfix operators, or a closer that ends the
 # expression — a set that always overflows the readable cap, so the generated
 # message degrades to a bare "Syntax error". One uniform, honest message serves
-# them all. The remaining two are a labeled-block head and a function signature.
+# them all. The remaining two are a labeled-block head and a function type in a
+# type position (a type definition or an '&fn(…)' reference type; the function
+# and tag *declaration* signature was split off to its own rule and no longer
+# needs an override).
 
 # --- Expression-FOLLOW states (uniform message) ---
 # After a complete expression: extend it with an operator / postfix, or end it.
 
-parse: CONST IDENT EQUAL CHAR BANGEQUAL CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR BANGEQUAL CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR EQUALEQUAL CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR EQUALEQUAL CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR GE CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GE CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR GES CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GES CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR GEU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GEU CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR GT CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GT CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR GTS CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GTS CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR GTU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR GTU CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR LE CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LE CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR LES CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LES CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR LEU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LEU CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR LT CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LT CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR LTS CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LTS CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: CONST IDENT EQUAL CHAR LTU CHAR QUOTE
+parse: CONST IDENT EQUAL CHAR LTU CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE BECOME CHAR ELSE
@@ -63,25 +66,25 @@ Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on',
 parse: FN IDENT LBRACE BECOME CHAR LPAREN RPAREN WHILE
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: FN IDENT LBRACE BR_IF QUOTE AS CHAR QUOTE
+parse: FN IDENT LBRACE BR_IF QUOTE AS CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS AMPERSAND CONT CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS AMPERSAND CONT CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_CAST_FAIL QUOTE AS DESCRIPTOR LPAREN CHAR RPAREN CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_NON_NULL QUOTE AS CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
-parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS CHAR QUOTE
+parse: FN IDENT LBRACE BR_ON_NULL QUOTE AS CHAR EQUAL
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
 parse: FN IDENT LBRACE DISPATCH CHAR ELSE
@@ -120,9 +123,14 @@ Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on',
 parse: FN IDENT LBRACE QUOTE AS COLON UNREACHABLE
 Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 
-# state 56: after a function parameter list — a result type, the function body,
-# or (as a continuation-reference type in an expression) an operator / the end
-# of the expression.
-parse: FN IDENT LPAREN RPAREN WHILE
+# state 56: after a function-type parameter list in a *type* position — a type
+# definition ('type f = fn(…)') or a reference type inside an expression
+# ('x as &fn(…)'). A result type ('->') or, in the expression home, an operator /
+# a postfix / the enclosing block's '{' / the end of the expression may follow.
+# The function/tag *declaration* signature no longer merges here: it went to the
+# duplicated 'function_signature' rule (its own state auto-generates
+# "Expecting ''', '->', ';', or '{'."), so this state and its message are now the
+# type home alone.
+parse: TYPE IDENT EQUAL FN LPAREN RPAREN WHILE
 Expecting '->', '{', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 
