@@ -131,7 +131,10 @@ cell and is invisible to the balance count. The scan therefore reports a
 1-based stack cell index, emitted into the message as `<N>`. At runtime,
 a small helper resolves it against the live parser: cell N of the
 incremental engine's stack carries the opener's source position, and the
-CLI underlines it (the alias's full width). The same mechanism carries a
+CLI underlines it. When the closer has a unique mate, the hint names the
+mate's full alias and the underline spans its full width ("This '[|'
+opens ..."); a closer with many mates (WebAssembly's ')' closes 22
+different openers) names the shared bracket character. The same mechanism carries a
 second marker kind, `<^N>`, for hedge subjects, resolved to the full
 source span of a folded construct; a message may carry several labels.
 
