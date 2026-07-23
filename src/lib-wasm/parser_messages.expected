@@ -461,6 +461,10 @@ Assuming that the element list is complete, expecting ')'.
 <^1>this element list
 <4>This '(' opens the enclosing construct.
 
+parse: LPAREN ELEM BRANCH_HINT_ANNOT STRING RPAREN WAIT
+
+Expecting a folded instruction.
+
 parse: LPAREN ELEM DECLARE ANYREF WAIT
 
 Assuming that the element list is complete, expecting ')'.
@@ -640,10 +644,6 @@ parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN SELECT MEM_ALIGN
 
 Assuming that the plain instruction is complete, expecting instructions.
 <^1>this plain instruction
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN STRING_ANNOT RPAREN WAIT
-
-Expecting instructions.
 
 parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN TRY_TABLE END ID LPAREN_THEN
 
@@ -1193,7 +1193,7 @@ parse: LPAREN FUNC TRY ID LPAREN_THEN
 
 Expecting a block type, instructions, or legacy catches.
 
-parse: LPAREN FUNC TRY LPAREN_RESULT RPAREN LPAREN_THEN
+parse: LPAREN FUNC TRY LPAREN_RESULT RPAREN ELSE
 
 Assuming that the block type is complete, expecting instructions, or legacy catches.
 <^1>this block type

@@ -909,8 +909,10 @@ instructions:
   { hinted $sloc h i :: r }
 | h = branch_hint_annot i = blockinstr r = instructions
   { hinted $sloc h i :: r }
-| h = branch_hint_annot i = folded_instruction r = instructions
-  { hinted $sloc h i :: r }
+(* A hinted folded instruction ([(@…) (if …)]) is handled by [folded_instruction]
+   itself (see its first production), reached here via the [folded_instruction]
+   case above; a dedicated statement-level rule would duplicate that derivation
+   and make the grammar ambiguous. *)
 
 string_list: l = list(STRING) { l }
 
@@ -952,6 +954,13 @@ cond_instr:
   { with_loc $sloc (If_annotation { cond = c; then_body; else_body }) }
 
 folded_instruction:
+(* Branch-hinting proposal: a hinted conditional branch may appear as a folded
+   operand — most commonly a hinted [if] used as another instruction's condition
+   ([(@…) (if …)] before the enclosing [(then …)]). This is the placement wax and
+   binaryen both emit (the annotation binds to the wrapped branch's opcode); wax's
+   printer produces it, so the parser must accept it here as well as at statement
+   position. [hinted] rejects the annotation on anything but a conditional branch. *)
+| h = branch_hint_annot i = folded_instruction { hinted $sloc h i }
 | "(" i = plain_instruction l = folded_instruction * ")"
   { with_loc $sloc (Folded (i, l)) }
 (* The inner block-family node is given a span ending at the body

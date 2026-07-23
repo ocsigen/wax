@@ -264,6 +264,7 @@
     1x Expecting a dummy ctx.
     2x Expecting a field type.
     1x Expecting a float or NaN.
+    1x Expecting a folded instruction.
     1x Expecting a global type, an identifier ('$...'), an inline export, or an inline import.
     1x Expecting a global type, or an identifier ('$...').
     2x Expecting a global type.
@@ -321,5 +322,5 @@
     1x Expecting cond then fields.
     1x Expecting end of file.
     1x Expecting instructions, or legacy catches.
-    5x Expecting instructions.
+    4x Expecting instructions.
     2x Expecting parameters and results.

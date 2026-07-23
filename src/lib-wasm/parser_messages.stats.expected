@@ -11,8 +11,8 @@ missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
 state/automaton item-set match: 680/680
 unsound claims: 0
-entries with uncovered actions: 24
-uncovered action tokens (total): 1641
+entries with uncovered actions: 23
+uncovered action tokens (total): 1636
 names configured: 27, unused: 2
   FLOAT (expecting: unused, assuming: unused)
   INT (expecting: unused, assuming: unused)
