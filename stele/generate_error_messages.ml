@@ -14,6 +14,56 @@ module IntSet = Set.Make (Int)
 
 type status = Direct | Lookahead | Both
 
+(* --- Name-rendering provenance (the [names] review mode, step 12) --- *)
+
+(* The pipeline step that produced a rendered name, so [stele names] can report
+   *how* every symbol reached its wording. Mirrors the precedence documented in
+   stele's README: a token alias, a [names] config entry, the 3b list-element
+   chase, the pluralised Assuming-subject rendering, the lowercase
+   auto-derivation, a [class] label, or the last-resort quoted-lowercase
+   fallback. Recorded alongside each rendered string by the [*_src] variants of
+   the rendering functions, kept non-invasive (the plain functions project the
+   string out). *)
+type name_source =
+  | Alias
+  | Names_entry
+  | Chase
+  | Plural_subject
+  | Auto
+  | Class_label
+  | Fallback
+
+let source_label = function
+  | Alias -> "alias"
+  | Names_entry -> "[names]"
+  | Chase -> "3b-chase"
+  | Plural_subject -> "plural-subj"
+  | Auto -> "auto-derived"
+  | Class_label -> "[class]"
+  | Fallback -> "quoted-fallback"
+
+(* Where a rendered name appears. Usage is counted per position because a symbol
+   can render differently in each — a list-shaped nonterminal singularises via
+   the chase in the Expecting list but keeps its list/plural name as an Assuming
+   subject — and a [names] entry can be dead in one position yet live in the
+   other (the [LPAREN_IMPORT]/[list_of_indices] subtlety). *)
+type position = Expecting | Assuming
+
+(* One rendering of one grammar symbol in one position of one message — the raw
+   material [stele names] and the config-unused stat aggregate over. [nu_credit]
+   names the element a 3b chase resolved to and *its* real source: when
+   [nu_source] is [Chase] the shown text comes from that element (e.g. the
+   [locals] list chases to [local_decl], whose text is its [names] entry), so
+   the config-unused stat credits the element and does not mis-report it as
+   unused. [None] when no chase occurred. *)
+type name_use = {
+  nu_symbol : string;
+  nu_rendered : string;
+  nu_source : name_source;
+  nu_position : position;
+  nu_credit : (string * name_source) option;
+}
+
 (* --- Per-grammar configuration (the [-config] sidecar) --- *)
 
 (* Everything grammar-specific that is not derivable from the [.cmly] lives in a
@@ -560,42 +610,48 @@ let classify_symbol cfg s =
       if StringSet.mem s members then Some label else None)
     cfg.classes
 
-let get_readable_name cfg terminals s =
-  try Printf.sprintf "'%s'" (Hashtbl.find terminals s)
-  with Not_found -> (
-    match special_name cfg s with
-    | Some name -> name
-    | None ->
-        if String.lowercase_ascii s = s then
-          (* Non-terminals: "some_name" -> "a/an some name" *)
-          let parts = String.split_on_char '_' s in
-          let parts = List.filter (fun p -> p <> "") parts in
-          if parts = [] then s
+(* Core rendering with provenance (step 12). Returns the readable string paired
+   with the pipeline step that produced it; [get_readable_name] projects the
+   string. Precedence: token alias, [names] entry, lowercase auto-derivation,
+   quoted-lowercase fallback. *)
+let get_readable_name_src cfg terminals s =
+  match Hashtbl.find_opt terminals s with
+  | Some a -> (Printf.sprintf "'%s'" a, Alias)
+  | None -> (
+      match special_name cfg s with
+      | Some name -> (name, Names_entry)
+      | None ->
+          if String.lowercase_ascii s = s then
+            (* Non-terminals: "some_name" -> "a/an some name" *)
+            let parts = String.split_on_char '_' s in
+            let parts = List.filter (fun p -> p <> "") parts in
+            if parts = [] then (s, Auto)
+            else
+              let name = String.concat " " parts in
+              match parts with
+              | p :: _ ->
+                  let c = String.get p 0 in
+                  (* Drop the article for a plural noun phrase ("folded
+                     instructions", not "a folded instructions"). Plurality is
+                     decided by the LAST word — "descriptor clauses" is plural,
+                     "expression list" is not — so the article agrees with the
+                     head noun. *)
+                  let last = List.nth parts (List.length parts - 1) in
+                  let is_plural =
+                    String.length last > 1
+                    && String.sub last (String.length last - 1) 1 = "s"
+                    && not
+                         (List.mem last
+                            [ "as"; "is"; "this"; "plus"; "minus"; "address" ])
+                  in
+                  if is_plural then (name, Auto)
+                  else if List.mem c [ 'a'; 'e'; 'i'; 'o'; 'u' ] then
+                    ("an " ^ name, Auto)
+                  else ("a " ^ name, Auto)
+              | _ -> (name, Auto)
           else
-            let name = String.concat " " parts in
-            match parts with
-            | p :: _ ->
-                let c = String.get p 0 in
-                (* Drop the article for a plural noun phrase ("folded
-                   instructions", not "a folded instructions"). Plurality is
-                   decided by the LAST word — "descriptor clauses" is plural,
-                   "expression list" is not — so the article agrees with the
-                   head noun. *)
-                let last = List.nth parts (List.length parts - 1) in
-                let is_plural =
-                  String.length last > 1
-                  && String.sub last (String.length last - 1) 1 = "s"
-                  && not
-                       (List.mem last
-                          [ "as"; "is"; "this"; "plus"; "minus"; "address" ])
-                in
-                if is_plural then name
-                else if List.mem c [ 'a'; 'e'; 'i'; 'o'; 'u' ] then "an " ^ name
-                else "a " ^ name
-            | _ -> name
-        else
-          (* Keywords/Other Terminals: "TOKEN" -> "'token'" *)
-          "'" ^ String.lowercase_ascii s ^ "'")
+            (* Keywords/Other Terminals: "TOKEN" -> "'token'" *)
+            ("'" ^ String.lowercase_ascii s ^ "'", Fallback))
 
 (* Rendering for the *Expecting* position (step 3b). What the user types next is
    one element, so a list-shaped nonterminal is rendered as its singular element
@@ -608,7 +664,11 @@ let get_readable_name cfg terminals s =
    (e.g. [list_of_indices] → "an index", [on_clauses] → the [on]/[[] opener),
    which is intentional; the curated forms remain in force for the Assuming
    subject, which names the whole completed sequence. *)
-let rec expecting_name ?(visited = StringSet.empty) cfg terminals gram s =
+(* Returns (rendered string, display source, credit). When the 3b chase fires
+   the display source is [Chase] (so the review table shows the mechanism that
+   overrode the list name), and the credit is the element the chase resolved to
+   paired with its *real* source — what actually produced the text. *)
+let rec expecting_name_src ?(visited = StringSet.empty) cfg terminals gram s =
   if
     (not (Hashtbl.mem terminals s))
     && String.lowercase_ascii s = s
@@ -619,10 +679,27 @@ let rec expecting_name ?(visited = StringSet.empty) cfg terminals gram s =
   then
     match chase_list_element gram s with
     | Some elem ->
-        expecting_name ~visited:(StringSet.add s visited) cfg terminals gram
-          elem
-    | None -> get_readable_name cfg terminals s
-  else get_readable_name cfg terminals s
+        let r, elem_src, elem_credit =
+          expecting_name_src ~visited:(StringSet.add s visited) cfg terminals
+            gram elem
+        in
+        (* The credit is the deepest resolution: propagate the element's own
+           credit if it was itself chased, else the element and its real
+           source. *)
+        let credit =
+          match elem_credit with Some c -> c | None -> (elem, elem_src)
+        in
+        (r, Chase, Some credit)
+    | None ->
+        let r, src = get_readable_name_src cfg terminals s in
+        (r, src, None)
+  else
+    let r, src = get_readable_name_src cfg terminals s in
+    (r, src, None)
+
+let expecting_name ?(visited = StringSet.empty) cfg terminals gram s =
+  let r, _, _ = expecting_name_src ~visited cfg terminals gram s in
+  r
 
 (* Drop a leading indefinite article from a readable noun phrase
    ("a field type" -> "field type", "an elemexpr" -> "elemexpr"); a quoted
@@ -666,14 +743,15 @@ let pluralize_phrase name =
    signals to the reader that an optional list element was elided from the
    Expecting list rather than being illegal — the hedge whose absence silently
    dropped tokens. *)
-let subject_name cfg terminals gram s =
+let subject_name_src cfg terminals gram s =
   if gram.is_generated s then
     match chase_list_element gram s with
     | Some elem ->
-        pluralize_phrase
-          (strip_article (expecting_name cfg terminals gram elem))
-    | None -> "a list"
-  else get_readable_name cfg terminals s
+        ( pluralize_phrase
+            (strip_article (expecting_name cfg terminals gram elem)),
+          Plural_subject )
+    | None -> ("a list", Plural_subject)
+  else get_readable_name_src cfg terminals s
 
 (* --- Self-Lints and Statistics --- *)
 
@@ -729,6 +807,13 @@ type message_stat = {
           (List.length expected_symbols), for every entry — the
           [-suggest-classes] impact simulation's baseline against the <=5 cap.
       *)
+  name_uses : name_use list;
+      (** Every symbol this entry's *emitted* message actually rendered, with
+          its rendered form, provenance, and position (step 12). Empty for an
+          override (free prose) and for a generic fallback ("Syntax error", no
+          symbol shown) — except that an over-cap fallback under a spurious
+          reduction still shows its Assuming subject, which is recorded. The
+          [names] review and the config-unused stat aggregate over these. *)
 }
 
 (* Would [token] plausibly open the construct [closer] terminates? Broader than
@@ -932,8 +1017,8 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
      (the whole completed construct — a user-named nonterminal by name, a
      generated list wrapper by its pluralised element); [expecting_name] renders
      the Expecting list (one element — singularises a list-shaped name). *)
-  let subject_name = subject_name cfg terminals grammar in
-  let expecting_name = expecting_name cfg terminals grammar in
+  let subject_name_src = subject_name_src cfg terminals grammar in
+  let expecting_name_src = expecting_name_src cfg terminals grammar in
 
   (* The final expected list for a set of valid symbols: drop any anonymous
      residue, then collapse an operator class only when it has >=2 members
@@ -958,12 +1043,24 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
           | None -> acc)
         StringMap.empty expected_raw
     in
-    let expected_symbols =
-      expected_raw
-      |> List.map (fun s ->
+    (* Per raw symbol, its rendered form and the pipeline step that produced it
+       (step 12): a class label when the class collapse fires (>=2 members
+       present), else the Expecting-position rendering. Feeds both the shown
+       [expected_symbols] and the [names] review's per-symbol provenance. *)
+    let rendered =
+      List.map
+        (fun s ->
           match classify_symbol cfg s with
-          | Some c when StringMap.find c class_counts >= 2 -> c
-          | _ -> expecting_name s)
+          | Some c when StringMap.find c class_counts >= 2 ->
+              (s, c, Class_label, None)
+          | _ ->
+              let r, src, credit = expecting_name_src s in
+              (s, r, src, credit))
+        expected_raw
+    in
+    let expected_symbols =
+      rendered
+      |> List.map (fun (_, r, _, _) -> r)
       |> List.sort_uniq String.compare
     in
     (* The classes whose collapse actually fired (>=2 members present): the
@@ -973,7 +1070,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
         (fun c n acc -> if n >= 2 then StringSet.add c acc else acc)
         class_counts StringSet.empty
     in
-    (expected_raw, expected_symbols, collapsed)
+    (expected_raw, expected_symbols, collapsed, rendered)
   in
 
   (* Calculate Valid Next Symbols, choosing between the two continuation tiers
@@ -996,16 +1093,20 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
   let vs_agg =
     symbols_of (fun _ -> true) |> StatusMap.bindings |> List.map fst
   in
-  let expected_raw_agg, exp_agg, collapsed_agg = expected_of vs_agg in
-  let valid_symbols, expected_raw, expected_symbols, collapsed_classes =
+  let expected_raw_agg, exp_agg, collapsed_agg, rendered_agg =
+    expected_of vs_agg
+  in
+  let valid_symbols, expected_raw, expected_symbols, collapsed_classes, rendered
+      =
     let n = List.length exp_agg in
-    if n >= 1 && n <= 5 then (vs_agg, expected_raw_agg, exp_agg, collapsed_agg)
+    if n >= 1 && n <= 5 then
+      (vs_agg, expected_raw_agg, exp_agg, collapsed_agg, rendered_agg)
     else
       let vs_c =
         symbols_of grammar.is_generated |> StatusMap.bindings |> List.map fst
       in
-      let expected_raw_c, exp_c, collapsed_c = expected_of vs_c in
-      (vs_c, expected_raw_c, exp_c, collapsed_c)
+      let expected_raw_c, exp_c, collapsed_c, rendered_c = expected_of vs_c in
+      (vs_c, expected_raw_c, exp_c, collapsed_c, rendered_c)
   in
 
   let sentence =
@@ -1079,7 +1180,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
     match List.rev d.spurious_reductions with
     | [] -> base_message
     | last :: _ ->
-        let raw_name = subject_name last.symbol in
+        let raw_name = fst (subject_name_src last.symbol) in
         let name, verb =
           if String.length raw_name > 2 && String.sub raw_name 0 2 = "a " then
             (String.sub raw_name 2 (String.length raw_name - 2), "is")
@@ -1156,6 +1257,47 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
         StringSet.empty expected_raw
     else StringSet.empty
   in
+  (* Per-symbol rendering provenance (step 12), one [name_use] per symbol the
+     *shown* message renders. The Expecting list surfaces only when emitted (the
+     [rendered] list carries the chosen tier's symbols with their source); the
+     Assuming subject surfaces whenever a spurious reduction was hedged and the
+     entry is not overridden — including an over-cap fallback, whose message is
+     still "Assuming that the X is complete, syntax error." An override shows
+     free prose, so it contributes nothing. *)
+  let name_uses =
+    let expecting =
+      if emitted then
+        List.map
+          (fun (sym, r, src, credit) ->
+            {
+              nu_symbol = sym;
+              nu_rendered = r;
+              nu_source = src;
+              nu_position = Expecting;
+              nu_credit = credit;
+            })
+          rendered
+      else []
+    in
+    let assuming =
+      if (not overridden) && d.spurious_reductions <> [] then
+        match List.rev d.spurious_reductions with
+        | last :: _ ->
+            let r, src = subject_name_src last.symbol in
+            [
+              {
+                nu_symbol = last.symbol;
+                nu_rendered = r;
+                nu_source = src;
+                nu_position = Assuming;
+                nu_credit = None;
+              };
+            ]
+        | [] -> []
+      else []
+    in
+    expecting @ assuming
+  in
   let stat =
     {
       expecting = emitted;
@@ -1176,6 +1318,7 @@ let generate_message cfg closers grammar terminals ~comments ~overrides entry =
       collapsed_classes;
       raw_terminals = List.filter grammar.is_terminal expected_raw;
       readable_len = n_expected;
+      name_uses;
     }
   in
   (* [full_message] is returned separately for the census (step 7), which counts
@@ -1325,6 +1468,48 @@ let check_entry gram auto (entry, stat) =
         in
         (unsound, StringSet.diff action_terms covered)
 
+(* --- Names review and staleness (step 12) --- *)
+
+(* Per [names] config key, how many times its curated phrase was the *winning*
+   rendering in each position (i.e. a [name_use] with source [Names_entry]). A
+   key that wins in neither position fires nothing — the config-unused ratchet
+   target — though that is not always a bug: a list-shaped name is
+   Expecting-dead because the 3b chase overrides it, yet can be Assuming-live as
+   the completed-construct subject. Returned sorted by key as
+   (key, expecting_count, assuming_count) over *every* configured [names] entry,
+   so an unused one shows (0, 0). *)
+let names_fire_counts cfg uses =
+  let bump sym pos m =
+    let e, a =
+      match StringMap.find_opt sym m with Some p -> p | None -> (0, 0)
+    in
+    StringMap.add sym
+      (match pos with Expecting -> (e + 1, a) | Assuming -> (e, a + 1))
+      m
+  in
+  let counts =
+    List.fold_left
+      (fun m u ->
+        (* A [names] entry fires either as the winning source directly, or as
+           the element a chase resolved to (credited so [local_decl] under the
+           [locals] chase is not mis-flagged as unused). *)
+        let m =
+          if u.nu_source = Names_entry then bump u.nu_symbol u.nu_position m
+          else m
+        in
+        match u.nu_credit with
+        | Some (elem, Names_entry) -> bump elem u.nu_position m
+        | _ -> m)
+      StringMap.empty uses
+  in
+  Hashtbl.fold (fun k _ acc -> k :: acc) cfg.names []
+  |> List.sort_uniq String.compare
+  |> List.map (fun k ->
+      let e, a =
+        match StringMap.find_opt k counts with Some p -> p | None -> (0, 0)
+      in
+      (k, e, a))
+
 (* Aggregate the per-entry self-lints into the quality summary pinned by the
    promoted [parser_messages.stats.expected] goldens: regressions (a new
    fallback state, a lost hint, a jargon token) fail `dune runtest`;
@@ -1426,7 +1611,82 @@ let output_stats cfg gram auto results =
     (fun (label, _) ->
       Printf.printf "class %S: collapsed in %d entries\n" label
         (count (fun s -> StringSet.mem label s.collapsed_classes)))
-    cfg.classes
+    cfg.classes;
+  (* Names-staleness ratchet (step 12): the [names] mode counts, per configured
+     entry, how often its curated phrase actually won in each position. An entry
+     unused in *both* positions fires nothing and is the ratchet target — going
+     quiet after a grammar change becomes a failing runtest diff, like class
+     dormancy. Each unused entry is listed with its per-position detail (both
+     "unused" here; the [names] mode's full table shows any dead-in-one-position
+     entry, which still fires and so is not counted here). *)
+  let uses = List.concat_map (fun (_, s) -> s.name_uses) results in
+  let fire = names_fire_counts cfg uses in
+  let unused = List.filter (fun (_, e, a) -> e = 0 && a = 0) fire in
+  Printf.printf "names configured: %d, unused: %d\n" (List.length fire)
+    (List.length unused);
+  List.iter
+    (fun (k, e, a) ->
+      let show n = if n = 0 then "unused" else string_of_int n in
+      Printf.printf "  %s (expecting: %s, assuming: %s)\n" k (show e) (show a))
+    unused
+
+(* The [names] review mode (step 12): a table of every symbol that surfaces in
+   the emitted messages — its rendered form, the pipeline step that produced it,
+   and how many times it appears in each position — sorted by symbol, then an
+   [unused [names] entries] section listing configured entries whose curated
+   phrase won in neither position. The audit surface for both directions:
+   awkward auto-derived or fallback renderings that deserve a [names] entry, and
+   [names] entries nothing uses. Output is plain aligned text, grep-able and
+   stable (no box drawing). *)
+let output_names cfg results =
+  let uses = List.concat_map (fun (_, s) -> s.name_uses) results in
+  (* Aggregate by (symbol, rendered, source): a symbol that renders one way in
+     the Expecting list and another as an Assuming subject (a list-shaped name)
+     yields two rows, each honest about its own rendering and source. *)
+  let tbl = Hashtbl.create 256 in
+  List.iter
+    (fun u ->
+      let key = (u.nu_symbol, u.nu_rendered, u.nu_source) in
+      let e, a = try Hashtbl.find tbl key with Not_found -> (0, 0) in
+      let e, a =
+        match u.nu_position with
+        | Expecting -> (e + 1, a)
+        | Assuming -> (e, a + 1)
+      in
+      Hashtbl.replace tbl key (e, a))
+    uses;
+  let rows =
+    Hashtbl.fold
+      (fun (sym, r, src) (e, a) acc -> (sym, r, src, e, a) :: acc)
+      tbl []
+    |> List.sort (fun (s1, r1, _, _, _) (s2, r2, _, _, _) ->
+        match String.compare s1 s2 with 0 -> String.compare r1 r2 | c -> c)
+  in
+  let colw sel dflt =
+    List.fold_left (fun w row -> max w (String.length (sel row))) dflt rows
+  in
+  let wsym = colw (fun (s, _, _, _, _) -> s) (String.length "SYMBOL") in
+  let wren = colw (fun (_, r, _, _, _) -> r) (String.length "RENDERED") in
+  let wsrc =
+    colw (fun (_, _, src, _, _) -> source_label src) (String.length "SOURCE")
+  in
+  Printf.printf "%-*s  %-*s  %-*s  %9s  %8s\n" wsym "SYMBOL" wren "RENDERED"
+    wsrc "SOURCE" "EXPECTING" "ASSUMING";
+  List.iter
+    (fun (sym, r, src, e, a) ->
+      Printf.printf "%-*s  %-*s  %-*s  %9d  %8d\n" wsym sym wren r wsrc
+        (source_label src) e a)
+    rows;
+  let fire = names_fire_counts cfg uses in
+  let unused = List.filter (fun (_, e, a) -> e = 0 && a = 0) fire in
+  Printf.printf "\nunused [names] entries:\n";
+  if unused = [] then Printf.printf "  (none)\n"
+  else
+    List.iter
+      (fun (k, _, _) ->
+        Printf.printf "  %s = %s\n" k
+          (match Hashtbl.find_opt cfg.names k with Some v -> v | None -> ""))
+      unused
 
 (* --- Message census (step 7) --- *)
 
@@ -1609,6 +1869,7 @@ type mode =
   | Generate of bool  (** [true] = [--no-comments] *)
   | Stats
   | Census
+  | Names
   | Fallbacks
   | Suggest_classes
   | Transitions
@@ -1644,7 +1905,7 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
   let closers = closers_of terminals in
   match mode with
   | Transitions -> analyze_transitions closers grammar terminals entries
-  | Generate _ | Stats | Census | Fallbacks | Suggest_classes -> (
+  | Generate _ | Stats | Census | Names | Fallbacks | Suggest_classes -> (
       let comments = match mode with Generate nc -> not nc | _ -> true in
       (match mode with
       | Generate _ -> Printf.eprintf "Generating messages...\n"
@@ -1686,6 +1947,7 @@ let run mode ~cmly_file ~config_file ~overrides_file input_file =
       | Census ->
           output_census (List.map (fun (_, (_, body, _)) -> body) results)
       | Stats -> output_stats cfg grammar auto (stats_of ())
+      | Names -> output_names cfg (stats_of ())
       | Fallbacks -> output_fallbacks (stats_of ())
       | Suggest_classes -> output_suggest_classes cfg (stats_of ())
       | Transitions -> assert false)
@@ -1810,6 +2072,38 @@ let census_cmd =
   in
   Cmd.v (Cmd.info "census" ~doc ~man) term
 
+let names_cmd =
+  let doc =
+    "Review how every symbol is rendered, and find unused config names"
+  in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Print a table of every grammar symbol that surfaces in the emitted \
+         messages: its rendered form, the pipeline step that produced it \
+         (token alias, $(b,[names]) entry, the 3b list-element chase, the \
+         Assuming-subject plural rendering, the lowercase auto-derivation, a \
+         $(b,[class]) label, or the quoted-lowercase fallback), and how often \
+         it appears in the Expecting list versus the Assuming subject. Usage \
+         is counted per position because a symbol can render differently in \
+         each. After the table, list any $(b,[names]) entries whose curated \
+         phrase won in neither position. The audit surface for two directions: \
+         awkward renderings that deserve a $(b,[names]) entry, and \
+         $(b,[names]) entries nothing uses.";
+      `S Manpage.s_options;
+    ]
+  in
+  let term =
+    let+ cmly = cmly_arg
+    and+ config = config_arg
+    and+ overrides = overrides_arg
+    and+ messages = messages_arg in
+    run Names ~cmly_file:cmly ~config_file:config ~overrides_file:overrides
+      messages
+  in
+  Cmd.v (Cmd.info "names" ~doc ~man) term
+
 let fallbacks_cmd =
   let doc = "Print .overrides templates for uncovered fallback states" in
   let man =
@@ -1910,6 +2204,7 @@ let main_cmd =
       generate_cmd;
       stats_cmd;
       census_cmd;
+      names_cmd;
       fallbacks_cmd;
       suggest_classes_cmd;
       transitions_cmd;

@@ -422,7 +422,7 @@ Expecting ')', or a data elem.
 
 parse: LPAREN DATA WAIT
 
-Expecting '(', ')', 'id', a data elem, or an offset.
+Expecting '(', ')', a data elem, an identifier ('$...'), or an offset.
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN ELEM ANYREF LPAREN ITEM CALL_INDIRECT END
@@ -520,7 +520,7 @@ Expecting ')', an element list, or an index.
 
 parse: LPAREN ELEM WAIT
 
-Expecting '(', 'declare', 'id', an element list, or an offset.
+Expecting '(', 'declare', an element list, an identifier ('$...'), or an offset.
 
 parse: LPAREN FUNC ARRAY_COPY NAT MEM_OFFSET
 
@@ -958,7 +958,7 @@ Assuming that the locals are complete, expecting ')', or instructions.
 
 parse: LPAREN FUNC LPAREN_LOCAL WAIT
 
-Expecting ')', 'id', or a value type.
+Expecting ')', a value type, or an identifier ('$...').
 <1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC MEMORY_COPY NAT MEM_OFFSET
@@ -1555,7 +1555,7 @@ Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an 
 
 parse: LPAREN FUNC WAIT
 
-Expecting '(export', or 'id'.
+Expecting '(export', or an identifier ('$...').
 
 parse: LPAREN GLOBAL ANYREF CALL_INDIRECT END
 
@@ -1608,7 +1608,7 @@ Expecting a name.
 
 parse: LPAREN GLOBAL WAIT
 
-Expecting '(export', '(import', 'id', or a global type.
+Expecting '(export', '(import', a global type, or an identifier ('$...').
 
 parse: LPAREN MEMORY I32 LPAREN DATA RPAREN WAIT
 
@@ -1732,7 +1732,7 @@ Assuming that the limits are complete, expecting ')', 'shared', or a page-size c
 
 parse: LPAREN MEMORY WAIT
 
-Expecting '(export', or 'id'.
+Expecting '(export', or an identifier ('$...').
 
 parse: LPAREN MODULE ID WAIT
 
@@ -1745,7 +1745,7 @@ Expecting end of file.
 
 parse: LPAREN MODULE WAIT
 
-Expecting ')', 'id', or a module field.
+Expecting ')', a module field, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN REC LPAREN_TYPE LPAREN FUNC RPAREN RPAREN WAIT
@@ -1872,7 +1872,7 @@ Assuming that the limits are complete, expecting a reference type.
 
 parse: LPAREN TABLE WAIT
 
-Expecting '(export', or 'id'.
+Expecting '(export', or an identifier ('$...').
 
 parse: LPAREN TAG ID WAIT
 
@@ -1930,7 +1930,7 @@ Expecting a parameter group.
 
 parse: LPAREN TAG LPAREN_PARAM WAIT
 
-Expecting ')', 'id', or an unnamed param.
+Expecting ')', an identifier ('$...'), or an unnamed param.
 <1>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
@@ -1962,7 +1962,7 @@ Expecting an index.
 
 parse: LPAREN TAG WAIT
 
-Expecting '(export', '(import', ')', 'id', or a type use.
+Expecting '(export', '(import', ')', a type use, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse: LPAREN WAIT
@@ -2367,7 +2367,7 @@ Expecting ')'.
 
 parse_script: LPAREN GET WAIT
 
-Expecting 'id', or a string.
+Expecting a string, or an identifier ('$...').
 
 parse_script: LPAREN INPUT ID WAIT
 
@@ -2380,7 +2380,7 @@ Expecting ')'.
 
 parse_script: LPAREN INPUT WAIT
 
-Expecting 'id', or a string.
+Expecting a string, or an identifier ('$...').
 
 parse_script: LPAREN INVOKE ID WAIT
 
@@ -2477,7 +2477,7 @@ Expecting ')', or a const.
 
 parse_script: LPAREN INVOKE WAIT
 
-Expecting 'id', or a string.
+Expecting a string, or an identifier ('$...').
 
 parse_script: LPAREN MODULE BINARY WAIT
 
@@ -2486,7 +2486,7 @@ Expecting ')', or a string.
 
 parse_script: LPAREN MODULE DEFINITION WAIT
 
-Expecting ')', 'binary', 'id', 'quote', or a module field.
+Expecting ')', 'binary', 'quote', a module field, or an identifier ('$...').
 <3>This '(' opens the enclosing construct.
 
 parse_script: LPAREN MODULE ID WAIT
@@ -2501,11 +2501,11 @@ Expecting ')'.
 
 parse_script: LPAREN MODULE INSTANCE ID WAIT
 
-Expecting ')', or 'id'.
+Expecting ')', or an identifier ('$...').
 
 parse_script: LPAREN MODULE INSTANCE WAIT
 
-Expecting ')', or 'id'.
+Expecting ')', or an identifier ('$...').
 <3>This '(' opens the enclosing construct.
 
 parse_script: LPAREN MODULE LPAREN WAIT
@@ -2534,7 +2534,7 @@ Expecting ')'.
 
 parse_script: LPAREN OUTPUT WAIT
 
-Expecting ')', 'id', or a string.
+Expecting ')', a string, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN REGISTER STRING ID WAIT
@@ -2544,7 +2544,7 @@ Expecting ')'.
 
 parse_script: LPAREN REGISTER STRING WAIT
 
-Expecting ')', or 'id'.
+Expecting ')', or an identifier ('$...').
 <3>This '(' opens the enclosing construct.
 
 parse_script: LPAREN REGISTER WAIT
@@ -2562,7 +2562,7 @@ Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'asse
 
 parse_script: LPAREN SCRIPT WAIT
 
-Expecting ')', 'id', or a cmd.
+Expecting ')', a cmd, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN THREAD ID WAIT
@@ -2586,7 +2586,7 @@ Expecting ')'.
 
 parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE WAIT
 
-Expecting 'id'.
+Expecting an identifier ('$...').
 
 parse_script: LPAREN THREAD LPAREN SHARED LPAREN WAIT
 
@@ -2602,7 +2602,7 @@ Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'asse
 
 parse_script: LPAREN THREAD WAIT
 
-Expecting ')', 'id', a cmd, or a shared clause.
+Expecting ')', a cmd, a shared clause, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN VEC_TERN_OP
@@ -2616,7 +2616,7 @@ Expecting ')'.
 
 parse_script: LPAREN WAIT WAIT
 
-Expecting ')', or 'id'.
+Expecting ')', or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_EXPORT STRING LPAREN FUNC NAT NAT
@@ -2716,7 +2716,7 @@ Expecting ')', or an import group elem.
 
 parse_script: LPAREN_IMPORT STRING LPAREN FUNC WAIT
 
-Expecting '(', ')', 'id', or a type use.
+Expecting '(', ')', a type use, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL ANYREF WAIT
@@ -2730,7 +2730,7 @@ Expecting a global type.
 
 parse_script: LPAREN_IMPORT STRING LPAREN GLOBAL WAIT
 
-Expecting 'id', or a global type.
+Expecting a global type, or an identifier ('$...').
 
 parse_script: LPAREN_IMPORT STRING LPAREN ITEM ID STRING LPAREN FUNC RPAREN WAIT
 
@@ -2758,7 +2758,7 @@ Expecting ')', or an external type.
 
 parse_script: LPAREN_IMPORT STRING LPAREN ITEM WAIT
 
-Expecting 'id', or a name.
+Expecting a name, or an identifier ('$...').
 
 parse_script: LPAREN_IMPORT STRING LPAREN MEMORY ID WAIT
 
@@ -2771,7 +2771,7 @@ Expecting ')'.
 
 parse_script: LPAREN_IMPORT STRING LPAREN MEMORY WAIT
 
-Expecting 'id', or a memory type.
+Expecting a memory type, or an identifier ('$...').
 
 parse_script: LPAREN_IMPORT STRING LPAREN TABLE I32 WAIT
 
@@ -2788,7 +2788,7 @@ Expecting ')'.
 
 parse_script: LPAREN_IMPORT STRING LPAREN TABLE WAIT
 
-Expecting 'id', or a table type.
+Expecting a table type, or an identifier ('$...').
 
 parse_script: LPAREN_IMPORT STRING LPAREN TAG ID WAIT
 
@@ -2802,7 +2802,7 @@ Assuming that the type use is complete, expecting ')'.
 
 parse_script: LPAREN_IMPORT STRING LPAREN TAG WAIT
 
-Expecting ')', 'id', or a type use.
+Expecting ')', a type use, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_IMPORT STRING LPAREN WAIT
@@ -2899,7 +2899,7 @@ Expecting ')', or a field.
 
 parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN FIELD WAIT
 
-Expecting ')', 'id', or a field type.
+Expecting ')', a field type, or an identifier ('$...').
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_TYPE LPAREN STRUCT LPAREN WAIT
@@ -3008,7 +3008,7 @@ Expecting an index.
 
 parse_script: LPAREN_TYPE WAIT
 
-Expecting 'id', or a subtype.
+Expecting a subtype, or an identifier ('$...').
 
 parse_script: RPAREN
 
@@ -3030,5 +3030,5 @@ Expecting ')', a string, or an index.
 
 parse_script: STRING_ANNOT WAIT
 
-Expecting 'id'.
+Expecting an identifier ('$...').
 

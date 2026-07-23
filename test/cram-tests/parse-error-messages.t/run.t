@@ -211,7 +211,7 @@ instruction's arguments):
 func's optional export clause or id belongs):
 
   $ wax check export-head.wat
-  Error: Expecting '(export', or 'id'.
+  Error: Expecting '(export', or an identifier ('$...').
    ──➤  export-head.wat:1:15
   1 │ (module (func 5))
     ·               ^

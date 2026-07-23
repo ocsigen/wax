@@ -76,6 +76,31 @@
  (action
   (diff calc.stats.expected calc.stats)))
 
+; The names review (step 12): every rendered symbol with its provenance
+; (alias / [names] / [class] / auto-derived / quoted-fallback) and per-position
+; usage, then any [names] entries that fired in neither position. Here `stmts`
+; is [names]-rendered only as an Assuming subject (0 expecting, 1 assuming) —
+; the positional subtlety the mode exists to surface — and nothing is unused.
+
+(rule
+ (with-stdout-to
+  calc.names
+  (run
+   %{project_root}/stele/generate_error_messages.exe
+   names
+   --cmly
+   %{dep:calc.cmly}
+   --config
+   %{dep:calc.config}
+   --overrides
+   %{dep:calc.overrides}
+   %{dep:calc.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.names.expected calc.names)))
+
 ; The config rot guard: a stale [class]/[names]/[opener-nets] entry must fail
 ; the build. calc-rot.config names a token the grammar lacks; the generator
 ; prints a clean one-line "stele: ... names no symbol of this grammar" error and

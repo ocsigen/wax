@@ -73,8 +73,8 @@ The generator is a build-time tool. Wire four menhir/stele steps; see
 ## The command line
 
 stele is a `Cmd.group` of subcommands, one per output: `generate`
-(`--no-comments` for the golden projection), `stats`, `census`, `fallbacks`,
-`suggest-classes`, and `transitions`. Each takes the same inputs — the required
+(`--no-comments` for the golden projection), `stats`, `census`, `names`,
+`fallbacks`, `suggest-classes`, and `transitions`. Each takes the same inputs — the required
 `--cmly FILE`, the optional `--config FILE` / `--overrides FILE`, and the
 positional `.messages` file — so every command line reads
 `stele <command> --cmly g.cmly [--config …] [--overrides …] g.messages`. Run
@@ -119,6 +119,23 @@ Useful modes while working:
 - `census` prints each distinct message body once with its occurrence count,
   the delimiter-hint depth normalized to `<_>`, so sentence re-picking at most
   bumps a count and a wording change is a one-line diff.
+- `names` reviews how every symbol reaches its wording: a table of each symbol
+  that surfaces in the emitted messages with its rendered form, the pipeline
+  step that produced it (token alias, `[names]` entry, the list-element chase,
+  the Assuming-subject plural rendering, the lowercase auto-derivation, a
+  `[class]` label, or the quoted-lowercase fallback), and how often it appears
+  in the Expecting list versus the Assuming subject. Usage is counted per
+  position because a symbol can render differently in each (a list name
+  singularises via the chase in the Expecting list but keeps its plural as a
+  subject) and a `[names]` entry can be dead in one position yet live in the
+  other. After the table it lists any `[names]` entries whose curated phrase won
+  in neither position. The audit surface for two directions: awkward auto-derived
+  or fallback renderings that deserve a `[names]` entry (a quoted-lowercase
+  fallback that is not a real keyword — the token name shown as if it were
+  literal syntax), and `[names]` entries nothing uses. `stats` mirrors the
+  second half as the ratchet: a `names configured: X, unused: Y` line plus one
+  indented per-position line per fully-unused entry, so an entry going quiet
+  becomes a golden diff.
 - `fallbacks` prints a ready-to-paste `.overrides` block for every
   generic-fallback ("Syntax error") state not yet overridden. Empty output means
   every fallback is covered, the condition the stats ratchet pins at zero.
@@ -255,7 +272,7 @@ stele/
     dune
   test/                      ; the toy calc grammar (the copyable template)
     parser.mly  calc.config  calc.overrides
-    calc.expected  calc.stats.expected
+    calc.expected  calc.stats.expected  calc.names.expected
     calc-rot.config  calc-rot.expected  ; the config rot-guard case
     dune
   README.md

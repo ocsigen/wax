@@ -1,0 +1,12 @@
+SYMBOL  RENDERED     SOURCE           EXPECTING  ASSUMING
+EOF     'eof'        quoted-fallback          1         0
+PLUS    an operator  [class]                  3         0
+RBRACE  '}'          alias                    1         0
+RPAREN  ')'          alias                    2         0
+SEMI    ';'          alias                    2         0
+STAR    an operator  [class]                  3         0
+expr    an expr      auto-derived             3         0
+stmts   statements   [names]                  0         1
+
+unused [names] entries:
+  (none)

@@ -15,3 +15,7 @@ entries with uncovered actions: 0
 uncovered action tokens (total): 0
 class "an operator": collapsed in 33 entries
 class "a comparison operator": collapsed in 33 entries
+names configured: 17, unused: 3
+  CHAR (expecting: unused, assuming: unused)
+  EOF (expecting: unused, assuming: unused)
+  FLOAT (expecting: unused, assuming: unused)
