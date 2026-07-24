@@ -399,6 +399,44 @@ let completion_kind (k : Wax_wasm.Resolve.kind) =
   | Tag -> "event"
   | Label | Memory | Table | Elem | Data -> "text"
 
+let wat_abstract_heap_types =
+  [
+    "any";
+    "eq";
+    "i31";
+    "struct";
+    "array";
+    "none";
+    "func";
+    "nofunc";
+    "extern";
+    "noextern";
+    "exn";
+    "noexn";
+    "cont";
+    "nocont";
+  ]
+
+let wat_numeric_types = [ "i32"; "i64"; "f32"; "f64"; "v128" ]
+
+let wat_reftype_abbrevs =
+  [
+    "anyref";
+    "eqref";
+    "i31ref";
+    "structref";
+    "arrayref";
+    "nullref";
+    "funcref";
+    "nullfuncref";
+    "exnref";
+    "nullexnref";
+    "contref";
+    "nullcontref";
+    "externref";
+    "nullexternref";
+  ]
+
 (* As [completion_string], but for WAT. WAT operands are all indices into flat
    spaces, and the kind of index a position wants is fixed by the enclosing
    instruction — so where the user is typing an index (or has just opened one,
@@ -418,17 +456,19 @@ let completion_string ?(encoding = UTF16) src line ch (_defines : string list) =
       let width = span_width in
       let expected = ref [] in
       ignore (Wax_wasm.Resolve.f ~expected ast);
-      (* The narrowest index use-site covering the cursor (a zero-width inserted
-         placeholder wins over any wider token that might abut it). *)
       let best =
         List.fold_left
           (fun best (e : Wax_wasm.Resolve.expected) ->
             if contains e.e_loc then
               match best with
-              | Some (b : Wax_wasm.Resolve.expected)
-                when width b.e_loc <= width e.e_loc ->
-                  best
-              | _ -> Some e
+              | Some (b : Wax_wasm.Resolve.expected) ->
+                  if
+                    b.e_type_slot = None && e.e_type_slot <> None
+                    && width b.e_loc = 0
+                  then Some e
+                  else if width b.e_loc <= width e.e_loc then best
+                  else Some e
+              | None -> Some e
             else best)
           None !expected
       in
@@ -436,20 +476,71 @@ let completion_string ?(encoding = UTF16) src line ch (_defines : string list) =
       | None -> []
       | Some e ->
           let seen = Hashtbl.create 32 in
+          let candidates =
+            let index_items =
+              List.map
+                (fun (name, kind, hover) ->
+                  {
+                    k_name = "$" ^ name;
+                    k_kind = completion_kind kind;
+                    k_detail = Option.value hover ~default:"";
+                  })
+                (e.e_candidates ())
+            in
+            match e.e_type_slot with
+            | Some Heaptype ->
+                let kw_items =
+                  List.map
+                    (fun kw ->
+                      {
+                        k_name = kw;
+                        k_kind = "keyword";
+                        k_detail = "heap type";
+                      })
+                    wat_abstract_heap_types
+                in
+                index_items @ kw_items
+            | Some Reftype ->
+                List.map
+                  (fun kw ->
+                    {
+                      k_name = kw;
+                      k_kind = "keyword";
+                      k_detail = "reference type";
+                    })
+                  wat_reftype_abbrevs
+            | Some Valtype ->
+                let num_items =
+                  List.map
+                    (fun kw ->
+                      {
+                        k_name = kw;
+                        k_kind = "keyword";
+                        k_detail = "value type";
+                      })
+                    wat_numeric_types
+                in
+                let ref_items =
+                  List.map
+                    (fun kw ->
+                      {
+                        k_name = kw;
+                        k_kind = "keyword";
+                        k_detail = "value type";
+                      })
+                    wat_reftype_abbrevs
+                in
+                num_items @ ref_items
+            | None -> index_items
+          in
           List.filter_map
-            (fun (name, kind, hover) ->
-              let k_name = "$" ^ name in
-              let key = (k_name, kind) in
+            (fun item ->
+              let key = (item.k_name, item.k_kind) in
               if Hashtbl.mem seen key then None
               else (
                 Hashtbl.add seen key ();
-                Some
-                  {
-                    k_name;
-                    k_kind = completion_kind kind;
-                    k_detail = Option.value hover ~default:"";
-                  }))
-            (e.e_candidates ()))
+                Some item))
+            candidates)
 
 (* As [check_string] but for WAT: the recovered parse's syntax errors together
    with the validation / lint diagnostics, both from the shared analysis. *)

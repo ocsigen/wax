@@ -46,6 +46,8 @@ let insert =
       false,
       "$_" );
     (Tokens.NAT "0", Wax_utils.Message.text "Missing number.", false, "0");
+    (Tokens.I32, Wax_utils.Message.text "Missing type.", false, "i32");
+    (Tokens.FUNCREF, Wax_utils.Message.text "Missing type.", false, "funcref");
   ]
 
 (* A missing closer — [(module (func … (func …] with a [)] left out — surfaces

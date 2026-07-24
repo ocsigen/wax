@@ -40,9 +40,12 @@ type space = {
   s_by_index : (int, acc) Hashtbl.t;
 }
 
+type type_slot = Heaptype | Reftype | Valtype
+
 type expected = {
   e_loc : location;
   e_candidates : unit -> (string * kind * string option) list;
+  e_type_slot : type_slot option;
 }
 
 let f ?expected ((_, fields) : location Text.module_) : binding list =
@@ -50,10 +53,13 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
   (* Record an index use-site for completion: its span and a thunk producing the
      named definitions in scope for the space it expects. The thunk is forced
      after resolution completes, so every space is fully built. *)
-  let record loc candidates =
+  let record ?type_slot loc candidates =
     match expected with
     | None -> ()
-    | Some r -> r := { e_loc = loc; e_candidates = candidates } :: !r
+    | Some r ->
+        r :=
+          { e_loc = loc; e_candidates = candidates; e_type_slot = type_slot }
+          :: !r
   in
   let space_candidates sp () =
     Hashtbl.fold
@@ -102,8 +108,8 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
   (* Record a use of index [idx] in space [sp], if it resolves. The use-site is
      noted for completion regardless of whether it resolves — an unresolved
      [$prefix] the user is still typing wants the same space's names. *)
-  let use sp (idx : Text.idx) =
-    record idx.info (space_candidates sp);
+  let use ?type_slot sp (idx : Text.idx) =
+    record ?type_slot idx.info (space_candidates sp);
     let target =
       match idx.desc with
       | Text.Num n -> Hashtbl.find_opt sp.s_by_index (Uint32.to_int n)
@@ -128,17 +134,25 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
   (* Type references buried in the type family (reference value types, block
      types, function-type uses). *)
   let use_heaptype (h : Text.heaptype) =
-    match h with Text.Type idx | Text.Exact idx -> use types idx | _ -> ()
+    match h with
+    | Text.Type idx | Text.Exact idx -> use ~type_slot:Heaptype types idx
+    | _ -> ()
   in
-  let use_reftype (r : Text.reftype) = use_heaptype r.Text.typ in
-  let use_valtype (v : Text.valtype) =
-    match v with Text.Ref r -> use_reftype r | _ -> ()
+  let use_reftype ?loc (r : Text.reftype) =
+    Option.iter (fun l -> record ~type_slot:Reftype l (fun () -> [])) loc;
+    use_heaptype r.Text.typ
+  in
+  let use_valtype ?loc (v : Text.valtype) =
+    Option.iter (fun l -> record ~type_slot:Valtype l (fun () -> [])) loc;
+    match v with Text.Ref r -> use_heaptype r.Text.typ | _ -> ()
   in
   let use_typeuse ((idx_opt, ft_opt) : Text.typeuse) =
     Option.iter (use types) idx_opt;
     Option.iter
       (fun (ft : Text.functype) ->
-        Array.iter (fun p -> use_valtype (snd p.desc)) ft.Text.params;
+        Array.iter
+          (fun p -> use_valtype ~loc:p.info (snd p.desc))
+          ft.Text.params;
         Array.iter use_valtype ft.Text.results)
       ft_opt
   in
@@ -245,8 +259,8 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
     | Br_on_cast_desc_eq (l, r1, r2)
     | Br_on_cast_desc_eq_fail (l, r1, r2) ->
         use_label labels l;
-        use_reftype r1;
-        use_reftype r2
+        use_reftype ~loc:i.info r1;
+        use_reftype ~loc:i.info r2
     (* Functions. *)
     | Call idx | ReturnCall idx | RefFunc idx -> use funcs idx
     (* Globals / locals. *)
@@ -285,7 +299,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
         use elems e
     | StructGet (_, t, fld) | StructSet (t, fld) -> use_field t fld
     (* Reference tests / casts / null. *)
-    | RefTest r | RefCast r | RefCastDescEq r -> use_reftype r
+    | RefTest r | RefCast r | RefCastDescEq r -> use_reftype ~loc:i.info r
     | RefNull h -> use_heaptype h
     (* Memory. *)
     | Load (idx, _, _)
@@ -441,17 +455,19 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
                 match sub.Text.typ with
                 | Text.Func ft ->
                     Array.iter
-                      (fun p -> use_valtype (snd p.desc))
+                      (fun p -> use_valtype ~loc:p.info (snd p.desc))
                       ft.Text.params;
                     Array.iter use_valtype ft.Text.results
                 | Text.Struct farr ->
                     Array.iter
                       (fun fe ->
                         match snd fe.desc with
-                        | { typ = Text.Value v; _ } -> use_valtype v
+                        | { typ = Text.Value v; _ } ->
+                            use_valtype ~loc:fe.info v
                         | _ -> ())
                       farr
-                | Text.Array { typ = Text.Value v; _ } -> use_valtype v
+                | Text.Array { typ = Text.Value v; _ } ->
+                    use_valtype ~loc:field.info v
                 | Text.Array _ -> ()
                 | Text.Cont idx -> use types idx)
               rectype
@@ -477,7 +493,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
                 let lid, ltyp = l.desc in
                 (* Resolve the declared type's own type references, e.g.
                    [$t] in [(local $x (ref $t))]. *)
-                use_valtype ltyp;
+                use_valtype ~loc:l.info ltyp;
                 ignore (register locals lid None))
               decls;
             walk_instrs locals [] instrs

@@ -121,6 +121,17 @@
   partial prefix $h (functions) -> [$helper:function]
   not an index position -> []
 
+=== completion (contextual type completion) ===
+  ref.null (type names + abstract heap types) -> [$t:type any:keyword eq:keyword i31:keyword struct:keyword array:keyword none:keyword func:keyword nofunc:keyword extern:keyword noextern:keyword exn:keyword noexn:keyword cont:keyword nocont:keyword]
+  (ref ) in param (type names + abstract heap types) -> [$t:type any:keyword eq:keyword i31:keyword struct:keyword array:keyword none:keyword func:keyword nofunc:keyword extern:keyword noextern:keyword exn:keyword noexn:keyword cont:keyword nocont:keyword]
+  param (valtypes) -> []
+  param prefix i (valtypes) -> []
+  result (valtypes) -> []
+  local (valtypes) -> []
+  field (valtypes) -> []
+  table elemtype (reftypes) -> []
+  elem (reftypes) -> []
+
 === diagnostics on a missing operand ===
   missing call index -> [Missing index.]
   missing branch label -> [Missing index.]

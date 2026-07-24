@@ -36,6 +36,8 @@ type binding = {
   hover : string option;  (** A one-line summary for hover over the name. *)
 }
 
+type type_slot = Heaptype | Reftype | Valtype
+
 type expected = {
   e_loc : Ast.location;
       (** The span of an index use — a symbolic [$id], a numeric index, or the
@@ -46,6 +48,10 @@ type expected = {
           there: each [(name without [$], kind, hover)]. A thunk so a consumer
           pays the snapshot only for the one use-site it cares about. Empty when
           nothing of that kind is in scope. *)
+  e_type_slot : type_slot option;
+      (** Some slot at a type position: abstract heap types (Heaptype),
+          reference type abbreviations (Reftype), or value types (Valtype) are
+          legal here in addition to/instead of index names. *)
 }
 (** Where an index is expected, for completion: the kind of index a position
     wants is fixed by the instruction it sits in, so recovery inserting a
