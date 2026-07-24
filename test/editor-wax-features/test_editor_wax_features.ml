@@ -87,4 +87,42 @@ let () =
     (fun (s : Editor_common.sym) ->
       Printf.printf "  %s %s %s\n" s.s_kind s.s_name (show_loc s.s_selection))
     (Wax_editor.symbols_string src);
+  print_newline ();
+
+  (* Contextual type completion. Each case is its own buffer with the cursor at
+     the end of [sub]. A value-type position (after [let x:]) offers the numeric
+     value-type keywords among the general candidates; a heap-type position
+     (right after [&]) short-circuits to just the abstract heap types plus the
+     module's named types — numeric value types must NOT appear there. *)
+  let complete ?(only = fun _ -> true) label csrc sub =
+    let i = Str.search_forward (Str.regexp_string sub) csrc 0 in
+    let line = ref 0 and bol = ref 0 in
+    String.iteri
+      (fun j c ->
+        if j < i && c = '\n' then (
+          incr line;
+          bol := j + 1))
+      csrc;
+    let col = i - !bol + String.length sub in
+    Printf.printf "%s:\n" label;
+    Wax_editor.completion_string csrc !line col []
+    |> List.filter only
+    |> List.map (fun (c : Editor_common.completion) ->
+        Printf.sprintf "%s:%s" c.k_name c.k_kind)
+    |> List.sort compare
+    |> List.iter (fun s -> Printf.printf "  %s\n" s)
+  in
+  complete "=== completion (value-type position, value types only) ==="
+    ~only:(fun (c : Editor_common.completion) -> c.k_detail = "value type")
+    "type Node = { next: i32 }\nfn f() -> i32 { let x: i32 = 0; x }\n" "let x: ";
+  complete "=== completion (heap-type position, after &) ==="
+    "type Node = { next: i32 }\nfn f() -> i32 { let x: &i32 = 0; 0 }\n"
+    "let x: &";
+  (* Binary bitwise-AND: [&] here follows the operand [x], so it must NOT be
+     read as a reference type — ordinary completion (locals/keywords/module
+     names), with the heap types [any]/[func] absent. *)
+  complete "=== completion (binary-AND position, no heap types) ==="
+    ~only:(fun (c : Editor_common.completion) ->
+      c.k_name = "any" || c.k_name = "func" || c.k_name = "x" || c.k_name = "g")
+    "fn g() -> i32 { let x = 5; let y = x & 0; y }\n" "x & ";
   print_newline ()

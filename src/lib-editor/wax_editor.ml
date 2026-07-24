@@ -840,6 +840,34 @@ let symbols_string src =
    drifts. *)
 let wax_keywords = Wax_conversion.Namespace.reserved_words
 
+(* The primitive value-type keywords. Offered context-free alongside the other
+   keywords: they are valid wherever a value type is written, and the client
+   filters by the typed prefix. Kept separate from [Namespace.reserved_words]
+   (which drives conversion renaming) — these are not reserved words there. *)
+let wax_value_type_keywords = [ "i32"; "i64"; "f32"; "f64"; "v128" ]
+
+(* The abstract heap types (the keys of the parser's [absheaptype_tbl] plus
+   [cont]) and [fn] — everything that can legally follow [&]/[&?]/[&!] to form a
+   reference type, other than a named type. *)
+let wax_heap_type_keywords =
+  [
+    "any";
+    "eq";
+    "i31";
+    "struct";
+    "array";
+    "none";
+    "func";
+    "nofunc";
+    "extern";
+    "noextern";
+    "exn";
+    "noexn";
+    "cont";
+    "nocont";
+    "fn";
+  ]
+
 (* Render a declaration's type / signature for a completion item's detail,
    straight from the parsed AST (no typing). A wide margin keeps it on one
    line. *)
@@ -1211,8 +1239,67 @@ let namespace_position ~encoding src line ch =
     if !j < stop then Some (String.sub src (!j + 1) (stop - !j)) else None)
   else None
 
+(* Whether the cursor is completing a heap type: its identifier prefix (possibly
+   empty) is immediately preceded by [&], with optional [?]/[!] in between (the
+   [& ?? !? heap_type] reference-type syntax). Only heap types and named types
+   are legal there — not numeric value types — so this short-circuits the
+   general completion like [is_member_position].
+
+   [&] is overloaded: it also spells binary bitwise-AND ([a & b]). The two are
+   told apart by what precedes the [&] (skipping whitespace): a reference-type
+   [&] follows a type-introducing character or the start of the buffer, whereas
+   a binary [&] follows an operand terminator — an identifier char, or a
+   closing [)] / []] / [}] / string-quote. A reference type is never preceded
+   by an operand terminator, so ruling those out has no false negatives. *)
+let is_heap_type_position ~encoding src line ch =
+  let off = line_start_offset src line + byte_column ~encoding src line ch in
+  let i = ref (off - 1) in
+  while !i >= 0 && is_ident_char src.[!i] do
+    decr i
+  done;
+  while !i >= 0 && (src.[!i] = '?' || src.[!i] = '!') do
+    decr i
+  done;
+  !i >= 0
+  && src.[!i] = '&'
+  &&
+  (* Skip whitespace before the [&], then reject a preceding operand terminator
+     (a binary [a and b], not a reference type). Running off the start leaves it
+     a type. *)
+  let j = ref (!i - 1) in
+  while
+    !j >= 0
+    && (src.[!j] = ' ' || src.[!j] = '\t' || src.[!j] = '\n' || src.[!j] = '\r')
+  do
+    decr j
+  done;
+  if !j < 0 then true
+  else
+    let p = src.[!j] in
+    not (is_ident_char p || p = ')' || p = ']' || p = '}' || p = '"')
+
 let completion_string ?(encoding = UTF16) src line ch defines =
-  if is_member_position ~encoding src line ch then
+  if is_heap_type_position ~encoding src line ch then
+    let heap_keywords =
+      List.map
+        (fun k -> { k_name = k; k_kind = "keyword"; k_detail = "heap type" })
+        wax_heap_type_keywords
+    in
+    let types =
+      let ast_opt, _, _ =
+        Wax_parser.parse_recover ~filename:"<buffer>"
+          ~sync:Wax_lang.Recover.sync ~insert:Wax_lang.Recover.insert
+          ~closers:Wax_lang.Recover.closers src
+      in
+      match ast_opt with
+      | None -> []
+      | Some ast ->
+          let target = (line + 1, byte_column ~encoding src line ch) in
+          module_completions src ast target (define_bindings defines)
+          |> List.filter (fun c -> c.k_kind = "type")
+    in
+    heap_keywords @ types
+  else if is_member_position ~encoding src line ch then
     match member_receiver_at ~encoding src line ch (analyze src).a_members with
     | Some r ->
         List.map member_completion (Wax_lang.Members.member_candidates r)
@@ -1273,6 +1360,10 @@ let completion_string ?(encoding = UTF16) src line ch defines =
                   k_detail = "labelled argument";
                 })
               [ "align"; "offset"; "lane"; "tag" ]
+          @ List.map
+              (fun k ->
+                { k_name = k; k_kind = "keyword"; k_detail = "value type" })
+              wax_value_type_keywords
         in
         (* The intrinsic namespace names, so [v128::] / [i64::] / [atomic::] is
            discoverable; selecting one leaves the cursor before the [::]. *)

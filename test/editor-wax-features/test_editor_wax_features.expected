@@ -25,3 +25,30 @@
   function f (7,7)-(7,8)
   function g (10,3)-(10,4)
 
+=== completion (value-type position, value types only) ===:
+  f32:keyword
+  f64:keyword
+  i32:keyword
+  i64:keyword
+  v128:keyword
+=== completion (heap-type position, after &) ===:
+  Node:type
+  any:keyword
+  array:keyword
+  cont:keyword
+  eq:keyword
+  exn:keyword
+  extern:keyword
+  fn:keyword
+  func:keyword
+  i31:keyword
+  nocont:keyword
+  noexn:keyword
+  noextern:keyword
+  nofunc:keyword
+  none:keyword
+  struct:keyword
+=== completion (binary-AND position, no heap types) ===:
+  g:function
+  x:local
+
