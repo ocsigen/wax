@@ -300,6 +300,22 @@ server](#language-server)).
       (proposal) WebAssembly, and removing annotations is orthogonal to
       whether the consumer supports the proposal.
 
+- **`--faithful`**
+    - Decompile faithfully: turn off the stream-reshaping recoveries, so a
+      `wat`/`wasm` module decompiled to Wax recompiles with the same reachable
+      instruction structure. It keeps `!(a == b)` instead of fusing
+      `t.eq; i32.eqz` into a single `a != b`, and keeps a flat `br_on_cast_fail`
+      chain instead of recovering it as a `match` (which re-lowers to the nested
+      ladder). It also keeps a redundant non-null `ref.cast` and pins some
+      constant widths through conversions.
+    - Only valid with wax output (`-f wax`); requesting it for wat or wasm output
+      is a usage error.
+    - Some divergences remain (all semantically inert): local ordering and
+      numbering, the `name` section, type renumbering, constant widths, the
+      recompiler-peephole fusions (narrow-load-then-widen, `extend32_s`,
+      direct-call), compiler-inserted casts, and dead code. See
+      [Round-Tripping](correspondence/round_trip.md).
+
 - **`--source-map`**
     - Generate a source map file alongside the output file and insert a `sourceMappingURL` custom section. Only valid with wasm output (`-f wasm`) to a file, when the source is a text file (not a Wasm binary).
       Requesting one for wat or wax output, when the source is a Wasm binary, or when outputting to `stdout`, is an error.

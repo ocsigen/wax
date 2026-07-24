@@ -476,6 +476,14 @@ type ctx = {
          type ([0 as i32], [0.0 as f64], ...). This keeps Wax type inference
          from re-typing an otherwise polymorphic literal, so a type mismatch in
          the source survives the round-trip. *)
+  faithful : bool;
+      (* When set (the [--faithful] decompilation mode), the recoveries that
+         rewrite the instruction stream to a shorter or differently-shaped one
+         are turned off, so the decompiled Wax re-lowers to the exact original
+         opcodes. Here it keeps the [!(a == b)] form of [t.eq; i32.eqz] rather
+         than fusing it to [a != b] (which recompiles to a single [t.ne]); it is
+         also threaded into {!Recover_match} to disable the flat
+         [br_on_cast_fail]-chain arm. *)
   diagnostics : Wax_utils.Diagnostic.context;
   cond_env : Cond.env;
   cond_diag : Wax_utils.Diagnostic.context;
@@ -1139,7 +1147,7 @@ let floattype ty : Ast.valtype =
   | `F64 -> F64
   | _ -> assert false
 
-let int_un_op i0 sz (op : Src.int_un_op) =
+let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
   (* A no-argument instruction method [recv.meth()]. *)
   let method_call recv meth =
@@ -1193,8 +1201,10 @@ let int_un_op i0 sz (op : Src.int_un_op) =
         (* [eqz] of an equality is exactly the negated comparison; recover
            [i32.eqz (ref.eq a b)] — how [a != b] on references lowers — as
            [a != b] rather than [!(a == b)]. ([sz] is [i32] here, so [pin] leaves
-           the [BinOp] shape untouched.) *)
-        | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) ->
+           the [BinOp] shape untouched.) Under [--faithful] this rewrite is off:
+           it turns [t.eq; i32.eqz] into a single [t.ne], so keep the [!(...)]
+           form, which re-lowers to the original [eq; eqz] pair. *)
+        | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) when not faithful ->
             with_loc (BinOp (op_loc i0 Ast.Ne, e1, e2))
         | _ -> with_loc (UnOp (op_loc i0 Ast.Not, operand)))
     | Trunc (f, signage) ->
@@ -1222,12 +1232,18 @@ let int_un_op i0 sz (op : Src.int_un_op) =
            else { e with desc = Ast.Cast (e, Valtype (floattype sz)) })
           "to_bits"
     | ExtendS `_32 ->
-        (* i64.extend32_s *)
+        (* i64.extend32_s, rendered [(operand as i32) as i64_s] so [to_wasm]
+           re-fuses it (the inner operand must stay typed i64 for the fusion to
+           fire). Under [--faithful] pin the operand's i64 source, so a wrapped
+           i64 constant does not re-default to i32 — which would break the
+           fusion and re-emit the value-equal but distinct [extend_i32_s]. *)
         with_loc
           (Cast
-             ( (let e = e (inttype `I32) in
-                if e' = None then e
-                else { e with desc = Ast.Cast (e, Valtype (inttype `I32)) }),
+             ( (let src =
+                  if faithful then pin (inttype `I64) else e (inttype `I32)
+                in
+                if e' = None then src
+                else { src with desc = Ast.Cast (src, Valtype (inttype `I32)) }),
                Signedtype { typ = sz; signage = Signed; strict = false } ))
     | ExtendS `_8 -> method_call (e (inttype sz)) "extend8_s"
     | ExtendS `_16 -> method_call (e (inttype sz)) "extend16_s")
@@ -1355,7 +1371,7 @@ let int_bin_op i0 sz (op : Src.int_bin_op) =
   | Le s -> compare (Le (Some s))
   | Ge s -> compare (Ge (Some s))
 
-let float_un_op i0 sz (op : Src.float_un_op) =
+let float_un_op ~faithful i0 sz (op : Src.float_un_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
   (* A no-argument instruction method [recv.meth()]. *)
   let method_call recv meth =
@@ -1369,6 +1385,19 @@ let float_un_op i0 sz (op : Src.float_un_op) =
     | Some e -> e
     | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty))
   in
+  (* Pin an inlined convert SOURCE to its non-i32 opcode width, so
+     [f32.convert_i64_s (i64.const 8)] does not decompile to a bare [8] that
+     re-defaults to i32 and recompiles as [f32.convert_i32_s] — a value-inert
+     but stream-visible width drift (a large constant keeps i64 on its own, so
+     only a small one drifts). Only under [--faithful]: the default path leaves
+     it, as it re-defaults i32 anyway and the value is unchanged. Mirrors
+     [int_un_op]'s [pin] and [Reinterpret] below. *)
+  let pin_src ty x =
+    match (e', ty, faithful) with
+    | Some _, (Ast.I64 | F32 | F64), true ->
+        { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+    | _ -> x
+  in
   (* [neg]/[abs]/…/[sqrt] have result width = operand width, so they carry the
      operand's flexibility (like [clz]); [convert]/[reinterpret] fix a concrete
      result width via a cast, so they are grounded ([None]). *)
@@ -1377,19 +1406,30 @@ let float_un_op i0 sz (op : Src.float_un_op) =
     | Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt -> recv_w
     | Convert _ | Reinterpret -> None
   in
+  (* An [f32] method operand ([f32.sqrt] etc.) whose source is a bare float
+     literal or hole re-defaults to [f64] on re-parse, drifting [f32.sqrt] to
+     [f64.sqrt] (a precision change). Under [--faithful] pin it to [f32]. Only
+     [f32] drifts (a bare literal defaults to [f64]), so [f64] needs no pin. *)
+  let e_fop () =
+    let x = e (floattype sz) in
+    match (sz, e', faithful) with
+    | `F32, Some _, true -> { x with Ast.desc = Ast.Cast (x, Valtype F32) }
+    | _ -> x
+  in
   Stack.push_num result_w
     (match op with
-    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e (floattype sz)))
-    | Abs -> method_call (e (floattype sz)) "abs"
-    | Ceil -> method_call (e (floattype sz)) "ceil"
-    | Floor -> method_call (e (floattype sz)) "floor"
-    | Trunc -> method_call (e (floattype sz)) "trunc"
-    | Nearest -> method_call (e (floattype sz)) "nearest"
-    | Sqrt -> method_call (e (floattype sz)) "sqrt"
+    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e_fop ()))
+    | Abs -> method_call (e_fop ()) "abs"
+    | Ceil -> method_call (e_fop ()) "ceil"
+    | Floor -> method_call (e_fop ()) "floor"
+    | Trunc -> method_call (e_fop ()) "trunc"
+    | Nearest -> method_call (e_fop ()) "nearest"
+    | Sqrt -> method_call (e_fop ()) "sqrt"
     | Convert (sz', signage) ->
+        let ity = inttype (sz' :> [ `I32 | `I64 | `F32 | `F64 ]) in
         with_loc
           (Cast
-             ( e (inttype (sz' :> [ `I32 | `I64 | `F32 | `F64 ])),
+             ( pin_src ity (e ity),
                Signedtype { typ = sz; signage; strict = false } ))
     | Reinterpret ->
         method_call
@@ -2041,10 +2081,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       let* args = Stack.grab input in
       Stack.push 2 (path_call "i64" name args)
-  | UnOp (I64 op) -> int_un_op i `I64 op
-  | UnOp (I32 op) -> int_un_op i `I32 op
-  | UnOp (F64 op) -> float_un_op i `F64 op
-  | UnOp (F32 op) -> float_un_op i `F32 op
+  | UnOp (I64 op) -> int_un_op ~faithful:ctx.faithful i `I64 op
+  | UnOp (I32 op) -> int_un_op ~faithful:ctx.faithful i `I32 op
+  | UnOp (F64 op) -> float_un_op ~faithful:ctx.faithful i `F64 op
+  | UnOp (F32 op) -> float_un_op ~faithful:ctx.faithful i `F32 op
   | StructNew i ->
       let type_name = idx ctx `Type i in
       let fields = snd (struct_fields ctx type_name) in
@@ -3975,8 +4015,8 @@ let rec group_imports fields =
   in
   merge [] (List.map recurse fields)
 
-let module_ ?(strict_constants = false) ?features diagnostics
-    (module_name, fields) =
+let module_ ?(strict_constants = false) ?(faithful = false) ?features
+    diagnostics (module_name, fields) =
   Wax_utils.Debug.timed "convert" @@ fun () ->
   try
     let forbid_numeric = module_has_conditional fields in
@@ -4023,6 +4063,7 @@ let module_ ?(strict_constants = false) ?features diagnostics
         label_arities = [];
         return_arity = 0;
         strict_constants;
+        faithful;
         cond_env = Cond.create ();
         cond_diag = Wax_utils.Diagnostic.collector ();
         cond_asm = Cond.true_;
@@ -4086,7 +4127,7 @@ let module_ ?(strict_constants = false) ?features diagnostics
        ref-type reference (computed after conversion, which is what names them). *)
     let converted = extra_type_decls ctx @ converted in
     let recovered =
-      Recover_match.module_
+      Recover_match.module_ ~faithful
         (Sink_let.module_
            (Recover_loops.module_
               (Recover_trycatch.module_ (Recover_dispatch.module_ converted))))

@@ -239,13 +239,13 @@ let rec collect_arms scrut stmts =
       | _ -> ([], scrut, [], stmts))
   | [] -> ([], scrut, [], stmts)
 
-let rec rewrite_instr (i : location instr) : location instr =
-  let d = rewrite_desc i.desc in
+let rec rewrite_instr ~faithful (i : location instr) : location instr =
+  let d = rewrite_desc ~faithful i.desc in
   if d == i.desc then i else { i with desc = d }
 
 (* Fold the [escape] block [i] (and the trailing statements after it, which
    become the default) into a [match]. *)
-and try_fold (i : location instr) (trailing : location instr list) :
+and try_fold ~faithful (i : location instr) (trailing : location instr list) :
     (location instr list * location instr) option =
   match descend i with
   | None -> None
@@ -285,7 +285,9 @@ and try_fold (i : location instr) (trailing : location instr list) :
             | `Null, None -> Some MatchNull
             | `Null, Some _ -> None
           in
-          Option.map (fun pat -> (pat, no_loc (rewrite_list body))) pat
+          Option.map
+            (fun pat -> (pat, no_loc (rewrite_list ~faithful body)))
+            pat
         in
         let arms = List.map2 arm tests (List.rev levels) in
         if List.exists Option.is_none arms then None
@@ -314,54 +316,64 @@ and try_fold (i : location instr) (trailing : location instr list) :
                 desc =
                   Match
                     {
-                      scrutinee = rewrite_instr scrut;
+                      scrutinee = rewrite_instr ~faithful scrut;
                       arms;
-                      default = no_loc (rewrite_list trailing);
+                      default = no_loc (rewrite_list ~faithful trailing);
                     };
               } )
 
-and rewrite_list stmts =
+and rewrite_list ~faithful stmts =
   match stmts with
   | [] -> []
   | i :: rest -> (
       (* First the nested ladder (the shape {!Ast_utils.lower_match} emits),
          then a flat [br_on_cast_fail] chain — folded even for a single arm (a
-         lone downcast-or-branch reads as a one-arm [match]). *)
-      match try_fold i rest with
-      | Some (hoisted, m) -> List.map rewrite_instr hoisted @ [ m ]
+         lone downcast-or-branch reads as a one-arm [match]). The flat-chain arm
+         re-lowers to the nested ladder rather than the original flat chain, so
+         [--faithful] ([faithful]) skips it while keeping the exact-inverse
+         nested-ladder fold. *)
+      match try_fold ~faithful i rest with
+      | Some (hoisted, m) -> List.map (rewrite_instr ~faithful) hoisted @ [ m ]
       | None -> (
-          match collect_arms None stmts with
+          match
+            if faithful then ([], None, [], []) else collect_arms None stmts
+          with
           | (_ :: _ as arms), Some scrut, hoisted, trailing ->
-              List.map rewrite_instr hoisted
+              List.map (rewrite_instr ~faithful) hoisted
               @ [
                   {
                     i with
                     desc =
                       Match
                         {
-                          scrutinee = rewrite_instr scrut;
+                          scrutinee = rewrite_instr ~faithful scrut;
                           arms =
                             List.map
-                              (fun (p, b) -> (p, no_loc (rewrite_list b)))
+                              (fun (p, b) ->
+                                (p, no_loc (rewrite_list ~faithful b)))
                               arms;
-                          default = no_loc (rewrite_list trailing);
+                          default = no_loc (rewrite_list ~faithful trailing);
                         };
                   };
                 ]
           | _ ->
-              let i' = rewrite_instr i and rest' = rewrite_list rest in
+              let i' = rewrite_instr ~faithful i
+              and rest' = rewrite_list ~faithful rest in
               if i' == i && rest' == rest then stmts else i' :: rest'))
 
-and rewrite_desc (desc : location instr_desc) : location instr_desc =
+and rewrite_desc ~faithful (desc : location instr_desc) : location instr_desc =
   (* Purely structural recursion; the folding lives in [try_fold]/[rewrite_list].
      Share-preserving, so an untouched subtree is not rebuilt. *)
-  Ast_utils.map_desc ~instr:rewrite_instr ~block:rewrite_list desc
+  Ast_utils.map_desc ~instr:(rewrite_instr ~faithful)
+    ~block:(rewrite_list ~faithful) desc
 
-let rec field_desc (f : location modulefield) =
-  let map_fields = List.map (fun a -> { a with desc = field_desc a.desc }) in
+let rec field_desc ~faithful (f : location modulefield) =
+  let map_fields =
+    List.map (fun a -> { a with desc = field_desc ~faithful a.desc })
+  in
   match f with
   | Func ({ body = label, instrs; _ } as r) ->
-      Func { r with body = (label, rewrite_list instrs) }
+      Func { r with body = (label, rewrite_list ~faithful instrs) }
   | Conditional ({ then_fields; else_fields; _ } as r) ->
       Conditional
         {
@@ -376,5 +388,5 @@ let rec field_desc (f : location modulefield) =
     | Tag _ | Memory _ | Data _ | Table _ | Elem _ ) as f ->
       f
 
-let module_ (m : location module_) : location module_ =
-  List.map (fun a -> { a with desc = field_desc a.desc }) m
+let module_ ?(faithful = false) (m : location module_) : location module_ =
+  List.map (fun a -> { a with desc = field_desc ~faithful a.desc }) m

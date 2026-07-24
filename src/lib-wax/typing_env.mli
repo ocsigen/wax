@@ -142,6 +142,7 @@ type module_context = {
   warn_unused : bool;
   simplify : bool;
   suggest : bool;
+  faithful : bool;
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
   functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;

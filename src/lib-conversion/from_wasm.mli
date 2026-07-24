@@ -7,6 +7,7 @@ exception Unresolved_reference of Wax_wasm.Ast.location
 
 val module_ :
   ?strict_constants:bool ->
+  ?faithful:bool ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_ ->
@@ -18,6 +19,13 @@ val module_ :
     wrapped in a cast to its concrete type, so Wax type inference cannot re-type
     an otherwise polymorphic literal and a source-level type mismatch survives
     the round-trip.
+
+    When [faithful] is set (default [false], the [--faithful] decompilation
+    mode), the stream-reshaping recoveries are turned off so the result
+    re-lowers to the exact original opcodes: the [t.eq; i32.eqz] -> [a != b]
+    fusion is kept as [!(a == b)], and {!Recover_match}'s flat
+    [br_on_cast_fail]-chain arm is disabled (the caller should also re-type
+    without the [simplify] pass).
 
     When [features] is given, a [#![feature = "…"]] inner attribute is stamped
     for each feature recorded as used on it (by the binary decoder or by

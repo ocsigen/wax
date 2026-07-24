@@ -1,4 +1,5 @@
 val module_ :
+  ?faithful:bool ->
   Wax_lang.Ast.location Wax_lang.Ast.module_ ->
   Wax_lang.Ast.location Wax_lang.Ast.module_
 (** [module_ m] rewrites each function body, folding the sequential type-test
@@ -12,4 +13,11 @@ val module_ :
 
     Folding is the exact inverse of {!Ast_utils.lower_match}, so a Wax [match]
     round-trips through the binary. Meant to run on {!Sink_let.module_} output,
-    which places the binding declaration adjacent to its block. *)
+    which places the binding declaration adjacent to its block.
+
+    A [match] is also recovered from the {e flat} [br_on_cast_fail] chain
+    hand-written GC code more often uses (one discarded block per arm). That arm
+    re-lowers to the nested ladder, not the original flat chain, so it is
+    semantically faithful but not byte-for-byte; [faithful] (default [false],
+    the [--faithful] decompilation mode) disables it, keeping the exact-inverse
+    nested-ladder fold. *)

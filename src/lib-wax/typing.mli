@@ -18,6 +18,7 @@ val f :
   ?simplify:bool ->
   ?warn_unused:bool ->
   ?suggest:bool ->
+  ?faithful:bool ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -30,6 +31,12 @@ val f :
     casts of non-nullable arguments are tightened to [&extern]/[&any]. This is
     intended for the Wasm-to-Wax conversion, where casts are inserted to pin
     types; hand-written Wax is left untouched.
+
+    When [faithful] is set (default [false], the [--faithful] decompilation
+    mode, mutually exclusive with [simplify]), casts are kept as under a plain
+    re-type EXCEPT the [From_wasm] scaffolding cast on a [call_ref] callee,
+    which is still dropped when redundant so it does not re-lower to a spurious
+    [ref.cast].
 
     When [warn_unused] is set (default [false]), a [let]-bound local that is
     never read is reported as a warning (unless its name starts with [_]). A
@@ -72,6 +79,7 @@ val f_infer :
   ?resolve_links:reference list ref option ->
   ?pun_spans:Ast.location list ref option ->
   ?member_completions:(Ast.location * Members.member_receiver) list ref option ->
+  ?faithful:bool ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->

@@ -5875,9 +5875,29 @@ and type_cast ctx i =
          desirable when converting from Wasm ([ctx.simplify]): there casts are
          inserted to pin types and precise inference makes some unnecessary. For
          hand-written Wax (formatting, or compiling to Wasm) we keep casts as
-         written. *)
+         written.
+
+         [--faithful] ([ctx.faithful]) keeps [simplify] off so a redundant
+         *source* [ref.cast] survives and re-emits, but the decompiler also
+         inserts type-pin SCAFFOLDING casts — a member-access receiver, a
+         [call_ref] callee — that [simplify] would drop and that otherwise
+         re-lower to a spurious [ref.cast] the original lacked. Those pins are
+         nullable ([cast_ref] / the callee pin in [From_wasm] use
+         [nullable = true]); a hand-visible redundant up-cast worth keeping is
+         the non-null form ([ref.cast (ref any)] -> [_ as &any]). So under
+         [--faithful] the drop still fires for a redundant cast to a NULLABLE ref
+         target, pruning the common scaffolding, while a non-null redundant cast
+         is kept. (Compiler-inserted pins and source casts cannot be told apart
+         in general without provenance — see the [FAITHDRIFT] leg, which does not
+         compare the cast family for this reason.) *)
+      let target_nullable_ref =
+        match Cell.get ty with
+        | Valtype { typ = Ref { nullable = true; _ }; _ } -> true
+        | _ -> false
+      in
       let unnecessary_cast =
-        ctx.simplify && (not load_bearing_literal) && (not load_bearing_null)
+        (ctx.simplify || (ctx.faithful && target_nullable_ref))
+        && (not load_bearing_literal) && (not load_bearing_null)
         && (not load_bearing_bottom_ref)
         && (not load_bearing_cont)
         && (not (is_unknown_or_error ty'))
@@ -10662,7 +10682,8 @@ let check_attributes diagnostics field =
 
 let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
-    ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
+    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) ~simplify
+    diagnostics fields =
   (* [simplify] (the Wasm->Wax rewrite that drops redundant annotations) and
      [suggest] (offering those same drops as editor quick fixes on hand-written
      Wax) are mutually exclusive: [simplify] removes the very nodes [suggest]
@@ -10763,6 +10784,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       member_completions;
       simplify;
       suggest;
+      faithful;
     }
   in
   check_type_definitions ctx;
@@ -11592,8 +11614,8 @@ let apply_declared_features diagnostics features fields =
    specialized to be conditional-free and typed independently, so a diagnostic
    is reported once with the assumption under which it is reachable. Only the
    diagnostics matter here, so the typed module is not built ([~build:false]). *)
-let check_configurations ~warn_unused ~features ~simplify ~suggest diagnostics
-    fields =
+let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
+    diagnostics fields =
   Wax_wasm.Cond_explore.check_all diagnostics
     ?truncation_location:
       (match fields with hd :: _ -> Some hd.info | [] -> None)
@@ -11603,13 +11625,14 @@ let check_configurations ~warn_unused ~features ~simplify ~suggest diagnostics
     ~check:(fun ctx m ->
       ignore
         (type_configuration ~build:false ~warn_unused ~suggest ~features
-           ~simplify ctx m
+           ~faithful ~simplify ctx m
           : _ * _))
     ()
 
 let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
-    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
+    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
+    fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   apply_declared_features diagnostics features fields;
   (* [check_let_bindings] reports a [let] binding inside an [(@if)] branch, which
@@ -11620,10 +11643,10 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
   if has_conditional then check_let_bindings diagnostics fields;
   if not has_conditional then
     type_configuration ~warn_unused ~suggest ~resolve_links ~pun_spans
-      ~member_completions ~features ~simplify diagnostics fields
+      ~member_completions ~faithful ~features ~simplify diagnostics fields
   else begin
-    check_configurations ~warn_unused ~features ~simplify ~suggest diagnostics
-      fields;
+    check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
+      diagnostics fields;
     (* Build the typed module (consumed only by the deferred WAT conversion and
        the editor; validation-only paths use [check] and never reach here) by
        typing the module with conditionals preserved. [type_configuration]
@@ -11631,8 +11654,8 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
        typed under its own assumption. Diagnostics are discarded —
        [check_configurations] above did the real checking; references are
        recorded here, off the single tree the editor consumes. *)
-    type_configuration ~resolve_links ~pun_spans ~member_completions ~features
-      ~simplify
+    type_configuration ~resolve_links ~pun_spans ~member_completions ~faithful
+      ~features ~simplify
       (Wax_utils.Diagnostic.collector ())
       fields
   end
@@ -11729,10 +11752,12 @@ let lint_confusable diagnostics fields =
   walk fields
 
 let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
-    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
+    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
+    fields =
   if warn_unused then lint_confusable diagnostics fields;
   let types, typed =
-    f_infer ~simplify ~warn_unused ~suggest ~features diagnostics fields
+    f_infer ~simplify ~warn_unused ~suggest ~faithful ~features diagnostics
+      fields
   in
   (types, project_module typed)
 
@@ -11750,7 +11775,7 @@ let check ?(warn_unused = false) ?(suggest = false)
         : _ * _)
   else
     check_configurations ~warn_unused ~features ~simplify:false ~suggest
-      diagnostics fields
+      ~faithful:false diagnostics fields
 
 let erase_types m =
   List.map (fun m -> { m with desc = Ast_utils.map_modulefield snd m.desc }) m

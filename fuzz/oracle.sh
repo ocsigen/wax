@@ -122,6 +122,144 @@ width_op_histogram() {
     | sort | uniq -c
 }
 
+# Structural opcode-token sequence of a binary's REACHABLE instructions, for the
+# FAITHDRIFT leg (oracle 5b): the live instruction stream in source order, one
+# opcode per line, immediates stripped, then normalised so that only the SHAPE of
+# the stream — which opcodes appear, in what order and count — is compared, not
+# their operand widths or the compiler-inserted casts. It is the assertion behind
+# [--faithful]: that mode turns off the stream-reshaping recoveries, so a faithful
+# round-trip must reproduce this structural sequence exactly. In particular it
+# pins the two recoveries [--faithful] reliably disables: [t.eq; i32.eqz] stays a
+# separate [eqz] (not fused to [t.ne]), and a flat [br_on_cast_fail] chain stays
+# [br_on_cast_fail] (not recovered to the [br_on_cast] ladder) — distinct opcode
+# tokens a regression would immediately perturb.
+#
+# Four normalisations keep the comparison to that structural shape (each applied
+# identically to BOTH sides, and each a value-inert decompiler behaviour that is
+# NOT one of the transformations [--faithful] gates — see the residual-divergence
+# list in docs/src/correspondence/round_trip.md). Every one is a DOCUMENTED
+# exclusion, not a silent one:
+#
+#  (a) DEAD CODE is skipped. Code after an unconditional terminator
+#      ([unreachable]/[br]/[br_table]/[return…]/[throw…]/[rethrow]) up to its
+#      block end is unreachable; its operand stack is polymorphic, so the
+#      decompiler cannot always type it — a dead constant re-defaults its width, a
+#      dead [wrap]/[extend] drops, a dead poly [call_ref] callee gains a
+#      [ref.cast]. All pre-existing (the DEFAULT path does the same) and inert. A
+#      structured-control walk tracks reachability and emits only live opcodes.
+#
+#  (b) The CAST FAMILY is dropped ([ref.cast]/[ref.test]/[ref.i31]/
+#      [extern.convert_any]/[any.convert_extern]). The decompiler inserts type-pin
+#      casts (a member receiver, a [call_ref] callee) that are indistinguishable
+#      from a source [ref.cast] without provenance, so [--faithful]'s cast
+#      fidelity is best-effort (it keeps non-null redundant up-casts, prunes the
+#      nullable pins) and is demonstrated by faithful.t rather than asserted here.
+#
+#  (c) CONSTANT and ATOMIC operand WIDTHS are erased ([iN.const]->[i.const],
+#      [iN.atomic.*]->[atomic.*]). A small constant re-defaults to [i32] and its
+#      consumer's width follows; the value is unchanged (a large constant keeps
+#      [i64] on its own). This is the same width-is-inert stance
+#      [width_op_histogram] takes — that leg still checks the width-SENSITIVE
+#      families (div/rem/shift/trunc/ordered-compare/eq_ne), which keep full width
+#      here too, so a genuine width drift in those still shows in oracle 5.
+#
+#  (d) Three recompiler-peephole FUSIONS are folded to their fused opcode: the
+#      narrow-load-then-widen ([iN.load8/16/32_S ; i64.extend_i32_S] ->
+#      [iN.load…_S]), [i64.extend32_s] ([wrap_i64 ; extend_i32_s]), and the
+#      direct-call recovery ([ref.func ; (return_)call_ref] -> [(return_)call]).
+#      All live in [to_wasm], shared with hand-written Wax, so the decompiler
+#      cannot avoid them. Also the float-literal negation fold ([fN.const ;
+#      fN.neg] -> the negated literal) and the empty-[else] elision.
+opcode_sequence() {
+  local txt
+  txt="$("$WASM_TOOLS" print "$1" 2>/dev/null)" || return 1
+  printf '%s\n' "$txt" \
+    | awk '
+        # (a) reachability walk + (b) cast-family drop: emit the first token of
+        # each reachable body line, skipping the compiler-cast opcodes.
+        BEGIN { reach = 0; depth = 0; infunc = 0 }
+        function term(t) {
+          return (t == "unreachable" || t == "br" || t == "br_table" \
+               || t == "return" || t == "return_call" \
+               || t == "return_call_ref" || t == "return_call_indirect" \
+               || t == "throw" || t == "throw_ref" || t == "rethrow")
+        }
+        function is_cast(t) {
+          return (t == "ref.cast" || t == "ref.test" || t == "ref.i31" \
+               || t == "extern.convert_any" || t == "any.convert_extern")
+        }
+        {
+          line = $0
+          if (line ~ /^[[:space:]]*\(func[ )]/) { infunc=1; reach=1; depth=0; next }
+          if (line ~ /^[[:space:]]*\(/) next
+          if (line ~ /^[[:space:]]*\)[[:space:]]*$/) { infunc = 0; next }
+          if (!infunc || line ~ /^[[:space:]]*$/) next
+          sub(/^[[:space:]]+/, "", line)
+          tok = line; sub(/[[:space:]].*/, "", tok)
+          if (tok=="block" || tok=="loop" || tok=="if" || tok=="try" || tok=="try_table") {
+            if (reach) print tok
+            depth++; fe[depth] = reach
+          } else if (tok=="else" || tok=="catch" || tok=="catch_all") {
+            if (fe[depth]) print tok
+            reach = fe[depth]
+          } else if (tok=="end" || tok=="delegate") {
+            if (fe[depth]) print tok
+            reach = fe[depth]; if (depth > 0) depth--
+          } else if (term(tok)) {
+            if (reach) print tok
+            reach = 0
+          } else if (reach && !is_cast(tok)) print tok
+        }' \
+    | sed -E '
+        s/^i(32|64)\.const$/i.const/
+        s/^f(32|64)\.const$/f.const/
+        s/^i32\.atomic\.store$/atomic.store4/
+        s/^i64\.atomic\.store$/atomic.store8/
+        s/^i(32|64)\.atomic\.store8$/atomic.store1/
+        s/^i(32|64)\.atomic\.store16$/atomic.store2/
+        s/^i64\.atomic\.store32$/atomic.store4/
+        s/^i32\.atomic\.load$/atomic.load4/
+        s/^i64\.atomic\.load$/atomic.load8/
+        s/^i(32|64)\.atomic\.load8_u$/atomic.load1/
+        s/^i(32|64)\.atomic\.load16_u$/atomic.load2/
+        s/^i64\.atomic\.load32_u$/atomic.load4/
+        s/^i32\.atomic\.rmw\.([a-z]+)$/atomic.rmw4.\1/
+        s/^i64\.atomic\.rmw\.([a-z]+)$/atomic.rmw8.\1/
+        s/^i(32|64)\.atomic\.rmw8\.([a-z]+)_u$/atomic.rmw1.\2/
+        s/^i(32|64)\.atomic\.rmw16\.([a-z]+)_u$/atomic.rmw2.\2/
+        s/^i64\.atomic\.rmw32\.([a-z]+)_u$/atomic.rmw4.\1/' \
+    | awk '
+        # (d) fold the recompiler-peephole fusions and literal folds.
+        function sign(s) { return substr(s, length(s), 1) }
+        {
+          tok = $0
+          if (have) {
+            # narrow-load-then-widen: iN.load->iN.load32, iN.load8/16_S->iN.load8/16_S
+            if (prev ~ /^i32\.(load|load8|load16)_?[su]?$/ \
+                && tok ~ /^i64\.extend_i32_[su]$/ \
+                && (prev == "i32.load" || sign(prev) == sign(tok))) {
+              if (prev == "i32.load") prev = "i64.load32_" sign(tok)
+              else prev = "i64." substr(prev, 5)
+              next
+            }
+            # i64.extend32_s: wrap_i64 ; extend_i32_s
+            if (prev == "i32.wrap_i64" && tok == "i64.extend_i32_s") {
+              prev = "i64.extend32_s"; next
+            }
+            # direct-call recovery: ref.func ; (return_)call_ref -> (return_)call
+            if (prev == "ref.func" && tok == "call_ref") { prev = "call"; next }
+            if (prev == "ref.func" && tok == "return_call_ref") { prev = "return_call"; next }
+            # float negation of a literal folds into the literal
+            if ((tok == "f32.neg" || tok == "f64.neg") && prev == "f.const") { next }
+            # empty else branch is elided
+            if (prev == "else" && tok == "end") { prev = tok; next }
+          }
+          if (have) print prev
+          prev = tok; have = 1
+        }
+        END { if (have) print prev }'
+}
+
 # Sorted bag of the LOAD-BEARING structural tokens of a binary, for the oracle-6
 # structural compare (below). rt1 and rt2 there both come from wax's own encoder
 # one decompile apart, so — unlike oracle 5, where local reordering and type
@@ -474,6 +612,52 @@ if [ "$FMT" != wax ]; then
       finding WIDTHDRIFT HIGH "$IN" \
         "round-trip changed a width-sensitive opcode (div/rem/shift/trunc_f/ordered-compare/eq_ne histogram: [${orig_hist//$'\n'/; }] -> [${via_hist//$'\n'/; }])" \
         "$(repro "${wa[@]}") && $(repro "${rb[@]}") && diff <(wasm-tools print $IN | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)|i(32|64)\.(eq|ne)\b' | sed -E 's/\.(eq|ne)\$/.eq_ne/' | sort) <(wasm-tools print $WORK/via.wasm | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)|i(32|64)\.(eq|ne)\b' | sed -E 's/\.(eq|ne)\$/.eq_ne/' | sort)"
+    fi
+  fi
+fi
+
+# ---- 5b. Faithful round-trip: --faithful re-lowers the reachable structure. ----
+# The dual of oracle 5's width histogram, stricter in what it compares (the whole
+# reachable instruction SHAPE, not just the width-sensitive families) and scoped
+# to the FAITHFUL round trip. [--faithful] decompilation turns off the
+# stream-reshaping recoveries (eq+eqz->ne, the flat br_on_cast_fail chain's
+# match-ladder recovery), so a faithful decompile+recompile must reproduce the
+# reachable opcode sequence — modulo the value-inert normalisations
+# [opcode_sequence] folds out (widths, compiler casts, recompiler fusions, dead
+# code; each documented there). A diff is a fidelity break in a gated recovery.
+#
+# The reference is the input COMPILED to a binary ([wat]->[wasm], desugaring the
+# Wax [(@string ...)] sugar exactly as the faithful round trip does; a [wasm]
+# input is already the reference). Comparing binary-to-binary this way — rather
+# than printing a [.wat] input directly — keeps the sugar expansion from reading
+# as drift. (Only for wat/wasm input: --faithful applies to decompilation, and a
+# wax input's "decompile" is a reprint.)
+if [ "$FMT" != wax ]; then
+  if [ "$FMT" = wasm ]; then
+    ref="$IN"
+  else
+    ref="$WORK/faithful_ref.wasm"
+    [ "$(classify_wax -i "$FMT" -f wasm "$IN" -o "$ref")" = ok ] || ref=""
+  fi
+  fwa=(-i "$FMT" -f wax --faithful "$IN" -o "$WORK/faithful.wax")
+  if [ -n "$ref" ] && [ "$(classify_wax "${fwa[@]}")" = ok ]; then
+    frb=(-i wax -f wasm "$WORK/faithful.wax" -o "$WORK/faithful.wasm")
+    rf="$(classify_wax "${frb[@]}")"
+    if [ "$rf" != ok ]; then
+      finding FAITHDRIFT HIGH "$IN" \
+        "--faithful decompilation does not recompile (${rf#crash:}${rf/ok/})" \
+        "$(repro "${fwa[@]}") && $(repro "${frb[@]}")"
+    elif ! wt_validate "$WORK/faithful.wasm" \
+         && ! wt_ahead_divergence "$WORK/faithful.wasm.err"; then
+      finding FAITHDRIFT HIGH "$IN" \
+        "--faithful round-trip is rejected by wasm-tools: $(head -1 "$WORK/faithful.wasm.err")" \
+        "$(repro "${fwa[@]}") && $(repro "${frb[@]}") && wasm-tools validate --features all $WORK/faithful.wasm"
+    elif orig_seq="$(opcode_sequence "$ref")" \
+         && via_seq="$(opcode_sequence "$WORK/faithful.wasm")" \
+         && [ "$orig_seq" != "$via_seq" ]; then
+      finding FAITHDRIFT HIGH "$IN" \
+        "--faithful round-trip changed the opcode stream ($(diff <(printf '%s\n' "$orig_seq") <(printf '%s\n' "$via_seq") | grep -E '^[<>]' | paste -sd' ' -))" \
+        "$(repro "${fwa[@]}") && $(repro "${frb[@]}") && diff <(wasm-tools print $WORK/faithful_ref.wasm 2>/dev/null || wasm-tools print $IN) <(wasm-tools print $WORK/faithful.wasm)"
     fi
   fi
 fi

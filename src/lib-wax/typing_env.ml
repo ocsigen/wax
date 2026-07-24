@@ -203,6 +203,11 @@ type module_context = {
          redundant [let] annotation), for editor quick fixes and [wax check].
          The AST is left untouched (unlike [simplify], which rewrites it); the
          two are mutually exclusive. Enabled for hand-written Wax only. *)
+  faithful : bool;
+  (* The [--faithful] decompilation mode: [simplify] is off (so casts are kept)
+         but the [From_wasm] scaffolding cast on a [call_ref]/[return_call_ref]
+         callee is still dropped when redundant, so it does not re-lower to a
+         spurious [ref.cast]. Set only on that path; never with [simplify]. *)
   (* --- Module-wide type and name tables (built once, before any body) --- *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;

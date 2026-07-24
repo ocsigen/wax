@@ -42,8 +42,13 @@ Each of the following is a normalisation, not a change in behaviour.
 2. **`eq` then `eqz` fuses to `ne`.** A `t.eq` followed by `i32.eqz` decompiles
    to `a != b`, which recompiles as a single `t.ne`.
 
-3. **Cast fusion.** Chains of `extend`, `wrap`, and `reinterpret` may fold. For
-   example a `wrap` of an `extend` back to the same width cancels.
+3. **Narrow load then widen fuses.** A narrow load immediately widened to `i64`
+   (`i32.load8_s; i64.extend_i32_s`, and the `load16` / unsigned / atomic forms)
+   decompiles to a single-cast `m.load8(x) as i64_s` and recompiles to the fused
+   `i64.load8_s`. The fusion is a peephole in the recompiler (`to_wasm`), shared
+   with hand-written Wax, not a decompiler rewrite, so it is the one divergence
+   `--faithful` cannot remove: the faithful decompile emits the two-cast
+   spelling `as i32_s as i64_s`, which the peephole re-fuses on the way back.
 
 4. **Redundant `ref.cast` erased.** A `ref.cast` decompiles to an `as`
    ascription. While re-typing the decompiled Wax, the ascription is dropped
@@ -69,6 +74,49 @@ Each of the following is a normalisation, not a change in behaviour.
 6. **A typed `select` may lose its immediate.** The value type is always
    preserved through the arms, but the explicit `(result t)` immediate form is
    not guaranteed to be reproduced.
+
+## Faithful round-tripping
+
+The `--faithful` flag (wax output only) turns off the two stream-reshaping
+recoveries that it can turn off cleanly, so a decompiled module recompiles with
+the same reachable instruction structure. It reliably suppresses divergences 2
+and 5: `eq` then `eqz` stays `!(a == b)` (re-lowering to the `eq; eqz` pair,
+not fused to `t.ne`), and a flat `br_on_cast_fail` chain is kept as separate
+blocks (not recovered to a `br_on_cast` ladder). For divergence 4 it keeps a
+redundant *non-null* `ref.cast` as an `as` ascription (re-emitting it), a
+best-effort improvement (see below). It also pins a constant's width through an
+`int`-to-`float` conversion and through `i64.extend32_s`. The Wax is pin-noisier
+(a kept width ascription emits no instruction) but structurally exact.
+
+Several normalisations remain even under `--faithful`, all semantically inert
+(and each present on the default path too — `--faithful` does not make anything
+worse). They fall outside the two recoveries the mode gates:
+
+- **Locals and names** (divergence 1), a typed `select`'s immediate (divergence
+  6), and constant *widths* (a small `i64` constant re-defaults to `i32`; its
+  value is unchanged, a large one keeps `i64`).
+- **Recompiler-peephole fusions** (divergence 3, generalised): narrow-load-then-
+  widen (`i32.load8_s; i64.extend_i32_s` → `i64.load8_s`), `i64.extend32_s`
+  (`wrap` + `extend`), and calling a `ref.func` directly (`ref.func; call_ref` →
+  `call`). They live in the recompiler, shared with hand-written Wax, so the
+  decompiler cannot avoid them.
+- **Compiler-inserted casts.** The decompiler pins a member-access receiver and
+  a `call_ref` callee with a `ref.cast` to a nullable reference; those pins are
+  indistinguishable from a redundant source `ref.cast` to a nullable type
+  without provenance, so faithful's cast fidelity is best-effort — it keeps a
+  redundant *non-null* up-cast but prunes the nullable ones. Also
+  `f32.neg`/`f64.neg` of a literal folds into the negated literal (Wax spells a
+  negative float literal `-X`).
+- **Dead code** (after an `unreachable` or an unconditional `br`): its operand
+  stack is polymorphic, so the surface cannot always type it — a dead
+  `i32.wrap_i64` drops, a dead constant re-defaults its width, a dead `call_ref`
+  callee gains a `ref.cast`. None of it runs.
+
+This mode's contract — that a faithful decompile+recompile reproduces the
+reachable instruction *structure* (opcodes, order and count, modulo those inert
+normalisations) — is enforced by the differential fuzzing harness (the
+`FAITHDRIFT` leg), which compares the reachable opcode sequence with widths, the
+compiler-cast family, and the fusions above normalised away.
 
 ## How this is checked
 
