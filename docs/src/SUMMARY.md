@@ -11,6 +11,7 @@
     - [Types](./correspondence/types.md)
     - [Instructions](./correspondence/instructions.md)
     - [Module Fields](./correspondence/module_fields.md)
+    - [Round-Tripping](./correspondence/round_trip.md)
 
 - [CLI Reference](./cli.md)
 - [Editor Support](./editor.md)

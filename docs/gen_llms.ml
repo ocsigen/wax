@@ -44,6 +44,7 @@ let files =
     "correspondence/types.md";
     "correspondence/instructions.md";
     "correspondence/module_fields.md";
+    "correspondence/round_trip.md";
     "cli.md";
   ]
 

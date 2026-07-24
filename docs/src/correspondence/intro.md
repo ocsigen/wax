@@ -4,7 +4,7 @@ This guide documents the correspondence between WebAssembly (Wasm) and Wax const
 
 ## High-level differences
 
-Wax is an expression-oriented language, whereas Wasm is stack-oriented. However, Wax constructs map very closely to Wasm instructions, often one-to-one or with simple desugaring.
+Wax is an expression-oriented language, whereas Wasm is stack-oriented. However, Wax constructs map very closely to Wasm instructions, often one-to-one or with simple desugaring. Decompiling a module and recompiling it reproduces the original; see [Round-Tripping](round_trip.md) for what is preserved exactly and the few inert divergences.
 
 Key differences:
 - **Expressions vs Stack**: Wax uses variables (`let`) and nested expressions instead of explicit stack manipulation (`local.get`/`set`, `drop`).
