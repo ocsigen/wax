@@ -8,7 +8,8 @@
 # silently changing the operand's width and, for a non-mod-2^32-homomorphic op
 # (`div`/`rem`/`>>`/`<<`/`rot`), its VALUE. Confirmed erasers: `drop`, comparisons,
 # `eqz`, `i32.wrap_i64`, a truncation's source float width, the value operand of a
-# narrow i64 store (`i64.store8/16/32` — its method name carries only the access
+# narrow i64 store (`i64.store8/16/32`, and the atomic `i64.atomic.store8/16/32` /
+# `i64.atomic.rmw*8/16/32` — the method name carries only the access
 # width), either arm of a `select` (whose `?:` surface carries no result type, so
 # the arms must be pinned or an interposed eraser cannot reach them), and a value
 # left on the stack that an unconditional branch (`br`/`br_table`/`return`/
@@ -91,6 +92,18 @@ for i in "${!INNER_EXPR[@]}"; do
   for s in store8 store16 store32; do
     add "$s $OP" "$OP" \
       "(module (memory 1) (func (export \"f\") (i64.$s (i32.const 0) $E)))"
+  done
+  # The atomic narrow store/RMW value operand is the same eraser: the method name
+  # ([atomic_store16], [atomic_rmw_add16]) carries only the access width, so the
+  # i32/i64 type is recovered from the value operand ([From_wasm] pins it, as for
+  # the plain narrow store above). RMWs return the old value, dropped here.
+  for s in atomic.store8 atomic.store16 atomic.store32; do
+    add "i64.$s $OP" "$OP" \
+      "(module (memory 1 1 shared) (func (export \"f\") (i64.$s (i32.const 0) $E)))"
+  done
+  for r in rmw8.add_u rmw16.add_u rmw32.add_u; do
+    add "i64.atomic.$r $OP" "$OP" \
+      "(module (memory 1 1 shared) (func (export \"f\") (drop (i64.atomic.$r (i32.const 0) $E))))"
   done
 done
 
