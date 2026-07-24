@@ -1338,13 +1338,21 @@ let pop_typed ty =
    same holds for the reference conversions [ref.i31] ([(_ as i32) as &i31]) and
    [i31.get_s/u] ([(_ as &?i31) as i32_s]), whose surface [as] erases the source
    hierarchy — a bare [_ as &i31] / [_ as i32_s] re-types the hole directly to the
-   target and drops the op. (The cross-hierarchy [extern.convert_any] /
-   [any.convert_extern] need the wider [convert_src] below.) A present operand is
-   returned unchanged, so reachable code is untouched. Mirrors the dead-code
+   target and drops the op. A [select] operand is grounded for the same reason,
+   as [convert_src] does below: an untyped [select] of holes re-parses
+   type-adaptively (a numeric select re-defaults to i32, a reference select loses
+   its hierarchy), so under the outer [as] a bare [(_?_:_) as i32_s] takes the
+   target type directly and drops the op ([select; i31.get_s] losing the
+   [i31.get_s]); pinning the source ([((_?_:_) as &?i31) as i32_s]) keeps it. (The
+   cross-hierarchy [extern.convert_any] / [any.convert_extern] need the still
+   wider [convert_src] below, which also grounds a forwarding [br_on_null].) A
+   present, concrete operand is returned unchanged, so reachable code is untouched
+   — the redundant pin on a grounded select is pruned by the same reparse-adaptive
+   mirror in the typer that keeps the load-bearing one. Mirrors the dead-code
    numeric-operand pins in [int_bin_op]/[pop_typed]. *)
 let type_hole_src src e =
   match e.Ast.desc with
-  | Ast.Hole -> { e with Ast.desc = Ast.Cast (e, Valtype src) }
+  | Ast.Hole | Ast.Select _ -> { e with Ast.desc = Ast.Cast (e, Valtype src) }
   | _ -> e
 
 (* As [type_hole_src] for the cross-hierarchy converts ([extern.convert_any] /
