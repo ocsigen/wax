@@ -1376,7 +1376,43 @@ let rec convert_src src e =
      and needs no case here.) *)
   | Ast.Br_on_null (l, inner) ->
       { e with Ast.desc = Ast.Br_on_null (l, convert_src src inner) }
+  (* A [br_on_null] whose label carries values delivers them THEN the tested ref;
+     the operand is a [Sequence] of [branch-values…; tested-ref], and its
+     fall-through non-null ref — the value a following convert consumes — takes
+     the LAST element's (the tested ref's) hierarchy, so pin that last element.
+     ([ref.as_non_null] on the tested ref shows as a [NonNull] wrapper; recurse
+     through it to the hole so the pin lands on the reference itself.) *)
+  | Ast.Sequence (_ :: _ as l) ->
+      let rev = List.rev l in
+      let last = convert_src src (List.hd rev) in
+      { e with Ast.desc = Ast.Sequence (List.rev (last :: List.tl rev)) }
+  | Ast.NonNull inner ->
+      { e with Ast.desc = Ast.NonNull (convert_src src inner) }
   | _ -> e
+
+(* Ground the tested-ref of a forwarding [br_on_null] residual sitting on top of
+   the stack, for a following cross-hierarchy convert. A [br_on_null] into a block
+   with a ref result pushes an arity >= 2 residual (the delivered branch values
+   plus the fall-through non-null ref); that residual cannot be split, so the
+   convert's own pop reads a fresh hole which, on re-parse, reconnects to the
+   fall-through ref — typed by the block's declared ref result (e.g. [(ref null
+   any)]). The convert's source pin on that hole would then cross hierarchies and
+   materialise a spurious extra opcode (an [extern.convert_any] ahead of the
+   [any.convert_extern]). Pinning the residual's tested-ref operand to the convert
+   SOURCE instead grounds the fall-through ref at the source hierarchy, so the
+   hole reconnects there and the convert lowers to exactly one opcode. A no-op
+   unless the top is such a residual; the arity-1 (no-result-block) case is a
+   directly-popped [br_on_null] operand already handled by [convert_src]. *)
+let pin_forwarding_source src stack =
+  match stack with
+  | (a, w, ({ Ast.desc = Ast.Br_on_null (l, inner); _ } as node)) :: rem
+    when a >= 2 ->
+      ( ( a,
+          w,
+          { node with Ast.desc = Ast.Br_on_null (l, convert_src src inner) } )
+        :: rem,
+        () )
+  | _ -> (stack, ())
 
 (* [pop_typed] carrying the receiver's width tag, for a method-form op that
    inherits its receiver's flexibility (a rotate, a float method). A hole is
@@ -1388,6 +1424,31 @@ let pop_typed_tagged ty =
     | Some (e, w) -> (e, w)
     | None -> (Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)), None))
 
+(* An operand tree whose printed form re-parses type-ADAPTIVELY: with no width or
+   type of its own it re-defaults (a numeric tree to [i32]). A bare hole is the
+   base case, and an untyped [select] is adaptive when BOTH arms are (its result
+   type is its arms'). Mirrors the typer's [reparse_adaptive] (kept local to
+   from_wasm so it carries no dependency on the typer). *)
+let rec reparse_adaptive (i : _ Ast.instr) =
+  match i.Ast.desc with
+  | Ast.Hole | Ast.Null -> true
+  | Ast.Select (_, a, b) -> reparse_adaptive a && reparse_adaptive b
+  | _ -> false
+
+(* A popped operand is a width ANCHOR — its printed form fixes the operator's
+   width on its own, so a width-erasing consumer (a comparison, the sibling of a
+   shift) need not pin against it — only when it is present ([Some]), carries no
+   flexible width tag ([None]), AND is not an adaptive tree. An untyped [select]
+   of holes is pushed with a [None] tag (its arms carry no width), but it
+   re-parses to [i32] like a bare hole: it anchors nothing, so a non-i32 sibling
+   must still be pinned — otherwise [unreachable; select; i64.shr_u] decompiles
+   to [_ >>u (_?_:_)] and re-parses as [i32.shr_u], silently losing the shift's
+   [i64] width. Shared by [int_bin_op], [float_bin_op] and the [Select] consumer
+   so the anchor/adaptivity model stays consistent across all three. *)
+let is_anchor = function
+  | Some (e, None) -> not (reparse_adaptive e)
+  | _ -> false
+
 let int_bin_op i0 sz (op : Src.int_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
   (* An operand popped off the stack is one of three kinds:
@@ -1396,8 +1457,9 @@ let int_bin_op i0 sz (op : Src.int_bin_op) =
      - a *flexible* literal tree: a present entry with tag [Some w];
      - a *hole* ([try_pop_tagged] = [None]): a pop from the empty/absent stack
        in dead code — it re-parses as [i32] and so needs a pin to keep a non-i32
-       width. *)
-  let is_anchor = function Some (_, None) -> true | _ -> false in
+       width.
+     [is_anchor] (top level) also excludes an adaptive select-of-holes, whose
+     [None] tag would otherwise read as a grounded anchor. *)
   let is_hole = function None -> true | _ -> false in
   let bare = Ast.no_loc Ast.Hole in
   let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
@@ -1558,7 +1620,6 @@ let float_bin_op i0 sz (op : Src.float_bin_op) =
      arithmetic operator preserves the operand width and its result is flexible
      only when both operands are (else grounded, no tag); with no anchor a hole is
      pinned so it does not re-default to i32. *)
-  let is_anchor = function Some (_, None) -> true | _ -> false in
   let is_hole = function None -> true | _ -> false in
   let bare = Ast.no_loc Ast.Hole in
   let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
@@ -2432,22 +2493,27 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | ExternConvertAny ->
       (* Source is [&?any]; a dead-code hole is pinned [(_ as &?any)] so the
          conversion survives (a bare [_ as &?extern] re-types the hole and drops
-         it). *)
+         it). A forwarding [br_on_null] residual on top has its tested ref pinned
+         to the source too, so a stranded fall-through hole reconnects there. *)
+      let src : Ast.valtype = Ref { nullable = true; typ = Any } in
+      let* () = pin_forwarding_source src in
       let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
            (Cast
-              ( convert_src (Ref { nullable = true; typ = Any }) e,
+              ( convert_src src e,
                 Valtype (Ref { nullable = true; typ = Extern }) )))
   | AnyConvertExtern ->
       (* Source is [&?extern]; a dead-code hole is pinned [(_ as &?extern)] so the
-         conversion survives. *)
+         conversion survives. As [ExternConvertAny], a forwarding [br_on_null]
+         residual on top has its tested ref pinned to the source. *)
+      let src : Ast.valtype = Ref { nullable = true; typ = Extern } in
+      let* () = pin_forwarding_source src in
       let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
            (Cast
-              ( convert_src (Ref { nullable = true; typ = Extern }) e,
-                Valtype (Ref { nullable = true; typ = Any }) )))
+              (convert_src src e, Valtype (Ref { nullable = true; typ = Any }))))
   | ArrayNewData (t, d) ->
       let* len = Stack.pop_width_preserved in
       let* off = Stack.pop_width_preserved in
@@ -2634,7 +2700,6 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* cond = Stack.pop_width_preserved in
       let* o2 = Stack.try_pop_tagged in
       let* o1 = Stack.try_pop_tagged in
-      let is_anchor = function Some (_, None) -> true | _ -> false in
       let is_hole = function None -> true | _ -> false in
       let any_anchor = is_anchor o1 || is_anchor o2 in
       match sel_ty with
