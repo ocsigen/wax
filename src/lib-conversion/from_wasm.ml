@@ -894,9 +894,8 @@ Step 2: use this info to generate using names without reusing existing names
 (*** The conversion stack ***)
 
 module Stack = struct
-  (* Each entry is [(present, width, instr)]. [width] records the numeric result
-     width the producing opcode states — a const or arithmetic op tags its own
-     width, everything else is [None].
+  (* [width] records the numeric result width the producing opcode states — a
+     const or arithmetic op tags its own width, everything else is [None].
 
      The two pops encode whether the consuming instruction's Wax surface syntax
      preserves or erases that width, so the choice is explicit at every call site
@@ -914,7 +913,15 @@ module Stack = struct
        [simplify]'s [load_bearing_literal] drops the pin again when it is
        redundant. *)
   type width = [ `I32 | `I64 | `F32 | `F64 ] option
-  type stack = (bool * width * Ast.location Ast.instr) list
+
+  (* Each entry is [(arity, width, instr)]: [arity] is the number of stack values
+     the instruction produces. Only a single value ([arity = 1]) can be popped as
+     an operand; [arity = 0] is a statement (a [nop], a void call, a branch whose
+     targets carry no value) and [arity >= 2] a multi-value residual, both of which
+     a pop reads as a hole. The distinction matters for [effective_backing]: a
+     zero-value statement is transparent (a bare hole reconnects THROUGH it to
+     whatever is below), a value residual is not. *)
+  type stack = (int * width * Ast.location Ast.instr) list
   type 'a t = stack -> stack * 'a
 
   let rec complete n cur =
@@ -924,22 +931,22 @@ module Stack = struct
     if n = 0 then (stack, cur)
     else
       match stack with
-      | (true, _, instr) :: rem -> grab_rec (n - 1) rem (instr :: cur)
+      | (1, _, instr) :: rem -> grab_rec (n - 1) rem (instr :: cur)
       | _ -> (stack, complete n cur)
 
   let consume inputs stack =
     if inputs = 0 then (stack, ())
     else
       ( (match stack with
-        | (true, w, instr) :: rem -> (false, w, instr) :: rem
+        | (1, w, instr) :: rem -> (0, w, instr) :: rem
         | _ -> stack),
         () )
 
   let grab n stack = grab_rec n stack []
-  let push arity i stack = ((arity = 1, None, i) :: stack, ())
+  let push arity i stack = ((arity, None, i) :: stack, ())
 
   (* Push a numeric value tagged with the width its opcode states. *)
-  let push_num width i stack = ((true, width, i) :: stack, ())
+  let push_num width i stack = ((1, width, i) :: stack, ())
 
   (* Wrap [i] in an identity cast to its non-i32 opcode width (see the module
      comment). [None]/[I32] are the re-parse default, so leave the tree as is. *)
@@ -960,18 +967,18 @@ module Stack = struct
      i32 on re-parse — an [i32] op would trap / mask differently. *)
   let push_poly i stack =
     let stack = List.map (fun (a, w, e) -> (a, None, pin_width w e)) stack in
-    ((false, None, i) :: stack, ())
+    ((0, None, i) :: stack, ())
 
   let pop_width_preserved stack =
     match stack with
-    | (true, _, i) :: rem -> (rem, i)
+    | (1, _, i) :: rem -> (rem, i)
     | _ -> (stack, Ast.no_loc Ast.Hole)
 
   (* Pop, pinning the operand's opcode width. Used by single-operand width
      erasers ([drop], [wrap], [promote], [demote]). *)
   let pop_width_erased stack =
     match stack with
-    | (true, w, i) :: rem -> (rem, pin_width w i)
+    | (1, w, i) :: rem -> (rem, pin_width w i)
     | _ -> (stack, Ast.no_loc Ast.Hole)
 
   (* Pop with the width tag, without pinning — the caller decides. Used by [drop],
@@ -980,19 +987,36 @@ module Stack = struct
      [try_pop_tagged] instead, to tell a hole apart from a real operand.) *)
   let pop_tagged stack =
     match stack with
-    | (true, w, i) :: rem -> (rem, (i, w))
+    | (1, w, i) :: rem -> (rem, (i, w))
     | _ -> (stack, (Ast.no_loc Ast.Hole, None))
 
   let try_pop stack =
-    match stack with (true, _, i) :: rem -> (rem, Some i) | _ -> (stack, None)
+    match stack with (1, _, i) :: rem -> (rem, Some i) | _ -> (stack, None)
 
-  (* Peek the top entry's instruction without consuming it, whatever its presence
-     flag. A [try_pop] hole ([None]) is either a pop from an empty stack or from a
-     dead ([present = false]) entry; the reference comparisons peek to tell a real
-     dead value producer (whose residual the typer will type) from a polymorphic
-     bottom left by a terminator sentinel. *)
-  let peek stack =
-    (stack, match stack with (_, _, i) :: _ -> Some i | [] -> None)
+  (* The REFERENCE value a bare hole reconnects to, seen THROUGH interposed
+     entries that cannot be that value:
+      - a zero-value statement ([arity] 0) — a [nop], a void call, a [br_if] whose
+        condition was the value just above it;
+      - a NUMERIC value residual (a [Some] width tag): it cannot be a
+        [ref.is_null]/[ref.eq] operand (they take a reference), so in valid code it
+        is a leftover from a consumer whose grab an interposed statement blocked
+        (e.g. [i32.const c ; atomic.fence ; br_if] leaves [c] stranded, its role as
+        the [br_if] condition lost), not the operand the ref op actually pops.
+     [stop] marks the terminator sentinels ([arity] 0 too, but the polymorphic
+     bottom, so they stop the scan). Returns the first residual that CAN back the
+     hole — an [arity] >= 1 value with no numeric tag (a reference by validity) —
+     else [None] (a terminator bottom, a stranded numeric only, or empty). A [None]
+     tag also covers an untyped [select] of holes, correctly treated as a backing
+     that the caller then pins; a genuinely numeric untagged residual (a bare
+     [load]/[rmw]) is rare in this position and, if it arises, only leaves the ref
+     op un-pinned (the pre-existing best-effort). *)
+  let rec effective_backing stop = function
+    | (0, _, i) :: rem when not (stop i) -> effective_backing stop rem
+    | (a, Some _, _) :: rem when a >= 1 -> effective_backing stop rem
+    | (a, None, i) :: _ when a >= 1 -> Some i
+    | _ -> None
+
+  let effective_backing stop stack = (stack, effective_backing stop stack)
 
   (* [try_pop] carrying the width tag — a method-form op tags its result with its
      receiver's flexibility, so an erasing consumer pins it (and the pin, cast on
@@ -1000,7 +1024,7 @@ module Stack = struct
      [i64.clz]). *)
   let try_pop_tagged stack =
     match stack with
-    | (true, w, i) :: rem -> (rem, Some (i, w))
+    | (1, w, i) :: rem -> (rem, Some (i, w))
     | _ -> (stack, None)
 
   (* Flush the leftover stack as statements. A value stranded past a conditional
@@ -1034,7 +1058,11 @@ module Stack = struct
     let st, () = f [] in
     let rec pin_stranded results_left below_stmt = function
       | [] -> []
-      | (present, w, i) :: rem ->
+      | (arity, w, i) :: rem ->
+          (* Only a single-value entry ([arity = 1]) is a pinnable leftover; a
+             statement ([0]) or multi-value residual is left as is and, like a
+             statement below it, marks everything deeper as below-statement. *)
+          let present = arity = 1 in
           let is_result = present && (not below_stmt) && results_left > 0 in
           let i = if present && not is_result then pin_width w i else i in
           let results_left =
@@ -1307,16 +1335,39 @@ let pop_typed ty =
    [promote]) whose source width the surface [as] cannot recover from a bare [_]
    would otherwise drop entirely ([unreachable; i32.wrap_i64; drop] losing the
    wrap): pinning the source makes [(_ as i64) as i32] re-emit the [wrap]. The
-   same holds for the reference conversions whose surface is a plain [as] that
-   erases the source hierarchy: [ref.i31] ([(_ as i32) as &i31]), [i31.get_s/u]
-   ([(_ as &?i31) as i32_s]), [extern.convert_any] ([(_ as &?any) as &?extern])
-   and [any.convert_extern] ([(_ as &?extern) as &?any]) — a bare [_ as &i31] /
-   [_ as i32_s] re-types the hole directly to the target and drops the op. A
-   present operand is returned unchanged, so reachable code is untouched. Mirrors
-   the dead-code numeric-operand pins in [int_bin_op]/[pop_typed]. *)
+   same holds for the reference conversions [ref.i31] ([(_ as i32) as &i31]) and
+   [i31.get_s/u] ([(_ as &?i31) as i32_s]), whose surface [as] erases the source
+   hierarchy — a bare [_ as &i31] / [_ as i32_s] re-types the hole directly to the
+   target and drops the op. (The cross-hierarchy [extern.convert_any] /
+   [any.convert_extern] need the wider [convert_src] below.) A present operand is
+   returned unchanged, so reachable code is untouched. Mirrors the dead-code
+   numeric-operand pins in [int_bin_op]/[pop_typed]. *)
 let type_hole_src src e =
   match e.Ast.desc with
   | Ast.Hole -> { e with Ast.desc = Ast.Cast (e, Valtype src) }
+  | _ -> e
+
+(* As [type_hole_src] for the cross-hierarchy converts ([extern.convert_any] /
+   [any.convert_extern]), but also grounds an operand whose printed form re-parses
+   type-ADAPTIVELY and would otherwise take the target hierarchy under the outer
+   [as], collapsing the convert into a plain [ref.null]: a hole, and a [select]
+   whose arms are adaptive (its result type is its arms'). A bare [null] arrives
+   already cast ([ref.null any] -> [null as &?any]) so is left alone; a concrete
+   reference fixes the convert on its own and is left alone. The typer keeps the
+   pin only when load-bearing (its [restore_inner] mirrors [reparse_adaptive]) and
+   prunes it for a concrete operand, so reachable non-adaptive code is untouched. *)
+let rec convert_src src e =
+  match e.Ast.desc with
+  | Ast.Hole | Ast.Select _ -> { e with Ast.desc = Ast.Cast (e, Valtype src) }
+  (* [br_on_null] forwards its operand's value on the fall-through (its non-null
+     version), so the source cast must pin that operand INSIDE the branch, not wrap
+     the branch result: wrapping would cast the branch's already-[any]-defaulted
+     result and insert a spurious [extern.convert_any]. Recurse to the innermost
+     hole. ([br_on_non_null] does NOT forward — its fall-through consumes the
+     operand and yields nothing — so it never appears as a convert's value operand
+     and needs no case here.) *)
+  | Ast.Br_on_null (l, inner) ->
+      { e with Ast.desc = Ast.Br_on_null (l, convert_src src inner) }
   | _ -> e
 
 (* [pop_typed] carrying the receiver's width tag, for a method-form op that
@@ -2378,7 +2429,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1
         (with_loc
            (Cast
-              ( type_hole_src (Ref { nullable = true; typ = Any }) e,
+              ( convert_src (Ref { nullable = true; typ = Any }) e,
                 Valtype (Ref { nullable = true; typ = Extern }) )))
   | AnyConvertExtern ->
       (* Source is [&?extern]; a dead-code hole is pinned [(_ as &?extern)] so the
@@ -2387,7 +2438,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1
         (with_loc
            (Cast
-              ( type_hole_src (Ref { nullable = true; typ = Extern }) e,
+              ( convert_src (Ref { nullable = true; typ = Extern }) e,
                 Valtype (Ref { nullable = true; typ = Any }) )))
   | ArrayNewData (t, d) ->
       let* len = Stack.pop_width_preserved in
@@ -2482,23 +2533,22 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
          [i32.eq] — a family change, not just a width drift. Leave the holes bare
          whenever a real ref value backs the comparison (the typer unifies them
          to it): a present anchor (a ref value, whose printed form carries its
-         type), or a dead value producer still on the polymorphic stack (whose
-         residual feeding [ref.eq] is a ref by validity, so the bare [_ == _]
-         recovers [ref.eq]). Only when nothing but a terminator sentinel / empty
-         is below do both operands spring from the polymorphic bottom; then pin
-         one hole with a nullable eq-ref cast [(_ as &?eq)] to recover [ref.eq].
-         (A ref pin cannot be blindly applied like a numeric one: a numeric [as]
-         is always a valid conversion, but casting a value the typer already
-         typed in another reference hierarchy to [&?eq] is a static error — so,
-         unlike [ref.is_null]'s [&?any] pin, this is NOT extended to a deeper dead
-         region, where a bare [_ == _] over func/exn/… operands must stay bare.) *)
+         type), or a value residual [effective_backing] finds below any interposed
+         zero-value statements (a ref by validity, so the bare [_ == _] recovers
+         [ref.eq]). Only when both operands spring from the polymorphic bottom (a
+         terminator sentinel / empty, reached through interposed dead statements)
+         pin one hole with a nullable eq-ref cast [(_ as &?eq)]. (A ref pin cannot
+         be blindly applied like a numeric one: a numeric [as] is always valid, but
+         casting a value the typer already typed in another reference hierarchy to
+         [&?eq] is a static error — hence it is only used over the polymorphic
+         bottom, where it is a valid convert, never over a value residual, which is
+         detected and left bare regardless of its hierarchy.) *)
       let* o2 = Stack.try_pop in
       let* o1 = Stack.try_pop in
-      let* top = Stack.peek in
+      let* backing = Stack.effective_backing is_poly_terminator in
       let bare = Ast.no_loc Ast.Hole in
       let backed =
-        Option.is_some o1 || Option.is_some o2
-        || match top with Some i -> not (is_poly_terminator i) | None -> false
+        Option.is_some o1 || Option.is_some o2 || Option.is_some backing
       in
       let e1 =
         match o1 with
@@ -2521,37 +2571,34 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | RefIsNull ->
       (* [ref.is_null] lowers to the Wax [!e] surface, which it shares with
          [i32.eqz]; with no ref backing it a bare hole re-parses as [i32.eqz] (a
-         family change). As for [RefEq], leave the hole bare whenever a real ref
-         backs it (a present anchor, or a dead value producer on the polymorphic
-         stack whose residual is a ref by validity — the typer types [!_] to
-         [ref.is_null]). Only over a terminator sentinel / empty stack (a
-         polymorphic bottom) pin with a nullable any-ref cast [(_ as &?any)]:
-         [ref.is_null] carries no immediate, so any nullable ref top recovers it
-         and [&?any] is the canonical choice.
+         family change). Leave the hole bare whenever a real ref backs it (a
+         present anchor, or a value residual [effective_backing] finds below any
+         interposed zero-value statements — a ref by validity, so the typer types
+         [!_] to [ref.is_null]). Pin with a nullable any-ref cast [(_ as &?any)]
+         when the hole springs from the polymorphic bottom instead: a terminator
+         sentinel or empty stack, INCLUDING one reached through interposed dead
+         statements (a [br_if] whose condition consumed the value just above, so
+         its own arity-0 entry no longer backs anything — the shape [effective_
+         backing] skips to reach the sentinel). [ref.is_null] carries no immediate,
+         so any nullable ref top recovers it and [&?any] is canonical.
 
-         A present operand that is an UNANNOTATED [select] is the exception: only a
+         A present operand that is an UNANNOTATED [select] is pinned too: only a
          numeric [select] is unannotated, so in dead code it is a polymorphic
-         [select] of holes that re-parses to the numeric [i32] select (making [!]
-         an [i32.eqz]) unless pinned. It backs no concrete ref, so pin it
-         [(_?_:_) as &?any] like the bottom hole. (The pin is kept only when
+         [select] of holes that re-parses to the numeric [i32] select unless
+         pinned; it backs no concrete ref. (Every pin is kept only when
          load-bearing: [simplify]/[--faithful] drop it for a concrete ref operand,
-         where [ty' <: &?any] holds, and keep it for the numeric select, where it
-         does not.) *)
+         where [ty' <: &?any] holds, and keep it otherwise.) *)
       let* o = Stack.try_pop in
-      let* top = Stack.peek in
+      let* backing = Stack.effective_backing is_poly_terminator in
       let any_pin e =
         Ast.no_loc (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Any })))
-      in
-      let backed =
-        Option.is_some o
-        || match top with Some i -> not (is_poly_terminator i) | None -> false
       in
       let e =
         match o with
         | Some ({ Ast.desc = Ast.Select _; _ } as e) -> any_pin e
         | Some e -> e
         | None ->
-            if backed then Ast.no_loc Ast.Hole
+            if Option.is_some backing then Ast.no_loc Ast.Hole
             else any_pin (Ast.no_loc Ast.Hole)
       in
       Stack.push 1 (with_loc (UnOp (op_loc i Ast.Not, e)))
@@ -2780,7 +2827,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 0
         (mem_call m meth (addr :: value :: mem_extra with_loc memarg nat))
-  | Atomic (m, op, memarg) ->
+  | Atomic (m, op, memarg) -> (
       let operands, results = Atomics.signature op in
       let* ops = Stack.grab (List.length operands) in
       let* addr = Stack.pop_width_preserved in
@@ -2831,7 +2878,15 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
             | (`I8 | `I16 | `I32), `I64 -> cast `I64 call)
         | _ -> call
       in
-      Stack.push (List.length results) result
+      (* An atomic load / RMW / notify / wait produces a single numeric ([i32]/
+         [i64]) result; tag it with that width (like every arithmetic result) so a
+         downstream width eraser pins it, and so a dead leftover of it is recognised
+         as numeric — a value a [ref.is_null]/[ref.eq] can never take, hence not a
+         backing (see [effective_backing]). A store has no result. *)
+      match results with
+      | [ t ] ->
+          Stack.push_num (Some (t :> [ `I32 | `I64 | `F32 | `F64 ])) result
+      | _ -> Stack.push (List.length results) result)
   | AtomicFence -> Stack.push 0 (path_call "atomic" "fence" [])
   | Char c -> Stack.push 1 (with_loc (Char c))
   | String (t, s) ->

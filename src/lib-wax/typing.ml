@@ -2600,6 +2600,28 @@ let rec is_null_initializer (i : _ instr) =
   | Cast (e, _) -> is_null_initializer e
   | _ -> false
 
+(* Whether an operand's PRINTED form re-parses type-ADAPTIVELY: with no type of
+   its own, it takes the hierarchy the enclosing context suggests. A bare [null]
+   and a [Hole] (a dead-code stack value, or one reconnecting to a bottom null)
+   are the base cases; a [select]/[?:] is adaptive when both its arms are (its
+   result type is its arms'), and likewise an [if]/[do]-block through its
+   tail(s). It is the criterion behind [restore_inner] (below): only an adaptive
+   operand collapses a cross-hierarchy [extern.convert_any]/[any.convert_extern]
+   into a plain [ref.null] when its inner any/extern cast is dropped, so only for
+   it must the inner cast be re-grounded. An anchored operand (a concrete
+   reference value) fixes the convert regardless; re-grounding it would be inert
+   but noisy, so it is excluded. A [Cast] node never reaches here (the caller
+   guards on the inner having been dropped, so the operand is no longer a cast).
+   Extensible: further adaptive tails (a [Let] body's tail, a labelled block)
+   could be added if a sweep surfaces them. *)
+let rec reparse_adaptive (i : _ instr) =
+  match i.desc with
+  | Null | Hole -> true
+  | Select (_, a, b) -> reparse_adaptive a && reparse_adaptive b
+  (* A block ([do]/[if]) coming from [From_wasm] carries an explicit result type,
+     which pins it, so it never re-parses adaptively and needs no case here. *)
+  | _ -> false
+
 let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
   Wax_wasm.Types.val_subtype (subtyping_info ctx) a.internal b.internal
   && Wax_wasm.Types.val_subtype (subtyping_info ctx) b.internal a.internal
@@ -5644,12 +5666,16 @@ and type_cast ctx i =
             match (inner_t, typ) with
             | ( Valtype (Ref { typ = inner_ht; _ }),
                 Valtype (Ref { typ = outer_ht; _ }) )
-              when (is_null_initializer i' || i'.desc = Hole)
-                   && cross inner_ht outer_ht ->
-                (* A null, or a dead-code hole (poly / reconnecting to a bottom
-                   null): the operand is an anyref by validity, so keeping the
-                   inner any/extern cast keeps the cross-hierarchy convert instead
-                   of collapsing to a plain [ref.null]. *)
+              when reparse_adaptive i' && cross inner_ht outer_ht ->
+                (* The operand re-parses type-adaptively (a null, a dead-code hole,
+                   a [select]/[if] of adaptives): under the outer cast it would
+                   take the extern/any hierarchy and collapse the convert into a
+                   plain [ref.null], so keep the inner any/extern cast. The operand
+                   is an anyref by validity, so this is always type-valid. An
+                   anchored (concrete-ref) operand fixes the convert on its own and
+                   is excluded, so the DEFAULT path is not perturbed with a
+                   spurious pin; a wrongly-restored inner on such an operand would
+                   be inert but noisy. *)
                 Some inner_t
             | Valtype F64, Valtype F32 -> (
                 match i'.desc with Int _ | Float _ -> None | _ -> Some inner_t)
