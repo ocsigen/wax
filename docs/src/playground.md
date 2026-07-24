@@ -53,13 +53,28 @@
 
 <style>
 #wax-playground {
-  /* Break out of mdbook's narrow content column into a wide two-pane layout. */
+  /* Break out of mdbook's narrow content column into a wide two-pane layout,
+     centred on the content column. mdbook offsets the content by the sidebar
+     and pins fixed nav arrows at the page edges, so a plain `92vw` ran past the
+     right of the viewport on a narrow window (truncating the page with no way
+     to scroll to it) and slid under the arrows. Cap the width to what the page
+     frame actually leaves: reserve a gutter for the side arrows once mdbook
+     shows them (>1080px), and subtract the sidebar when it is open. */
   position: relative;
   left: 50%;
   transform: translateX(-50%);
-  width: 92vw;
-  max-width: 1200px;
+  --wp-gutter: 1em;
+  width: min(1200px, calc(100vw - 2 * var(--wp-gutter)));
   box-sizing: border-box;
+}
+@media only screen and (min-width: 1081px) {
+  #wax-playground { --wp-gutter: 170px; }
+}
+#mdbook-sidebar-toggle-anchor:checked ~ .page-wrapper #wax-playground {
+  width: min(1200px,
+             calc(100vw - var(--sidebar-width)
+                        - var(--sidebar-resize-indicator-width, 0px)
+                        - 2 * var(--wp-gutter)));
 }
 #wax-playground * { box-sizing: border-box; }
 
