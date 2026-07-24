@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-26488f1b.js";
+            window.path_to_searchindex_js = "searchindex-98dc7141.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e20ab12e.js"></script>
+        <script src="toc-15e75985.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -3526,7 +3526,7 @@ reply value.</p>
 <h1 id="introduction-1"><a class="header" href="#introduction-1">Introduction</a></h1>
 <p>This guide documents the correspondence between WebAssembly (Wasm) and Wax constructs. It is intended for developers who are familiar with Wasm and want to understand how Wax maps to it.</p>
 <h2 id="high-level-differences"><a class="header" href="#high-level-differences">High-level differences</a></h2>
-<p>Wax is an expression-oriented language, whereas Wasm is stack-oriented. However, Wax constructs map very closely to Wasm instructions, often one-to-one or with simple desugaring.</p>
+<p>Wax is an expression-oriented language, whereas Wasm is stack-oriented. However, Wax constructs map very closely to Wasm instructions, often one-to-one or with simple desugaring. Decompiling a module and recompiling it reproduces the original; see <a href="#round-tripping">Round-Tripping</a> for what is preserved exactly and the few inert divergences.</p>
 <p>Key differences:</p>
 <ul>
 <li><strong>Expressions vs Stack</strong>: Wax uses variables (<code>let</code>) and nested expressions instead of explicit stack manipulation (<code>local.get</code>/<code>set</code>, <code>drop</code>).</li>
@@ -4582,6 +4582,94 @@ overrides that.</p>
 
 <p>This order is conventional but not required; Wax allows fields in any order.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="round-tripping"><a class="header" href="#round-tripping">Round-Tripping</a></h1>
+<p>Decompiling a Wasm module to Wax and recompiling it (<code>wasm → wax → wasm</code>)
+reproduces the instruction stream opcode-for-opcode, dead code included. The
+type section is preserved as well: structurally identical types stay distinct
+and keep their order and numbering. The rest of this page lists the places where
+the round trip diverges. Every divergence is semantically inert: the recompiled
+module behaves identically, it just is not byte-for-byte identical.</p>
+<h2 id="divergences"><a class="header" href="#divergences">Divergences</a></h2>
+<ol>
+<li>
+<p><strong>Locals and names.</strong> Local order and numbering are not preserved; every use
+is rewritten consistently. The <code>name</code> section is rewritten.</p>
+</li>
+<li>
+<p><strong><code>eq</code> then <code>eqz</code> fuses to <code>ne</code>.</strong> A <code>t.eq</code> followed by <code>i32.eqz</code> decompiles
+to <code>a != b</code>, which recompiles as a single <code>t.ne</code>. (<code>--faithful</code> keeps the
+pair.)</p>
+</li>
+<li>
+<p><strong>Flat cast-dispatch chains are canonicalised.</strong> A flat run of
+<code>br_on_cast_fail</code> blocks is recovered as a <code>match</code>, which re-lowers to the
+nested <code>br_on_cast</code> ladder rather than the flat chain. The ladder shape
+itself round-trips byte-for-byte. (<code>--faithful</code> keeps the flat chain.)</p>
+</li>
+<li>
+<p><strong>Redundant <code>ref.cast</code> erased (best-effort).</strong> A <code>ref.cast</code> decompiles to an
+<code>as</code> ascription, which is dropped when the operand’s inferred type is already
+a subtype of the target (an identity cast or an upcast), so it recompiles to
+no instruction. A genuine downcast is kept and re-emits <code>ref.cast</code>. The
+decompiler also inserts scaffolding casts of its own (a member-access
+receiver, a <code>call_ref</code> callee) to nullable reference types, and these are
+indistinguishable from a redundant source cast to a nullable type, so cast
+keeping is best-effort. A few load-bearing ascriptions (a width pin, a
+bottom-reference type name, a continuation type immediate) are never dropped.</p>
+</li>
+<li>
+<p><strong>A typed <code>select</code> may lose its immediate.</strong> The value type is always
+preserved through the arms, but the explicit <code>(result t)</code> immediate form is
+not guaranteed to be reproduced.</p>
+</li>
+<li>
+<p><strong>Shared spellings.</strong> A few distinct opcode streams share a single Wax
+spelling, so the recompiler picks one canonical encoding for both:</p>
+<ul>
+<li><strong><code>i64.extend32_s</code></strong> is spelled <code>(x as i32) as i64_s</code>, the same
+wrap-then-sign-extend pair a hand-written <code>i32.wrap_i64; i64.extend_i32_s</code>
+produces, and both recompile to <code>i64.extend32_s</code>.</li>
+<li><strong>A 32-bit load widened to <code>i64</code>.</strong> <code>i32.load; i64.extend_i32_u</code> and the
+fused <code>i64.load32_u</code> are both <code>m.load32(x) as i64_u</code> and recompile to
+<code>i64.load32_u</code>. The atomic analogue behaves the same:
+<code>i32.atomic.load; i64.extend_i32_u</code> and <code>i64.atomic.load32_u</code> are both
+<code>m.atomic_load32(x) as i64_u</code>. (The 8- and 16-bit narrow loads carry an
+inner <code>as i32_s</code>, so the pair and the fused load stay distinct; only the
+zero-extending <code>_u</code> load32 fuses.)</li>
+<li><strong>The call family.</strong> <code>call</code> and <code>call_indirect</code> desugar through <code>call_ref</code>
+(via a <code>ref.func</code> or a table access) and are recovered by pattern; a shape
+that cannot re-fuse recompiles to the desugared <code>call_ref</code> form.</li>
+<li><strong>Float negation of a literal.</strong> <code>f32.neg</code>/<code>f64.neg</code> of a constant folds
+into the negated literal (Wax spells a negative float literal <code>-X</code>), so
+both <code>const -X</code> and <code>const X; neg</code> recompile the same way.</li>
+<li><strong>Empty <code>else</code>.</strong> An <code>if</code> with an empty <code>else</code> branch decompiles to a
+branchless <code>if</code>, which recompiles without the <code>else</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Types may become more precise.</strong> A declared type wider than the value it
+holds tightens to the value’s precise type across a round trip: the
+decompiler infers each binding’s type from its content and drops the wider
+annotation, and the recompiler re-infers the precise type. The module still
+validates (the precise type is a subtype of the original) and behaves
+identically. This affects a <code>local</code> or a <code>const</code> global declared at a
+supertype but only ever assigned a narrower value, a block result type
+declared wider than its body when no consumer pins the wider type, and a
+<code>br_on_cast</code>’s source-type immediate re-inferred from its operand.</p>
+</li>
+</ol>
+<h2 id="faithful-round-tripping"><a class="header" href="#faithful-round-tripping">Faithful round-tripping</a></h2>
+<p>The <code>--faithful</code> flag (wax output only) preserves the reachable instruction
+structure the reshaping recoveries would otherwise change. It keeps the
+<code>eq; eqz</code> pair rather than fusing to <code>t.ne</code> (divergence 2), keeps a flat
+<code>br_on_cast_fail</code> chain rather than recovering the <code>br_on_cast</code> ladder
+(divergence 3), and keeps a redundant non-null <code>ref.cast</code> as an <code>as</code> ascription
+(divergence 4). The other divergences are inert normalisations it does not gate.</p>
+<h2 id="how-this-is-checked"><a class="header" href="#how-this-is-checked">How this is checked</a></h2>
+<p>These guarantees are enforced by a differential fuzzing harness that compares
+per-opcode histograms across a round trip, over both a curated corpus and a
+<code>wasm-smith</code> campaign.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
 <p>The <code>wax</code> binary is the primary interface for the Wax toolchain. It supports conversion between Wax, WebAssembly Text (WAT), and WebAssembly Binary (Wasm) formats.</p>
 <h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
@@ -4924,6 +5012,28 @@ still gates during processing; re-ingesting the desugared text needs
 A module <em>using</em> gated constructs is not an error — those are real
 (proposal) WebAssembly, and removing annotations is orthogonal to
 whether the consumer supports the proposal.</li>
+</ul>
+</li>
+<li>
+<p><strong><code>--faithful</code></strong></p>
+<ul>
+<li>Decompile faithfully: turn off the stream-reshaping recoveries, so a
+<code>wat</code>/<code>wasm</code> module decompiled to Wax recompiles with the same reachable
+instruction structure. It keeps <code>!(a == b)</code> instead of fusing
+<code>t.eq; i32.eqz</code> into a single <code>a != b</code>, and keeps a flat <code>br_on_cast_fail</code>
+chain instead of recovering it as a <code>match</code> (which re-lowers to the nested
+ladder). It also keeps a redundant non-null <code>ref.cast</code>.</li>
+<li>Only valid with wax output (<code>-f wax</code>); requesting it for wat or wasm output
+is a usage error.</li>
+<li>Width fidelity is <em>not</em> faithful-only: constant, leftover, dead-code and
+convert / <code>extend32_s</code> widths are pinned on the default decompile too, so
+<code>--faithful</code> preserves the opcode <em>structure</em> the reshaping recoveries
+would change, not the widths.</li>
+<li>Some divergences remain (all semantically inert): local ordering and
+numbering, the <code>name</code> section, type renumbering, compiler-inserted casts, a
+typed <code>select</code>’s immediate, and the shared spellings (<code>extend32_s</code>, a
+32-bit load widened to <code>i64</code>, the call family, float neg-of-literal). See
+<a href="#round-tripping">Round-Tripping</a>.</li>
 </ul>
 </li>
 <li>

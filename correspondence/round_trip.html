@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Editor Support - Wax Documentation</title>
+        <title>Round-Tripping - Wax Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-5320e0d8.svg">
-        <link rel="shortcut icon" href="favicon-63bebb14.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-e96d0476.css">
-        <link rel="stylesheet" href="css/chrome-d279d366.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-5320e0d8.svg">
+        <link rel="shortcut icon" href="../favicon-63bebb14.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="assets/wax-highlight-4afa133d.css">
+        <link rel="stylesheet" href="../assets/wax-highlight-4afa133d.css">
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-98dc7141.js";
+            window.path_to_searchindex_js = "../searchindex-98dc7141.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-15e75985.js"></script>
+        <script src="../toc-15e75985.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,7 +141,7 @@
                     <h1 class="menu-title">Wax Documentation</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/ocsigen/wax" title="Git repository" aria-label="Git repository">
@@ -178,113 +178,105 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="editor-support"><a class="header" href="#editor-support">Editor Support</a></h1>
-<p>Wax integrates with editors in two ways. <strong>Visual Studio Code</strong> has a dedicated
-extension that bundles everything. Every other editor combines two pieces: the
-<a href="https://github.com/ocsigen/wax/tree/main/tree-sitter-wax"><code>tree-sitter-wax</code></a>
-grammar for syntax highlighting, and the built-in <strong><code>wax lsp</code></strong> language server
-(see <a href="cli.html#language-server">CLI Reference</a>) for everything else. The extension
-and the server run the same analysis as the <code>wax</code> toolchain, so the language
-features are the same across editors.</p>
-<h2 id="features"><a class="header" href="#features">Features</a></h2>
-<p>Available in VS Code, and in any editor with a Language Server Protocol client
-through <code>wax lsp</code>:</p>
+                        <h1 id="round-tripping"><a class="header" href="#round-tripping">Round-Tripping</a></h1>
+<p>Decompiling a Wasm module to Wax and recompiling it (<code>wasm → wax → wasm</code>)
+reproduces the instruction stream opcode-for-opcode, dead code included. The
+type section is preserved as well: structurally identical types stay distinct
+and keep their order and numbering. The rest of this page lists the places where
+the round trip diverges. Every divergence is semantically inert: the recompiled
+module behaves identically, it just is not byte-for-byte identical.</p>
+<h2 id="divergences"><a class="header" href="#divergences">Divergences</a></h2>
+<ol>
+<li>
+<p><strong>Locals and names.</strong> Local order and numbering are not preserved; every use
+is rewritten consistently. The <code>name</code> section is rewritten.</p>
+</li>
+<li>
+<p><strong><code>eq</code> then <code>eqz</code> fuses to <code>ne</code>.</strong> A <code>t.eq</code> followed by <code>i32.eqz</code> decompiles
+to <code>a != b</code>, which recompiles as a single <code>t.ne</code>. (<code>--faithful</code> keeps the
+pair.)</p>
+</li>
+<li>
+<p><strong>Flat cast-dispatch chains are canonicalised.</strong> A flat run of
+<code>br_on_cast_fail</code> blocks is recovered as a <code>match</code>, which re-lowers to the
+nested <code>br_on_cast</code> ladder rather than the flat chain. The ladder shape
+itself round-trips byte-for-byte. (<code>--faithful</code> keeps the flat chain.)</p>
+</li>
+<li>
+<p><strong>Redundant <code>ref.cast</code> erased (best-effort).</strong> A <code>ref.cast</code> decompiles to an
+<code>as</code> ascription, which is dropped when the operand’s inferred type is already
+a subtype of the target (an identity cast or an upcast), so it recompiles to
+no instruction. A genuine downcast is kept and re-emits <code>ref.cast</code>. The
+decompiler also inserts scaffolding casts of its own (a member-access
+receiver, a <code>call_ref</code> callee) to nullable reference types, and these are
+indistinguishable from a redundant source cast to a nullable type, so cast
+keeping is best-effort. A few load-bearing ascriptions (a width pin, a
+bottom-reference type name, a continuation type immediate) are never dropped.</p>
+</li>
+<li>
+<p><strong>A typed <code>select</code> may lose its immediate.</strong> The value type is always
+preserved through the arms, but the explicit <code>(result t)</code> immediate form is
+not guaranteed to be reproduced.</p>
+</li>
+<li>
+<p><strong>Shared spellings.</strong> A few distinct opcode streams share a single Wax
+spelling, so the recompiler picks one canonical encoding for both:</p>
 <ul>
-<li>Diagnostics as you type: syntax errors, type errors, and lints.</li>
-<li>Hover types, and inlay hints showing the inferred type on each un-annotated
-<code>let</code> binding.</li>
-<li>Go to definition, go to type definition, find references, and document
-highlight.</li>
-<li>Rename (a punned struct field is expanded so the field is preserved).</li>
-<li>Completion: the names in scope, a struct value’s fields and a numeric / array
-/ <code>v128</code> / memory / table receiver’s methods after <code>.</code>, and an intrinsic
-namespace’s functions after <code>::</code>.</li>
-<li>Signature help while typing a call.</li>
-<li>Document outline, folding ranges, selection ranges, and semantic tokens.</li>
-<li>Formatting.</li>
+<li><strong><code>i64.extend32_s</code></strong> is spelled <code>(x as i32) as i64_s</code>, the same
+wrap-then-sign-extend pair a hand-written <code>i32.wrap_i64; i64.extend_i32_s</code>
+produces, and both recompile to <code>i64.extend32_s</code>.</li>
+<li><strong>A 32-bit load widened to <code>i64</code>.</strong> <code>i32.load; i64.extend_i32_u</code> and the
+fused <code>i64.load32_u</code> are both <code>m.load32(x) as i64_u</code> and recompile to
+<code>i64.load32_u</code>. The atomic analogue behaves the same:
+<code>i32.atomic.load; i64.extend_i32_u</code> and <code>i64.atomic.load32_u</code> are both
+<code>m.atomic_load32(x) as i64_u</code>. (The 8- and 16-bit narrow loads carry an
+inner <code>as i32_s</code>, so the pair and the fused load stay distinct; only the
+zero-extending <code>_u</code> load32 fuses.)</li>
+<li><strong>The call family.</strong> <code>call</code> and <code>call_indirect</code> desugar through <code>call_ref</code>
+(via a <code>ref.func</code> or a table access) and are recovered by pattern; a shape
+that cannot re-fuse recompiles to the desugared <code>call_ref</code> form.</li>
+<li><strong>Float negation of a literal.</strong> <code>f32.neg</code>/<code>f64.neg</code> of a constant folds
+into the negated literal (Wax spells a negative float literal <code>-X</code>), so
+both <code>const -X</code> and <code>const X; neg</code> recompile the same way.</li>
+<li><strong>Empty <code>else</code>.</strong> An <code>if</code> with an empty <code>else</code> branch decompiles to a
+branchless <code>if</code>, which recompiles without the <code>else</code>.</li>
 </ul>
-<p>WebAssembly text (<code>.wat</code>) gets the same features: formatting,
-diagnostics, the outline, hover types, go-to-definition, go-to-type-definition,
-find references, document highlight, rename, folding, selection ranges, signature
-help, semantic tokens (identifiers coloured by the kind of index they resolve
-to), completion (where an index is expected, the names of the space it wants —
-functions, globals, locals, types, labels — since the instruction fixes the
-kind), inlay hints (after a numeric index, the name of the definition it
-refers to, so <code>(local.get 0)</code> reads as <code>(local.get 0 $x)</code>), and inactive-branch
-dimming for <code>(@if)</code> conditional compilation. Syntax highlighting
-otherwise comes from the extension’s own grammar in VS Code and from
-<code>tree-sitter-wax</code> elsewhere.</p>
-<h2 id="visual-studio-code"><a class="header" href="#visual-studio-code">Visual Studio Code</a></h2>
-<p>The <a href="https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax">Wax extension</a>
-(source in <a href="https://github.com/ocsigen/wax/tree/main/editors/vscode"><code>editors/vscode/</code></a>)
-covers both <code>.wax</code> and <code>.wat</code> files with the full feature set above, plus
-snippets and commands to preview the compiled WAT or decompiled Wax side by
-side. It runs the toolchain compiled to WebAssembly in-process, with no separate
-<code>wax</code> install, so it works the same in desktop and web VS Code (including
-<a href="https://vscode.dev">vscode.dev</a>).</p>
-<h2 id="other-editors"><a class="header" href="#other-editors">Other editors</a></h2>
-<p>Any editor with a Language Server Protocol client gets the feature set above by
-launching <code>wax lsp</code>. The editor starts the server itself, so <code>wax</code> only needs to
-be on your <code>PATH</code>; pair it with the tree-sitter grammar for highlighting.
-Ready-to-use configurations, each with a README, live under
-<a href="https://github.com/ocsigen/wax/tree/main/editors"><code>editors/</code></a>:</p>
-<ul>
-<li>
-<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/nvim/README.md">Neovim</a></strong>: register
-the <code>tree-sitter-wax</code> parser (nvim-treesitter or the built-in loader) and
-point <code>vim.lsp</code> at <code>wax lsp</code>.</p>
 </li>
 <li>
-<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/helix/README.md">Helix</a></strong>: add the
-grammar and a <code>[language-server.wax]</code> entry running <code>wax lsp</code> (a ready-to-paste
-<code>languages.toml</code> is included).</p>
+<p><strong>Types may become more precise.</strong> A declared type wider than the value it
+holds tightens to the value’s precise type across a round trip: the
+decompiler infers each binding’s type from its content and drops the wider
+annotation, and the recompiler re-infers the precise type. The module still
+validates (the precise type is a subtype of the original) and behaves
+identically. This affects a <code>local</code> or a <code>const</code> global declared at a
+supertype but only ever assigned a narrower value, a block result type
+declared wider than its body when no consumer pins the wider type, and a
+<code>br_on_cast</code>’s source-type immediate re-inferred from its operand.</p>
 </li>
-<li>
-<p><strong><a href="https://github.com/ocsigen/wax/blob/main/editors/emacs/README.md">Emacs</a></strong>:
-<code>wax-ts-mode</code> provides tree-sitter highlighting, indentation, and <code>imenu</code>,
-with Eglot driving <code>wax lsp</code> for the rest. Requires Emacs 29+ and can be installed directly from GitHub using <code>use-package</code> with <code>package-vc</code>:</p>
-<pre><code class="language-elisp">(use-package wax-ts-mode
-  :vc (:url "https://github.com/ocsigen/wax"
-       :branch "main"
-       :rev :newest
-       :lisp-dir "editors/emacs")
-  :hook (wax-ts-mode . eglot-ensure))
-
-;; Optional: completion popup as you type. Without it, Eglot still serves
-;; completions through the built-in `completion-at-point' (C-M-i).
-(use-package corfu
-  :ensure t
-  :custom
-  (corfu-auto t)
-  (corfu-auto-prefix 1)  ; pop up after one character, not the default 3
-  :hook (wax-ts-mode . corfu-mode))
-</code></pre>
-</li>
-</ul>
-<p>The server’s flags and behaviour (document sync, position-encoding negotiation)
-are documented under <a href="cli.html#language-server"><code>wax lsp</code></a> in the CLI reference.</p>
-<h2 id="ai-coding-agents"><a class="header" href="#ai-coding-agents">AI coding agents</a></h2>
-<p>Coding assistants that support the <code>SKILL.md</code> agent-skill format (Claude Code,
-Antigravity, Copilot, Codex, …) can be taught Wax with the
-<a href="https://github.com/ocsigen/wax/tree/main/skills/wax"><code>wax</code> skill</a> shipped in
-the repository. Wax has almost no presence in model training data, so the
-skill bundles the complete language reference as a single context-loadable
-file and instructs the agent to validate everything it writes with
-<code>wax check</code>. Install it with the
-<a href="https://github.com/vercel-labs/skills"><code>skills</code> CLI</a>:</p>
-<pre><code class="language-sh">npx skills add ocsigen/wax
-</code></pre>
-<p>or copy <code>skills/wax/</code> into the agent’s skills directory (for Claude Code,
-<code>.claude/skills/</code>).</p>
+</ol>
+<h2 id="faithful-round-tripping"><a class="header" href="#faithful-round-tripping">Faithful round-tripping</a></h2>
+<p>The <code>--faithful</code> flag (wax output only) preserves the reachable instruction
+structure the reshaping recoveries would otherwise change. It keeps the
+<code>eq; eqz</code> pair rather than fusing to <code>t.ne</code> (divergence 2), keeps a flat
+<code>br_on_cast_fail</code> chain rather than recovering the <code>br_on_cast</code> ladder
+(divergence 3), and keeps a redundant non-null <code>ref.cast</code> as an <code>as</code> ascription
+(divergence 4). The other divergences are inert normalisations it does not gate.</p>
+<h2 id="how-this-is-checked"><a class="header" href="#how-this-is-checked">How this is checked</a></h2>
+<p>These guarantees are enforced by a differential fuzzing harness that compares
+per-opcode histograms across a round trip, over both a curated corpus and a
+<code>wasm-smith</code> campaign.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="cli.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../correspondence/module_fields.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="../cli.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -292,10 +284,13 @@ file and instructs the agent to validate everything it writes with
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="cli.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../correspondence/module_fields.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="../cli.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>
@@ -313,16 +308,16 @@ file and instructs the agent to validate everything it writes with
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-09f2665d.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-609e4cb8.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="assets/wax-copy-90f63bdb.js"></script>
+        <script src="../assets/wax-copy-90f63bdb.js"></script>
 
 
 

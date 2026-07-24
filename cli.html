@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-26488f1b.js";
+            window.path_to_searchindex_js = "searchindex-98dc7141.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e20ab12e.js"></script>
+        <script src="toc-15e75985.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -523,6 +523,28 @@ whether the consumer supports the proposal.</li>
 </ul>
 </li>
 <li>
+<p><strong><code>--faithful</code></strong></p>
+<ul>
+<li>Decompile faithfully: turn off the stream-reshaping recoveries, so a
+<code>wat</code>/<code>wasm</code> module decompiled to Wax recompiles with the same reachable
+instruction structure. It keeps <code>!(a == b)</code> instead of fusing
+<code>t.eq; i32.eqz</code> into a single <code>a != b</code>, and keeps a flat <code>br_on_cast_fail</code>
+chain instead of recovering it as a <code>match</code> (which re-lowers to the nested
+ladder). It also keeps a redundant non-null <code>ref.cast</code>.</li>
+<li>Only valid with wax output (<code>-f wax</code>); requesting it for wat or wasm output
+is a usage error.</li>
+<li>Width fidelity is <em>not</em> faithful-only: constant, leftover, dead-code and
+convert / <code>extend32_s</code> widths are pinned on the default decompile too, so
+<code>--faithful</code> preserves the opcode <em>structure</em> the reshaping recoveries
+would change, not the widths.</li>
+<li>Some divergences remain (all semantically inert): local ordering and
+numbering, the <code>name</code> section, type renumbering, compiler-inserted casts, a
+typed <code>select</code>’s immediate, and the shared spellings (<code>extend32_s</code>, a
+32-bit load widened to <code>i64</code>, the call family, float neg-of-literal). See
+<a href="correspondence/round_trip.html">Round-Tripping</a>.</li>
+</ul>
+</li>
+<li>
 <p><strong><code>--source-map</code></strong></p>
 <ul>
 <li>Generate a source map file alongside the output file and insert a <code>sourceMappingURL</code> custom section. Only valid with wasm output (<code>-f wasm</code>) to a file, when the source is a text file (not a Wasm binary).
@@ -758,7 +780,7 @@ for the per-shell details and the PowerShell setup.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="correspondence/module_fields.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="correspondence/round_trip.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -772,7 +794,7 @@ for the per-shell details and the PowerShell setup.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="correspondence/module_fields.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="correspondence/round_trip.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
