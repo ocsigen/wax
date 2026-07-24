@@ -77,6 +77,10 @@ fuzz/num-id-fuzz.sh         # metamorphic: flipping a type ref name<->number mus
 fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two-cast chains
 fuzz/wat-cast-const.sh      # deterministic round-trip of each conversion on edge-value consts (catches over-rejection)
 
+# Bottom-typed compositions (holes/ref.null/select/br_on_*/converts/atomic.fence, live and post-unreachable):
+fuzz/bottom-fuzz.sh         # exhaustive small-depth enumeration of the bottom-composition cluster; REF-arbitrated validity + oracle.sh round-trip; COUNT=N random tail
+fuzz/null-mutate.sh         # metamorphic: inject bottom values (ref.null / select-wrap / br_on_null passthrough) into valid corpus modules + round-trip; COUNT=N modules, PER=N mutations
+
 # wasm *binary* input side (the binary reader):
 fuzz/mutate-wasm.sh [count]            # byte-mutate the valid wasm corpus + check them (decoder)
 MODE=struct fuzz/mutate-wasm.sh [count] # structure-aware mutants (wasm-tools mutate): from_wasm / validation / round-trip
@@ -99,7 +103,8 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
 `validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`, `const-context.sh`,
-`fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh`,
+`bottom-fuzz.sh`, `null-mutate.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -569,6 +574,56 @@ over-rejection, not an intended "no". The edge values (signed zero, powers of tw
 straddling the i32/u32/i64 limits, range limits, inf, nan) probe those arms
 exhaustively; it is what would have caught the `i64.trunc_f* (f*.const 2^32)` →
 `<big> as i64_s` over-rejection directly.
+
+## The bottom-composition cluster
+
+The recent round-trip miscompiles were all one shape: a tiny (<=6 instruction)
+composition of a bottom-typed value (a hole `_`, a `ref.null`, an `unreachable`
+residue) with a type-adaptive surface (`select`, the `br_on_*` family, the
+hierarchy converts `extern.convert_any`/`any.convert_extern`), sometimes with an
+interposed zero-effect statement (`atomic.fence`), in a live OR a
+post-`unreachable` position — each a `from_wasm` pin missing on some operand path
+(the `type_hole_src`/`pin_width`/`effective_backing`/`convert_src` idioms). Every
+one was found only by luck in `wasm-smith` volume. Two guards target that cluster
+directly.
+
+`bottom-fuzz.sh` enumerates it exhaustively at small depth. `bottom-gen.awk`
+generates a templated core (WRAP·producer·adapter·consumer·sink, ~15k bodies over
+a focused alphabet: `ref.null` at every heap type in both hierarchies, typed and
+untyped `select`, `ref.is_null`/`ref.eq`/`ref.as_non_null`, the converts,
+`atomic.fence`, an i64 const + `i64.shr_u`, the whole `br`/`br_on_*` family into
+labels of each hierarchy, with and without a leading `unreachable`) plus a
+SEED-driven random tail (length 3..8); each body drops into a scaffolding module
+and is deduped by signature (`sort -u`). Validity is arbitrated by the spec
+reference interpreter (`REF`), exactly as `unreachable-fuzz.sh` does — wax rejects
++ REF accepts is a HIGH `OVER_REJECT` (the dead-code / principal-typing
+over-rejection class), wax accepts (even `-s`) + REF rejects is a HIGH
+`FALSE_ACCEPT` — and REF is trusted only where it can parse the candidate (this
+3.0 build lacks threads, so `atomic.fence` reads as a syntax error there and is
+left to the round-trip net). Every wax-accepted candidate then goes through
+`oracle.sh` (the round-trip / emitter-soundness / width / struct-drift suite,
+arbitered by wasm-tools, which does support the atomics/GC), which is what
+actually catches the composition-round-trip bugs. `LINT_PARITY` (always REVIEW)
+is dropped: the synthetic bodies are dense with redundant/constant constructs
+that lint-diverge between simplified wax and literal wat by construction. Under
+20 minutes at default `JOBS`; `COUNT` sets the random-tail size, `ORACLE_EVERY=N`
+samples the round-trip net.
+
+`null-mutate.sh` plants the same values inside real, intertwined corpus bodies
+(the setting the smith-only bugs arose in). `wat-null-mutate.awk` applies one
+type-preserving mutation at a seed-chosen site of an unfolded corpus module:
+`NULL` (a reference operand replaced by a `ref.null` at a matching bottom heap
+type — the reference arbitrates validity, a both-reject being the type change,
+not a bug), `SELECT` (a value wrapped in `select v v (i32.const 1)`, value- and
+type-preserving so a valid mutant by construction), and `BRNULL` (a nullable ref
+routed through a semantics-preserving `br_on_non_null` passthrough inside a
+block). It keys only on producers whose result type is self-evident from the line
+(`ref.null`/`ref.func`/`iNN.const`), so no WAT type inference is needed and the
+rewrite is correct by construction. `COUNT` bases (drawn in a SEED-keyed order,
+kept only if they carry a site) times `PER` mutations; the same REF-arbitration
+and `oracle.sh` round-trip nets as `bottom-fuzz.sh`, and the same `LINT_PARITY`
+drop (the `SELECT` mutation injects a redundant, constant-condition select).
+Findings under `fuzz/bottom-findings/` and `fuzz/null-mutate-findings/`.
 
 ## Deterministic cross-cutting guards
 

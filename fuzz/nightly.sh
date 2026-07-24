@@ -20,7 +20,9 @@
 # drives diff-validate.sh, VALIDATE_FUZZ_COUNT drives validate-fuzz.sh,
 # CROSS_PROPOSAL_COUNT drives wat-cross-proposal.sh, UNREACHABLE_COUNT drives
 # unreachable-fuzz.sh, FAULT_LOCALITY_COUNT drives fault-locality.sh, and
-CONST_CONTEXT_COUNT drives const-context.sh.
+CONST_CONTEXT_COUNT drives const-context.sh, BOTTOM_COUNT drives bottom-fuzz.sh
+# (its random tail; the core is exhaustive), and NULL_MUTATE_COUNT drives
+# null-mutate.sh (module count; PER mutations each).
 # COUNT and SMITH are still accepted as legacy coarse
 # overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools; node
 # and the reference interpreter (REF) unlock the execution oracles (campaigns
@@ -47,6 +49,8 @@ cross_proposal="${CROSS_PROPOSAL_COUNT:-${legacy_count:-1500}}"
 unreachable="${UNREACHABLE_COUNT:-${legacy_count:-800}}"
 fault_locality="${FAULT_LOCALITY_COUNT:-${legacy_count:-600}}"
 const_context="${CONST_CONTEXT_COUNT:-${legacy_count:-400}}"
+bottom_tail="${BOTTOM_COUNT:-${legacy_count:-3000}}"
+null_mutate="${NULL_MUTATE_COUNT:-${legacy_count:-200}}"
 if [ "${QUICK:-0}" = 1 ]; then
   smith=40
   corpus_smith=40
@@ -61,6 +65,8 @@ if [ "${QUICK:-0}" = 1 ]; then
   unreachable=60
   fault_locality=60
   const_context=60
+  bottom_tail=60
+  null_mutate=30
 fi
 
 command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
@@ -69,7 +75,7 @@ command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
 }
 
 echo "nightly campaigns — SEED=$SEED  (replay this run with: SEED=$SEED fuzz/nightly.sh)" >&2
-echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz cross-proposal=$cross_proposal unreachable=$unreachable fault-locality=$fault_locality const-context=$const_context" >&2
+echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz cross-proposal=$cross_proposal unreachable=$unreachable fault-locality=$fault_locality const-context=$const_context bottom=$bottom_tail null-mutate=$null_mutate" >&2
 
 fail=0 passed=0 skipped=0 failed_list=""
 
@@ -175,6 +181,11 @@ run "COUNT=$fault_locality" fault-locality.sh
 # elem initializers to sweep the arm-by-arm constant_instruction surface both
 # frontends validate independently.
 run "FUZZ=$const_context" const-context.sh
+# Bottom-typed compositions: exhaustive small-depth enumeration (bottom-fuzz) and
+# type-preserving injection into corpus bodies (null-mutate) of the hole/ref.null/
+# select/br_on_* cluster behind the recent round-trip miscompiles.
+run "COUNT=$bottom_tail" bottom-fuzz.sh
+run "COUNT=$null_mutate" null-mutate.sh
 
 echo >&2
 echo "==================== fuzz/nightly.sh summary ====================" >&2

@@ -11,3 +11,5 @@ cross-findings/
 unreachable-findings/
 fault-findings/
 const-findings/
+bottom-findings/
+null-mutate-findings/
