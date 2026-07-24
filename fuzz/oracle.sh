@@ -155,25 +155,27 @@ width_op_histogram() {
 # list in docs/src/correspondence/round_trip.md). Every one is DOCUMENTED, not
 # silent, and each was proven load-bearing by a corpus sweep (dropping it fires
 # false drift). The formerly-normalised drifts (the cast-family drop beyond
-# [ref.cast], most of [ref.is_null]->[i32.eqz], constant/atomic width erasure)
-# were FIXED in from_wasm and are no longer normalised — those ops now round-trip
-# and are compared. One residual dead-code [ref.is_null] shape stays normalised
-# (see [emit], scoped to unreachable code).
+# [ref.cast], [ref.is_null]->[i32.eqz], constant/atomic width erasure) were all
+# FIXED in from_wasm and are no longer normalised — those ops now round-trip and
+# are compared, live and dead alike.
 #
-#  (a) Only [ref.cast] (and its custom-descriptors analogue [ref.cast_desc_eq]) is
-#      dropped. The decompiler inserts type-pin casts (a member receiver, a
-#      [call_ref] callee) that are indistinguishable from a source [ref.cast]
-#      without provenance, so [--faithful]'s cast fidelity is best-effort (it
-#      keeps non-null redundant up-casts, prunes the nullable pins) and is
-#      demonstrated by faithful.t rather than asserted here. Every other reference
-#      op is a genuine COMPUTATION and is compared: [ref.test]/[ref.i31]/
-#      [i31.get_s/u]/[extern.convert_any]/[any.convert_extern] (from_wasm pins
-#      their dead-code holes with the operation's operand type) and [ref.is_null]
-#      on the LIVE path (from_wasm pins its dead terminator-bottom hole and its
-#      dead select-of-holes operand [(_ as &?any)]). The one exception is a
-#      [ref.is_null] deep in UNREACHABLE code reconnecting to a dead value below
-#      interposed statements — value-inert, and the pin regresses a genuine
-#      non-any bottom-ref reconnect — kept normalised in [emit] with a comment.
+#  (a) Only [ref.cast] is dropped. The decompiler inserts type-pin casts (a member
+#      receiver, a [call_ref] callee) that are indistinguishable from a source
+#      [ref.cast] without provenance, so [--faithful]'s cast fidelity is
+#      best-effort (it keeps non-null redundant up-casts, prunes the nullable pins)
+#      and is demonstrated by faithful.t rather than asserted here. Every other
+#      reference op is a genuine COMPUTATION and is compared, including the
+#      custom-descriptors [ref.cast_desc_eq] (the typer never drops a [CastDesc] as
+#      redundant — its [Cast] arm always re-emits one — and from_wasm's
+#      [pin_descriptor]/[pin_descriptor_reftype] pin its dead-code descriptor and
+#      value holes): [ref.test]/[ref.i31]/[i31.get_s/u]/[extern.convert_any]/
+#      [any.convert_extern] (from_wasm pins their dead-code holes with the
+#      operation's operand type) and [ref.is_null] (from_wasm pins its dead
+#      select-of-holes operand and any bottom-sprung hole [(_ as &?any)] —
+#      [Stack.effective_backing] sees THROUGH interposed zero-value statements
+#      like a [br_if] whose condition consumed the value above it, so a hole that
+#      springs from the polymorphic bottom is recognised even when a dead
+#      statement hides the sentinel).
 #
 #  (b) Two recompiler-peephole FUSIONS are folded to their fused opcode:
 #      [i64.extend32_s] ([wrap_i64 ; extend_i32_s], a true shared spelling with no
@@ -185,10 +187,11 @@ width_op_histogram() {
 #      ([fN.const ; fN.neg] -> the negated literal) and the empty-[else] elision.
 #      The narrow-load-then-widen fusion is NOT normalised: the decompiler renders
 #      a fused [iN.loadN_S] as a single cast (re-fuses) and only a genuine
-#      [iN.load ; extend] pair as two casts (re-lowers to the pair); the
-#      [i32.load ; i64.extend_i32_S] -> [i64.load32_S] shared spelling (which the
-#      single-cast [m.load32(x) as i64_S] cannot separate) is the one exception,
-#      folded above.
+#      [iN.load ; extend] pair as two casts (re-lowers to the pair); the two
+#      exceptions are the shared spelling [m.load32(x) as i64_S], which a single
+#      cast cannot separate, so [i32.load ; i64.extend_i32_S] -> [i64.load32_S] and
+#      its atomic analogue [i32.atomic.load ; i64.extend_i32_u] ->
+#      [i64.atomic.load32_u] are folded above.
 opcode_sequence() {
   local txt
   txt="$("$WASM_TOOLS" print "$1" 2>/dev/null)" || return 1
@@ -201,52 +204,24 @@ opcode_sequence() {
         # provenance, so cast fidelity is best-effort. Every OTHER reference op is
         # a genuine computation that must round-trip and is compared:
         # [ref.test]/[ref.i31]/[i31.get_s/u]/[extern.convert_any]/
-        # [any.convert_extern] (from_wasm pins their dead-code holes) and
-        # [ref.is_null] (distinct from [i32.eqz] on the LIVE path; one residual
-        # DEAD shape is still normalised in [emit] below — see there).
-        BEGIN { reach = 1; depth = 0; infunc = 0 }
-        function term(t) {
-          return (t == "unreachable" || t == "br" || t == "br_table" \
-               || t == "return" || t == "return_call" \
-               || t == "return_call_ref" || t == "return_call_indirect" \
-               || t == "throw" || t == "throw_ref" || t == "rethrow")
-        }
+        # [any.convert_extern]/[ref.cast_desc_eq] (from_wasm pins their dead-code
+        # holes) and [ref.is_null] (distinct from [i32.eqz] on both live and dead
+        # paths). No reachability walk is needed any more: dead code is emitted and
+        # compared like live code, so this just emits each body line first token
+        # (immediates already stripped) minus [ref.cast].
+        BEGIN { infunc = 0 }
         function is_cast(t) {
-          return (t == "ref.cast" || t == "ref.cast_desc_eq")
-        }
-        function emit(t) {
-          # RESIDUAL (user to review): in an UNREACHABLE region a [ref.is_null]
-          # still maps to [i32.eqz]. The select-of-holes and terminator-bottom
-          # shapes are FIXED and compared on the live path, but one dead shape
-          # remains: [ref.is_null] whose bare [!_] reconnects to a dead value
-          # sitting below interposed dead statements (e.g. [throw ; …
-          # i32.atomic.rmw ; br_if ; ref.is_null]) — which may be numeric, so [!]
-          # re-parses as [i32.eqz]. The [(_ as &?any)] pin cannot fix it: the same
-          # reconnect can be a genuine non-any bottom ref (a multi-value
-          # [br_on_cast] fall-through residual, [&nofunc]), which [(_ as &?any)]
-          # would cross-cast and reject (regressing dead-code-flexible-result.t).
-          # Distinguishing the two needs type info [from_wasm] lacks, so this one
-          # dead shape stays normalised. It is value-inert (unreachable code).
-          if (!reach && t == "ref.is_null") t = "i32.eqz"
-          print t
+          return (t == "ref.cast")
         }
         {
           line = $0
-          if (line ~ /^[[:space:]]*\(func[ )]/) { infunc=1; reach=1; depth=0; next }
+          if (line ~ /^[[:space:]]*\(func[ )]/) { infunc=1; next }
           if (line ~ /^[[:space:]]*\(/) next
           if (line ~ /^[[:space:]]*\)[[:space:]]*$/) { infunc = 0; next }
           if (!infunc || line ~ /^[[:space:]]*$/) next
           sub(/^[[:space:]]+/, "", line)
           tok = line; sub(/[[:space:]].*/, "", tok)
-          if (tok=="block" || tok=="loop" || tok=="if" || tok=="try" || tok=="try_table") {
-            emit(tok); depth++; fe[depth] = reach
-          } else if (tok=="else" || tok=="catch" || tok=="catch_all") {
-            reach = fe[depth]; emit(tok)
-          } else if (tok=="end" || tok=="delegate") {
-            reach = fe[depth]; emit(tok); if (depth > 0) depth--
-          } else if (term(tok)) {
-            emit(tok); reach = 0
-          } else if (!is_cast(tok)) emit(tok)
+          if (!is_cast(tok)) print tok
         }' \
     | awk '
         # (c) fold the shared-spelling fusions and literal folds. Constant and
@@ -269,6 +244,14 @@ opcode_sequence() {
             # not folded).
             if (prev == "i32.load" && tok ~ /^i64\.extend_i32_[su]$/) {
               prev = "i64.load32_" substr(tok, length(tok), 1); next
+            }
+            # the atomic analogue: i32.atomic.load ; i64.extend_i32_u ->
+            # i64.atomic.load32_u. Same shared spelling ([m.atomic_load32(x) as
+            # i64_u]); only the zero-extending [_u] form exists as a fused atomic
+            # load32, so a trailing [_s] stays the honest two-cast pair (as for the
+            # 8/16-bit forms) and is not folded.
+            if (prev == "i32.atomic.load" && tok == "i64.extend_i32_u") {
+              prev = "i64.atomic.load32_u"; next
             }
             # call family: ref.func ; (return_)call_ref -> (return_)call, and
             # table.get ; (return_)call_ref -> (return_)call_indirect. call and
