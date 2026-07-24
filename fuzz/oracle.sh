@@ -161,10 +161,22 @@ roundtrip_struct_bag() {
       # must not read as drift — while a WIDTH change (i64 -> i32) still shows as a
       # differing multiset. A grouping change ((local i32 i32) vs two lines) also
       # cancels for the same reason.
+      #
+      # Reference types are masked to REF (both the explicit ref-paren form and
+      # every <x>ref shorthand): the wax decompiler legitimately re-infers a
+      # more-precise (narrower) reference type on a round trip — a nullable
+      # exnref whose only value is a caught non-null ref-exn, say — and such
+      # narrowing is behavior-inert whenever the result still validates (which
+      # this check requires), exactly as it is for funcref/anyref. The catch-all
+      # [A-Za-z0-9_]*ref masks EVERY shorthand uniformly (no primitive width
+      # contains "ref"), so the explicit and shorthand spellings of one type
+      # (nullfuncref vs the ref-null-nofunc paren form, exnref vs ref-null-exn)
+      # collapse to the same token. A per-name list missed the exn/cont
+      # hierarchies and mis-masked the null-prefixed bottoms.
       line ~ /^[[:space:]]*\(local[[:space:])]/ {
         t = line
         gsub(/\(ref[^)]*\)/, "REF", t)
-        gsub(/(null|any|eq|i31|struct|array|func|extern|nofunc|noextern)ref/, "REF", t)
+        gsub(/[A-Za-z0-9_]*ref/, "REF", t)
         sub(/^[[:space:]]*\(local/, "", t); gsub(/\)/, "", t)
         n = split(t, toks, /[[:space:]]+/)
         for (k = 1; k <= n; k++) if (toks[k] != "") print "LOCAL " toks[k]
