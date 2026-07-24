@@ -139,3 +139,55 @@ Round-tripping back to Wasm recovers every opcode at its original width:
     (unreachable)
     (drop (ref.eq (local.get $x)))
   )
+
+A dead width-changing conversion (`wrap`/`extend`/`demote`/`promote`) has a hole
+operand whose source width the surface `as` cannot recover, so a bare `_` would
+drop the instruction entirely. `from_wasm` pins the source with a typed hole so
+the conversion survives: `(_ as i64) as i32` re-emits the `wrap`, `(_ as i32) as
+i64_s` the `extend_i32_s`, and so on.
+
+  $ cat > c.wat <<'WAT'
+  > (module
+  >   (func $wrap unreachable i32.wrap_i64 drop)
+  >   (func $ext_s unreachable i64.extend_i32_s drop)
+  >   (func $ext_u unreachable i64.extend_i32_u drop)
+  >   (func $demote unreachable f32.demote_f64 drop)
+  >   (func $promote unreachable f64.promote_f32 drop))
+  > WAT
+  $ wax -i wat -f wax c.wat
+  fn wrap() {
+      unreachable;
+      _ = _ as i64 as i32;
+  }
+  fn ext_s() {
+      unreachable;
+      _ = _ as i32 as i64_s;
+  }
+  fn ext_u() {
+      unreachable;
+      _ = _ as i32 as i64_u;
+  }
+  fn demote() {
+      unreachable;
+      _ = _ as f64 as f32;
+  }
+  fn promote() {
+      unreachable;
+      _ = _ as f32 as f64;
+  }
+
+Round-tripping recovers each conversion at its original width:
+
+  $ wax -i wat -f wax c.wat | wax -i wax -f wat
+  (func $wrap (unreachable) (drop (i32.wrap_i64)))
+  (func $ext_s (unreachable) (drop (i64.extend_i32_s)))
+  (func $ext_u (unreachable) (drop (i64.extend_i32_u)))
+  (func $demote (unreachable) (drop (f32.demote_f64)))
+  (func $promote (unreachable) (drop (f64.promote_f32)))
+
+A dead constant keeps its declared width too (covered by the constant pin), so a
+dead `i64.const` feeding a width-sensitive op does not narrow:
+
+  $ printf '(module (func unreachable i64.const 4096 i64.const 40 i64.shr_u drop))' > s.wat
+  $ wax -i wat -f wax s.wat | wax -i wax -f wat | grep -oE 'i64.shr_u'
+  i64.shr_u

@@ -105,11 +105,12 @@ than the original flat chain; faithful keeps the flat blocks.
   }
 
 A narrow load immediately widened to `i64` (`i32.load8_s; i64.extend_i32_s`)
-decompiles to a single-cast `m.load8(x) as i64_s` by default; faithful keeps the
-two-cast spelling `as i32_s as i64_s`. This fusion lives in the recompiler
-peephole shared with hand-written Wax, not in the decompiler, so both forms
-still recompile to the single fused `i64.load8_s` — the one round-trip
-divergence `--faithful` cannot remove.
+decompiles to a single-cast `m.load8(x) as i64_s` by default, which the
+recompiler peephole fuses to the single `i64.load8_s` (a default-path
+divergence). Faithful keeps the two-cast spelling `as i32_s as i64_s`, which now
+re-lowers to the honest `i32.load8_s; i64.extend_i32_s` pair — the original
+stream exactly, so `--faithful` round-trips this case opcode-for-opcode. (Only a
+genuine single-cast, decompiled or hand-written, still fuses.)
 
   $ cat > widen.wat <<'WAT'
   > (module (memory 1) (func (export "f") (param i32) (result i64)
@@ -127,6 +128,15 @@ divergence `--faithful` cannot remove.
   fn f(x: i32) -> i64 {
       m.load8(x) as i32_s as i64_s;
   }
+
+The default single-cast fuses back to the single instruction, while the faithful
+two-cast spelling re-lowers to the original pair:
+
+  $ wax -i wat -f wax widen.wat | wax -i wax -f wat | grep -oE 'i(32|64)\.load8_s|i64\.extend_i32_s'
+  i64.load8_s
+  $ wax -i wat -f wax --faithful widen.wat | wax -i wax -f wat | grep -oE 'i(32|64)\.load8_s|i64\.extend_i32_s'
+  i64.extend_i32_s
+  i32.load8_s
 
 `--faithful` applies only to decompilation (wax output); it is a usage error
 otherwise.

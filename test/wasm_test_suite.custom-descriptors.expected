@@ -30,16 +30,6 @@ Wax type-checking should have failed (type mismatch):
 from wasm: (func (result f32) (f32.convert_i32_u (i64.const 0)))
 Wax type-checking should have failed (type mismatch):
   fn f() -> f32 {
-      0 as i32 as f32_s;
-  }
-from wasm: (func (result f32) (f32.convert_i64_s (i32.const 0)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> f32 {
-      0 as i32 as f32_u;
-  }
-from wasm: (func (result f32) (f32.convert_i64_u (i32.const 0)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> f32 {
       (0 as i64 as i32).from_bits();
   }
 from wasm: (func (result f32) (f32.reinterpret_i32 (i64.const 0)))
@@ -53,16 +43,6 @@ Wax type-checking should have failed (type mismatch):
       0 as i64 as f64_u;
   }
 from wasm: (func (result f64) (f64.convert_i32_u (i64.const 0)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> f64 {
-      0 as i32 as f64_s;
-  }
-from wasm: (func (result f64) (f64.convert_i64_s (i32.const 0)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> f64 {
-      0 as i32 as f64_u;
-  }
-from wasm: (func (result f64) (f64.convert_i64_u (i32.const 0)))
 ==== core/custom-descriptors/br_on_cast_desc_eq.wast ====
 Wax type-checking should have failed (type mismatch):
   rec {

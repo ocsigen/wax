@@ -8,8 +8,10 @@ expected".
 
 The typer now types a narrow RMW's result as the flexible `Int` rather than
 `Unknown`: it defaults to i32 like any flexible integer, yet a consumer can pin
-it — here the i64 memory address pins it back to i64 — so the module round-trips
-with no `From_wasm` width-pin needed:
+it — here the i64 memory address pins the result back to i64. `From_wasm` also
+pins the narrow op's *value* operand to its i64 type (mirroring the plain narrow
+store `StoreS`), so an unanchored narrow i64 store/RMW keeps its width too; both
+pins round-trip:
 
   $ cat > f.wat <<'WAT'
   > (module
@@ -24,6 +26,6 @@ with no `From_wasm` width-pin needed:
   memory m: i64 [1];
   fn f() {
       unreachable;
-      _ = m.atomic_load16(m.atomic_rmw_sub8(_, _)) as i64_u;
+      _ = m.atomic_load16(m.atomic_rmw_sub8(_, _ as i64)) as i64_u;
   }
   $ wax -i wat -f wax f.wat -o f.wax && wax -i wax -f wasm f.wax -o /dev/null --validate

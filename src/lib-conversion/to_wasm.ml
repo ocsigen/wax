@@ -1408,29 +1408,16 @@ and instruction ret ctx i : location Text.instr list =
              | Signedtype { typ = `I64; signage = Signed; _ } -> true
              | _ -> false ->
           folded loc (UnOp (I64 (ExtendS `_32))) (instruction ret ctx inner)
-      (* (mem.load8/16(p) as i32_S) as i64_S  ->  i64.load8/16_S *)
-      | Cast
-          ( {
-              desc =
-                Call
-                  ( { desc = StructGet ({ desc = Get memname; _ }, meth); _ },
-                    args );
-              _;
-            },
-            Signedtype { typ = `I32; signage = s1; _ } )
-        when memory_receiver ctx memname.desc
-             && (meth.desc = "load8" || meth.desc = "load16") -> (
-          match cast_ty with
-          | Signedtype { typ = `I64; signage = s2; _ } when s1 = s2 ->
-              let memidx = index memname in
-              let memarg = mem_memarg meth.desc args in
-              let addr_code = instruction ret ctx (List.nth args 0) in
-              let size = if meth.desc = "load8" then `I8 else `I16 in
-              folded (snd expr.info)
-                (LoadS (memidx, memarg, `I64, size, s1))
-                addr_code
-          | _ -> default_cast ())
-      (* mem.load8/16(p) as i32_S -> i32.load8/16_S ; mem.load32(p) as i64_S ->
+      (* A *double*-cast narrow load ([(mem.load8(p) as i32_s) as i64_s]) is
+         deliberately NOT fused: it is a distinct AST from the idiomatic
+         single-cast [mem.load8(p) as i64_s] (kept below), and conflating the two
+         hid that the honest lowering of the double cast is the pair
+         [i32.load8_s; i64.extend_i32_s]. It now falls through to [default_cast],
+         which emits exactly that pair. The default decompile path is unaffected:
+         the Wax typer's [simplify] coalesces a narrow-load-then-widen to the
+         single-cast spelling, so the double cast only ever comes from
+         hand-written Wax. (The atomic analogue is likewise left unfused.)
+         mem.load8/16(p) as i32_S -> i32.load8/16_S ; mem.load32(p) as i64_S ->
          i64.load32_S *)
       | Call ({ desc = StructGet ({ desc = Get memname; _ }, meth); _ }, args)
         when memory_receiver ctx memname.desc
@@ -1456,42 +1443,12 @@ and instruction ret ctx i : location Text.instr list =
           | "load32", Signedtype { typ = `I64; signage; _ } ->
               emit `I64 `I32 signage
           | _ -> default_cast ())
-      (* (mem.atomic_load8/16(p) as i32_u) as i64_u  ->  i64.atomic.load8/16_u
-         (the two-step decompiled spelling of the fused instruction, as for the
-         plain narrow loads above). *)
-      | Cast
-          ( {
-              desc =
-                Call
-                  ( { desc = StructGet ({ desc = Get memname; _ }, meth); _ },
-                    args );
-              _;
-            },
-            Signedtype { typ = `I32; signage = Unsigned; _ } )
-        when memory_receiver ctx memname.desc
-             &&
-             match Atomics.of_method_name meth.desc with
-             | Some (Atomics.Load (`W8 | `W16)) -> true
-             | _ -> false -> (
-          match cast_ty with
-          | Signedtype { typ = `I64; signage = Unsigned; _ } ->
-              let w, pw =
-                match Atomics.of_method_name meth.desc with
-                | Some (Atomics.Load `W8) -> (`W8, `I8)
-                | _ -> (`W16, `I16)
-              in
-              let stack_args, labels = split_labelled args in
-              let memarg =
-                memarg_of_labels ~natural:(Atomics.width_bytes w) labels
-              in
-              let addr_code =
-                List.concat_map (instruction ret ctx) stack_args
-              in
-              folded (snd expr.info)
-                (Atomic (index memname, Ast.AtomicLoad (`I64, Some pw), memarg))
-                addr_code
-          | _ -> default_cast ())
-      (* mem.atomic_load8/16(p) as iN_u -> iN.atomic.load8/16_u ;
+      (* (The double-cast atomic narrow load [(mem.atomic_load8(p) as i32_u) as
+         i64_u] is left unfused for the same reason as the plain double cast
+         above: it falls through to the honest [i32.atomic.load8_u;
+         i64.extend_i32_u] pair, while the decompiler emits the single-cast
+         spelling handled next.)
+         mem.atomic_load8/16(p) as iN_u -> iN.atomic.load8/16_u ;
          mem.atomic_load32(p) as i64_u -> i64.atomic.load32_u. Only the
          zero-extending forms exist: [atomic_load32(p) as i64_s] falls through
          to the plain i32 atomic load followed by [i64.extend_i32_s] (and

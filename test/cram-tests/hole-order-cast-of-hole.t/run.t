@@ -22,15 +22,32 @@ differential-validation fuzzer.
   elem e: &func = [];
   #[export]
   fn f() -> f32 {
-      1;
-      2;
+      1 as f32;
+      2 as f32;
       e.drop();
-      (_ as f32).min(_ as f32);
+      _.min(_);
   }
 
-And it round-trips back to valid wasm:
+The two stranded [f32.const]s are leftovers past the [elem.drop] statement, so
+the decompiler pins their width there ([1 as f32]); the [f32.min] then reads its
+holes with no cast of its own. And it round-trips back to valid wasm:
 
   $ wax -i wat -f wax m.wat -o m.wax && wax -i wax -f wasm m.wax -o /dev/null --validate
+
+The transparent nop cast the check must let through is exercised directly: with
+f32 holes, [(_ as f32)] is a no-op, so [(_ as f32).min(_ as f32)] compiles:
+
+  $ cat > good.wax <<'WAX'
+  > #[export = "f"]
+  > fn f(x: f32, y: f32) -> f32 {
+  >     x;
+  >     y;
+  >     nop;
+  >     (_ as f32).min(_ as f32);
+  > }
+  > WAX
+
+  $ wax -f wasm good.wax -o /dev/null --validate
 
 A *real* conversion is not transparent: with f64 holes, [_ as f32] is an
 [f32.demote_f64] that operates on the stack top, so [(_ as f32).min(_ as f32)]

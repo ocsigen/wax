@@ -1003,9 +1003,46 @@ module Stack = struct
     | (true, w, i) :: rem -> (rem, Some (i, w))
     | _ -> (stack, None)
 
-  let run f =
+  (* Flush the leftover stack as statements. A value stranded past a conditional
+     branch ([br_if]/[br_on_null]/[br_on_cast]/…) is popped by neither a
+     width-erasing consumer nor [push_poly] (which only fires at an
+     *unconditional* terminator): the branch pushes a statement entry
+     ([present = false]) on top of it, so it can no longer be consumed and
+     reaches here as a leftover — its width tag would otherwise be lost, and a
+     load-bearing [i64.shr_u]/[f32.sqrt] leftover would re-default to i32/f64 on
+     re-parse (masking/precision change). Pin such a stranded value from its
+     discarded tag.
+
+     Only a *present* stranded value is pinned: a present value that a statement
+     entry sits above (closer to the top) can never be popped again, so it is a
+     genuine leftover. Two shapes keep the pin off values whose width is already
+     fixed by context (where a pin would be redundant cast noise): the block's own
+     RESULTS — the top [results] present entries, fixed by the block/function/
+     const-initialiser type — and a value [consume] flipped to [present = false]
+     as a block input, fixed by the block's declared input type. A value consumed
+     later pops normally and never reaches [run].
+
+     [results] is the block's declared output arity: the top [results] present
+     entries are its results and stay unpinned; a present entry BEYOND that count
+     (or below a statement) is an excess leftover — a value stranded below the
+     block's own results with no statement between them (the block-arity gap) is
+     otherwise mistaken for a result and never pinned, so a width-tagged leftover
+     ([f64.trunc]) narrows on re-parse. Callers that cannot state an arity default
+     to the old leading-present-run heuristic ([max_int] = every leading present
+     entry is a result); the control constructs pass their real output count. *)
+  let run ?(results = max_int) f =
     let st, () = f [] in
-    List.rev_map (fun (_, _, i) -> i) st
+    let rec pin_stranded results_left below_stmt = function
+      | [] -> []
+      | (present, w, i) :: rem ->
+          let is_result = present && (not below_stmt) && results_left > 0 in
+          let i = if present && not is_result then pin_width w i else i in
+          let results_left =
+            if is_result then results_left - 1 else results_left
+          in
+          i :: pin_stranded results_left (below_stmt || not present) rem
+    in
+    List.rev (pin_stranded results false st)
 end
 
 let ( let* ) e f st =
@@ -1232,18 +1269,20 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
            else { e with desc = Ast.Cast (e, Valtype (floattype sz)) })
           "to_bits"
     | ExtendS `_32 ->
-        (* i64.extend32_s, rendered [(operand as i32) as i64_s] so [to_wasm]
-           re-fuses it (the inner operand must stay typed i64 for the fusion to
-           fire). Under [--faithful] pin the operand's i64 source, so a wrapped
-           i64 constant does not re-default to i32 — which would break the
-           fusion and re-emit the value-equal but distinct [extend_i32_s]. *)
+        (* i64.extend32_s, rendered [((operand as i64) as i32) as i64_s] so
+           [to_wasm] re-fuses it: the [as i32] wraps an i64 to i32 and the outer
+           [as i64_s] sign-extends, and the fusion keys on the inner operand
+           being typed i64. Pin the i64 source in every case — a bare [i64.const]
+           source would re-default to i32 (collapsing the wrap and re-emitting the
+           value-equal but distinct [extend_i32_s]), and a dead-code hole is
+           polymorphic so [(_ as i64)] pins it i64 and the pair re-fuses to
+           [extend32_s] rather than dropping the wrap to [extend_i32_s]. A
+           non-constant i64 operand is already i64-typed, so [pin] is a no-op and
+           [simplify] leaves the wrap. *)
         with_loc
           (Cast
-             ( (let src =
-                  if faithful then pin (inttype `I64) else e (inttype `I32)
-                in
-                if e' = None then src
-                else { src with desc = Ast.Cast (src, Valtype (inttype `I32)) }),
+             ( (let src = pin (inttype `I64) in
+                { src with desc = Ast.Cast (src, Valtype (inttype `I32)) }),
                Signedtype { typ = sz; signage = Signed; strict = false } ))
     | ExtendS `_8 -> method_call (e (inttype sz)) "extend8_s"
     | ExtendS `_16 -> method_call (e (inttype sz)) "extend16_s")
@@ -1261,6 +1300,24 @@ let pop_typed ty =
     (match o with
     | Some e -> e
     | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)))
+
+(* Give a conversion's absent operand — a hole on the polymorphic stack in dead
+   code — the opcode's source type, [(_ as src)], so the conversion survives the
+   round trip. A width-narrowing/widening conversion ([wrap]/[extend]/[demote]/
+   [promote]) whose source width the surface [as] cannot recover from a bare [_]
+   would otherwise drop entirely ([unreachable; i32.wrap_i64; drop] losing the
+   wrap): pinning the source makes [(_ as i64) as i32] re-emit the [wrap]. The
+   same holds for the reference conversions whose surface is a plain [as] that
+   erases the source hierarchy: [ref.i31] ([(_ as i32) as &i31]), [i31.get_s/u]
+   ([(_ as &?i31) as i32_s]), [extern.convert_any] ([(_ as &?any) as &?extern])
+   and [any.convert_extern] ([(_ as &?extern) as &?any]) — a bare [_ as &i31] /
+   [_ as i32_s] re-types the hole directly to the target and drops the op. A
+   present operand is returned unchanged, so reachable code is untouched. Mirrors
+   the dead-code numeric-operand pins in [int_bin_op]/[pop_typed]. *)
+let type_hole_src src e =
+  match e.Ast.desc with
+  | Ast.Hole -> { e with Ast.desc = Ast.Cast (e, Valtype src) }
+  | _ -> e
 
 (* [pop_typed] carrying the receiver's width tag, for a method-form op that
    inherits its receiver's flexibility (a rotate, a float method). A hole is
@@ -1371,7 +1428,7 @@ let int_bin_op i0 sz (op : Src.int_bin_op) =
   | Le s -> compare (Le (Some s))
   | Ge s -> compare (Ge (Some s))
 
-let float_un_op ~faithful i0 sz (op : Src.float_un_op) =
+let float_un_op i0 sz (op : Src.float_un_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
   (* A no-argument instruction method [recv.meth()]. *)
   let method_call recv meth =
@@ -1388,13 +1445,13 @@ let float_un_op ~faithful i0 sz (op : Src.float_un_op) =
   (* Pin an inlined convert SOURCE to its non-i32 opcode width, so
      [f32.convert_i64_s (i64.const 8)] does not decompile to a bare [8] that
      re-defaults to i32 and recompiles as [f32.convert_i32_s] — a value-inert
-     but stream-visible width drift (a large constant keeps i64 on its own, so
-     only a small one drifts). Only under [--faithful]: the default path leaves
-     it, as it re-defaults i32 anyway and the value is unchanged. Mirrors
-     [int_un_op]'s [pin] and [Reinterpret] below. *)
+     but stream-visible default-path width drift (the convert's surface
+     [8 as f32_s] erases the operand width, so a stranded-leftover pin cannot
+     reach it; a large constant keeps i64 on its own, so only a small one
+     drifts). Mirrors [int_un_op]'s [pin] and [Reinterpret] below. *)
   let pin_src ty x =
-    match (e', ty, faithful) with
-    | Some _, (Ast.I64 | F32 | F64), true ->
+    match (e', ty) with
+    | Some _, (Ast.I64 | F32 | F64) ->
         { x with Ast.desc = Ast.Cast (x, Valtype ty) }
     | _ -> x
   in
@@ -1406,25 +1463,23 @@ let float_un_op ~faithful i0 sz (op : Src.float_un_op) =
     | Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt -> recv_w
     | Convert _ | Reinterpret -> None
   in
-  (* An [f32] method operand ([f32.sqrt] etc.) whose source is a bare float
-     literal or hole re-defaults to [f64] on re-parse, drifting [f32.sqrt] to
-     [f64.sqrt] (a precision change). Under [--faithful] pin it to [f32]. Only
-     [f32] drifts (a bare literal defaults to [f64]), so [f64] needs no pin. *)
-  let e_fop () =
-    let x = e (floattype sz) in
-    match (sz, e', faithful) with
-    | `F32, Some _, true -> { x with Ast.desc = Ast.Cast (x, Valtype F32) }
-    | _ -> x
-  in
+  (* A width-named [f32] method ([f32.sqrt] etc.) carries its operand width in
+     its result ([result_w = recv_w]): every consumer of the concrete [f32]
+     result fixes it — a [drop] records [f32] in its [Let] annotation, a return
+     type / another [f32] op / a call argument grounds it, and a stranded
+     leftover is pinned by [Stack.run] (the result tag then flows back to the
+     receiver through the method). So no operand-side pin is needed on the
+     default path; a bare-literal receiver whose result drifts [f32.sqrt] to
+     [f64.sqrt] cannot arise without the result itself being unpinned first. *)
   Stack.push_num result_w
     (match op with
-    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e_fop ()))
-    | Abs -> method_call (e_fop ()) "abs"
-    | Ceil -> method_call (e_fop ()) "ceil"
-    | Floor -> method_call (e_fop ()) "floor"
-    | Trunc -> method_call (e_fop ()) "trunc"
-    | Nearest -> method_call (e_fop ()) "nearest"
-    | Sqrt -> method_call (e_fop ()) "sqrt"
+    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e (floattype sz)))
+    | Abs -> method_call (e (floattype sz)) "abs"
+    | Ceil -> method_call (e (floattype sz)) "ceil"
+    | Floor -> method_call (e (floattype sz)) "floor"
+    | Trunc -> method_call (e (floattype sz)) "trunc"
+    | Nearest -> method_call (e (floattype sz)) "nearest"
+    | Sqrt -> method_call (e (floattype sz)) "sqrt"
     | Convert (sz', signage) ->
         let ity = inttype (sz' :> [ `I32 | `I64 | `F32 | `F64 ]) in
         with_loc
@@ -1825,8 +1880,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
           ~targeted:(label_targeted ?self:(label_name label) block.desc)
           label typ
       in
-      let block = Stack.run (instructions ctx block.desc) in
       let inputs, outputs = blocktype_arity ctx typ in
+      let block = Stack.run ~results:outputs (instructions ctx block.desc) in
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
@@ -1843,8 +1898,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
           ~targeted:(label_targeted ?self:(label_name label) block.desc)
           label typ
       in
-      let block = Stack.run (instructions ctx block.desc) in
       let inputs, outputs = blocktype_arity ctx typ in
+      let block = Stack.run ~results:outputs (instructions ctx block.desc) in
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
@@ -1864,11 +1919,15 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
             || label_targeted ?self else_block.desc)
           label typ
       in
+      let inputs, outputs = blocktype_arity ctx typ in
       (* Keep the (then ...)/(else ...) clause locations on the Wax blocks so a
          comment opening a clause attaches to the block rather than the
          condition or the previous clause's last instruction. *)
       let if_block =
-        { if_block with Ast.desc = Stack.run (instructions ctx if_block.desc) }
+        {
+          if_block with
+          Ast.desc = Stack.run ~results:outputs (instructions ctx if_block.desc);
+        }
       in
       let else_block =
         if else_block.desc = [] then None
@@ -1876,10 +1935,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
           Some
             {
               else_block with
-              Ast.desc = Stack.run (instructions ctx else_block.desc);
+              Ast.desc =
+                Stack.run ~results:outputs (instructions ctx else_block.desc);
             }
       in
-      let inputs, outputs = blocktype_arity ctx typ in
       let* cond = Stack.pop_width_preserved in
       let* () = Stack.consume inputs in
       Stack.push
@@ -1899,7 +1958,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
           ~targeted:(label_targeted ?self:(label_name labl) block.desc)
           labl typ
       in
-      let block = Stack.run (instructions block_ctx block.desc) in
+      let inputs, outputs = blocktype_arity ctx typ in
+      let block =
+        Stack.run ~results:outputs (instructions block_ctx block.desc)
+      in
       let catches =
         List.map
           (fun (catch : Src.catch) : Ast.catch ->
@@ -1910,7 +1972,6 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
             | CatchAllRef l -> CatchAllRef (label ctx l))
           catches
       in
-      let inputs, outputs = blocktype_arity ctx typ in
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
@@ -1935,21 +1996,24 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         | None -> false
       in
       let label, ctx = push_label ctx ~loop:false ~targeted label typ in
-      let block = Stack.run (instructions ctx block.desc) in
+      let inputs, outputs = blocktype_arity ctx typ in
+      let block = Stack.run ~results:outputs (instructions ctx block.desc) in
       let catches =
         List.map
           (fun (t, block) ->
             ( idx ctx `Tag t,
-              Ast.no_loc (Stack.run (instructions ctx block.Ast.desc)) ))
+              Ast.no_loc
+                (Stack.run ~results:outputs (instructions ctx block.Ast.desc))
+            ))
           catches
       in
       let catch_all =
         Option.map
           (fun block ->
-            Ast.no_loc (Stack.run (instructions ctx block.Ast.desc)))
+            Ast.no_loc
+              (Stack.run ~results:outputs (instructions ctx block.Ast.desc)))
           catch_all
       in
-      let inputs, outputs = blocktype_arity ctx typ in
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
@@ -2083,8 +2147,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 2 (path_call "i64" name args)
   | UnOp (I64 op) -> int_un_op ~faithful:ctx.faithful i `I64 op
   | UnOp (I32 op) -> int_un_op ~faithful:ctx.faithful i `I32 op
-  | UnOp (F64 op) -> float_un_op ~faithful:ctx.faithful i `F64 op
-  | UnOp (F32 op) -> float_un_op ~faithful:ctx.faithful i `F32 op
+  | UnOp (F64 op) -> float_un_op i `F64 op
+  | UnOp (F32 op) -> float_un_op i `F32 op
   | StructNew i ->
       let type_name = idx ctx `Type i in
       let fields = snd (struct_fields ctx type_name) in
@@ -2260,43 +2324,71 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push_num (Some width)
         (if ctx.strict_constants then with_loc (Cast (lit, Valtype ty)) else lit)
   | RefI31 ->
+      (* Source is i32; a dead-code hole is pinned [(_ as i32)] so [ref.i31]
+         survives (a bare [_ as &i31] re-types the hole to a null i31 and drops the
+         conversion). *)
       let* e = Stack.pop_width_preserved in
       Stack.push 1
-        (with_loc (Cast (e, Valtype (Ref { nullable = false; typ = I31 }))))
+        (with_loc
+           (Cast
+              ( type_hole_src I32 e,
+                Valtype (Ref { nullable = false; typ = I31 }) )))
   | I31Get signage ->
+      (* Source is [&?i31]; a dead-code hole is pinned [(_ as &?i31)] so [i31.get]
+         survives (a bare [_ as i32_s] re-types the hole to i32 and drops it). *)
       let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
-           (Cast (e, Signedtype { typ = `I32; signage; strict = false })))
+           (Cast
+              ( type_hole_src (Ref { nullable = true; typ = I31 }) e,
+                Signedtype { typ = `I32; signage; strict = false } )))
   | I64ExtendI32 signage ->
+      (* Source is i32; a dead-code hole is pinned [(_ as i32)] so the widen
+         survives (a bare [_ as i64_s] drops the [extend_i32_s]). *)
       let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
-           (Cast (e, Signedtype { typ = `I64; signage; strict = false })))
+           (Cast
+              ( type_hole_src I32 e,
+                Signedtype { typ = `I64; signage; strict = false } )))
   | I32WrapI64 ->
       (* Width eraser: [i32.wrap_i64 (4096 >>u 40)] is 0, but a bare [4096 >>u 40]
          re-defaults to i32 and the shift count masks to 8, yielding 16 (a LIVE
-         miscompilation). Pin the i64 operand. *)
+         miscompilation). Pin the i64 operand; a dead-code hole is pinned
+         [(_ as i64)] so [(_ as i64) as i32] re-emits the [wrap] (else it drops). *)
       let* e = Stack.pop_width_erased in
-      Stack.push 1 (with_loc (Cast (e, Valtype I32)))
+      Stack.push 1 (with_loc (Cast (type_hole_src I64 e, Valtype I32)))
   | F64PromoteF32 ->
       (* Width eraser: the f32 source is not carried by [e as f64]; a bare float
-         literal re-defaults to f64, dropping the promote (and its f32 rounding). *)
+         literal re-defaults to f64, dropping the promote (and its f32 rounding).
+         A dead-code hole is pinned [(_ as f32)] so the promote survives. *)
       let* e = Stack.pop_width_erased in
-      Stack.push 1 (with_loc (Cast (e, Valtype F64)))
+      Stack.push 1 (with_loc (Cast (type_hole_src F32 e, Valtype F64)))
   | F32DemoteF64 ->
       (* Width eraser: an integer-valued f64 source prints as a bare integer that
-         re-defaults to i32, turning the demote into an i32->f32 convert. *)
+         re-defaults to i32, turning the demote into an i32->f32 convert. A
+         dead-code hole is pinned [(_ as f64)] so the demote survives. *)
       let* e = Stack.pop_width_erased in
-      Stack.push 1 (with_loc (Cast (e, Valtype F32)))
+      Stack.push 1 (with_loc (Cast (type_hole_src F64 e, Valtype F32)))
   | ExternConvertAny ->
+      (* Source is [&?any]; a dead-code hole is pinned [(_ as &?any)] so the
+         conversion survives (a bare [_ as &?extern] re-types the hole and drops
+         it). *)
       let* e = Stack.pop_width_preserved in
       Stack.push 1
-        (with_loc (Cast (e, Valtype (Ref { nullable = true; typ = Extern }))))
+        (with_loc
+           (Cast
+              ( type_hole_src (Ref { nullable = true; typ = Any }) e,
+                Valtype (Ref { nullable = true; typ = Extern }) )))
   | AnyConvertExtern ->
+      (* Source is [&?extern]; a dead-code hole is pinned [(_ as &?extern)] so the
+         conversion survives. *)
       let* e = Stack.pop_width_preserved in
       Stack.push 1
-        (with_loc (Cast (e, Valtype (Ref { nullable = true; typ = Any }))))
+        (with_loc
+           (Cast
+              ( type_hole_src (Ref { nullable = true; typ = Extern }) e,
+                Valtype (Ref { nullable = true; typ = Any }) )))
   | ArrayNewData (t, d) ->
       let* len = Stack.pop_width_preserved in
       let* off = Stack.pop_width_preserved in
@@ -2397,7 +2489,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
          one hole with a nullable eq-ref cast [(_ as &?eq)] to recover [ref.eq].
          (A ref pin cannot be blindly applied like a numeric one: a numeric [as]
          is always a valid conversion, but casting a value the typer already
-         typed in another reference hierarchy to [&?eq] is a static error.) *)
+         typed in another reference hierarchy to [&?eq] is a static error — so,
+         unlike [ref.is_null]'s [&?any] pin, this is NOT extended to a deeper dead
+         region, where a bare [_ == _] over func/exn/… operands must stay bare.) *)
       let* o2 = Stack.try_pop in
       let* o1 = Stack.try_pop in
       let* top = Stack.peek in
@@ -2433,39 +2527,50 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
          [ref.is_null]). Only over a terminator sentinel / empty stack (a
          polymorphic bottom) pin with a nullable any-ref cast [(_ as &?any)]:
          [ref.is_null] carries no immediate, so any nullable ref top recovers it
-         and [&?any] is the canonical choice. *)
+         and [&?any] is the canonical choice.
+
+         A present operand that is an UNANNOTATED [select] is the exception: only a
+         numeric [select] is unannotated, so in dead code it is a polymorphic
+         [select] of holes that re-parses to the numeric [i32] select (making [!]
+         an [i32.eqz]) unless pinned. It backs no concrete ref, so pin it
+         [(_?_:_) as &?any] like the bottom hole. (The pin is kept only when
+         load-bearing: [simplify]/[--faithful] drop it for a concrete ref operand,
+         where [ty' <: &?any] holds, and keep it for the numeric select, where it
+         does not.) *)
       let* o = Stack.try_pop in
       let* top = Stack.peek in
+      let any_pin e =
+        Ast.no_loc (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Any })))
+      in
       let backed =
         Option.is_some o
         || match top with Some i -> not (is_poly_terminator i) | None -> false
       in
       let e =
         match o with
+        | Some ({ Ast.desc = Ast.Select _; _ } as e) -> any_pin e
         | Some e -> e
         | None ->
             if backed then Ast.no_loc Ast.Hole
-            else
-              Ast.no_loc
-                (Ast.Cast
-                   ( Ast.no_loc Ast.Hole,
-                     Valtype (Ref { nullable = true; typ = Any }) ))
+            else any_pin (Ast.no_loc Ast.Hole)
       in
       Stack.push 1 (with_loc (UnOp (op_loc i Ast.Not, e)))
   | Select tys -> (
       (* The Wax [?:] carries no result type, so resolve the annotation (if any)
-         both to catch an out-of-range type reference and to recover a single
-         *numeric* result type: a typed [select (result t)] with [t] one of
-         [i64]/[f32]/[f64] must survive re-parse, but with no type on the [?:] an
-         anchor-free arm re-defaults to i32. ([i32] is the re-parse default and
-         needs no pin; a reference-typed or untyped select is out of scope — it
-         may return as an untyped select as long as the value type is kept.) *)
+         both to catch an out-of-range type reference and to recover the single
+         result type: a typed [select (result t)] with [t] one of [i64]/[f32]/[f64]
+         or a REFERENCE type must survive re-parse, but with no type on the [?:] an
+         anchor-free numeric arm re-defaults to i32 and an anchor-free reference
+         arm re-defaults to the numeric [i32] select — dropping the ref type, which
+         a downstream [ref.is_null] then reads as [i32.eqz] (an opcode-family
+         change). ([i32] itself is the re-parse default and needs no pin; an
+         untyped select is genuinely typeless.) A ref pin is only safe with no
+         anchored operand (guarded below by [not any_anchor]): casting an operand
+         the typer already placed in another hierarchy to [t] would be a static
+         error, but a bare hole is polymorphic. *)
       let sel_ty =
         match tys with
-        | Some [ t ] -> (
-            match valtype ctx t with
-            | (I64 | F32 | F64) as t -> Some t
-            | _ -> None)
+        | Some [ t ] -> ( match valtype ctx t with I32 -> None | t -> Some t)
         | Some ts ->
             List.iter (fun t -> ignore (valtype ctx t : Ast.valtype)) ts;
             None
@@ -2505,15 +2610,27 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
              grounded it fixes the width and re-parse resolves the other to it (as
              in [int_bin_op]'s [symbol]). Carrying the combined tag lets a
              downstream eraser ([i32.wrap_i64]) pin the arms so a flexible i64
-             select doesn't re-default to i32. *)
-          let e o =
-            match o with Some (e, _) -> e | None -> Ast.no_loc Ast.Hole
+             select doesn't re-default to i32.
+
+             When only ONE arm is present (a dead-code hole in the other), the hole
+             cannot anchor the present arm's width, and the untyped select carries
+             no result type to pin it either, so a present arm with a non-default
+             width tag ([f32.const], a small [i64.const]) is pinned directly
+             ([_ ? (0x0 as f32) : _]) — otherwise the bare literal re-defaults
+             (f32 -> f64, i64 -> i32) on re-parse. *)
+          let hole = Ast.no_loc Ast.Hole in
+          let e1, e2, width =
+            match (o1, o2) with
+            | Some (a, wa), Some (b, wb) ->
+                let width =
+                  match (wa, wb) with Some _, Some _ -> wa | _ -> None
+                in
+                (a, b, width)
+            | Some (a, wa), None -> (Stack.pin_width wa a, hole, None)
+            | None, Some (b, wb) -> (hole, Stack.pin_width wb b, None)
+            | None, None -> (hole, hole, None)
           in
-          let w o = match o with Some (_, w) -> w | None -> None in
-          let width =
-            match (w o1, w o2) with Some _, Some _ -> w o1 | _ -> None
-          in
-          Stack.push_num width (with_loc (Select (cond, e o1, e o2))))
+          Stack.push_num width (with_loc (Select (cond, e1, e2))))
   | Throw t ->
       let input, _ = tag_arity ctx t in
       let* args = Stack.grab input in
@@ -2618,8 +2735,15 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let result =
         match (size, result_ty) with
         | _, `I32 -> cast `I32 call
-        | `I32, `I64 -> cast `I64 call
-        | (`I8 | `I16), `I64 -> cast `I64 (cast `I32 call)
+        (* A genuinely fused i64 narrow load ([i64.load8_s]) is a single cast
+           [m.load8(x) as i64_s], which [to_wasm]'s single-cast arm re-fuses to
+           the same instruction. Only a *pair* ([i32.load8_s ; i64.extend_i32_s])
+           decompiles as the two casts [(m.load8(x) as i32_s) as i64_s], which
+           re-lowers to that honest pair (the two spellings are distinct now that
+           [to_wasm] no longer fuses the double cast); so both round-trip
+           opcode-for-opcode under [--faithful], and the default path coalesces
+           the pair's two casts to the single-cast spelling via [simplify]. *)
+        | (`I8 | `I16 | `I32), `I64 -> cast `I64 call
       in
       Stack.push 1 result
   | Store (m, memarg, nt) ->
@@ -2662,11 +2786,27 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* addr = Stack.pop_width_preserved in
       let nat = 1 lsl Atomics.natural_align_log2 op in
       (* A narrow store/RMW ([store8/16/32], [rmw*8/16/32]) picks its i32/i64 type
-         from the value operand's type on re-parse ([To_wasm.atomic_op]). No pin
-         is needed for a hole value operand: the typer types a narrow RMW result
-         as the flexible [Int] (not [Unknown]), so it defaults to i32 yet a
-         consumer can still pin it to i64 (an i64 memory address, a widening
-         [as i64_u]), and both forms round-trip. *)
+         from the value operand's type on re-parse ([To_wasm.atomic_op]): its method
+         name carries only the access width, which is ambiguous ([atomic_store16] is
+         both [i32.atomic.store16] and [i64.atomic.store16]). A width-flexible i64
+         value operand (an [i64.const], a hole on the dead-code stack) re-defaults
+         to i32 and narrows the op, so pin it to its signature type, exactly as the
+         plain narrow store [StoreS] above (a redundant i32/already-i64 pin is
+         dropped by [simplify]; [to_wasm] re-fuses). The full-width forms
+         ([store64]/[rmw.…]/[store]) carry an unambiguous name and need no pin. *)
+      let narrow =
+        match op with
+        | AtomicStore (_, Some _) | AtomicRmw (_, _, Some _) -> true
+        | _ -> false
+      in
+      let ops =
+        if narrow then
+          List.map2
+            (fun e t ->
+              Stack.pin_width (Some (t :> [ `I32 | `I64 | `F32 | `F64 ])) e)
+            ops operands
+        else ops
+      in
       let call =
         mem_call m
           (Atomics.method_name (Atomics.family op))
@@ -2674,9 +2814,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       (* The method name carries the access width only; a narrow load resolves
          its i32/i64 type with a trailing [as iN_u] cast, following the plain
-         narrow-load decompile above (the i64 forms of the 8/16-bit loads widen
-         in two steps, re-fused by [To_wasm]). Stores and RMWs re-resolve from
-         their value operand's type. *)
+         narrow-load decompile above: a fused i64 form ([i64.atomic.load8_u]) is
+         the single cast [m.atomic_load8(x) as i64_u] (re-fused by [to_wasm]),
+         only a genuine pair ([i32.atomic.load8_u ; i64.extend_i32_u]) is two
+         casts. Stores and RMWs re-resolve from their value operand's type. *)
       let result =
         match op with
         | AtomicLoad (t, Some w) -> (
@@ -2687,8 +2828,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
             in
             match (w, t) with
             | _, `I32 -> cast `I32 call
-            | `I32, `I64 -> cast `I64 call
-            | (`I8 | `I16), `I64 -> cast `I64 (cast `I32 call))
+            | (`I8 | `I16 | `I32), `I64 -> cast `I64 call)
         | _ -> call
       in
       Stack.push (List.length results) result

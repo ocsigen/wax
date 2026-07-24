@@ -5594,7 +5594,68 @@ and type_cast ctx i =
   (* Type casts ([e as t]) and type tests ([e is t]). *)
   match i.desc with
   | Cast (i', typ) ->
+      (* An inner cast [(e as t) as u] that [simplify]/[--faithful] would drop as
+         redundant, but which is load-bearing: dropping the NODE collapses the
+         PRINTED form to [e as u], and a re-parse then re-defaults [e] and loses
+         the instruction the double cast lowered to. Remember the inner cast's
+         type [t] here (the only thing captured before the inner is typed — not its
+         operand's shape, which may be a [select], a call, …); if the inner cast is
+         dropped below, decide from the RESULT whether to re-ground it:
+
+         - a NULL whose cast type differs from the expected outer type
+           ([(null as &?any) as &?extern] and its mirror): the inner cast types the
+           null as an anyref so the outer lowers to the cross-hierarchy
+           [extern.convert_any]; dropped (a bare null satisfies any any-hierarchy
+           consumer) it collapses to [null as &?extern] = [ref.null extern],
+           dropping the convert. Per the rule "keep a null's cast when the expected
+           type differs from the cast type": [is_null_initializer] on the RESULT is
+           robust (a [select] etc. is not a null), and [t <> u] is the difference.
+
+         - [f32.demote_f64] of a width-flexible float ([(sqrt() as f64) as f32]):
+           the inner [as f64] pins the operand f64 so the outer [as f32] is a
+           genuine demote; dropped as redundant (f64 IS the float re-parse
+           default), the width-flexible operand re-defaults toward the outer [f32]
+           and the demote collapses into an [f32.sqrt] (a precision change). A
+           bare-literal result is excluded: its demote is value-inert ([f64.const]
+           then demote equals the [f32.const]), so pinning would only add noise. *)
+      let inner_cast_type =
+        match i'.desc with Cast (_, t) -> Some t | _ -> None
+      in
       let* i' = instruction ctx i' in
+      (* The inner cast type to RE-INSERT if it was dropped below (i.e. the result
+         is no longer a cast) and dropping it would lose the outer instruction. The
+         wrap is applied at the final kept-cast return, NOT here, so it does not
+         perturb the cast-fusion / redundancy logic in between. *)
+      let restore_inner =
+        (* [any] <-> [extern] are different hierarchies: a null cast to one, then
+           cast to the other, is the cross-hierarchy [extern.convert_any] /
+           [any.convert_extern] — dropping the inner would re-default the null and
+           collapse the convert to a plain [ref.null]. A same-hierarchy "different
+           type" null cast is instead a [ref.cast] (which [--faithful] does not
+           compare and [simplify] legitimately prunes), so only the cross-hierarchy
+           case is kept. *)
+        let cross a b =
+          match (top_heap_type ctx a, top_heap_type ctx b) with
+          | Some Any, Some Extern | Some Extern, Some Any -> true
+          | _ -> false
+        in
+        match inner_cast_type with
+        | Some inner_t when match i'.desc with Cast _ -> false | _ -> true -> (
+            match (inner_t, typ) with
+            | ( Valtype (Ref { typ = inner_ht; _ }),
+                Valtype (Ref { typ = outer_ht; _ }) )
+              when (is_null_initializer i' || i'.desc = Hole)
+                   && cross inner_ht outer_ht ->
+                (* A null, or a dead-code hole (poly / reconnecting to a bottom
+                   null): the operand is an anyref by validity, so keeping the
+                   inner any/extern cast keeps the cross-hierarchy convert instead
+                   of collapsing to a plain [ref.null]. *)
+                Some inner_t
+            | Valtype F64, Valtype F32 -> (
+                match i'.desc with Int _ | Float _ -> None | _ -> Some inner_t)
+            | _ -> None)
+        | _ -> None
+      in
       if ctx.warn_unused then
         Typing_lint.lint_conversion ctx ~location:i.info typ i';
       (* When converting from Wasm, fuse two casts whose inserted intermediate
@@ -5904,7 +5965,18 @@ and type_cast ctx i =
         && subtype ctx ty' ty
       in
       if unnecessary_cast then return { i' with info = ([| ty |], snd i'.info) }
-      else return_expression i (Cast (i', typ)) ty
+      else
+        (* Re-insert a dropped-but-load-bearing inner cast (see [restore_inner]):
+           the outer cast is kept here, so wrap its operand back in the inner cast
+           the drop removed, keeping the printed double cast. [i'] already carries
+           the inner cast's (result) type in its [info], so the wrapper is
+           consistent. *)
+        let i' =
+          match restore_inner with
+          | Some inner_t -> { i' with desc = Cast (i', inner_t) }
+          | None -> i'
+        in
+        return_expression i (Cast (i', typ)) ty
   | CastDesc (value, nullable, d) ->
       (* [value as [?]descriptor(d)]: a descriptor-equality cast. The target type
          is recovered from [d] ([d : (ref null? (exact_1 Y))], [Y describes X] ⇒
