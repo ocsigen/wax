@@ -42,7 +42,9 @@
   </div>
   <div class="wp-pane">
     <div class="wp-pane-title" id="wp-out-title">WAT output</div>
-    <pre class="wp-output" id="wp-output"><code></code></pre>
+    <div class="wp-output-wrap">
+      <pre class="wp-output" id="wp-output"><code></code></pre>
+    </div>
   </div>
 </div>
 
@@ -200,7 +202,15 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
 /* Tooltip/caret/selection colours live in the CodeMirror theme (editor.mjs), so
    they outrank CodeMirror's runtime-injected base theme. */
 
+.wp-output-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+}
 .wp-output {
+  position: static;
   flex: 1 1 auto;
   height: 60vh;
   min-height: 300px;
@@ -215,6 +225,14 @@ html.coal .cm-wt-comment, html.navy .cm-wt-comment, html.ayu .cm-wt-comment { co
   white-space: pre;
   tab-size: 4;
   transition: opacity 0.15s;
+}
+/* Keep mdbook's injected clipboard button fixed at the top-right of the pane
+   rather than scrolling along with the output text view. */
+#wax-playground .wp-output .buttons {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
 }
 /* While the current source does not convert, the pane keeps the last good
    output but dims it to show it is stale. */
