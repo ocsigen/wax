@@ -17,7 +17,7 @@ differential-validation fuzzer.
   #[export]
   fn f() -> i32 {
       unreachable;
-      _ <=u 5793170017578347395;
+      _ as i64 <=u 5793170017578347395;
   }
 
 And it round-trips back to valid wasm:

@@ -966,8 +966,10 @@ module Stack = struct
     | (true, w, i) :: rem -> (rem, pin_width w i)
     | _ -> (stack, Ast.no_loc Ast.Hole)
 
-  (* Pop with the width tag, without pinning — the caller decides (used by
-     comparisons, which pin one operand only when *both* are anchor-free). *)
+  (* Pop with the width tag, without pinning — the caller decides. Used by [drop],
+     which records the tag in its [Let]'s type annotation rather than an identity
+     cast. A hole reads as an untagged empty pop. (Binops/comparisons/select use
+     [try_pop_tagged] instead, to tell a hole apart from a real operand.) *)
   let pop_tagged stack =
     match stack with
     | (true, w, i) :: rem -> (rem, (i, w))
@@ -1226,8 +1228,9 @@ let int_un_op i0 sz (op : Src.int_un_op) =
    scalar type [ty]. A non-inlinable operand becomes a typed hole [(_ as ty)]
    rather than a bare [_], so the call type-checks in unreachable code where the
    operand stack is polymorphic (mirrors the unary ops [int_un_op]/[float_un_op]).
-   The arithmetic/comparison operators need no such cast: they lower to plain
-   [BinOp]s, which accept a polymorphic operand. *)
+   The arithmetic/comparison operators lower to plain [BinOp]s, which accept a
+   polymorphic operand for *type-checking*, but for *width fidelity* they pin one
+   anchor-free hole with the opcode type too (see [int_bin_op]'s [symbol]). *)
 let pop_typed ty =
   let* o = Stack.try_pop in
   return
@@ -1247,30 +1250,71 @@ let pop_typed_tagged ty =
 
 let int_bin_op i0 sz (op : Src.int_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
+  (* An operand popped off the stack is one of three kinds:
+     - an *anchor*: a present entry with tag [None] (a local, a call result) —
+       its printed form fixes the width by itself, so it needs no pin;
+     - a *flexible* literal tree: a present entry with tag [Some w];
+     - a *hole* ([try_pop_tagged] = [None]): a pop from the empty/absent stack
+       in dead code — it re-parses as [i32] and so needs a pin to keep a non-i32
+       width. *)
+  let is_anchor = function Some (_, None) -> true | _ -> false in
+  let is_hole = function None -> true | _ -> false in
+  let bare = Ast.no_loc Ast.Hole in
+  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
+  (* A pinned hole: [(_ as i64)] etc. [pin_width] leaves it bare for [i32] (the
+     re-parse default needs no pin), so an [i32] op adds no noise. *)
+  let pinned = Stack.pin_width arith bare in
   (* An arithmetic operator yields the operand width, so [a + b] round-trips to
      that width via the sum's own type — operands are width-preserved. Its result
      is a flexible literal tree (tagged) only when BOTH operands are; if either is
-     grounded (tag [None]: a local, a call — a typed anchor), the sum is grounded
-     too ([x + 1] re-parses to [x]'s width on its own), so it takes no tag and no
-     downstream eraser pins it. *)
+     grounded (an anchor, or a pinned hole), the sum is grounded too ([x + 1]
+     re-parses to [x]'s width on its own), so it takes no tag and no downstream
+     eraser pins it. A hole must not be left bare unless an anchor grounds it:
+     with no anchor we pin exactly one hole with the opcode type, and the typer
+     grounds the other operand (a flexible literal or the second hole) from it. *)
   let symbol width op =
-    let* e2, w2 = Stack.pop_tagged in
-    let* e1, w1 = Stack.pop_tagged in
-    let width = match (w1, w2) with Some _, Some _ -> width | _ -> None in
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let any_anchor = is_anchor o1 || is_anchor o2 in
+    let pin1 = (not any_anchor) && is_hole o1 in
+    let pin2 = (not any_anchor) && is_hole o2 && not pin1 in
+    let e o pin =
+      match o with Some (e, _) -> e | None -> if pin then pinned else bare
+    in
+    let e1 = e o1 pin1 and e2 = e o2 pin2 in
+    let both_flexible =
+      match (o1, o2) with
+      | Some (_, Some _), Some (_, Some _) -> true
+      | _ -> false
+    in
+    let width = if both_flexible then width else None in
     Stack.push_num width (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
-  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
   (* A comparison yields i32 whatever its operands' width, so it *erases* it:
      [(4096 >>u 40) == 0] would re-default the shift to i32 and flip true->false.
-     Pin one operand's width only when *both* are anchor-free numeric producers
-     (both tagged) — an anchored operand (tag [None]: a local, a call result)
-     already fixes the width and the other unifies to it, so [x <s 0] needs no
-     pin. The i32 result carries no tag. *)
+     Pin exactly one operand's width whenever *no* operand is an anchor — an
+     anchored operand (a local, a call result) already fixes the width and the
+     other unifies to it, so [x <s 0] needs no pin. When one unanchored operand
+     is a hole, pin the hole (cast on the hole); otherwise (both present and
+     flexible) result-cast the first operand. The i32 result carries no tag. *)
   let compare op =
-    let* e2, w2 = Stack.pop_tagged in
-    let* e1, w1 = Stack.pop_tagged in
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let any_anchor = is_anchor o1 || is_anchor o2 in
+    let pin1_hole = (not any_anchor) && is_hole o1 in
+    let pin2_hole = (not any_anchor) && is_hole o2 && not pin1_hole in
+    let pin1_flex =
+      (not any_anchor) && (not (is_hole o1)) && not (is_hole o2)
+    in
     let e1 =
-      match (w1, w2) with Some _, Some _ -> Stack.pin_width arith e1 | _ -> e1
+      match o1 with
+      | Some (e, _) -> if pin1_flex then Stack.pin_width arith e else e
+      | None -> if pin1_hole then pinned else bare
+    in
+    let e2 =
+      match o2 with
+      | Some (e, _) -> e
+      | None -> if pin2_hole then pinned else bare
     in
     Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
@@ -1348,22 +1392,54 @@ let float_un_op i0 sz (op : Src.float_un_op) =
 
 let float_bin_op i0 sz (op : Src.float_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
-  (* As for [int_bin_op]: an arithmetic operator preserves the operand width and
-     its result is flexible only when both operands are (else grounded, no tag); a
-     comparison erases the width (i32 result), so it pins its operands. *)
+  (* As for [int_bin_op] (see there for the anchor/flexible/hole terminology): an
+     arithmetic operator preserves the operand width and its result is flexible
+     only when both operands are (else grounded, no tag); with no anchor a hole is
+     pinned so it does not re-default to i32. *)
+  let is_anchor = function Some (_, None) -> true | _ -> false in
+  let is_hole = function None -> true | _ -> false in
+  let bare = Ast.no_loc Ast.Hole in
+  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
+  let pinned = Stack.pin_width arith bare in
   let symbol width op =
-    let* e2, w2 = Stack.pop_tagged in
-    let* e1, w1 = Stack.pop_tagged in
-    let width = match (w1, w2) with Some _, Some _ -> width | _ -> None in
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let any_anchor = is_anchor o1 || is_anchor o2 in
+    let pin1 = (not any_anchor) && is_hole o1 in
+    let pin2 = (not any_anchor) && is_hole o2 && not pin1 in
+    let e o pin =
+      match o with Some (e, _) -> e | None -> if pin then pinned else bare
+    in
+    let e1 = e o1 pin1 and e2 = e o2 pin2 in
+    let both_flexible =
+      match (o1, o2) with
+      | Some (_, Some _), Some (_, Some _) -> true
+      | _ -> false
+    in
+    let width = if both_flexible then width else None in
     Stack.push_num width (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
-  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
-  (* As for [int_bin_op]: pin one operand only when both are anchor-free. *)
+  (* As for [int_bin_op]: pin exactly one operand whenever no operand is an
+     anchor — a hole if there is one (cast on the hole), else the first flexible
+     operand (result-cast). *)
   let compare op =
-    let* e2, w2 = Stack.pop_tagged in
-    let* e1, w1 = Stack.pop_tagged in
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let any_anchor = is_anchor o1 || is_anchor o2 in
+    let pin1_hole = (not any_anchor) && is_hole o1 in
+    let pin2_hole = (not any_anchor) && is_hole o2 && not pin1_hole in
+    let pin1_flex =
+      (not any_anchor) && (not (is_hole o1)) && not (is_hole o2)
+    in
     let e1 =
-      match (w1, w2) with Some _, Some _ -> Stack.pin_width arith e1 | _ -> e1
+      match o1 with
+      | Some (e, _) -> if pin1_flex then Stack.pin_width arith e else e
+      | None -> if pin1_hole then pinned else bare
+    in
+    let e2 =
+      match o2 with
+      | Some (e, _) -> e
+      | None -> if pin2_hole then pinned else bare
     in
     Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
@@ -2261,23 +2337,68 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | RefIsNull ->
       let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (UnOp (op_loc i Ast.Not, e)))
-  | Select tys ->
-      (* The Wax [?:] carries no result type, but resolve the annotation (if
-         any) so an out-of-range type reference is still caught. *)
-      Option.iter
-        (List.iter (fun t -> ignore (valtype ctx t : Ast.valtype)))
-        tys;
+  | Select tys -> (
+      (* The Wax [?:] carries no result type, so resolve the annotation (if any)
+         both to catch an out-of-range type reference and to recover a single
+         *numeric* result type: a typed [select (result t)] with [t] one of
+         [i64]/[f32]/[f64] must survive re-parse, but with no type on the [?:] an
+         anchor-free arm re-defaults to i32. ([i32] is the re-parse default and
+         needs no pin; a reference-typed or untyped select is out of scope — it
+         may return as an untyped select as long as the value type is kept.) *)
+      let sel_ty =
+        match tys with
+        | Some [ t ] -> (
+            match valtype ctx t with
+            | (I64 | F32 | F64) as t -> Some t
+            | _ -> None)
+        | Some ts ->
+            List.iter (fun t -> ignore (valtype ctx t : Ast.valtype)) ts;
+            None
+        | None -> None
+      in
       let* cond = Stack.pop_width_preserved in
-      let* e2, w2 = Stack.pop_tagged in
-      let* e1, w1 = Stack.pop_tagged in
-      (* The result width is that of the arms (both share the select's type). It
-         is flexible only when BOTH arms are flexible literal trees; if either is
-         grounded it fixes the width and re-parse resolves the other to it (as in
-         [int_bin_op]'s [symbol]). Carrying the combined tag lets a downstream
-         eraser ([i32.wrap_i64]) pin the arms so a flexible i64 select doesn't
-         re-default to i32. *)
-      let width = match (w1, w2) with Some _, Some _ -> w1 | _ -> None in
-      Stack.push_num width (with_loc (Select (cond, e1, e2)))
+      let* o2 = Stack.try_pop_tagged in
+      let* o1 = Stack.try_pop_tagged in
+      let is_anchor = function Some (_, None) -> true | _ -> false in
+      let is_hole = function None -> true | _ -> false in
+      let any_anchor = is_anchor o1 || is_anchor o2 in
+      match sel_ty with
+      | Some t when not any_anchor ->
+          (* Pin exactly one arm to the select's type (as in [compare]): a hole
+             if there is one (cast on the hole), else result-cast the first
+             flexible arm. That grounds the whole select, so it takes no tag. *)
+          let pin1_hole = is_hole o1 in
+          let pin2_hole = is_hole o2 && not pin1_hole in
+          let pin1_flex = (not pin1_hole) && not pin2_hole in
+          let pinned = Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype t)) in
+          let cast e = { e with Ast.desc = Ast.Cast (e, Valtype t) } in
+          let e1 =
+            match o1 with
+            | Some (e, _) -> if pin1_flex then cast e else e
+            | None -> if pin1_hole then pinned else Ast.no_loc Ast.Hole
+          in
+          let e2 =
+            match o2 with
+            | Some (e, _) -> e
+            | None -> if pin2_hole then pinned else Ast.no_loc Ast.Hole
+          in
+          Stack.push_num None (with_loc (Select (cond, e1, e2)))
+      | _ ->
+          (* Untyped/i32/reference select, or a typed select an arm anchors: the
+             result width is that of the arms (both share the select's type),
+             flexible only when BOTH arms are flexible literal trees; if either is
+             grounded it fixes the width and re-parse resolves the other to it (as
+             in [int_bin_op]'s [symbol]). Carrying the combined tag lets a
+             downstream eraser ([i32.wrap_i64]) pin the arms so a flexible i64
+             select doesn't re-default to i32. *)
+          let e o =
+            match o with Some (e, _) -> e | None -> Ast.no_loc Ast.Hole
+          in
+          let w o = match o with Some (_, w) -> w | None -> None in
+          let width =
+            match (w o1, w o2) with Some _, Some _ -> w o1 | _ -> None
+          in
+          Stack.push_num width (with_loc (Select (cond, e o1, e o2))))
   | Throw t ->
       let input, _ = tag_arity ctx t in
       let* args = Stack.grab input in

@@ -17,7 +17,7 @@ arm, which already accepted `LargeInt`. `!=` on a large-int literal is a valid
   $ wax -i wat -f wax f.wat
   fn f() -> i32 {
       become g();
-      _ != -17179869185;
+      _ as i64 != -17179869185;
   }
   fn g() -> i32 {
       0;

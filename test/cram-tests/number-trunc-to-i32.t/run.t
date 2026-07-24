@@ -19,7 +19,7 @@ signed conversion.) Regression: found by the differential-validation fuzzer.
   #[export]
   fn f() -> i32 {
       unreachable;
-      -(_ * _) as f32 as i32_s_strict;
+      -(_ as f32 * _) as i32_s_strict;
   }
 
 And it round-trips back to valid wasm:
