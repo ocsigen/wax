@@ -8,6 +8,14 @@ pin (no noise); an anchor operand (a local, a call result) fixes the width by
 itself, so its fellow holes stay bare; and a flexible literal (`i64.const 5`) is
 grounded by the single pin, not pinned itself.
 
+The same drift hits two reference-surface instructions that share a Wax surface
+with a numeric op: `ref.eq` (the `==` surface) would re-default to `i32.eq` and
+`ref.is_null` (the `!` surface) to `i32.eqz` — an opcode-*family* change, not a
+width drift, that the numeric `as t` pin cannot spell. Those are pinned with a
+nullable ref cast instead: `(_ as &?eq)` for `ref.eq`, `(_ as &?any)` for
+`ref.is_null`. As with the numeric pins, an anchored ref operand grounds its
+fellow hole, so a present operand leaves the hole bare.
+
   $ cat > m.wat <<'WAT'
   > (module
   >   (func $i32_add unreachable i32.add drop)
@@ -23,7 +31,11 @@ grounded by the single pin, not pinned itself.
   >   (func $anchor (param i64) unreachable local.get 0 i64.add drop)
   >   (func $sel_i64 (result i64) unreachable (select (result i64)))
   >   (func $sel_f32 (result f32) unreachable (select (result f32)))
-  >   (func $sel_i32 (result i32) unreachable (select (result i32))))
+  >   (func $sel_i32 (result i32) unreachable (select (result i32)))
+  >   (func $ref_eq unreachable ref.eq drop)
+  >   (func $ref_is_null unreachable ref.is_null drop)
+  >   (func $ref_eq_eqz unreachable ref.eq i32.eqz drop)
+  >   (func $ref_eq_anchor (param eqref eqref) unreachable local.get 0 ref.eq drop))
   > WAT
 
 The Wax carries a width pin only where re-parse would otherwise lose it (never on
@@ -86,6 +98,22 @@ an i32 op or an anchored operand):
       unreachable;
       _?_:_;
   }
+  fn ref_eq() {
+      unreachable;
+      _ = _ as &?eq == _;
+  }
+  fn ref_is_null() {
+      unreachable;
+      _ = !(_ as &?any);
+  }
+  fn ref_eq_eqz() {
+      unreachable;
+      _ = _ as &?eq != _;
+  }
+  fn ref_eq_anchor(x: &?eq, &?eq) {
+      unreachable;
+      _ = _ == x;
+  }
 
 Round-tripping back to Wasm recovers every opcode at its original width:
 
@@ -104,3 +132,10 @@ Round-tripping back to Wasm recovers every opcode at its original width:
   (func $sel_i64 (result i64) (unreachable) (select))
   (func $sel_f32 (result f32) (unreachable) (select))
   (func $sel_i32 (result i32) (unreachable) (select))
+  (func $ref_eq (unreachable) (drop (ref.eq)))
+  (func $ref_is_null (unreachable) (drop (ref.is_null)))
+  (func $ref_eq_eqz (unreachable) (drop (i32.eqz (ref.eq))))
+  (func $ref_eq_anchor (param $x eqref) (param eqref)
+    (unreachable)
+    (drop (ref.eq (local.get $x)))
+  )

@@ -978,6 +978,14 @@ module Stack = struct
   let try_pop stack =
     match stack with (true, _, i) :: rem -> (rem, Some i) | _ -> (stack, None)
 
+  (* Peek the top entry's instruction without consuming it, whatever its presence
+     flag. A [try_pop] hole ([None]) is either a pop from an empty stack or from a
+     dead ([present = false]) entry; the reference comparisons peek to tell a real
+     dead value producer (whose residual the typer will type) from a polymorphic
+     bottom left by a terminator sentinel. *)
+  let peek stack =
+    (stack, match stack with (_, _, i) :: _ -> Some i | [] -> None)
+
   (* [try_pop] carrying the width tag — a method-form op tags its result with its
      receiver's flexibility, so an erasing consumer pins it (and the pin, cast on
      the result, propagates back to the receiver: [((5).clz()) as i64] is
@@ -1701,6 +1709,18 @@ let struct_field nm (v : _ Ast.instr) =
   | Ast.Get x when String.equal x.desc nm -> (Ast.no_loc nm, None)
   | _ -> (Ast.no_loc nm, Some v)
 
+(* A diverging instruction leaves the stack polymorphic: everything below it is
+   dead and a later pop from the empty region springs from a polymorphic bottom
+   (an [Unknown]-typed hole). These are exactly the instructions lowered through
+   [Stack.push_poly]. Used by the reference comparisons to tell such a bottom
+   from a real dead value producer still on the stack (see [RefEq]/[RefIsNull]). *)
+let is_poly_terminator (i : _ Ast.instr) =
+  match i.Ast.desc with
+  | Ast.Unreachable | Ast.Br _ | Ast.Br_table _ | Ast.TailCall _ | Ast.Return _
+  | Ast.Throw _ | Ast.ThrowRef _ ->
+      true
+  | _ -> false
+
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
   let mem_call m meth args =
@@ -2324,8 +2344,38 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (Test (e, reftype ctx t)))
   | RefEq ->
-      let* e2 = Stack.pop_width_preserved in
-      let* e1 = Stack.pop_width_preserved in
+      (* [ref.eq] shares the Wax [==] surface with the numeric comparisons, but
+         the numeric width pin ([(_ as i64)]) is an [as t] cast and cannot spell
+         a ref type: with no anchor two bare holes re-parse as the numeric
+         [i32.eq] — a family change, not just a width drift. Leave the holes bare
+         whenever a real ref value backs the comparison (the typer unifies them
+         to it): a present anchor (a ref value, whose printed form carries its
+         type), or a dead value producer still on the polymorphic stack (whose
+         residual feeding [ref.eq] is a ref by validity, so the bare [_ == _]
+         recovers [ref.eq]). Only when nothing but a terminator sentinel / empty
+         is below do both operands spring from the polymorphic bottom; then pin
+         one hole with a nullable eq-ref cast [(_ as &?eq)] to recover [ref.eq].
+         (A ref pin cannot be blindly applied like a numeric one: a numeric [as]
+         is always a valid conversion, but casting a value the typer already
+         typed in another reference hierarchy to [&?eq] is a static error.) *)
+      let* o2 = Stack.try_pop in
+      let* o1 = Stack.try_pop in
+      let* top = Stack.peek in
+      let bare = Ast.no_loc Ast.Hole in
+      let backed =
+        Option.is_some o1 || Option.is_some o2
+        || match top with Some i -> not (is_poly_terminator i) | None -> false
+      in
+      let e1 =
+        match o1 with
+        | Some e -> e
+        | None ->
+            if backed then bare
+            else
+              Ast.no_loc
+                (Ast.Cast (bare, Valtype (Ref { nullable = true; typ = Eq })))
+      in
+      let e2 = match o2 with Some e -> e | None -> bare in
       Stack.push 1 (with_loc (BinOp (op_loc i Ast.Eq, e1, e2)))
   | RefFunc f -> Stack.push 1 (with_loc (Get (idx ctx `Func f)))
   | RefNull typ ->
@@ -2335,7 +2385,32 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               ( with_loc Null,
                 Valtype (Ref { nullable = true; typ = heaptype ctx typ }) )))
   | RefIsNull ->
-      let* e = Stack.pop_width_preserved in
+      (* [ref.is_null] lowers to the Wax [!e] surface, which it shares with
+         [i32.eqz]; with no ref backing it a bare hole re-parses as [i32.eqz] (a
+         family change). As for [RefEq], leave the hole bare whenever a real ref
+         backs it (a present anchor, or a dead value producer on the polymorphic
+         stack whose residual is a ref by validity — the typer types [!_] to
+         [ref.is_null]). Only over a terminator sentinel / empty stack (a
+         polymorphic bottom) pin with a nullable any-ref cast [(_ as &?any)]:
+         [ref.is_null] carries no immediate, so any nullable ref top recovers it
+         and [&?any] is the canonical choice. *)
+      let* o = Stack.try_pop in
+      let* top = Stack.peek in
+      let backed =
+        Option.is_some o
+        || match top with Some i -> not (is_poly_terminator i) | None -> false
+      in
+      let e =
+        match o with
+        | Some e -> e
+        | None ->
+            if backed then Ast.no_loc Ast.Hole
+            else
+              Ast.no_loc
+                (Ast.Cast
+                   ( Ast.no_loc Ast.Hole,
+                     Valtype (Ref { nullable = true; typ = Any }) ))
+      in
       Stack.push 1 (with_loc (UnOp (op_loc i Ast.Not, e)))
   | Select tys -> (
       (* The Wax [?:] carries no result type, so resolve the annotation (if any)
