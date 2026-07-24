@@ -306,14 +306,17 @@ server](#language-server)).
       instruction structure. It keeps `!(a == b)` instead of fusing
       `t.eq; i32.eqz` into a single `a != b`, and keeps a flat `br_on_cast_fail`
       chain instead of recovering it as a `match` (which re-lowers to the nested
-      ladder). It also keeps a redundant non-null `ref.cast` and pins some
-      constant widths through conversions.
+      ladder). It also keeps a redundant non-null `ref.cast`.
     - Only valid with wax output (`-f wax`); requesting it for wat or wasm output
       is a usage error.
+    - Width fidelity is *not* faithful-only: constant, leftover, dead-code and
+      convert / `extend32_s` widths are pinned on the default decompile too, so
+      `--faithful` preserves the opcode *structure* the reshaping recoveries
+      would change, not the widths.
     - Some divergences remain (all semantically inert): local ordering and
-      numbering, the `name` section, type renumbering, constant widths, the
-      recompiler-peephole fusions (narrow-load-then-widen, `extend32_s`,
-      direct-call), compiler-inserted casts, and dead code. See
+      numbering, the `name` section, type renumbering, compiler-inserted casts, a
+      typed `select`'s immediate, and the shared spellings (`extend32_s`, a
+      32-bit load widened to `i64`, the call family, float neg-of-literal). See
       [Round-Tripping](correspondence/round_trip.md).
 
 - **`--source-map`**

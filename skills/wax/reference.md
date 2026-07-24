@@ -4409,7 +4409,11 @@ byte-for-byte identical.
 For nearly everything, the instruction stream round-trips opcode-for-opcode:
 
 - Arithmetic, comparisons, and their operand widths.
-- Loads and stores, including their memargs (offset and alignment).
+- Loads and stores, including their memargs (offset and alignment). A narrow
+  load immediately widened to `i64` round-trips too: a genuinely fused
+  `i64.load8_s` stays fused, and a hand-written `i32.load8_s; i64.extend_i32_s`
+  pair stays a pair (see the shared-spelling note below for the one exception,
+  the 32-bit form).
 - Calls. A `call_indirect` decompiles through a table access and re-fuses to
   the same instruction.
 - GC struct and array operations.
@@ -4419,15 +4423,40 @@ For nearly everything, the instruction stream round-trips opcode-for-opcode:
   reconstruct re-lower byte-for-byte.
 - `nop` and `drop`.
 - Constants, each pinned to its declared width (an `i64.const` stays an
-  `i64.const`, not a re-defaulted `i32.const`).
+  `i64.const`, not a re-defaulted `i32.const`). A width pinned through an
+  int-to-float conversion (`f32.convert_i64_s (i64.const 8)`) and through
+  `i64.extend32_s` is preserved as well.
+- `f32.demote_f64` over a width-flexible operand (a float method whose width
+  follows a bare literal, such as `f64.sqrt`) keeps its f64 source rather than
+  collapsing into an f32 method. A narrow atomic store or RMW
+  (`i64.atomic.store16`, `i64.atomic.rmw16.add_u`) keeps its i64 value type,
+  whose ambiguous method name (`atomic_store16` is shared with the i32 form)
+  would otherwise re-default to i32.
 
 Dead code is preserved too. Instructions after an `unreachable` (or another
 terminator) have operands the surface syntax cannot type on its own, so the
 decompiler pins them: a width-sensitive numeric operand is ascribed its opcode
-width (`(_ as i64) + _`) instead of re-defaulting to `i32`, a `ref.eq` on the
-polymorphic bottom pins one operand with `(_ as &?eq)`, and a `ref.is_null` on
-the bottom pins its operand with `(_ as &?any)`. The opcodes after the
+width (`(_ as i64) + _`) instead of re-defaulting to `i32`, a width-changing
+conversion keeps its source width with a typed hole (`(_ as i64) as i32`
+re-emits a dead `wrap`, `(_ as i32) as i64_s` a dead `extend`), and a reference
+conversion whose `as` surface erases its source hierarchy pins the hole with the
+opcode's source type (`ref.i31` as `(_ as i32) as &i31`, `i31.get` as
+`(_ as &?i31) as i32_s`, `extern.convert_any` as `(_ as &?any) as &?extern`).
+`ref.test`, `ref.i31`, `i31.get`, `extern.convert_any` and `any.convert_extern`
+are operations, kept and round-tripped, not dropped like a `ref.cast`. A `ref.eq`
+on the polymorphic bottom pins one operand with `(_ as &?eq)`, and a `ref.is_null`
+on the bottom, or on an unannotated `select` of holes, pins its operand with
+`(_ as &?any)` so it does not re-parse as `i32.eqz`. A value left on the stack
+past a branch, conditional or not, keeps its width the same way; a present arm of
+an unannotated `select` whose fellow is a dead hole is pinned so its width and a
+narrow atomic store/RMW value operand keep their type. The opcodes after the
 terminator keep their types across the round trip.
+
+The one dead-code shape not preserved is a `ref.is_null` deep in unreachable code
+whose bare `!` reconnects to a dead value below interposed statements: that value
+may be numeric (so `!` reads as `i32.eqz`) or a genuine non-`any` bottom
+reference, and the two cannot be told apart without type information, so it is
+left as written. It is value-inert (unreachable code).
 
 ## Divergences
 
@@ -4438,89 +4467,86 @@ Each of the following is a normalisation, not a change in behaviour.
    may be deduplicated and renumbered.
 
 2. **`eq` then `eqz` fuses to `ne`.** A `t.eq` followed by `i32.eqz` decompiles
-   to `a != b`, which recompiles as a single `t.ne`.
+   to `a != b`, which recompiles as a single `t.ne`. (`--faithful` turns this
+   off; see below.)
 
-3. **Narrow load then widen fuses.** A narrow load immediately widened to `i64`
-   (`i32.load8_s; i64.extend_i32_s`, and the `load16` / unsigned / atomic forms)
-   decompiles to a single-cast `m.load8(x) as i64_s` and recompiles to the fused
-   `i64.load8_s`. The fusion is a peephole in the recompiler (`to_wasm`), shared
-   with hand-written Wax, not a decompiler rewrite, so it is the one divergence
-   `--faithful` cannot remove: the faithful decompile emits the two-cast
-   spelling `as i32_s as i64_s`, which the peephole re-fuses on the way back.
-
-4. **Redundant `ref.cast` erased.** A `ref.cast` decompiles to an `as`
-   ascription. While re-typing the decompiled Wax, the ascription is dropped
-   whenever the operand's inferred type is already a subtype of the target, that
-   is an identity cast or an upcast, so it recompiles to no instruction. A
-   genuine downcast, where the operand's type is not a subtype of the target,
-   is kept and re-emits `ref.cast`. A handful of ascriptions are load-bearing
-   and are never dropped even when they look redundant: one pinning an abstract
-   numeric literal to a non-default width, one on a bare `null` or a bottom
-   reference whose consumer needs the named type, and a continuation ascription
-   that names a different type than the operand's own (kept because it selects
-   the instruction's type immediate; it emits no instruction of its own). This
-   drop happens only on the decompilation path; a cast written by hand in Wax is
-   always kept.
-
-5. **Flat cast-dispatch chains are canonicalised.** Hand-written GC code often
+3. **Flat cast-dispatch chains are canonicalised.** Hand-written GC code often
    takes a value apart with a flat run of `br_on_cast_fail` blocks, one
    discarded block per arm. That flat chain is recovered as a `match`, which
    re-lowers to the nested `br_on_cast` ladder rather than the flat chain, so
    the round trip is semantically faithful but not byte-for-byte. (The nested
-   ladder shape itself round-trips byte-for-byte.)
+   ladder shape itself round-trips byte-for-byte, and `--faithful` keeps the
+   flat chain.)
 
-6. **A typed `select` may lose its immediate.** The value type is always
+4. **Redundant `ref.cast` erased (best-effort).** A `ref.cast` decompiles to an
+   `as` ascription. While re-typing the decompiled Wax, the ascription is
+   dropped whenever the operand's inferred type is already a subtype of the
+   target, that is an identity cast or an upcast, so it recompiles to no
+   instruction. A genuine downcast is kept and re-emits `ref.cast`. The
+   decompiler also inserts scaffolding casts of its own (a member-access
+   receiver, a `call_ref` callee) to nullable reference types; those are
+   indistinguishable from a redundant source cast to a nullable type without
+   provenance, so cast keeping is best-effort. A handful of load-bearing
+   ascriptions (a width pin, a bottom-reference type name, a continuation type
+   immediate) are never dropped. This drop happens only on the decompilation
+   path; a cast written by hand in Wax is always kept.
+
+5. **A typed `select` may lose its immediate.** The value type is always
    preserved through the arms, but the explicit `(result t)` immediate form is
    not guaranteed to be reproduced.
+
+6. **Shared spellings.** A few distinct opcode streams share a single Wax
+   spelling, so the recompiler picks one canonical encoding for both. These
+   live in the recompiler, shared with hand-written Wax, so the decompiler
+   cannot avoid them (and `--faithful` cannot either):
+
+   - **`i64.extend32_s`** has no dedicated Wax form; it is spelled
+     `(x as i32) as i64_s`, the same wrap-then-sign-extend pair a hand-written
+     `i32.wrap_i64; i64.extend_i32_s` produces, and both recompile to the single
+     `i64.extend32_s`.
+   - **A 32-bit load widened to `i64`.** `i32.load` is spelled `m.load32(x)`,
+     so `i32.load; i64.extend_i32_u` and the fused `i64.load32_u` are both
+     `m.load32(x) as i64_u` and recompile to `i64.load32_u`. (The 8- and 16-bit
+     narrow loads do *not* share a spelling: their pair carries an inner
+     `as i32_s`, so the pair and the fused load round-trip distinctly.)
+   - **The call family.** `call` and `call_indirect` desugar through `call_ref`
+     (via a `ref.func` or a table access) and are recovered by pattern; a
+     dead or degenerate shape that cannot re-fuse recompiles to the desugared
+     `call_ref` form.
+   - **Float negation of a literal.** `f32.neg`/`f64.neg` of a constant folds
+     into the negated literal (Wax spells a negative float literal `-X`).
 
 ## Faithful round-tripping
 
 The `--faithful` flag (wax output only) turns off the two stream-reshaping
-recoveries that it can turn off cleanly, so a decompiled module recompiles with
-the same reachable instruction structure. It reliably suppresses divergences 2
-and 5: `eq` then `eqz` stays `!(a == b)` (re-lowering to the `eq; eqz` pair,
-not fused to `t.ne`), and a flat `br_on_cast_fail` chain is kept as separate
-blocks (not recovered to a `br_on_cast` ladder). For divergence 4 it keeps a
-redundant *non-null* `ref.cast` as an `as` ascription (re-emitting it), a
-best-effort improvement (see below). It also pins a constant's width through an
-`int`-to-`float` conversion and through `i64.extend32_s`. The Wax is pin-noisier
-(a kept width ascription emits no instruction) but structurally exact.
+recoveries it can turn off cleanly, so a decompiled module recompiles with the
+same reachable instruction structure. It reliably suppresses divergences 2 and
+3: `eq` then `eqz` stays `!(a == b)` (re-lowering to the `eq; eqz` pair, not
+fused to `t.ne`), and a flat `br_on_cast_fail` chain is kept as separate blocks
+(not recovered to a `br_on_cast` ladder). For divergence 4 it keeps a redundant
+*non-null* `ref.cast` as an `as` ascription (re-emitting it), a best-effort
+improvement. The Wax is pin-noisier (a kept ascription emits no instruction) but
+structurally exact.
 
-Several normalisations remain even under `--faithful`, all semantically inert
-(and each present on the default path too — `--faithful` does not make anything
-worse). They fall outside the two recoveries the mode gates:
-
-- **Locals and names** (divergence 1), a typed `select`'s immediate (divergence
-  6), and constant *widths* (a small `i64` constant re-defaults to `i32`; its
-  value is unchanged, a large one keeps `i64`).
-- **Recompiler-peephole fusions** (divergence 3, generalised): narrow-load-then-
-  widen (`i32.load8_s; i64.extend_i32_s` → `i64.load8_s`), `i64.extend32_s`
-  (`wrap` + `extend`), and calling a `ref.func` directly (`ref.func; call_ref` →
-  `call`). They live in the recompiler, shared with hand-written Wax, so the
-  decompiler cannot avoid them.
-- **Compiler-inserted casts.** The decompiler pins a member-access receiver and
-  a `call_ref` callee with a `ref.cast` to a nullable reference; those pins are
-  indistinguishable from a redundant source `ref.cast` to a nullable type
-  without provenance, so faithful's cast fidelity is best-effort — it keeps a
-  redundant *non-null* up-cast but prunes the nullable ones. Also
-  `f32.neg`/`f64.neg` of a literal folds into the negated literal (Wax spells a
-  negative float literal `-X`).
-- **Dead code** (after an `unreachable` or an unconditional `br`): its operand
-  stack is polymorphic, so the surface cannot always type it — a dead
-  `i32.wrap_i64` drops, a dead constant re-defaults its width, a dead `call_ref`
-  callee gains a `ref.cast`. None of it runs.
-
-This mode's contract — that a faithful decompile+recompile reproduces the
-reachable instruction *structure* (opcodes, order and count, modulo those inert
-normalisations) — is enforced by the differential fuzzing harness (the
-`FAITHDRIFT` leg), which compares the reachable opcode sequence with widths, the
-compiler-cast family, and the fusions above normalised away.
+What remains under `--faithful` is only the inert normalisations it does not
+gate: locals and names (divergence 1), a typed `select`'s immediate
+(divergence 5), the best-effort scaffolding casts (divergence 4), and the shared
+spellings (divergence 6). Width pinning is no longer faithful-only: constant
+widths, leftover widths, dead-code widths, and the convert / `extend32_s`
+sources are pinned on the default path too, so `--faithful` does not make width
+fidelity any better than the default decompile; it only preserves the opcode
+*structure* the two reshaping recoveries would otherwise change.
 
 ## How this is checked
 
 These guarantees are enforced by a differential fuzzing harness that compares
 per-opcode histograms across a round trip, over both a curated corpus and a
-`wasm-smith` campaign.
+`wasm-smith` campaign. The `WIDTHDRIFT` leg checks that the width-sensitive
+families (div/rem/shift, float truncations, ordered comparisons, `eq`/`ne`, and
+the int-to-float conversions) keep full width on the default round trip; the
+`FAITHDRIFT` leg checks that a `--faithful` decompile+recompile reproduces the
+whole reachable opcode sequence, modulo the shared spellings and the
+compiler-cast family normalised away.
 
 
 <!-- docs/src/cli.md -->
@@ -4833,14 +4859,17 @@ server](#language-server)).
       instruction structure. It keeps `!(a == b)` instead of fusing
       `t.eq; i32.eqz` into a single `a != b`, and keeps a flat `br_on_cast_fail`
       chain instead of recovering it as a `match` (which re-lowers to the nested
-      ladder). It also keeps a redundant non-null `ref.cast` and pins some
-      constant widths through conversions.
+      ladder). It also keeps a redundant non-null `ref.cast`.
     - Only valid with wax output (`-f wax`); requesting it for wat or wasm output
       is a usage error.
+    - Width fidelity is *not* faithful-only: constant, leftover, dead-code and
+      convert / `extend32_s` widths are pinned on the default decompile too, so
+      `--faithful` preserves the opcode *structure* the reshaping recoveries
+      would change, not the widths.
     - Some divergences remain (all semantically inert): local ordering and
-      numbering, the `name` section, type renumbering, constant widths, the
-      recompiler-peephole fusions (narrow-load-then-widen, `extend32_s`,
-      direct-call), compiler-inserted casts, and dead code. See
+      numbering, the `name` section, type renumbering, compiler-inserted casts, a
+      typed `select`'s immediate, and the shared spellings (`extend32_s`, a
+      32-bit load widened to `i64`, the call family, float neg-of-literal). See
       [Round-Tripping](correspondence/round_trip.md).
 
 - **`--source-map`**
