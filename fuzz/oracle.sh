@@ -91,18 +91,21 @@ wt_ahead_divergence() {
 # div/rem/trunc in dead code (which the curated corpus never did), so the
 # exemption was load-bearing then and is not now.
 #
-# Deliberately EXCLUDED: the EQUALITY comparisons ([eq]/[ne]), [eqz] and
-# [i32.wrap_i64]. Their width is also erased and mostly fixed in from_wasm, but a
-# count is not histogram-clean:
-#   * [eq]/[ne] share the Wax [==]/[!=] surface across BOTH numeric and reference
-#     types, so in dead code a [ref.eq] pops holes that re-default to the numeric
-#     [i32.eq] (the numeric-width pin is an [as t] cast and cannot spell a ref
-#     type). An uncounted [ref.eq] thus turns into a counted [i32.eq] — a family
-#     change, not a width change — that no per-width bucket cancels without also
-#     masking a genuine [i32.eq] vs [i64.eq] width drift.
-#     (Reachable [ref.eq] is safe: its operands are anchors, not holes.) The
-#     [!(a==b)]->[a!=b] recovery ([i32.eqz (t.eq a b)] -> [t.ne]) also shuffles
-#     [eq]<->[ne] and consumes an [eqz].
+# The EQUALITY comparisons ([eq]/[ne]) are counted too, bucketed as [eq_ne] per
+# width (both [i32.eq] and [i32.ne] normalize to one [i32.eq_ne] token): the
+# [!(a==b)]->[a!=b] recovery legitimately swaps [i32.eqz (t.eq a b)] for [t.ne],
+# so an [eq]<->[ne] shuffle at the same width must cancel — while a genuine
+# [i32.eq] vs [i64.eq] width drift still shows. [ref.eq] itself carries no width
+# and is not matched ([\.eq\b] does not match [eqz]); it no longer drifts into a
+# counted [i32.eq], because from_wasm now pins its dead-code holes with a ref
+# cast ([(_ as &?eq)]), as it does [ref.is_null] ([(_ as &?any)]) — the
+# reference-surface analogues of the numeric width pins.
+#
+# Deliberately EXCLUDED: [eqz] and [i32.wrap_i64]. Their width is also erased and
+# mostly fixed in from_wasm, but a count is not histogram-clean:
+#   * [eqz] is consumed by the [!(a==b)]->[a!=b] recovery above ([i32.eqz (t.eq)]
+#     -> [t.ne]), which trades an [eqz] for a comparison; it also shares the Wax
+#     [!] surface with [ref.is_null].
 #   * [wrap] is legitimately folded away against an [extend] ([i32.wrap_i64
 #     (i64.extend_i32_u x)] = x).
 # Those consumers are covered by the deterministic [fuzz/drop-width.sh] sweep
@@ -114,7 +117,8 @@ width_op_histogram() {
   local txt
   txt="$("$WASM_TOOLS" print "$1" 2>/dev/null)" || return 1
   printf '%s\n' "$txt" \
-    | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl\b|i(32|64)\.trunc_f(32|64)_[su]\b|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)\b' \
+    | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl\b|i(32|64)\.trunc_f(32|64)_[su]\b|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)\b|i(32|64)\.(eq|ne)\b' \
+    | sed -E 's/\.(eq|ne)$/.eq_ne/' \
     | sort | uniq -c
 }
 
@@ -468,8 +472,8 @@ if [ "$FMT" != wax ]; then
       # Generalizes drop-width.sh to arbitrary corpus/smith/mutant inputs, which
       # carry no assertions for the execution oracles.
       finding WIDTHDRIFT HIGH "$IN" \
-        "round-trip changed a width-sensitive opcode (div/rem/shift/trunc_f/ordered-compare histogram: [${orig_hist//$'\n'/; }] -> [${via_hist//$'\n'/; }])" \
-        "$(repro "${wa[@]}") && $(repro "${rb[@]}") && diff <(wasm-tools print $IN | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)' | sort) <(wasm-tools print $WORK/via.wasm | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)' | sort)"
+        "round-trip changed a width-sensitive opcode (div/rem/shift/trunc_f/ordered-compare/eq_ne histogram: [${orig_hist//$'\n'/; }] -> [${via_hist//$'\n'/; }])" \
+        "$(repro "${wa[@]}") && $(repro "${rb[@]}") && diff <(wasm-tools print $IN | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)|i(32|64)\.(eq|ne)\b' | sed -E 's/\.(eq|ne)\$/.eq_ne/' | sort) <(wasm-tools print $WORK/via.wasm | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)|i(32|64)\.(eq|ne)\b' | sed -E 's/\.(eq|ne)\$/.eq_ne/' | sort)"
     fi
   fi
 fi
