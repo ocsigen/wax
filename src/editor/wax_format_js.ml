@@ -310,7 +310,10 @@ let completion_result completion src line ch defines =
     with _ -> []
   in
   let items =
-    try completion (Js.to_string src) line ch defines with _ -> []
+    try completion (Js.to_string src) line ch defines
+    with exn ->
+      Printf.eprintf "completion exn: %s\n%!" (Printexc.to_string exn);
+      []
   in
   Js.array (Array.of_list (List.map js_completion items))
 

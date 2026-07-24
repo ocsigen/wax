@@ -16,9 +16,12 @@ const vm = require("node:vm");
 const dir = process.argv[2] || path.join("docs", "src", "playground");
 const loaderPath = path.join(dir, "wax_format_js.bc.wasm.js");
 
+let prevProcess = null;
+
 function fail(msg) {
+  if (prevProcess) Object.defineProperty(globalThis, "process", prevProcess);
   console.error("smoke: " + msg);
-  process.exit(1);
+  (process || globalThis.process).exit(1);
 }
 
 function wasmNameFromLoader(src) {
@@ -62,7 +65,7 @@ async function main() {
   // The loader chooses its Node vs browser (fetch) branch by probing
   // `process.versions.node`. The playground runs the fetch branch, so hide
   // `process` to exercise the exact code path the page uses.
-  const prevProcess = Object.getOwnPropertyDescriptor(globalThis, "process");
+  prevProcess = Object.getOwnPropertyDescriptor(globalThis, "process");
   Object.defineProperty(globalThis, "process", {
     value: undefined,
     configurable: true,
@@ -79,6 +82,10 @@ async function main() {
 
     const diags = wax.check(src, []);
     if (!Array.isArray(diags)) fail("check did not return an array");
+
+    const watCompletions = wax.completionWat("(module (func (param (ref ", 0, 26, []);
+    if (!Array.isArray(watCompletions) || watCompletions.length === 0)
+      fail("completionWat on '(module (func (param (ref ' returned no items");
 
     // The binary-input path is the subtlest marshalling: bytes packed
     // one-per-char through a JS string into Js.to_bytestring. Feed it the 8-byte

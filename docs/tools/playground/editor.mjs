@@ -556,21 +556,21 @@ function makeCompletion(provider) {
     override: [
       (context) => {
         const word = context.matchBefore(/[\w$']+/);
-        // `.` and `:` are trigger characters (as declared to VS Code and LSP
-        // clients): the field/type list pops right at the dot, before any
-        // fragment of the name is typed.
-        if (!word && !context.explicit && !context.matchBefore(/[.:]/))
+        // `.` and `:` and `(` and space are trigger characters: completions pop
+        // before any fragment of the name is typed.
+        if (!word && !context.explicit && !context.matchBefore(/[.:\s(]/))
           return null;
         const { line, ch } = posToLC(context.state, context.pos);
         const items = provider.completion(context.state.doc.toString(), line, ch);
-        if (!items.length) return null;
+        const options = items.map((it) => ({
+          label: it.name,
+          type: cmKind(it.kind),
+          detail: it.detail || undefined,
+        }));
+        if (!options.length) return null;
         return {
           from: word ? word.from : context.pos,
-          options: items.map((it) => ({
-            label: it.name,
-            type: cmKind(it.kind),
-            detail: it.detail || undefined,
-          })),
+          options,
           validFor: /^[\w$']*$/,
         };
       },

@@ -462,10 +462,9 @@ let completion_string ?(encoding = UTF16) src line ch (_defines : string list) =
             if contains e.e_loc then
               match best with
               | Some (b : Wax_wasm.Resolve.expected) ->
-                  if
-                    b.e_type_slot = None && e.e_type_slot <> None
-                    && width b.e_loc = 0
-                  then Some e
+                  if b.e_type_slot = None && e.e_type_slot <> None then Some e
+                  else if b.e_type_slot <> None && e.e_type_slot = None then
+                    best
                   else if width b.e_loc <= width e.e_loc then best
                   else Some e
               | None -> Some e

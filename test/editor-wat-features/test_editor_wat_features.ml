@@ -458,15 +458,15 @@ let () =
   complete "(ref ) in param (type names + abstract heap types)"
     (prelude ^ "  (func (param (ref ))))\n")
     "(ref ";
-  complete "param (valtypes)" (prelude ^ "  (func (param\n") "(param";
+  complete "param (valtypes)" (prelude ^ "  (func (param )))\n") "(param ";
   complete "param prefix i (valtypes)"
-    (prelude ^ "  (func (param i\n")
+    (prelude ^ "  (func (param i)))\n")
     "(param i";
-  complete "result (valtypes)" (prelude ^ "  (func (result\n") "(result";
-  complete "local (valtypes)" (prelude ^ "  (func (local\n") "(local";
-  complete "field (valtypes)" "(module (type $s (struct (field\n" "(field";
-  complete "table elemtype (reftypes)" "(module (table 0 10\n" "(table 0 10";
-  complete "elem (reftypes)" "(module (elem\n" "(elem";
+  complete "result (valtypes)" (prelude ^ "  (func (result )))\n") "(result ";
+  complete "local (valtypes)" (prelude ^ "  (func (local )))\n") "(local ";
+  complete "field (valtypes)" "(module (type $s (struct (field ))))\n" "(field ";
+  complete "table elemtype (reftypes)" "(module (table 0 10 ))\n" "(table 0 10 ";
+  complete "elem (reftypes)" "(module (elem ))\n" "(elem ";
   print_newline ();
 
   (* Diagnostics on an incomplete operand: recovery names what is missing — an
