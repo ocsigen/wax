@@ -67,62 +67,54 @@ wt_ahead_divergence() {
 }
 
 # Count-per-opcode histogram of the *width-sensitive* numeric operators in a
-# module — integer div/rem, the shifts (shl/shr), and the (non-saturating)
-# float->int truncations. Their WIDTH is load-bearing and NOT carried by the Wax
-# surface at every consumer: a dropped/unpinned i64 tree that narrows to i32
-# turns a nonzero divisor into 0 (a divide-by-zero trap), a shift count masks to
-# the wrong modulus (4096 >>u 40 is 0 as i64, 16 as i32), and a trunc whose
-# source float width narrows changes which inputs trap / the value it produces.
-# This is the width-eraser class (ROADMAP.md §1), invisible to every validity
-# oracle (both sides validate; only execution sees it). No legitimate round-trip
-# rewrite touches these families IN REACHABLE CODE (cast fusion only moves
-# extend/wrap/reinterpret; div/rem/shift lower straight through; a truncation's
-# source is pinned in from_wasm), so any change is a bug — verified
-# false-positive-free over the corpus (0 findings; fires on a neutered wax).
+# module — integer div/rem, the shifts (shl/shr), the (non-saturating)
+# float->int truncations, and the ORDERED comparisons (lt/gt/le/ge, with
+# signage). Their WIDTH is load-bearing and NOT carried by the Wax surface at
+# every consumer: a dropped/unpinned i64 tree that narrows to i32 turns a nonzero
+# divisor into 0 (a divide-by-zero trap), a shift count masks to the wrong
+# modulus (4096 >>u 40 is 0 as i64, 16 as i32), a trunc whose source float width
+# narrows changes which inputs trap / the value it produces, and an ordered
+# comparison that re-defaults from f32 to i32 compares the wrong bits. This is the
+# width-eraser class (ROADMAP.md §1), invisible to every validity oracle (both
+# sides validate; only execution sees it). No legitimate round-trip rewrite
+# touches these families' WIDTH: cast fusion only moves extend/wrap/reinterpret;
+# div/rem/shift/ordered-comparison lower straight through; a truncation's source
+# is pinned in from_wasm. So any change is a bug — verified false-positive-free
+# over the corpus + a wasm-smith campaign (0 findings; fires on a neutered wax).
 #
-# Dead code is EXCLUDED from the count (the awk below tracks reachability):
-# from_wasm deliberately does not pin widths after a terminator (ROADMAP §1
-# "dead code is exempt — never executes"), so a width op on the polymorphic
-# dead-code stack legitimately re-defaults (or collapses to `unreachable`) —
-# the same reason comparisons/eqz/wrap are excluded entirely. wasm-smith puts
-# div/rem/trunc in dead code too (smith-findings/smith-{318,475}.wasm), which
-# the corpus never did.
+# Dead code is counted too. from_wasm now pins an anchor-free hole at every
+# width-sensitive consumer (binops, comparisons, typed numeric selects) with the
+# opcode type ([(_ as i64) + _]), so a width op on the polymorphic dead-code
+# stack no longer re-defaults to i32 across a round-trip. It used to be exempt —
+# a reachability tracker (now removed) skipped everything after a terminator —
+# because before that pin those dead holes drifted; wasm-smith routinely places
+# div/rem/trunc in dead code (which the curated corpus never did), so the
+# exemption was load-bearing then and is not now.
 #
-# Deliberately EXCLUDED: comparisons, [eqz] and [i32.wrap_i64]. Their width is
-# also erased and IS fixed in from_wasm, but they are not histogram-clean: a
-# comparison in dead code drifts harmlessly (holes re-default: [f32.eq]->[i32.eq]),
-# and a [wrap] is legitimately folded away against an [extend] ([i32.wrap_i64
-# (i64.extend_i32_u x)] = x). Those consumers are covered by the deterministic
-# [fuzz/drop-width.sh] sweep instead, which controls the operand shape.
+# Deliberately EXCLUDED: the EQUALITY comparisons ([eq]/[ne]), [eqz] and
+# [i32.wrap_i64]. Their width is also erased and mostly fixed in from_wasm, but a
+# count is not histogram-clean:
+#   * [eq]/[ne] share the Wax [==]/[!=] surface across BOTH numeric and reference
+#     types, so in dead code a [ref.eq] pops holes that re-default to the numeric
+#     [i32.eq] (the numeric-width pin is an [as t] cast and cannot spell a ref
+#     type). An uncounted [ref.eq] thus turns into a counted [i32.eq] — a family
+#     change, not a width change — that no per-width bucket cancels without also
+#     masking a genuine [i32.eq] vs [i64.eq] width drift.
+#     (Reachable [ref.eq] is safe: its operands are anchors, not holes.) The
+#     [!(a==b)]->[a!=b] recovery ([i32.eqz (t.eq a b)] -> [t.ne]) also shuffles
+#     [eq]<->[ne] and consumes an [eqz].
+#   * [wrap] is legitimately folded away against an [extend] ([i32.wrap_i64
+#     (i64.extend_i32_u x)] = x).
+# Those consumers are covered by the deterministic [fuzz/drop-width.sh] sweep
+# instead, which controls the operand shape.
 #
 # Returns non-zero (so the caller skips the check) if the reference cannot print
 # the argument — then there is no trustworthy ground truth to compare against.
 width_op_histogram() {
   local txt
   txt="$("$WASM_TOOLS" print "$1" 2>/dev/null)" || return 1
-  # Reachability tracker over the flat `wasm-tools print` form: after an
-  # unconditional terminator, skip lines until the enclosing frame's
-  # end/else/catch (nested dead blocks tracked by depth); a lone `)` closes
-  # the function. Only live lines reach the opcode grep.
   printf '%s\n' "$txt" \
-    | awk '
-        { t = $1 }
-        t == ")" { dead = 0; depth = 0 }
-        t == "block" || t == "loop" || t == "if" || t == "try" || t == "try_table" { depth++ }
-        t == "end" || t == "delegate" {
-          if (dead && depth == dead_depth) dead = 0
-          depth--
-        }
-        t == "else" || t == "catch" || t == "catch_all" {
-          if (dead && depth == dead_depth) dead = 0
-        }
-        dead { next }
-        { print }
-        t == "br" || t == "br_table" || t == "return" || t ~ /^return_call/ \
-          || t == "unreachable" || t == "throw" || t == "throw_ref" || t == "rethrow" {
-          dead = 1; dead_depth = depth
-        }' \
-    | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl\b|i(32|64)\.trunc_f(32|64)_[su]\b' \
+    | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl\b|i(32|64)\.trunc_f(32|64)_[su]\b|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)\b' \
     | sort | uniq -c
 }
 
@@ -476,8 +468,8 @@ if [ "$FMT" != wax ]; then
       # Generalizes drop-width.sh to arbitrary corpus/smith/mutant inputs, which
       # carry no assertions for the execution oracles.
       finding WIDTHDRIFT HIGH "$IN" \
-        "round-trip changed a width-sensitive opcode (div/rem/shift/trunc_f histogram: [${orig_hist//$'\n'/; }] -> [${via_hist//$'\n'/; }])" \
-        "$(repro "${wa[@]}") && $(repro "${rb[@]}") && diff <(wasm-tools print $IN | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]') <(wasm-tools print $WORK/via.wasm | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]')"
+        "round-trip changed a width-sensitive opcode (div/rem/shift/trunc_f/ordered-compare histogram: [${orig_hist//$'\n'/; }] -> [${via_hist//$'\n'/; }])" \
+        "$(repro "${wa[@]}") && $(repro "${rb[@]}") && diff <(wasm-tools print $IN | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)' | sort) <(wasm-tools print $WORK/via.wasm | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]|i(32|64)\.(lt|gt|le|ge)_[su]|f(32|64)\.(lt|gt|le|ge)' | sort)"
     fi
   fi
 fi
