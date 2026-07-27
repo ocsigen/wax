@@ -23,6 +23,10 @@ type reference = Typing_env.reference = {
 
 (*** Diagnostics ***)
 
+let loc_first_char loc =
+  let loc_start = loc.loc_start in
+  { loc with loc_end = { loc_start with pos_cnum = loc_start.pos_cnum + 1 } }
+
 let loc_last_char loc =
   let loc_end = loc.loc_end in
   { loc with loc_start = { loc_end with pos_cnum = loc_end.pos_cnum - 1 } }
@@ -2090,7 +2094,8 @@ let pop ctx kind ~location current expected ty st =
       Error.short_stack ctx.diagnostics kind
         ~location:
           (match kind with
-          | `Input | `Holes -> location
+          | `Input -> loc_first_char location
+          | `Holes -> location
           | `Output -> loc_last_char location)
         ~actual:(expected - current - 1)
         ~expected;
