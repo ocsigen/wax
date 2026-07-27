@@ -549,25 +549,26 @@ parameters_and_results_without_bindings:
      results = Array.of_list r } }
 
 field:
-| "(" FIELD i = ID t = field_type ")" { [ with_loc $sloc (Some i, t) ] }
+| "(" FIELD i = ID t = field_type ")"
+   { [ with_loc $sloc (Some i, snd t.Ast.desc) ] }
 (* An anonymous (field t1 t2 ...) declares several fields sharing one source
    span; locating them all at $sloc would create duplicate keys, so only the
    single-field case gets a real (comment-anchoring) location. *)
 | "(" FIELD l = field_type * ")"
   { match l with
-    | [ t ] -> [ with_loc $sloc (None, t) ]
-    | _ -> List.map (fun t -> Ast.no_loc (None, t)) l }
+    | [ t ] -> [ with_loc $sloc t.Ast.desc ]
+    | _ -> l }
 
 field_type:
-| typ = storage_type { {mut = false; typ} }
-| "(" MUT typ = storage_type ")" { {mut = true; typ} }
+| typ = storage_type { with_loc $sloc (None, {mut = false; typ}) }
+| "(" MUT typ = storage_type ")" { with_loc $sloc  (None, {mut = true; typ}) }
 
 storage_type:
 | t = value_type { Value t }
 | t = PACKEDTYPE { Packed t }
 
 composite_type:
-| "(" ARRAY t = field_type ")" { Array t }
+| "(" ARRAY t = field_type ")" { Array (snd t.Ast.desc) }
 | "(" STRUCT l = field * ")" { Struct (Array.of_list (List.flatten l)) }
 | "(" CONT i = index ")" { Cont i }
 | t = functype { Func t }
@@ -649,32 +650,34 @@ branch_hint_annot:
 blockinstr:
 | BLOCK label = label typ = block_type block =instructions END label2 = label
   { check_labels label label2;
-    with_loc $sloc (Block {label; typ; block = Ast.no_loc block}) }
+    with_loc $sloc
+      (Block {label; typ; block = with_loc $loc(block) block}) }
 | LOOP label = label typ = block_type block = instructions END label2 = label
   { check_labels label label2;
-    with_loc $sloc (Loop {label; typ; block = Ast.no_loc block}) }
+    with_loc $sloc (Loop {label; typ; block = with_loc $loc(block) block}) }
 | IF label = label typ = block_type if_block = instructions ELSE
   label2 = label else_block = instructions END
   label3 = label
   { check_labels label label2;
     check_labels label label3;
     with_loc $sloc
-      (If {label; typ; if_block = Ast.no_loc if_block;
-           else_block = Ast.no_loc else_block }) }
+      (If {label; typ; if_block = with_loc $loc(if_block) if_block;
+           else_block = with_loc $loc(else_block) else_block }) }
 | IF label = label typ = block_type if_block = instructions END
   label2 = label
   { check_labels label label2;
     with_loc $sloc
-      (If {label; typ; if_block = Ast.no_loc if_block;
-           else_block = Ast.no_loc [] }) }
+      (If {label; typ; if_block = with_loc $loc(if_block) if_block;
+           else_block = with_loc $sloc [] }) }
 | TRY_TABLE label = label typ = block_type catches = catches block = instructions
   END label2 = label
    { check_labels label label2;
-     with_loc $sloc (TryTable {label; typ; catches; block = Ast.no_loc block}) }
+     with_loc $sloc (TryTable {label; typ; catches; block = with_loc $loc(block) block}) }
 | TRY label = label typ = block_type block = instructions c = legacy_catches label2 = label
   { check_labels label label2;
     let (catches, catch_all) = c in
-    with_loc $sloc (Try {label; typ; block = Ast.no_loc block; catches; catch_all}) }
+    with_loc $sloc
+      (Try {label; typ; block = with_loc $loc(block) block; catches; catch_all}) }
 
 catches:
 | { [] }
@@ -696,9 +699,9 @@ on_clauses:
 
 legacy_catches:
 | END { [], None }
-| CATCH_ALL l = instructions END { [], Some (Ast.no_loc l) }
+| CATCH_ALL l = instructions END { [], Some (with_loc $loc(l) l) }
 | CATCH i = index l = instructions rem = legacy_catches
-  { map_fst (fun r -> (i, Ast.no_loc l) :: r) rem }
+  { map_fst (fun r -> (i, with_loc $loc(l) l) :: r) rem }
 
 label:
 | i = ID ? { i }
@@ -985,7 +988,7 @@ folded_instruction:
       (Folded
         (with_loc ($startpos, $endpos(else_block))
           (If {label; typ; if_block;
-               else_block = Option.value ~default:(Ast.no_loc []) else_block }),
+               else_block = Option.value ~default:(with_loc $sloc []) else_block }),
          l)) }
 | "(" TRY_TABLE label = label typ = block_type catches = catches
   block = instructions  ")"
@@ -1123,10 +1126,10 @@ local_decl:
   { [ with_loc $sloc (Some i, t) ] }
 (* As for fields, only the single-local case gets a comment-anchoring
    location; an anonymous (local t1 t2 ...) shares one span. *)
-| LPAREN_LOCAL l = value_type * ")"
+| LPAREN_LOCAL l = list(v = value_type { with_loc $sloc (None, v) }) ")"
   { match l with
-    | [ t ] -> [ with_loc $sloc (None, t) ]
-    | _ -> List.map (fun t -> Ast.no_loc (None, t)) l }
+    | [ t ] -> [ with_loc $sloc (None, snd t.Ast.desc) ]
+    | _ -> l }
 
 memory:
 | "(" MEMORY id = ID? exports = exports limits = memory_type ")"
