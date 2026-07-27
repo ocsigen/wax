@@ -444,7 +444,7 @@ case "$verdict:$EXPECT" in
         if [ "$sverdict" = ok ] && [ "$ref" = rejected ] \
           && { grep -q "likely-confusing unicode" "$IN.err" \
                || wt_ahead_divergence "$IN.err" \
-               || { [ "$FMT" = wat ] && grep -qE '\(do( |\))' "$IN"; }; }; then
+               || { [ "$FMT" = wat ] && grep -qE '\(do([[:space:]]|\)|$)' "$IN"; }; }; then
           # A known non-divergence where wax accepts and wasm-tools rejects:
           #   * a "Trojan Source" bidirectional control character in a string —
           #     the spec allows any UTF-8, so wax accepts it (and flags it with
@@ -545,7 +545,7 @@ demit=(--desugar -i "$FMT" -f wat "$IN" -o "$WORK/cand.wat")
 if [ "$(classify_wax "${demit[@]}")" = ok ] && ! wt_validate "$WORK/cand.wat" \
    && ! grep -qE "likely-confusing unicode|expected at least one module field|non-constant operator: visit_cont_new|branch_hint annotation: duplicate annotation" \
         "$WORK/cand.wat.err" \
-   && ! grep -qE '\(item \$|\(do( |\))' "$WORK/cand.wat"; then
+   && ! grep -qE '\(item \$|\(do([[:space:]]|\)|$)' "$WORK/cand.wat"; then
   # Rejections that are not wax bugs — wasm-tools text is stricter than the spec,
   # or trips on a deliberate wax text extension the emitted BINARY renders in
   # standard form:

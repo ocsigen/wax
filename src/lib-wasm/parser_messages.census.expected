@@ -172,7 +172,7 @@
     4x Expecting ')', or a type use.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a v128 const body.
-    1x Expecting ')', or a value type.
+    2x Expecting ')', or a value type.
     2x Expecting ')', or a value type.
        <_>This '(' opens the enclosing construct.
     4x Expecting ')', or an expression.

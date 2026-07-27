@@ -1937,6 +1937,10 @@ parse: LPAREN TAG LPAREN_PARAM WAIT
 Expecting ')', an identifier ('$...'), or an unnamed parameter.
 <1>This '(' opens the enclosing construct.
 
+parse: LPAREN TAG LPAREN_RESULT ANYREF WAIT
+
+Expecting ')', or a value type.
+
 parse: LPAREN TAG LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the type use is complete, expecting ')'.
