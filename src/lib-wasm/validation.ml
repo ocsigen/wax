@@ -343,6 +343,13 @@ let source_of_valtype (ty : valtype) : source_type =
 
 (*** Diagnostics ***)
 
+let loc_first_char (loc : Ast.location) =
+  let loc_start = loc.Ast.loc_start in
+  {
+    loc with
+    loc_end = { loc_start with Lexing.pos_cnum = loc_start.Lexing.pos_cnum + 1 };
+  }
+
 let loc_last_char (loc : Ast.location) =
   let loc_end = loc.Ast.loc_end in
   {
@@ -2671,22 +2678,23 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
   match i.desc with
   | Block { label; typ; block = b } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
-      let* () = pop_args ctx loc ~source:param_source params in
+      let* () = pop_args ctx (loc_first_char loc) ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
         ~br_source:result_source ~params ~results ~br_params:results b.desc;
       push_results ~loc ~source:result_source results
   | Loop { label; typ; block = b } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
-      let* () = pop_args ctx loc ~source:param_source params in
+      let* () = pop_args ctx (loc_first_char loc) ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
         ~br_source:param_source ~params ~results ~br_params:params b.desc;
       push_results ~loc ~source:result_source results
   | If { label; typ; if_block; else_block } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
-      let* () = pop_known ctx loc I32 in
-      let* () = pop_args ctx loc ~source:param_source params in
+      let loc_start = loc_first_char loc in
+      let* () = pop_known ctx loc_start I32 in
+      let* () = pop_args ctx loc_start ~source:param_source params in
       let used = track_label ctx label in
       (* Anchor each arm's stack-shape reports (a missing result, leftover
          values) at that arm, not at the whole [if] — otherwise the two arms'
@@ -2704,7 +2712,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       push_results ~loc ~source:result_source results
   | TryTable { label; typ; block = b; catches } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
-      let* () = pop_args ctx loc ~source:param_source params in
+      let* () = pop_args ctx (loc_first_char loc) ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
         ~br_source:result_source ~params ~results ~br_params:results b.desc;
@@ -2753,7 +2761,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       push_results ~loc ~source:result_source results
   | Try { label; typ; block = b; catches; catch_all } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
-      let* () = pop_args ctx loc ~source:param_source params in
+      let* () = pop_args ctx (loc_first_char loc) ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
         ~br_source:result_source ~params ~results ~br_params:results b.desc;
