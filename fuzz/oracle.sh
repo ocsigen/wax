@@ -740,7 +740,7 @@ if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
       # any other rejection at this step still fires. (classify_wax left the
       # conversion's stderr in $ERRLOG.)
       grep -qi "Conditional annotations cannot be emitted" "$ERRLOG" && continue
-      finding UNDER_REJECT REVIEW "$IN" \
+      finding UNDER_REJECT HIGH "$IN" \
         "wax check accepts but ${FMT}->${out} rejects it (typer under-rejects): $(grep -m1 -i error "$ERRLOG" || true)" \
         "$(repro "${check[@]}") && $(repro "${conv[@]}")"
     fi
