@@ -1212,6 +1212,17 @@ let floattype ty : Ast.valtype =
   | `F64 -> F64
   | _ -> assert false
 
+(* An operand tree whose printed form re-parses type-ADAPTIVELY: with no width or
+   type of its own it re-defaults (a numeric tree to [i32]). A bare hole is the
+   base case, and an untyped [select] is adaptive when BOTH arms are (its result
+   type is its arms'). Mirrors the typer's [reparse_adaptive] (kept local to
+   from_wasm so it carries no dependency on the typer). *)
+let rec reparse_adaptive (i : _ Ast.instr) =
+  match i.Ast.desc with
+  | Ast.Hole | Ast.Null -> true
+  | Ast.Select (_, a, b) -> reparse_adaptive a && reparse_adaptive b
+  | _ -> false
+
 let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
   (* A no-argument instruction method [recv.meth()]. *)
@@ -1255,11 +1266,27 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
     | Clz | Ctz | Popcnt | ExtendS (`_8 | `_16) -> recv_w
     | _ -> None
   in
+  (* Pin an adaptive receiver for a method-form op ([.clz()], [.ctz()] etc.).
+     The method name grounds the receiver in the integer family, and [i32] is
+     the default integer, so only [i64] needs an explicit pin — [(_?_:_).clz()]
+     already re-parses as [i32.clz], but [i64.clz] on an adaptive select-of-holes
+     drifts to [i32.clz] without one. Mirrors [e_method_pinned] in
+     [float_un_op]. *)
+  let e_method_pinned ty =
+    match ty with
+    | Ast.I32 -> e ty
+    | _ -> (
+        let x = e ty in
+        match e' with
+        | Some e when reparse_adaptive e ->
+            { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+        | _ -> x)
+  in
   Stack.push_num result_w
     (match op with
-    | Clz -> method_call (e (inttype sz)) "clz"
-    | Ctz -> method_call (e (inttype sz)) "ctz"
-    | Popcnt -> method_call (e (inttype sz)) "popcnt"
+    | Clz -> method_call (e_method_pinned (inttype sz)) "clz"
+    | Ctz -> method_call (e_method_pinned (inttype sz)) "ctz"
+    | Popcnt -> method_call (e_method_pinned (inttype sz)) "popcnt"
     | Eqz -> (
         let operand = pin (inttype sz) in
         match operand.Ast.desc with
@@ -1312,8 +1339,8 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
              ( (let src = pin (inttype `I64) in
                 { src with desc = Ast.Cast (src, Valtype (inttype `I32)) }),
                Signedtype { typ = sz; signage = Signed; strict = false } ))
-    | ExtendS `_8 -> method_call (e (inttype sz)) "extend8_s"
-    | ExtendS `_16 -> method_call (e (inttype sz)) "extend16_s")
+    | ExtendS `_8 -> method_call (e_method_pinned (inttype sz)) "extend8_s"
+    | ExtendS `_16 -> method_call (e_method_pinned (inttype sz)) "extend16_s")
 
 (* Pop an operand for a method-form intrinsic, ascribing it the operator's
    scalar type [ty]. A non-inlinable operand becomes a typed hole [(_ as ty)]
@@ -1423,17 +1450,6 @@ let pop_typed_tagged ty =
     (match o with
     | Some (e, w) -> (e, w)
     | None -> (Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)), None))
-
-(* An operand tree whose printed form re-parses type-ADAPTIVELY: with no width or
-   type of its own it re-defaults (a numeric tree to [i32]). A bare hole is the
-   base case, and an untyped [select] is adaptive when BOTH arms are (its result
-   type is its arms'). Mirrors the typer's [reparse_adaptive] (kept local to
-   from_wasm so it carries no dependency on the typer). *)
-let rec reparse_adaptive (i : _ Ast.instr) =
-  match i.Ast.desc with
-  | Ast.Hole | Ast.Null -> true
-  | Ast.Select (_, a, b) -> reparse_adaptive a && reparse_adaptive b
-  | _ -> false
 
 (* A popped operand is a width ANCHOR — its printed form fixes the operator's
    width on its own, so a width-erasing consumer (a comparison, the sibling of a
@@ -1584,23 +1600,36 @@ let float_un_op i0 sz (op : Src.float_un_op) =
     | Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt -> recv_w
     | Convert _ | Reinterpret -> None
   in
-  (* A width-named [f32] method ([f32.sqrt] etc.) carries its operand width in
-     its result ([result_w = recv_w]): every consumer of the concrete [f32]
-     result fixes it — a [drop] records [f32] in its [Let] annotation, a return
-     type / another [f32] op / a call argument grounds it, and a stranded
-     leftover is pinned by [Stack.run] (the result tag then flows back to the
-     receiver through the method). So no operand-side pin is needed on the
-     default path; a bare-literal receiver whose result drifts [f32.sqrt] to
-     [f64.sqrt] cannot arise without the result itself being unpinned first. *)
+  (* When the receiver is an ADAPTIVE tree — an untyped dead-code [select] of
+     holes whose printed form re-defaults to [i32] — its [recv_w] is [None], so
+     neither the result tag nor [Stack.run] can recover the float width. Pin
+     with a cast mirroring how [int_bin_op] and [float_bin_op] pin a non-anchor
+     hole. An absent receiver ([e' = None]) already gets a typed hole from [e];
+     a non-adaptive receiver carries its own width.
+
+     [Neg] always needs the pin (both [f32] and [f64]): the operator [-] does
+     not distinguish float from integer, so an unpinned adaptive tree re-defaults
+     to [i32] (integer subtraction). The method-form ops ([.floor()], [.sqrt()]
+     etc.) only need the pin for [f32]: the method name grounds the receiver in
+     the float family and [f64] is the default float, so [(_?_:_).floor()]
+     already re-parses as [f64.floor] — only [f32.floor] drifts without a pin. *)
+  let e_pinned ty =
+    let x = e ty in
+    match e' with
+    | Some e when reparse_adaptive e ->
+        { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+    | _ -> x
+  in
+  let e_method_pinned ty = match ty with Ast.F64 -> e ty | _ -> e_pinned ty in
   Stack.push_num result_w
     (match op with
-    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e (floattype sz)))
-    | Abs -> method_call (e (floattype sz)) "abs"
-    | Ceil -> method_call (e (floattype sz)) "ceil"
-    | Floor -> method_call (e (floattype sz)) "floor"
-    | Trunc -> method_call (e (floattype sz)) "trunc"
-    | Nearest -> method_call (e (floattype sz)) "nearest"
-    | Sqrt -> method_call (e (floattype sz)) "sqrt"
+    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e_pinned (floattype sz)))
+    | Abs -> method_call (e_method_pinned (floattype sz)) "abs"
+    | Ceil -> method_call (e_method_pinned (floattype sz)) "ceil"
+    | Floor -> method_call (e_method_pinned (floattype sz)) "floor"
+    | Trunc -> method_call (e_method_pinned (floattype sz)) "trunc"
+    | Nearest -> method_call (e_method_pinned (floattype sz)) "nearest"
+    | Sqrt -> method_call (e_method_pinned (floattype sz)) "sqrt"
     | Convert (sz', signage) ->
         let ity = inttype (sz' :> [ `I32 | `I64 | `F32 | `F64 ]) in
         with_loc

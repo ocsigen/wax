@@ -25,6 +25,6 @@ so pinning the result pins the operand and the negation lowers coherently:
   $ wax -i wat -f wax f.wat
   fn f() {
       unreachable;
-      _ = -(_?_:_) as f64;
+      _ = -((_?_:_) as f32) as f64;
   }
   $ wax -i wat -f wax f.wat -o f.wax && wax -i wax -f wasm f.wax -o /dev/null --validate
