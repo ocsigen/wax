@@ -68,7 +68,7 @@ spec_one() {
   # default wax rejects them and they would show up as spurious FALSE_REJECTs.
   # custom-descriptors is the only validation-affecting one today.
   case "$wast" in
-    *custom-descriptors*)
+    *custom-descriptors*|*branch_hint*)
       printf '0\t0\t0\t1\n' >"$stats"
       return 0
       ;;

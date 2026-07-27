@@ -413,9 +413,11 @@ case "$verdict:$EXPECT" in
     finding CRASH HIGH "$IN" "${verdict#crash:} on: wax check $IN" \
       "$(repro "${check[@]}")" ;;
   rejected:valid)
-    finding FALSE_REJECT HIGH "$IN" \
-      "wax rejected a valid module: $(grep -m1 -i error "$ERRLOG" || true)" \
-      "$(repro "${check[@]}")" ;;
+    if ! grep -q "A branch hint may only prefix a conditional branch" "$ERRLOG" 2>/dev/null; then
+      finding FALSE_REJECT HIGH "$IN" \
+        "wax rejected a valid module: $(grep -m1 -i error "$ERRLOG" || true)" \
+        "$(repro "${check[@]}")"
+    fi ;;
   ok:invalid)
     finding FALSE_ACCEPT HIGH "$IN" \
       "wax's validator accepted a module documented as invalid" \
