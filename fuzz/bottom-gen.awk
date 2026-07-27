@@ -17,17 +17,18 @@
 #   WRAP    — position/structure control, applied as a balanced pair around the
 #             body: none / a leading `unreachable` (the dead-code arm) / a
 #             `block … end` wrapper / a `loop … end` wrapper.
-#   PRODUCER— pushes one bottom/ref/num value: `ref.null` at each heap type in
-#             BOTH hierarchies (none/nofunc/extern/any/func), an i64/i32 const,
-#             the typed params/locals, a call.
+#   PRODUCER— pushes one bottom/ref/num/float value: `ref.null` at each heap type
+#             in BOTH hierarchies (none/nofunc/extern/any/func), an i64/i32 const,
+#             an f32/f64 const, the typed params/locals, a call.
 #   ADAPTER — a ~1->1 type-adaptive or passthrough op, or a zero-effect
 #             interposition (`atomic.fence`): the ref-null/non-null/cast branch
 #             passthroughs, the non-null coercion, `ref.is_null`, i31 box/unbox,
-#             the cross-hierarchy converts.
-#   CONSUMER— the type-adaptive sinks: typed and untyped `select`, `ref.eq`, the
-#             i64 width op `i64.shr_u`, `drop`, and `br_on_cast`/`br_on_cast_fail`
-#             into BOTH hierarchies (`(ref null func)`->`nofunc`, `anyref`->i31/
-#             none).
+#             the cross-hierarchy converts, the width-sensitive float methods
+#             (`fN.sqrt/abs/ceil/floor/trunc/nearest`).
+#   CONSUMER— the type-adaptive sinks: typed and untyped `select` (including
+#             float-typed), `ref.eq`, the i64 width op `i64.shr_u`, `drop`, and
+#             `br_on_cast`/`br_on_cast_fail` into BOTH hierarchies
+#             (`(ref null func)`->`nofunc`, `anyref`->i31/none).
 #   SINK    — a trailing nothing / `drop` / `unreachable`.
 #
 # WRAP is a balanced pair (a `block`/`loop` always gets its matching `end`) so no
@@ -54,17 +55,23 @@ BEGIN {
   np = split("" \
     "ref.null none" SUBSEP "ref.null nofunc" SUBSEP "ref.null extern" SUBSEP \
     "ref.null any" SUBSEP "ref.null func" SUBSEP "i64.const 40" SUBSEP \
-    "i32.const 1" SUBSEP "local.get $r" SUBSEP "local.get $n" SUBSEP \
+    "i32.const 1" SUBSEP "f32.const 1.0" SUBSEP "f64.const 1.0" SUBSEP \
+    "local.get $r" SUBSEP "local.get $n" SUBSEP \
     "local.get $x" SUBSEP "local.get $b" SUBSEP "call $g", prod, SUBSEP)
 
   # adapters[1] is the empty slot (no adapter).
   na = split("" SUBSEP "ref.as_non_null" SUBSEP "ref.is_null" SUBSEP \
     "extern.convert_any" SUBSEP "any.convert_extern" SUBSEP "ref.i31" SUBSEP \
     "i31.get_s" SUBSEP "br_on_null $bany" SUBSEP "br_on_non_null $bany" SUBSEP \
-    "atomic.fence", adapt, SUBSEP)
+    "atomic.fence" SUBSEP \
+    "f32.sqrt" SUBSEP "f32.abs" SUBSEP "f32.ceil" SUBSEP \
+    "f32.floor" SUBSEP "f32.trunc" SUBSEP "f32.nearest" SUBSEP \
+    "f64.sqrt" SUBSEP "f64.abs" SUBSEP "f64.ceil" SUBSEP \
+    "f64.floor" SUBSEP "f64.trunc" SUBSEP "f64.nearest", adapt, SUBSEP)
 
   # consumers[1] is the empty slot.
   nc = split("" SUBSEP "select" SUBSEP "select (result i64)" SUBSEP \
+    "select (result f32)" SUBSEP "select (result f64)" SUBSEP \
     "select (result (ref null any))" SUBSEP "ref.eq" SUBSEP "i64.shr_u" SUBSEP \
     "drop" SUBSEP "br_on_cast $bfunc (ref null func) (ref nofunc)" SUBSEP \
     "br_on_cast_fail $bfunc (ref null func) (ref nofunc)" SUBSEP \
