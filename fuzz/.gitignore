@@ -1,6 +1,7 @@
 corpus/
 corpus-wax/
 smith-findings/
+run-findings/
 mutate-findings/
 corpus-wat/
 mutate-wat-findings/

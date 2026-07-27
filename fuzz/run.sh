@@ -25,6 +25,8 @@ CORPUS="${1:-$ROOT/fuzz/corpus}"
 # one worker per core leaves the cores mostly idle. Oversubscribe (like smith.sh);
 # ~4x the core count is the sweet spot.
 JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
+KEEP="$ROOT/fuzz/run-findings"
+mkdir -p "$KEEP"
 REPORT="$(mktemp)"
 ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
 
@@ -60,6 +62,12 @@ if [ "$nfind" -gt 0 ]; then
   cut -f2,3,4,5 "$REPORT" | sort -u | sed 's/^/  /'
   echo
   echo "full report with reproduction commands: $REPORT"
+  # Persist the report and the failing inputs under fuzz/run-findings/ so the
+  # CI artifact upload (which globs fuzz/*-findings/) can pick them up.
+  cp "$REPORT" "$KEEP/report.tsv"
+  cut -f4 "$REPORT" | sort -u | while IFS= read -r f; do
+    [ -f "$f" ] && cp "$f" "$KEEP/"
+  done
 fi
 echo
 echo "note: behavioural (execution) oracles are separate — run fuzz/exec-ref.sh"
