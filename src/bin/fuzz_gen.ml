@@ -1186,6 +1186,32 @@ let type_decls : Ast.location Ast.modulefield list =
       };
   ]
 
+(* Compilation-hints proposal: a function-level [metadata.code.compilation_priority]
+   entry on roughly a third of the functions, so the generated modules exercise that
+   section's codec end to end alongside the instruction-level ones [maybe_hint]
+   drives. [#[priority]] is what makes the entry exist, so it always comes with the
+   optional part rather than instead of it; the reserved [#[run_once]] spelling gets
+   its own share, and 0 is included since it is a legal priority the LEB encoder
+   must still emit a byte for. *)
+let priority_attrs () : Ast.attributes =
+  let attr attr_name attr_value : Ast.attribute =
+    {
+      attr_name;
+      attr_value;
+      attr_guard = None;
+      attr_span = Wax_utils.Ast.dummy_loc;
+    }
+  in
+  let int_attr k n = attr k (Some (nl (Ast.Int (string_of_int n)))) in
+  if rnd 3 <> 0 then []
+  else
+    int_attr "priority" (pick [| 0; 1; 2; 5; 40; 1000 |])
+    ::
+    (match rnd 3 with
+    | 0 -> [ attr "run_once" None ]
+    | 1 -> [ int_attr "optimization" (pick [| 0; 3; 10; 127 |]) ]
+    | _ -> [])
+
 let func k : Ast.location Ast.modulefield =
   let res = rtys.(k) in
   let params =
@@ -1228,7 +1254,7 @@ let func k : Ast.location Ast.modulefield =
       typ = None;
       sign = Some sign;
       body = (None, body);
-      attributes = [];
+      attributes = priority_attrs ();
     }
 
 let () =
