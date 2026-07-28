@@ -1,0 +1,18 @@
+import "m" {
+    fn ext(x: i32) -> i32;
+    fn ext2(x: i32) -> i32;
+}
+
+#[export]
+#[priority = 1]
+#[run_once]
+fn init() { nop; }
+
+#[export]
+#[priority = 5]
+#[optimization = 10]
+fn hot(x: i32) -> i32 { ext(x) }
+
+#[export]
+#[priority = 2]
+fn warm(x: i32) -> i32 { ext2(x) }

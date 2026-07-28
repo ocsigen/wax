@@ -716,6 +716,7 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
                 (instr m.names local_names label_names (ref 0) [])
                 code.instrs;
             exports = [];
+            priority = code.priority;
           })
       m.functions
   in

@@ -105,3 +105,34 @@ let call_targets_payload l =
       uleb_to_buffer b pct)
     l;
   Buffer.contents b
+
+(*** Compilation priority ***)
+
+type priority = { compilation : int; optimization : int option }
+
+(* The proposal's prose gives 127 for "run once"; its own worked example instead
+   renders the value as ["\01\1F"], i.e. 31. We follow the prose. The byte is only
+   ever a spelling of this one value, so a binary carrying 31 round-trips as the
+   plain number it is. *)
+let run_once = 127
+
+(* A [metadata.code.compilation_priority] payload is a compilation priority,
+   optionally followed by an optimization priority. The proposal's
+   forward-compatibility rule says to read the leading values and ignore the rest,
+   so trailing bytes are dropped rather than rejected. *)
+let priority_of_payload s =
+  match uleb_of_string s 0 with
+  | Error _ -> Error "A compilation-priority hint ends mid-integer."
+  | Ok (compilation, pos) -> (
+      if pos >= String.length s then Ok { compilation; optimization = None }
+      else
+        match uleb_of_string s pos with
+        | Error _ as e -> e
+        | Ok (optimization, _) ->
+            Ok { compilation; optimization = Some optimization })
+
+let priority_payload { compilation; optimization } =
+  let b = Buffer.create 4 in
+  uleb_to_buffer b compilation;
+  Option.iter (uleb_to_buffer b) optimization;
+  Buffer.contents b

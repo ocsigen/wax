@@ -4845,7 +4845,7 @@ let build_initial_env ctx fields =
                   Sequence.register ctx.tags id (ty, sign);
                   ctx.imported_tags <- (idx, id, location) :: ctx.imported_tags;
                   mark ctx.used_tags idx))
-      | Func { id; typ; exports; instrs = _; locals = _ } -> (
+      | Func { id; typ; exports; instrs = _; locals = _; priority = _ } -> (
           (* A function's own signature is a reference *it* makes, so attribute it
              to the index this definition is about to claim rather than letting a
              dead function's type look externally referenced. *)
@@ -5651,7 +5651,7 @@ let functions ?(warn_unused = true) ctx fields =
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
       | Import { desc = Func _; _ } -> incr index
-      | Func { id = _; typ; locals = locs; instrs; exports } ->
+      | Func { id = _; typ; locals = locs; instrs; exports; priority = _ } ->
           (* Claimed before anything can fail below, so a definition whose type
              does not resolve still advances the counter, as it does there. *)
           let self = !index in
@@ -6447,9 +6447,10 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
           ~then_branch:(fun asm' -> sfields asm' then_fields.desc)
           ~else_branch:(fun asm' ->
             match else_fields with Some e -> sfields asm' e.desc | None -> [])
-    | Func { id; typ; locals; instrs; exports } ->
+    | Func { id; typ; locals; instrs; exports; priority } ->
         let desc : _ Ast.Text.modulefield =
-          Func { id; typ; locals; instrs = sinstrs asm instrs; exports }
+          Func
+            { id; typ; locals; instrs = sinstrs asm instrs; exports; priority }
         in
         ([ { f with desc } ], asm)
     | Global { id; typ; init; exports } ->

@@ -251,6 +251,9 @@ let keyword_table : (string, token) Hashtbl.t =
       ("never_opt", NEVER_OPT);
       ("always_opt", ALWAYS_OPT);
       ("target", TARGET);
+      ("priority", PRIORITY);
+      ("optimization", OPTIMIZATION);
+      ("run_once", RUN_ONCE);
       ("memory", MEMORY);
       ("pagesize", PAGESIZE);
       ("shared", SHARED);
@@ -676,6 +679,8 @@ let rec token_rec ctx lexbuf =
   (* Compilation-hints proposal, the instruction-level sections. *)
   | "(@metadata.code.instr_freq" -> INSTR_FREQ_ANNOT
   | "(@metadata.code.call_targets" -> CALL_TARGETS_ANNOT
+  (* … and the function-level one. *)
+  | "(@metadata.code.compilation_priority" -> COMPILATION_PRIORITY_ANNOT
   | "(@", Plus idchar ->
       skip_annotation 1 lexbuf;
       Wax_utils.Trivia.report_item ctx Annotation "";
@@ -691,6 +696,8 @@ let rec token_rec ctx lexbuf =
       else if s = "metadata.code.branch_hint" then BRANCH_HINT_ANNOT
       else if s = "metadata.code.instr_freq" then INSTR_FREQ_ANNOT
       else if s = "metadata.code.call_targets" then CALL_TARGETS_ANNOT
+      else if s = "metadata.code.compilation_priority" then
+        COMPILATION_PRIORITY_ANNOT
       else (
         if not (String.is_valid_utf_8 s) then
           raise

@@ -1,0 +1,7 @@
+import "m" {
+    #[priority = 1]
+    fn ext();
+}
+
+#[export]
+fn f() { ext(); }

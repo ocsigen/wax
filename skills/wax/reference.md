@@ -204,7 +204,7 @@ On top of that, it enables these further proposals by default:
 | Threads / atomics | shared memory, atomic loads/stores/RMW, `atomic::fence()` |
 | Wide arithmetic | 128-bit integer ops (e.g. `i64::add128`) |
 | Branch hinting | `#[likely]` / `#[unlikely]` |
-| [Compilation hints](https://github.com/WebAssembly/compilation-hints) | `#[freq = n]` / `#[never_opt]` / `#[always_opt]`, `#[targets(f: 0.73)]` |
+| [Compilation hints](https://github.com/WebAssembly/compilation-hints) | `#[freq = n]` / `#[never_opt]` / `#[always_opt]`, `#[targets(f: 0.73)]`, `#[priority = n]` / `#[optimization = n]` / `#[run_once]` |
 | Custom page sizes | `pagesize` |
 | [Extended name section](https://github.com/WebAssembly/extended-name-section) | `$`-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip |
 | [WAT numeric values](https://github.com/WebAssembly/wat-numeric-values) | typed numeric runs in [data segments](./language.md#data-segments) (`data d = [i16: -1, 2] ++ [f32: 0.5, nan] ++ [v128: i32x4(1,2,3,4)];`); runs survive the wax↔wat round-trip |
@@ -1047,6 +1047,24 @@ let y = #[freq = 4] f(x);    // fine: the initialiser is delimited
 This is the rule Rust's experimental `stmt_expr_attributes` uses. Several hints may
 stack on one instruction, and a hint on a block statement needs no trailing `;`, as
 a plain block statement does not.
+
+The proposal's third section is per-*function*, so it is an ordinary field
+attribute rather than an expression prefix:
+
+```wax
+#[priority = 1] #[run_once]
+fn init() { /* compiled early, never optimized */ }
+
+#[priority = 5] #[optimization = 10]
+fn hot(x: i32) -> i32 { x }
+```
+
+`#[priority = n]` says how soon to compile the function relative to the others, and
+is what makes the entry exist at all. The optimization priority is optional:
+`#[optimization = n]`, or `#[run_once]` for the reserved value saying the function
+is expected to run once, so optimizing it is wasted work. A function states at most
+one of those two, and neither without `#[priority]`. It needs a body to attach to,
+so it is allowed on a defined function, not an imported one.
 
 Like branch hints, these are advisory and preserved across every conversion, so no
 compiler flag is needed. See
@@ -3711,6 +3729,9 @@ preserved with no feature flag:
 | `#[never_opt]` | `(@metadata.code.instr_freq (never_opt))` | " |
 | `#[always_opt]` | `(@metadata.code.instr_freq (always_opt))` | " |
 | `#[targets(f: 0.73)]` | `(@metadata.code.call_targets (target $f 0.73))` | `metadata.code.call_targets` |
+| `#[priority = n]` | `(@metadata.code.compilation_priority (priority n))` | `metadata.code.compilation_priority` |
+| `#[optimization = n]` | `… (optimization n)` | " |
+| `#[run_once]` | `… (run_once)` | " |
 
 `instr_freq` is one byte: an offset base-2 logarithm of the executions-per-call
 ratio, `max 1 (min 64 (floor (log2 r) + 32))`, so `32` means once. `0` is
@@ -3723,6 +3744,14 @@ Both text forms are accepted on input, per the proposal.
 write the frequency as a fraction of 1 and store the whole percent, so the round-trip
 is exact. Only the structured `(target …)` form can *name* a target; the raw-byte
 form's indices are numeric.
+
+`compilation_priority` is the one section of the family that addresses a *function*
+rather than an instruction, so its entries are keyed at offset `0`. Its payload is a
+compilation priority, optionally followed by an optimization priority; `127` is the
+"runs once" value that prints as `(run_once)`. (The proposal's prose gives 127; its
+own worked example renders the value as 31. We follow the prose, and a binary
+carrying 31 round-trips as the plain number it is.) A trailing byte beyond what is
+required is read past and ignored, per the proposal's forward-compatibility rule.
 
 Each section is emitted before the code section, since its offsets are only known
 once the bodies are encoded. A hint belongs to the operation itself, never to a

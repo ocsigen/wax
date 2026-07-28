@@ -1,0 +1,5 @@
+#[export]
+#[priority = 1]
+#[optimization = 3]
+#[run_once]
+fn f() { nop; }

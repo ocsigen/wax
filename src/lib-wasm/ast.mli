@@ -819,6 +819,10 @@ module Text : sig
         locals : (name option * valtype, location) annotated list;
         instrs : 'info instr list;
         exports : name list;
+        priority : Hints.priority option;
+            (** compilation-hints: the function's
+                [metadata.code.compilation_priority] entry, the one hint of that
+                family that is per-function rather than per-instruction. *)
       }
     | Memory of {
         id : name option;
@@ -943,6 +947,9 @@ module Binary : sig
         (** The defining function's source span; its [loc_end] locates the
             body's terminating [end] opcode (closing brace) in a source map.
             [dummy_loc] for a function decoded from a binary. *)
+    priority : Hints.priority option;
+        (** compilation-hints: this function's
+            [metadata.code.compilation_priority] entry. *)
   }
 
   type 'info data = { init : string; mode : 'info datamode }

@@ -1481,7 +1481,7 @@ let code ch =
   if pos_in ch - start_pos <> size then error ch "function body size mismatch";
   (* [start_pos] is where this function's locals declaration begins — the origin
      for branch-hint offsets (branch-hinting proposal). *)
-  (start_pos, { locals; instrs; loc = Ast.dummy_loc })
+  (start_pos, { locals; instrs; loc = Ast.dummy_loc; priority = None })
 
 let data ch =
   let mode_byte = uint ch in
@@ -1665,6 +1665,7 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
      together after the whole module is read (a section may sit before or after
      the code section). *)
   let code_metadata_sections = ref [] in
+  let code_priorities = ref [] in
   let code_body_starts = ref [] in
   ch.pos <- 8;
   let rec loop m last_section_order =
@@ -1821,6 +1822,51 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
                     m with
                     target_features = m.target_features @ Array.to_list entries;
                   }
+              | "metadata.code.compilation_priority" ->
+                  (* Compilation-hints proposal, the function-level section. It
+                     shares the family's shape — funcidx, then (offset, payload)
+                     entries — but the offset is always 0, meaning "the function
+                     itself", so it needs no instruction matching and is kept apart
+                     from the offset-keyed setters. A nonzero offset addresses no
+                     instruction here, so the entry is ignored rather than
+                     misapplied to the body. Must still precede the code section,
+                     which is where its functions are. *)
+                  if last_section_order >= 12 then
+                    error ch
+                      "metadata.code.compilation_priority must appear before \
+                       the code section";
+                  let entries =
+                    vec
+                      (fun ch ->
+                        let funcidx = uint ch in
+                        let ps =
+                          vec
+                            (fun ch ->
+                              let offset = uint ch in
+                              let len = uint ch in
+                              if len = 0 then
+                                error ch "empty compilation_priority entry";
+                              let s =
+                                String.init len (fun _ ->
+                                    Char.chr (input_byte ch))
+                              in
+                              match Hints.priority_of_payload s with
+                              | Ok p -> (offset, p)
+                              | Error msg -> error ch "%s" msg)
+                            ch
+                        in
+                        (funcidx, Array.to_list ps))
+                      ch
+                  in
+                  code_priorities :=
+                    !code_priorities
+                    @ List.filter_map
+                        (fun (funcidx, ps) ->
+                          Option.map
+                            (fun (_, p) -> (funcidx, p))
+                            (List.find_opt (fun (off, _) -> off = 0) ps))
+                        (Array.to_list entries);
+                  m
               | ( "metadata.code.branch_hint" | "metadata.code.instr_freq"
                 | "metadata.code.call_targets" ) as sname ->
                   (* Branch-hinting / compilation-hints proposals. These sections
@@ -1916,9 +1962,21 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
       0
       (Ast_utils.flatten_binary_imports res.imports)
   in
-  {
-    res with
-    code =
-      attach_code_metadata ~num_func_imports ~code_starts:!code_body_starts
-        ~sections:!code_metadata_sections res.code;
-  }
+  let code =
+    attach_code_metadata ~num_func_imports ~code_starts:!code_body_starts
+      ~sections:!code_metadata_sections res.code
+  in
+  (* The function-level priorities, indexed like the sections state them: absolute
+     function indices, so the imports come first. An entry naming an imported or
+     out-of-range function has no body to carry it and is dropped. *)
+  let code =
+    if !code_priorities = [] then code
+    else
+      List.mapi
+        (fun i (c : Ast.location code) ->
+          match List.assoc_opt (num_func_imports + i) !code_priorities with
+          | None -> c
+          | Some p -> { c with priority = Some p })
+        code
+  in
+  { res with code }

@@ -3519,6 +3519,24 @@ let start_attribute ctx name : Ast.attributes =
         (List.map (fun (c, syn) -> (c, syn, ())) entries)
         (fun guard () -> ("start", None, guard))
 
+(* Compilation-hints proposal: the function's [metadata.code.compilation_priority]
+   entry, back as the attributes it is written with. [#[priority]] always comes
+   first, since it is what makes the entry exist; the reserved optimization value
+   prints as [#[run_once]] rather than the number. *)
+let priority_attributes (p : Wax_wasm.Hints.priority option) : Ast.attributes =
+  match p with
+  | None -> []
+  | Some { compilation; optimization } ->
+      let num n = Some (Ast.no_loc_instr (Ast.Int (string_of_int n))) in
+      let int_attr k n = (k, num n, None) in
+      int_attr "priority" compilation
+      :: Option.to_list
+           (Option.map
+              (fun o ->
+                if o = Wax_wasm.Hints.run_once then ("run_once", None, None)
+                else int_attr "optimization" o)
+              optimization)
+
 let single_expression ctx ~location l =
   match l with
   | [ e ] -> e
@@ -3543,7 +3561,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
             (modulefield ctx export_tbl)
             (Wax_wasm.Ast_utils.expand_import_group f);
         None
-    | Func { locals; instrs; typ; exports = e; _ } ->
+    | Func { locals; instrs; typ; exports = e; priority; _ } ->
         let label, labels =
           LabelStack.push ~targeted:(label_targeted instrs) (LabelStack.make ())
             None
@@ -3673,7 +3691,9 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                typ;
                sign = Some sign;
                body = (label (), locals @ Stack.run (instructions ctx instrs));
-               attributes = start_attribute ctx name @ exports ctx Func name e;
+               attributes =
+                 priority_attributes priority
+                 @ start_attribute ctx name @ exports ctx Func name e;
              })
     | Import { module_; name = nm; desc; exports = e; _ } -> (
         (* Build a single [import "module" <decl>;]. A name-only

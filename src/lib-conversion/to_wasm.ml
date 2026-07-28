@@ -1993,6 +1993,34 @@ let exports ~name attributes =
       | _ -> None)
     attributes
 
+(* Compilation-hints proposal: the function's [metadata.code.compilation_priority]
+   entry, gathered from its attributes. [#[priority = n]] is what makes the entry
+   exist at all — the section has no way to state an optimization priority without
+   a compilation one — so an [#[optimization]]/[#[run_once]] without it is rejected
+   by the typer, and dropped here rather than invented. *)
+let compilation_priority attributes =
+  let num v =
+    match v with
+    | Some { Wax_lang.Ast.desc = Wax_lang.Ast.Int n; _ } ->
+        Some (int_of_string n)
+    | _ -> None
+  in
+  let find k =
+    List.find_opt (fun (k', _, g) -> k' = k && g = None) attributes
+  in
+  match find "priority" with
+  | None -> None
+  | Some (_, v, _) ->
+      let compilation = Option.value ~default:0 (num v) in
+      let optimization =
+        match find "optimization" with
+        | Some (_, v, _) -> num v
+        | None ->
+            if find "run_once" <> None then Some Wax_wasm.Hints.run_once
+            else None
+      in
+      Some { Wax_wasm.Hints.compilation; optimization }
+
 (* The sibling module fields for the guarded exports of a field: each becomes a
    standalone [(export …)] wrapped in the conditional [(@if <cond> …)], so the
    export is present only when its guard holds -- independent of the field's own
@@ -2870,6 +2898,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                       locals = List.map Ast.no_loc func_locals;
                       instrs;
                       exports = exports ~name attributes;
+                      priority = compilation_priority attributes;
                     }
               | Import _ | Import_group _ | Conditional _ | Memory _ | Data _
               | Table _ | Elem _ | Module_annotation _ ->

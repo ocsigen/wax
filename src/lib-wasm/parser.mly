@@ -181,6 +181,10 @@
 %token NEVER_OPT "never_opt"
 %token ALWAYS_OPT "always_opt"
 %token TARGET "target"
+%token COMPILATION_PRIORITY_ANNOT "(@metadata.code.compilation_priority"
+%token PRIORITY "priority"
+%token OPTIMIZATION "optimization"
+%token RUN_ONCE "run_once"
 %token IF_ANNOT "(@if"
 %token THEN_ANNOT "(@then"
 %token ELSE_ANNOT "(@else"
@@ -456,6 +460,14 @@ let target_percent loc n =
 let call_targets_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
   match Hints.call_targets_of_payload s.Ast.desc with
   | Ok l -> List.map (fun (i, pct) -> (annot loc (Num (Uint32.of_int i)), pct)) l
+  | Error msg ->
+      raise (Wax_utils.Parsing.syntax_error_pair
+               (loc, Wax_utils.Message.text (msg ^ "\n")))
+
+(* The raw-byte spelling of [(@metadata.code.compilation_priority …)]. *)
+let priority_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
+  match Hints.priority_of_payload s.Ast.desc with
+  | Ok p -> p
   | Error msg ->
       raise (Wax_utils.Parsing.syntax_error_pair
                (loc, Wax_utils.Message.text (msg ^ "\n")))
@@ -756,6 +768,23 @@ call_targets_payload:
 
 call_target:
 | "(" TARGET i = index n = number ")" { (i, target_percent $loc(n) n) }
+
+(* The function-level [(@metadata.code.compilation_priority …)], written inside
+   [(func …)] after the type use — the position that means the offset-0 entry the
+   section keys it under. [(run_once)] is the reserved optimization priority; the
+   raw byte string is accepted too. *)
+compilation_priority_annot:
+| COMPILATION_PRIORITY_ANNOT p = compilation_priority_payload ")" { p }
+
+compilation_priority_payload:
+| "(" PRIORITY n = NAT ")" o = compilation_priority_opt
+  { { Hints.compilation = int_of_string n; optimization = o } }
+| s = STRING { priority_of_annotation $loc(s) s }
+
+compilation_priority_opt:
+| { None }
+| "(" OPTIMIZATION n = NAT ")" { Some (int_of_string n) }
+| "(" RUN_ONCE ")" { Some Hints.run_once }
 
 number:
 | n = NAT { n }
@@ -1198,8 +1227,9 @@ external_type:
 
 func:
 | "(" FUNC id = ID ? exports = exports typ = type_use
+   priority = compilation_priority_annot ?
    locals = locals instrs = instructions ")"
-  { annot $sloc (Func {id; typ; locals; instrs; exports}) }
+  { annot $sloc (Func {id; typ; locals; instrs; exports; priority}) }
 | "(" FUNC id = ID ?
   exports = exports imp = inline_import
   t = type_use ")"

@@ -953,6 +953,10 @@ module Text = struct
         locals : (name option * valtype, location) annotated list;
         instrs : 'info instr list;
         exports : name list;
+        (* compilation-hints proposal: the function's
+           [metadata.code.compilation_priority] entry, the one hint of that family
+           that is per-function rather than per-instruction. *)
+        priority : Hints.priority option;
       }
     | Memory of {
         id : name option;
@@ -1080,6 +1084,9 @@ module Binary = struct
         (* The defining function's source span; its [loc_end] is where the body's
            terminating [end] opcode is mapped (closing brace). [dummy_loc] for a
            function decoded from a binary, which carries no source location. *)
+    priority : Hints.priority option;
+        (* compilation-hints proposal: this function's
+           [metadata.code.compilation_priority] entry. *)
   }
 
   type 'info data = { init : string; mode : 'info datamode }

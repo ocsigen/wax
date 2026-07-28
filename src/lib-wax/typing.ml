@@ -617,6 +617,24 @@ module Error = struct
          "A call-target hint may only prefix an indirect call. This callee is \
           a function, so the call is direct and its target is already known.")
 
+  (* Compilation-hints proposal: an optimization priority is stated only alongside
+     a compilation one, so either spelling of it needs [#[priority]] too. *)
+  let priority_required context ~location which =
+    report context ~location
+      (text "The"
+       ++ kw ("#[" ^ which ^ "]")
+       ++ text "attribute needs a" ++ kw "#[priority = n]"
+      ^^ text ".")
+
+  (* Blamed at the [#[optimization = n]] value: an attribute carries no span of
+     its own, and [#[run_once]] has no value to fall back on, so pointing at the
+     one span that exists beats a related label spanning the whole function. *)
+  let conflicting_optimization context ~location =
+    report context ~location
+      (text "A function states at most one optimization priority:"
+       ++ kw "#[optimization = n]" ++ text "or" ++ kw "#[run_once]"
+      ^^ text ", not both.")
+
   let call_targets_over_100 context ~location ~total =
     report context ~location
       (((text "The call-target frequencies add up to" ++ Message.int total)
@@ -11182,7 +11200,7 @@ let field_attributes (field : _ modulefield) =
    inside an [import "module" { ... }] block, where a name-only
    [#[import = "name"]] overrides the imported name. *)
 let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
-    ~default_location (attributes : Ast.attributes) =
+    ?(priority_ok = false) ~default_location (attributes : Ast.attributes) =
   List.iter
     (fun ( name,
            value,
@@ -11240,8 +11258,51 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
                 "a string");
           if not import_ok then
             Error.annotation_not_allowed diagnostics ~location "import"
+      (* Compilation-hints proposal: the function-level compilation priority. It
+         needs a body to attach to, so it is allowed on a defined function only —
+         an imported one has no code-section entry to key an offset-0 hint in. *)
+      | "priority" | "optimization" ->
+          (match value with
+          | Some { desc = Int _; _ } -> ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location name
+                "an integer");
+          if not priority_ok then
+            Error.annotation_not_allowed diagnostics ~location name
+      | "run_once" ->
+          (match value with
+          | None -> ()
+          | Some _ ->
+              Error.annotation_value_mismatch diagnostics ~location "run_once"
+                "no value");
+          if not priority_ok then
+            Error.annotation_not_allowed diagnostics ~location "run_once"
       | _ -> Error.unknown_annotation diagnostics ~location name)
-    attributes
+    attributes;
+  (* The section states an optimization priority only alongside a compilation
+     one, and [run_once] is just a spelling of a particular optimization value, so
+     either without [#[priority]] would have nowhere to go. Reject rather than
+     invent a compilation priority the author did not choose. *)
+  if priority_ok then begin
+    let find k = List.find_opt (fun (k', _, _) -> k' = k) attributes in
+    let locate (_, v, _) =
+      match v with
+      | Some (x : location instr) -> x.info
+      | None -> default_location
+    in
+    if find "priority" = None then
+      List.iter
+        (fun k ->
+          Option.iter
+            (fun a ->
+              Error.priority_required diagnostics ~location:(locate a) k)
+            (find k))
+        [ "optimization"; "run_once" ];
+    match (find "optimization", find "run_once") with
+    | Some a, Some _ ->
+        Error.conflicting_optimization diagnostics ~location:(locate a)
+    | _ -> ()
+  end
 
 (* Validate the annotations on a module field: reject unknown ones, check the
    value shape of [export] / [start] / [module], and allow each only where it is
@@ -11256,8 +11317,9 @@ let check_attributes diagnostics
     | Data _ | Elem _ | Type _ | Import _ | Import_group _ | Conditional _ ->
         (false, false, false)
   in
+  let priority_ok = match field.desc with Func _ -> true | _ -> false in
   check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok
-    ~import_ok:false ~default_location:field.info
+    ~import_ok:false ~priority_ok ~default_location:field.info
     (field_attributes field.desc)
 
 (*** Type-checking a configuration ***)

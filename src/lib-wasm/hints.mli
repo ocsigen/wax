@@ -99,3 +99,28 @@ val call_targets_of_payload : string -> ((int * int) list, string) result
     numeric: only the structured text form can name a target. *)
 
 val call_targets_payload : (int * int) list -> string
+
+(** {1 Compilation priority}
+
+    [metadata.code.compilation_priority] is the one hint of this family that is
+    per-function rather than per-instruction: it says how soon a function should
+    be compiled, and how hard. It lives on the function rather than in {!t}, and
+    is keyed in the section at offset [0]. *)
+
+type priority = {
+  compilation : int;
+      (** How soon to compile this function, relative to the others. *)
+  optimization : int option;
+      (** How hard to optimize it, if stated; {!run_once} means "expected to run
+          once", so optimizing it is wasted work. *)
+}
+
+val run_once : int
+(** [127]: the optimization priority meaning the function runs once. *)
+
+val priority_of_payload : string -> (priority, string) result
+(** Decode a compilation priority and, if present, an optimization priority.
+    Trailing bytes are ignored rather than rejected, per the proposal's
+    forward-compatibility rule. *)
+
+val priority_payload : priority -> string

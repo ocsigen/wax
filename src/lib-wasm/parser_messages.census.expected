@@ -30,15 +30,14 @@
        <_>This '(' opens the enclosing construct.
     1x Assuming that the exports are complete, expecting '(', a memory type, a page-size clause, an address type, or an inline import.
        <^_>these exports
-    1x Assuming that the exports are complete, expecting ')', a local declaration, a type use, an inline import, or instructions.
-       <^_>these exports
-       <_>This '(' opens the enclosing construct.
     1x Assuming that the exports are complete, expecting ')', a type use, or an inline import.
        <^_>these exports
        <_>This '(' opens the enclosing construct.
     1x Assuming that the exports are complete, expecting a global type, or an inline import.
        <^_>these exports
     1x Assuming that the exports are complete, expecting a reference type, a table type, an address type, or an inline import.
+       <^_>these exports
+    1x Assuming that the exports are complete, expecting a type use, or an inline import.
        <^_>these exports
     4x Assuming that the expression is complete, expecting ')'.
        <^_>this expression
@@ -86,6 +85,9 @@
        <_>This '(' opens the enclosing construct.
     1x Assuming that the script is complete, expecting end of file.
        <^_>this script
+    1x Assuming that the type use is complete, expecting ')', a compilation priority annot, a local declaration, or instructions.
+       <^_>this type use
+       <_>This '(' opens the enclosing construct.
     7x Assuming that the type use is complete, expecting ')'.
        <^_>this type use
        <_>This '(' opens the enclosing construct.
@@ -194,6 +196,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or an integer.
        <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or an optimization priority.
     1x Expecting ')', or an unnamed parameter.
     1x Expecting ')', or an unnamed parameter.
        <_>This '(' opens the enclosing construct.
@@ -206,7 +209,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or parameters and results.
        <_>This '(' opens the enclosing construct.
-  108x Expecting ')'.
+  112x Expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'always_opt', 'freq', or 'never_opt'.
     1x Expecting 'and', 'not', 'or', a comparison operator, or an integer.
@@ -243,7 +246,9 @@
     1x Expecting 'nan', or a 64-bit float.
     1x Expecting 'null', or a heap type.
     1x Expecting 'offset', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+    1x Expecting 'optimization', or 'run_once'.
     1x Expecting 'pagesize'.
+    1x Expecting 'priority'.
     1x Expecting 'ref'.
     1x Expecting 'switch', or an index.
     1x Expecting 'table', 'offset', 'ref', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
@@ -260,6 +265,7 @@
     1x Expecting a block type, a folded instruction, or a folded then.
     1x Expecting a block type, a label, instructions, or legacy catches.
     1x Expecting a block type, instructions, or legacy catches.
+    1x Expecting a compilation priority.
     1x Expecting a composite type, an index, or descriptor clauses.
     1x Expecting a composite type, or descriptor clauses.
     2x Expecting a composite type.
@@ -325,7 +331,7 @@
    85x Expecting an index.
     1x Expecting an instr freq payload.
     1x Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
-    5x Expecting an integer.
+    7x Expecting an integer.
     2x Expecting an offset.
     1x Expecting another '(result' group, an instruction, or ')'.
     1x Expecting cond then fields.

@@ -6,14 +6,16 @@ let rec map_fields fields =
   List.map
     (fun field ->
       match field.desc with
-      | Text.Func { id = None; typ; locals; instrs; exports }
+      | Text.Func { id = None; typ; locals; instrs; exports; priority }
         when match exports with
              | export :: _ -> Wax_wasm.Lexer.is_valid_identifier export.desc
              | [] -> false ->
           let export = List.hd exports in
           {
             field with
-            desc = Text.Func { id = Some export; typ; locals; instrs; exports };
+            desc =
+              Text.Func
+                { id = Some export; typ; locals; instrs; exports; priority };
           }
       | Text.Module_if_annotation { cond; then_fields; else_fields } ->
           {

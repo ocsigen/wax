@@ -811,6 +811,24 @@ This is the rule Rust's experimental `stmt_expr_attributes` uses. Several hints 
 stack on one instruction, and a hint on a block statement needs no trailing `;`, as
 a plain block statement does not.
 
+The proposal's third section is per-*function*, so it is an ordinary field
+attribute rather than an expression prefix:
+
+```wax
+#[priority = 1] #[run_once]
+fn init() { /* compiled early, never optimized */ }
+
+#[priority = 5] #[optimization = 10]
+fn hot(x: i32) -> i32 { x }
+```
+
+`#[priority = n]` says how soon to compile the function relative to the others, and
+is what makes the entry exist at all. The optimization priority is optional:
+`#[optimization = n]`, or `#[run_once]` for the reserved value saying the function
+is expected to run once, so optimizing it is wasted work. A function states at most
+one of those two, and neither without `#[priority]`. It needs a body to attach to,
+so it is allowed on a defined function, not an imported one.
+
 Like branch hints, these are advisory and preserved across every conversion, so no
 compiler flag is needed. See
 [Instructions → Branch Hints](correspondence/instructions.md#branch-hints) for the

@@ -604,6 +604,36 @@ let call_targets_annotation targets =
            ])
        targets)
 
+(* Compilation-hints proposal:
+   [(@metadata.code.compilation_priority (priority 1) (optimization 10))], the
+   one hint of the family that belongs to a function rather than an instruction.
+   Printed inside [(func …)] after the type use, which is the offset-0 position
+   the section keys it under. Always the structured form; [run_once] prints as its
+   keyword. *)
+let compilation_priority_annotations (p : Hints.priority option) =
+  Option.to_list
+    (Option.map
+       (fun ({ compilation; optimization } : Hints.priority) ->
+         hint_annot "compilation_priority"
+           (list
+              [
+                atom ~style:Annotation "priority";
+                atom ~style:Constant (string_of_int compilation);
+              ]
+           :: Option.to_list
+                (Option.map
+                   (fun o ->
+                     if o = Hints.run_once then
+                       list [ atom ~style:Annotation "run_once" ]
+                     else
+                       list
+                         [
+                           atom ~style:Annotation "optimization";
+                           atom ~style:Constant (string_of_int o);
+                         ])
+                   optimization)))
+       p)
+
 (* Branch-hinting / compilation-hints proposals: the [(@metadata.code.…)]
    annotations an instruction's hints print as, in section order. *)
 let hint_annotations (h : _ Hints.t) =
@@ -1209,7 +1239,7 @@ let rec modulefield f =
      inner name — the array element itself is built with a dummy location. *)
   | Types [| t |] -> subtype ~loc t
   | Types l -> list ~loc (keyword "rec" :: List.map subtype (Array.to_list l))
-  | Func { id; typ; locals; instrs = i; exports = e } ->
+  | Func { id; typ; locals; instrs = i; exports = e; priority } ->
       let local_sexp e =
         let nm, t = e.Ast.desc in
         (* The hovbox lets a comment before any local break correctly while the
@@ -1223,7 +1253,8 @@ let rec modulefield f =
       in
       list ~loc
         (block (keyword "func" :: (opt_id id @ exports e @ fundecl typ))
-        :: (locals_block @ instrs i))
+        :: (compilation_priority_annotations priority @ locals_block @ instrs i)
+        )
   | Import { module_; name; id; desc; exports = e } -> (
       match e with
       | [] ->

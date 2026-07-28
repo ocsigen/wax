@@ -245,6 +245,9 @@ preserved with no feature flag:
 | `#[never_opt]` | `(@metadata.code.instr_freq (never_opt))` | " |
 | `#[always_opt]` | `(@metadata.code.instr_freq (always_opt))` | " |
 | `#[targets(f: 0.73)]` | `(@metadata.code.call_targets (target $f 0.73))` | `metadata.code.call_targets` |
+| `#[priority = n]` | `(@metadata.code.compilation_priority (priority n))` | `metadata.code.compilation_priority` |
+| `#[optimization = n]` | `… (optimization n)` | " |
+| `#[run_once]` | `… (run_once)` | " |
 
 `instr_freq` is one byte: an offset base-2 logarithm of the executions-per-call
 ratio, `max 1 (min 64 (floor (log2 r) + 32))`, so `32` means once. `0` is
@@ -257,6 +260,14 @@ Both text forms are accepted on input, per the proposal.
 write the frequency as a fraction of 1 and store the whole percent, so the round-trip
 is exact. Only the structured `(target …)` form can *name* a target; the raw-byte
 form's indices are numeric.
+
+`compilation_priority` is the one section of the family that addresses a *function*
+rather than an instruction, so its entries are keyed at offset `0`. Its payload is a
+compilation priority, optionally followed by an optimization priority; `127` is the
+"runs once" value that prints as `(run_once)`. (The proposal's prose gives 127; its
+own worked example renders the value as 31. We follow the prose, and a binary
+carrying 31 round-trips as the plain number it is.) A trailing byte beyond what is
+required is read past and ignored, per the proposal's forward-compatibility rule.
 
 Each section is emitted before the code section, since its offsets are only known
 once the bodies are encoded. A hint belongs to the operation itself, never to a

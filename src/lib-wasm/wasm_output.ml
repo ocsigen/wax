@@ -1549,7 +1549,10 @@ let module_ ~out_channel ?output_file ?(source_map = false)
      while encoding its body (the [hint_sink] fires per hinted instruction) and
      emit one [metadata.code.*] section per kind afterwards. Function indices are
      absolute (defined functions follow the imported ones). *)
-  let branch_hints = ref [] and freq_hints = ref [] and target_hints = ref [] in
+  let branch_hints = ref []
+  and freq_hints = ref []
+  and target_hints = ref []
+  and priorities = ref [] in
   if m.code <> [] then (
     let num_func_imports =
       List.fold_left
@@ -1622,6 +1625,14 @@ let module_ ~out_channel ?output_file ?(source_map = false)
                     (fun (l : (int * int) list Hints.hint) ->
                       (o, Hints.call_targets_payload l.value))
                     h.Hints.targets));
+        (* The function-level section: one entry per function that has a priority,
+           keyed at offset 0 — the position that means "the function itself". *)
+        Option.iter
+          (fun p ->
+            priorities :=
+              (num_func_imports + !code_index, [ (0, Hints.priority_payload p) ])
+              :: !priorities)
+          c.priority;
         incr code_index)
       code_content m.code;
 
@@ -1636,6 +1647,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
         ("branch_hint", branch_hints);
         ("instr_freq", freq_hints);
         ("call_targets", target_hints);
+        ("compilation_priority", priorities);
       ];
 
     let len = Buffer.length code_content in
