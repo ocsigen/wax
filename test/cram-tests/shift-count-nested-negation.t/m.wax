@@ -1,0 +1,8 @@
+#[export]
+fn single(x: i32) -> i32 {
+    x << -117775691;
+}
+#[export]
+fn double(x: i32) -> i32 {
+    x << --117775691;
+}

@@ -504,14 +504,20 @@ let int_literal_value_is n (e : _ Ast.instr) =
 (* Whether [e] is the integer literal zero. *)
 let int_literal_value_is_zero e = int_literal_value_is 0L e
 
-(* The [int64] value of a constant integer operand, looking through a leading
-   sign. A negative literal is [UnOp (Neg, Int …)], not a bare [Int], so the
-   constant-condition and shift lints below miss it unless they look through the
-   [Neg] — the Wasm validator sees the folded [i32.const] directly. *)
+(* The [int64] value of a constant integer operand, folding a leading sign
+   exactly as [To_wasm] does — so the lint fires only when the emitted operand is
+   a folded [i32.const], matching what the Wasm validator sees. A negative literal
+   is [UnOp (Neg, Int …)], not a bare [Int]; [To_wasm] folds a [Neg] only when its
+   operand is a bare literal ([-40] -> [i32.const -40]), and treats [Pos] as
+   transparent ([+-40] -> [i32.const -40]), but a [Neg] over anything else lowers
+   to a runtime [i32.sub 0 x] ([--40] / [-+40]) that is NOT a constant operand. So
+   fold a bare-literal [Neg] and recurse through [Pos] only; anything deeper is
+   [None]. Folding a nested [Neg] here over-fires relative to the validator. *)
 let rec int_operand_value (e : _ Ast.instr) =
   match e.desc with
   | Ast.Int s -> int_literal_value s
-  | UnOp ({ desc = Neg; _ }, a) -> Option.map Int64.neg (int_operand_value a)
+  | UnOp ({ desc = Neg; _ }, { desc = Ast.Int s; _ }) ->
+      Option.map Int64.neg (int_literal_value s)
   | UnOp ({ desc = Pos; _ }, a) -> int_operand_value a
   | _ -> None
 
@@ -525,18 +531,23 @@ let rec int_operand_value (e : _ Ast.instr) =
    genuinely unconstrained operand falls back to a default. *)
 let lint_shift ctx op result rhs =
   (* Parse a constant shift count unsigned: a hex literal past [2^63] wraps to a
-     negative [int64] under a signed parse, so compare unsigned. Look through a
-     leading sign, as [lint_condition] does — a negative count (masked modulo the
-     width, so still surprising) is [UnOp (Neg, Int …)], not a bare [Int]. A
-     literal exceeding [u64] ([None]) is left alone (astronomically large, and
-     beyond what the message can render). *)
+     negative [int64] under a signed parse, so compare unsigned. Fold a leading
+     sign exactly as [int_operand_value] / [To_wasm] do — a bare-literal [Neg]
+     (a negative count, masked modulo the width, is [UnOp (Neg, Int …)]) and a
+     transparent [Pos]; a [Neg] over anything else ([--n]) lowers to a runtime
+     [i32.sub 0 x] the Wasm validator does not see as a constant, so do not fold
+     it. A literal exceeding [u64] ([None]) is left alone (astronomically large,
+     and beyond what the message can render). *)
+  let of_int s =
+    let bits = String.concat "" (String.split_on_char '_' s) in
+    if String.starts_with ~prefix:"0x" bits then Int64.of_string_opt bits
+    else Int64.of_string_opt ("0u" ^ bits)
+  in
   let rec shift_count (e : _ Ast.instr) =
     match e.desc with
-    | Ast.Int s ->
-        let bits = String.concat "" (String.split_on_char '_' s) in
-        if String.starts_with ~prefix:"0x" bits then Int64.of_string_opt bits
-        else Int64.of_string_opt ("0u" ^ bits)
-    | UnOp ({ desc = Neg; _ }, a) -> Option.map Int64.neg (shift_count a)
+    | Ast.Int s -> of_int s
+    | UnOp ({ desc = Neg; _ }, { desc = Ast.Int s; _ }) ->
+        Option.map Int64.neg (of_int s)
     | UnOp ({ desc = Pos; _ }, a) -> shift_count a
     | _ -> None
   in
@@ -593,7 +604,12 @@ let round_to_f32 f = Int32.float_of_bits (Int32.bits_of_float f)
 let rec float_operand_value i =
   match i.desc with
   | Ast.Float s -> float_literal_value s
-  | UnOp ({ desc = Neg; _ }, e) -> Option.map Float.neg (float_operand_value e)
+  | UnOp ({ desc = Neg; _ }, { desc = Ast.Float s; _ }) ->
+      (* [To_wasm] folds a [Neg] into a negated literal only when its operand is a
+         bare literal ([-1e30] -> [f64.const -1e30]); a [Neg] over anything else
+         ([--1e30]) lowers to a runtime [f64.neg] the Wasm validator does not fold,
+         so — as for [int_operand_value] — fold only the bare-literal case. *)
+      Option.map Float.neg (float_literal_value s)
   | UnOp ({ desc = Pos; _ }, e) -> float_operand_value e
   | Cast (e, Valtype F32) -> Option.map round_to_f32 (float_operand_value e)
   | Cast (e, Valtype F64) -> float_operand_value e
