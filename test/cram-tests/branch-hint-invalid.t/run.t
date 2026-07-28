@@ -22,7 +22,7 @@ that named only `if`/`br_if`:
     A branch hint may only prefix a conditional branch (if, br_if, or br_on_*).
    ──➤  misplaced.wat:1:15
   1 │ (module (func (@metadata.code.branch_hint "\00") i32.const 0 drop))
-    ·               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
   [128]
 

@@ -412,15 +412,18 @@ let branch_hint_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
    rejected. So the grammar attaches it unconditionally; [validation] (and the
    Wax typer) reject a hint on anything but a conditional branch.
 
-   [loc] spans the annotation and the instruction; the instruction keeps its own
-   location, since the hint is no longer a node of its own. The wider span is
-   still recorded, so trivia attaches exactly as it did when it was. *)
-let hinted loc setters (i : _ instr) =
-  let span : Wax_utils.Ast.location =
-    {loc_start = fst loc; loc_end = snd loc}
-  in
+   The instruction keeps its own location: a hint is no longer a node of its own,
+   and each carries the span of the annotation it was written as, so a diagnostic
+   about a misplaced hint points at that annotation rather than at the whole
+   prefix. *)
+(* The source span of a single [(@metadata.code.…)] annotation, which is what a
+   diagnostic about that hint is blamed at. *)
+let annot_span loc : Wax_utils.Ast.location =
+  {loc_start = fst loc; loc_end = snd loc}
+
+let hinted setters (i : _ instr) =
   let set i =
-    {i with hints = List.fold_left (fun h f -> f span h) i.hints setters}
+    {i with hints = List.fold_left (fun h f -> f h) i.hints setters}
   in
   (* A hint belongs on the operation itself, never on a [Folded] wrapper: the
      opcode is emitted only after the folded operands, so that is where the
@@ -722,16 +725,19 @@ table_type:
 hinted_unfolded:
 | i = plain_instruction { i }
 | i = blockinstr { i }
-| h = hint_annot i = hinted_unfolded { hinted $sloc [h] i }
+| h = hint_annot i = hinted_unfolded { hinted [h] i }
 
 hint_annot:
 | BRANCH_HINT_ANNOT s = STRING ")"
   { let h = branch_hint_of_annotation $loc(s) s in
-    fun span hints -> Hints.branch span h hints }
+    let span = annot_span $sloc in
+    fun hints -> Hints.branch span h hints }
 | INSTR_FREQ_ANNOT f = instr_freq_payload ")"
-  { fun span hints -> Hints.freq span f hints }
+  { let span = annot_span $sloc in
+    fun hints -> Hints.freq span f hints }
 | CALL_TARGETS_ANNOT l = call_targets_payload ")"
-  { fun span hints -> Hints.targets span l hints }
+  { let span = annot_span $sloc in
+    fun hints -> Hints.targets span l hints }
 
 (* [(freq r)] gives the executions-per-call ratio, which the section stores as an
    offset base-2 logarithm; [(never_opt)]/[(always_opt)] are its reserved values.
@@ -1018,7 +1024,7 @@ instructions:
    the conditional branch that follows it (unfolded [if]/[br_if]/[br_on_*] or the
    folded form). [hinted] rejects the annotation on any other instruction. *)
 | h = hint_annot i = hinted_unfolded r = instructions
-  { hinted $sloc [h] i :: r }
+  { hinted [h] i :: r }
 (* A hinted folded instruction ([(@…) (if …)]) is handled by [folded_instruction]
    itself (see its first production), reached here via the [folded_instruction]
    case above; a dedicated statement-level rule would duplicate that derivation
@@ -1070,7 +1076,7 @@ folded_instruction:
    binaryen both emit (the annotation binds to the wrapped branch's opcode); wax's
    printer produces it, so the parser must accept it here as well as at statement
    position. [hinted] rejects the annotation on anything but a conditional branch. *)
-| h = hint_annot i = folded_instruction { hinted $sloc [h] i }
+| h = hint_annot i = folded_instruction { hinted [h] i }
 | "(" i = plain_instruction l = folded_instruction * ")"
   { with_loc $sloc (Folded (i, l)) }
 (* The inner block-family node is given a span ending at the body

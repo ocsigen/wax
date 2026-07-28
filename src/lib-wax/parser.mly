@@ -223,16 +223,17 @@ let is_branch_hint_target = function
   | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ -> true
   | _ -> false
 
-(* [loc] spans the attribute and the instruction; the instruction keeps its own
-   location, since the hint is no longer a node of its own. The wider span is
-   still recorded, so trivia attaches exactly as it did when it was. *)
-let hinted loc h (i : _ instr) =
+(* The instruction keeps its own location: a hint is no longer a node of its own,
+   and carries the span of the attribute it was written as — [aloc] — so a
+   diagnostic about a misplaced hint points at that attribute rather than at the
+   whole prefix. *)
+let hinted aloc h (i : _ instr) =
   if is_branch_hint_target i.desc then
-    {i with hints = Wax_wasm.Hints.branch (location_of loc) h i.hints}
+    {i with hints = Wax_wasm.Hints.branch (location_of aloc) h i.hints}
   else
     raise
       (Wax_utils.Parsing.syntax_error_pair
-         (loc,
+         (aloc,
            Wax_utils.Message.text ("A branch hint may only prefix a conditional branch (if, br_if, or \
            br_on_*).\n") ))
 
@@ -717,7 +718,7 @@ attribute:
    Parsed as an ordinary attribute (the lexer no longer has dedicated tokens);
    [branch_hint_of_attr] recovers the hint and rejects any other attribute. *)
 %inline branch_hint_attr:
-| a = attribute { branch_hint_of_attr $loc(a) a }
+| a = attribute { ($loc(a), branch_hint_of_attr $loc(a) a) }
 
 (* The conditional branches that carry an operand ([if] is a [blockinstr], handled
    separately). Shared by the plain plaininstr productions and the hinted wrapper
@@ -923,7 +924,7 @@ blockinstr:
 (* Branch-hinting proposal: a hinted [if] stays a [blockinstr] (so, like a plain
    [if], it needs no trailing [;]); [hinted] rejects the attribute on any other
    block form. *)
-| h = branch_hint_attr i = blockinstr { hinted $sloc h i }
+| h = branch_hint_attr i = blockinstr { hinted (fst h) (snd h) i }
 | DISPATCH index = expression
   "[" le = case_labels "]"
   "{" arms = semi_list(dispatch_arm) "}"
@@ -1082,7 +1083,7 @@ plaininstr:
 (* Branch-hinting proposal: [#[likely]] / [#[unlikely]] annotates the
    [br_if]/[br_on_*] that follows; a hinted [if] is a [blockinstr] (above). *)
 | h = branch_hint_attr b = branch_expr
-  { hinted $sloc h b }
+  { hinted (fst h) (snd h) b }
 | SUSPEND t = tag_name "(" l = expression_list ")"
   { with_loc $sloc (Suspend (t, l)) }
 (* The postfix handler clause of a [resume]-family method call, binding tightly

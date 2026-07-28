@@ -46,9 +46,8 @@ at the instruction it decorates:
   1 │ (module
   2 │   (func $f (result i32)
   3 │     (@metadata.code.instr_freq (freq 4))
-    · ╭───^
+    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │     (i32.const 0)))
-    · ╰───────────────^
   5 │ 
   [128]
 
@@ -64,8 +63,7 @@ meaningless rather than merely imprecise.
   5 │   (table $t funcref (elem $a $b))
   6 │   (func (export "f") (result i32)
   7 │     (@metadata.code.call_targets (target $a 0.8) (target $b 0.5))
-    · ╭───^
+    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   8 │     (call_indirect $t (type $ft) (i32.const 0))))
-    · ╰─────────────────────────────────────────────^
   9 │ 
   [128]
