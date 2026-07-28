@@ -59,12 +59,45 @@ let branch_hint_attr pp likely =
   attribute pp (if likely then "#[likely]" else "#[unlikely]");
   space pp ()
 
+(* Compilation-hints proposal: the frequency attribute. The reserved values print
+   as their own keywords; otherwise the byte stands for an executions-per-call
+   ratio. [%.17g] for a fractional one, so the decimal reads back as the same
+   double and re-encodes to the same byte.
+
+   A byte a hand-written binary put outside the formula's range has no ratio and
+   so no Wax spelling — Wax has no raw-byte form, unlike the WAT annotation — so
+   decompiling one to Wax drops the hint. It cannot arise from Wax itself, and a
+   dropped hint costs performance, never meaning. *)
+let freq_attr pp (b : Wax_wasm.Hints.freq) =
+  let emit s =
+    attribute pp ("#[" ^ s ^ "]");
+    space pp ()
+  in
+  if b = Wax_wasm.Hints.never_opt then emit "never_opt"
+  else if b = Wax_wasm.Hints.always_opt then emit "always_opt"
+  else
+    match Wax_wasm.Hints.ratio_of_freq b with
+    | Some r when Float.is_integer r && r >= 1. ->
+        emit (Printf.sprintf "freq = %.0f" r)
+    | Some r -> emit (Printf.sprintf "freq = %.17g" r)
+    | None -> ()
+
 (* Branch-hinting / compilation-hints proposals: the attributes an instruction's
-   hints print as, before the instruction itself. *)
-let hint_attrs pp (h : _ Wax_wasm.Hints.t) =
+   hints print as, before the instruction itself, in section order.
+
+   Every hint is printed, on a legal target or not: on an illegal one, printing the
+   attribute is what makes the Wax parser reject the module, so an invalid binary
+   stays invalid through the round trip instead of being laundered into valid
+   source. Placement is [get_prec]'s business — a hinted instruction binds at the
+   loosest precedence, so a tighter context parenthesizes it. *)
+let hint_attrs pp (i : _ Ast.instr) =
+  let h = i.hints in
   Option.iter
     (fun (b : bool Wax_wasm.Hints.hint) -> branch_hint_attr pp b.value)
-    h.Wax_wasm.Hints.branch
+    h.Wax_wasm.Hints.branch;
+  Option.iter
+    (fun (f : Wax_wasm.Hints.freq Wax_wasm.Hints.hint) -> freq_attr pp f.value)
+    h.Wax_wasm.Hints.freq
 
 (* Comment preservation: emit the trivia (comments, blank lines) the lexer
    collected, looked up by AST-node location. The rendering logic is shared with
@@ -607,36 +640,41 @@ let array_instr pp nm f =
       cut pp ())
 
 let get_prec (i : _ Ast.instr) =
-  match i.desc with
-  | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
-  | If_annotation _ | Dispatch _ | Match _ ->
-      Atom
-  | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
-  | Float _ | Struct _ | StructDefault _ | StructDesc _ | StructDefaultDesc _
-  | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | ArrayGet _
-  | Sequence _ ->
-      Atom
-  | ArraySet _ | Set _ | Tee _ -> Assignement
-  | Call _ | TailCall _ -> CallAndFieldAccess
-  | ContNew _ | ContBind _ | Suspend _ | Switch _ -> CallAndFieldAccess
-  (* A resume-family instruction with handlers carries its postfix [on] clause,
+  (* A hint attribute is parsed at the loosest precedence (it takes the whole
+     expression that follows it), so a hinted instruction in a tighter context has
+     to be parenthesized however tightly its own [desc] would bind. *)
+  if not (Wax_wasm.Hints.is_empty i.hints) then Instruction
+  else
+    match i.desc with
+    | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
+    | If_annotation _ | Dispatch _ | Match _ ->
+        Atom
+    | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+    | Int _ | Float _ | Struct _ | StructDefault _ | StructDesc _
+    | StructDefaultDesc _ | Array _ | ArrayDefault _ | ArrayFixed _
+    | ArraySegment _ | ArrayGet _ | Sequence _ ->
+        Atom
+    | ArraySet _ | Set _ | Tee _ -> Assignement
+    | Call _ | TailCall _ -> CallAndFieldAccess
+    | ContNew _ | ContBind _ | Suspend _ | Switch _ -> CallAndFieldAccess
+    (* A resume-family instruction with handlers carries its postfix [on] clause,
      which binds like [as]/[is]. *)
-  | Resume (_, h, _) | ResumeThrow (_, _, h, _) | ResumeThrowRef (_, h, _) ->
-      if h = [] then CallAndFieldAccess else Cast
-  | On _ -> Cast
-  | Cast _ | CastDesc _ | Test _ -> Cast
-  | NonNull _ -> UnaryPostfix
-  | UnOp _ -> UnaryPrefix
-  | StructGet _ | StructSet _ | GetDescriptor _ -> CallAndFieldAccess
-  | BinOp (op, _, _) ->
-      let out, _, _ = prec_op op.desc in
-      out
-  | Let _ | Labelled _ -> Instruction
-  | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-  | Throw _ | ThrowRef _ | Return _ ->
-      Branch
-  | Select _ -> Select
+    | Resume (_, h, _) | ResumeThrow (_, _, h, _) | ResumeThrowRef (_, h, _) ->
+        if h = [] then CallAndFieldAccess else Cast
+    | On _ -> Cast
+    | Cast _ | CastDesc _ | Test _ -> Cast
+    | NonNull _ -> UnaryPostfix
+    | UnOp _ -> UnaryPrefix
+    | StructGet _ | StructSet _ | GetDescriptor _ -> CallAndFieldAccess
+    | BinOp (op, _, _) ->
+        let out, _, _ = prec_op op.desc in
+        out
+    | Let _ | Labelled _ -> Instruction
+    | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
+    | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+    | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | Return _ ->
+        Branch
+    | Select _ -> Select
 
 let is_block (i : _ Ast.instr) =
   match i.desc with
@@ -657,7 +695,10 @@ let is_block (i : _ Ast.instr) =
 
 let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   let actual = get_prec i in
-  if prec > actual then false
+  (* A hinted instruction starts with its attribute's [#], not with the block's
+     [{], so it needs none of the block-at-statement-start disambiguation. *)
+  if not (Wax_wasm.Hints.is_empty i.hints) then false
+  else if prec > actual then false
   else
     match i.desc with
     | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
@@ -783,7 +824,7 @@ let match_pattern pp (pat : Ast.match_pattern) =
 let rec instr prec pp (i : _ instr) =
   atomic_node pp (pp.locate i.info) @@ fun () ->
   parentheses prec (get_prec i) pp @@ fun () ->
-  hint_attrs pp i.hints;
+  hint_attrs pp i;
   match i.desc with
   | Block { label; typ; block = l } ->
       (* A plain block is always introduced by [do] (a bare or labelled [{ … }]
@@ -1465,6 +1506,9 @@ and block pp label kind bt (l : (_ instr list, location) annotated) =
       close_block pp after)
 
 and deliminated_instr pp (i : _ instr) =
+  (* A block statement needs no [;] — its [}] ends it — hinted or not: a
+     statement-level hint prefixes the statement list, so what follows the
+     attributes is a plain block statement. *)
   if is_block i then instr Instruction pp i
   else (
     instr (if starts_with_block i then Atom else Instruction) pp i;

@@ -1285,8 +1285,29 @@
         {
           "type": "SYMBOL",
           "name": "_block_instruction"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "attributed_expression"
         }
       ]
+    },
+    "attributed_expression": {
+      "type": "PREC_RIGHT",
+      "value": 1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "attribute"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        ]
+      }
     },
     "_plaininstr": {
       "type": "CHOICE",
@@ -2867,18 +2888,6 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "attribute"
-              },
-              {
-                "type": "BLANK"
-              }
-            ]
-          },
-          {
-            "type": "CHOICE",
-            "members": [
-              {
                 "type": "SEQ",
                 "members": [
                   {
@@ -3354,6 +3363,10 @@
         {
           "type": "SYMBOL",
           "name": "_block_instruction"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "attributed_expression"
         },
         {
           "type": "SYMBOL",
@@ -4112,8 +4125,17 @@
                   "type": "FIELD",
                   "name": "step",
                   "content": {
-                    "type": "SYMBOL",
-                    "name": "_statement"
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "_statement"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "attributed_expression"
+                      }
+                    ]
                   }
                 },
                 {
@@ -4188,18 +4210,6 @@
       "content": {
         "type": "SEQ",
         "members": [
-          {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "attribute"
-              },
-              {
-                "type": "BLANK"
-              }
-            ]
-          },
           {
             "type": "CHOICE",
             "members": [

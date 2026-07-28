@@ -1,0 +1,12 @@
+fn side(x: i32) { }
+
+fn f(c: i32) {
+    #[likely]
+    #[freq = 16]
+    if c {
+        nop;
+    }
+    while c : (#[freq = 128] side(c)) {
+        nop;
+    }
+}

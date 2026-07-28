@@ -334,6 +334,14 @@ parse: CONST IDENT EQUAL IDENT SHARP WHILE
 
 Expecting a string.
 
+parse: CONST IDENT EQUAL SHARP LBRACKET IMPORT RBRACKET CHAR EQUAL
+
+Assuming that the constant expression is complete, expecting ';'.
+
+parse: CONST IDENT EQUAL SHARP LBRACKET IMPORT RBRACKET UNREACHABLE
+
+Expecting an expression.
+
 parse: CONST IDENT EQUAL UNREACHABLE
 
 Expecting a constant expression.
@@ -1191,10 +1199,10 @@ parse: FN IDENT LBRACE QUOTE AS COLON UNREACHABLE
 
 Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 
-parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN CHAR EQUAL
+parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN CHAR SHARP
 
-Assuming that the statement is complete, expecting ')'.
-<^1>this statement
+Assuming that the hinted statement is complete, expecting ')'.
+<^1>this hinted statement
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN IDENT RPAREN WHILE
@@ -1203,7 +1211,7 @@ Expecting a block.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN TYPE
 
-Expecting a statement.
+Expecting a hinted statement.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON WHILE
 
@@ -1257,14 +1265,6 @@ Expecting a condition.
 parse: FN IDENT LBRACE SHARP LBRACKET IF WHILE
 
 Expecting '('.
-
-parse: FN IDENT LBRACE SHARP LBRACKET IMPORT RBRACKET SHARP LBRACKET IMPORT RBRACKET UNREACHABLE
-
-Expecting a block.
-
-parse: FN IDENT LBRACE SHARP LBRACKET IMPORT RBRACKET UNREACHABLE
-
-Expecting a block, or a branch expression.
 
 parse: FN IDENT LBRACE SHARP LBRACKET WHILE
 
@@ -1534,10 +1534,10 @@ parse: FN IDENT LBRACE UNDERSCORE EQUAL UNREACHABLE
 
 Expecting an expression.
 
-parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN CHAR EQUAL
+parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN CHAR SHARP
 
-Assuming that the statement is complete, expecting ')'.
-<^1>this statement
+Assuming that the hinted statement is complete, expecting ')'.
+<^1>this hinted statement
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN DO LBRACE RBRACE ELSE
@@ -1548,9 +1548,13 @@ parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN IDENT RPAREN WHILE
 
 Expecting a block.
 
+parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN SHARP LBRACKET IMPORT RBRACKET TYPE
+
+Expecting a hinted statement, or an expression.
+
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN TYPE
 
-Expecting a statement.
+Expecting a hinted statement.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON WHILE
 

@@ -21,6 +21,7 @@
     3x Assuming that the condition is complete, expecting ')'.
        <^_>this condition
        <_>This '(' opens the enclosing construct.
+    1x Assuming that the constant expression is complete, expecting ';'.
     2x Assuming that the constant expression is complete, expecting ';'.
        <^_>this constant expression
     3x Assuming that the constant expression is complete, expecting ']'.
@@ -32,6 +33,9 @@
     2x Assuming that the expression list is complete, expecting ']'.
        <^_>this expression list
        <_>This '[' opens the enclosing construct.
+    2x Assuming that the hinted statement is complete, expecting ')'.
+       <^_>this hinted statement
+       <_>This '(' opens the enclosing construct.
     1x Assuming that the index expression is complete, expecting ']'.
        <^_>this index expression
        <_>This '[' opens the enclosing construct.
@@ -51,9 +55,6 @@
        <_>This '(' opens the enclosing construct.
     1x Assuming that the result type is complete, expecting ')'.
        <^_>this result type
-       <_>This '(' opens the enclosing construct.
-    2x Assuming that the statement is complete, expecting ')'.
-       <^_>this statement
        <_>This '(' opens the enclosing construct.
     1x Assuming that the statement is complete, expecting ';', or '}'.
        <^_>this statement
@@ -219,8 +220,7 @@
        <_>This '{' opens the enclosing construct.
     1x Expecting a block type.
     8x Expecting a block, or a block type.
-    1x Expecting a block, or a branch expression.
-   26x Expecting a block.
+   25x Expecting a block.
     2x Expecting a composite type.
     4x Expecting a condition expression.
     1x Expecting a condition literal.
@@ -234,6 +234,8 @@
     2x Expecting a function name.
     2x Expecting a function type.
     1x Expecting a heap type.
+    1x Expecting a hinted statement, or an expression.
+    2x Expecting a hinted statement.
    18x Expecting a label name.
     1x Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
     3x Expecting a length expression.
@@ -242,7 +244,6 @@
     2x Expecting a reference type, or an address type.
     5x Expecting a reference type.
     4x Expecting a result type.
-    2x Expecting a statement.
     1x Expecting a storage type.
     2x Expecting a string.
     3x Expecting a tag name.
@@ -251,7 +252,7 @@
     6x Expecting a value type.
     2x Expecting an address type.
     3x Expecting an attribute expression.
-   63x Expecting an expression.
+   64x Expecting an expression.
    12x Expecting an identifier.
     1x Expecting an index expression, or case labels.
     1x Expecting an index expression.

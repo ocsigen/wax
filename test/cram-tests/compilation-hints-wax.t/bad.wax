@@ -1,0 +1,6 @@
+fn f(x: i32) {
+    #[likely]
+    do {
+        nop;
+    }
+}

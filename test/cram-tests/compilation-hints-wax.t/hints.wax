@@ -1,0 +1,24 @@
+type ft = fn(i32) -> i32;
+
+fn a(x: i32) -> i32 { x }
+
+fn side(x: i32) { }
+
+fn spin(n: i32) {
+    #[always_opt]
+    'l: loop {
+        #[unlikely] br_if 'l n;
+    }
+}
+
+fn hot(c: i32) -> i32 {
+    #[likely]
+    #[freq = 16]
+    if c => i32 { 1 } else { 2 }
+}
+
+fn calls(p: &?ft, x: i32) -> i32 {
+    #[freq = 4] side(x);
+    let y = #[never_opt] a(x);
+    (#[freq = 2] p(y)) + a(#[always_opt] a(x))
+}

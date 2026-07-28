@@ -117,6 +117,16 @@ parse: FN IDENT LBRACE LBRACE DESCRIPTOR LPAREN CHAR ELSE
 Expecting an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
 <2>This '(' opens the enclosing construct.
 
+# expression-FOLLOW after a *hinted* expression (in a non-statement position;
+# at statement level the hint prefixes the list, so the states after it are the
+# unhinted ones). A hint attribute prefixing an expression is greedy, so this
+# state sees the union of what may continue the expression and what may end the
+# construct it sits in — a list the generator collapses to the generic
+# fallback. The unhinted sibling state's message is the right one: the hint
+# changes nothing about what may follow.
+parse: CONST IDENT EQUAL SHARP LBRACKET IMPORT RBRACKET CHAR EQUAL
+Assuming that the constant expression is complete, expecting ';'.
+
 # --- Non-expression states ---
 
 # state 226: after a block label 'l:, a labeled block must follow.

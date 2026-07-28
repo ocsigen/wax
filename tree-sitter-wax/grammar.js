@@ -260,7 +260,18 @@ module.exports = grammar({
     _expression: $ => choice(
       $._plaininstr,
       $._block_instruction,
+      $.attributed_expression,
     ),
+
+    // A hint attribute prefixing an expression takes the whole of it: the rule
+    // carries the loosest precedence, so every operator extends the expression
+    // under the attribute (parser.mly `expression: hint_attr expression` at
+    // prec_block). Which attributes are hints, and where they may sit, is the
+    // wax parser's semantic check, not the grammar's.
+    attributed_expression: $ => prec.right(PREC.block, seq(
+      $.attribute,
+      $._expression,
+    )),
 
     _plaininstr: $ => choice(
       $.null,
@@ -489,9 +500,6 @@ module.exports = grammar({
 
     // Operand-carrying conditional branches (parser.mly's `branch_expr`).
     branch_expression: $ => prec.right(PREC.branch, seq(
-      // At most one branch hint (`#[likely]` / `#[unlikely]`); the hint's name is
-      // checked by the compiler, not here.
-      optional($.attribute),
       choice(
         seq('br_if', field('label', $.label), field('value', $._expression)),
         seq('br_on_null', field('label', $.label), field('value', $._expression)),
@@ -539,10 +547,18 @@ module.exports = grammar({
 
     block_label: $ => seq($.label, ':'),
 
+    // A statement-level hint attribute is served by `attributed_expression`
+    // appearing directly as a block item: a hinted block instruction keeps the
+    // `;`-less form, and a hinted plain statement's `;` is absorbed by the
+    // empty-statement item (parser.mly `raw_statement_list -> hint_attr
+    // raw_statement_list`, which attaches the hint to the next item).
+    // Statement-only forms (`let`, `=`, `return`, …) admit no attribute — the
+    // wax parser rejects a hint there too.
     _block_item: $ => choice(
       ';',
       seq($._statement, ';'),
       $._block_instruction,
+      $.attributed_expression,
       $._conditional_statement,
     ),
 
@@ -664,7 +680,8 @@ module.exports = grammar({
       optional($.block_label),
       'while',
       field('condition', $._expression),
-      optional(seq(':', '(', field('step', $._statement), ')')),
+      optional(seq(':', '(',
+        field('step', choice($._statement, $.attributed_expression)), ')')),
       field('body', $._braced_block),
     ),
 
@@ -676,7 +693,6 @@ module.exports = grammar({
     ),
 
     if_expression: $ => prec.right(seq(
-      optional($.attribute),
       optional($.block_label),
       'if',
       field('condition', $._expression),

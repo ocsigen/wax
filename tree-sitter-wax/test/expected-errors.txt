@@ -12,6 +12,8 @@ test/cram-tests/check-all-errors.t/mixed.wax
 test/cram-tests/check-all-errors.t/multi.wax
 test/cram-tests/check-all-errors.t/stack-cascade.wax
 test/cram-tests/check-all-errors.t/unclosed-brace.wax
+test/cram-tests/compilation-hints-wax.t/dangling.wax
+test/cram-tests/compilation-hints-wax.t/straysemi.wax
 test/cram-tests/match.t/err_no_default.wax
 test/cram-tests/parse-error-messages.t/array.wax
 test/cram-tests/parse-error-messages.t/block.wax

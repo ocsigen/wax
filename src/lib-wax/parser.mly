@@ -223,32 +223,93 @@ let is_branch_hint_target = function
   | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ -> true
   | _ -> false
 
+(* Compilation-hints proposal: an instruction frequency guides inlining, loop
+   unrolling and block deferral, so it is meaningful on a call or a control
+   instruction. *)
+let is_freq_target = function
+  | Call _ | TailCall _ | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _
+  | TryCatch _ | Dispatch _ | Match _ -> true
+  | d -> is_branch_hint_target d
+
+(* Call targets need a call. Whether that call is *indirect* — the only kind the
+   hint means anything for — depends on what the callee resolves to, which the
+   parser cannot know; the typer decides. *)
+let is_targets_target = function
+  | Call _ | TailCall _ -> true
+  | _ -> false
+
 (* The instruction keeps its own location: a hint is no longer a node of its own,
    and carries the span of the attribute it was written as — [aloc] — so a
    diagnostic about a misplaced hint points at that attribute rather than at the
-   whole prefix. *)
-let hinted aloc h (i : _ instr) =
-  if is_branch_hint_target i.desc then
-    {i with hints = Wax_wasm.Hints.branch (location_of aloc) h i.hints}
-  else
+   whole prefix.
+
+   A hint attribute prefixes an expression, and takes the whole of it (see the
+   note on [expression]). So the instruction it lands on may be anything an
+   expression can be, and the target check below is what holds the placement rule:
+   a hint written where its extent is not obvious — [#[freq = 4] f(x) + 1] — lands
+   on the [BinOp] and is rejected here. Parentheses are a placement, so the advice
+   to use them is actionable. *)
+let hinted aloc setters (i : _ instr) =
+  let span = location_of aloc in
+  (* The advice to parenthesize is only actionable when the hint landed on an
+     operator form: there a tighter sub-expression exists that it could have been
+     meant for. On a block or a branch the placement is simply wrong, and
+     parentheses would not change what the hint lands on. *)
+  let hint =
+    match i.desc with
+    | BinOp _ | UnOp _ | Cast _ | CastDesc _ | Test _ | On _ | NonNull _
+    | StructGet _ | ArrayGet _ | GetDescriptor _ | Select _ ->
+        Some
+          (Wax_utils.Message.text
+             "A hint takes the whole expression that follows it. Parenthesize \
+              the part you meant.")
+    | _ -> None
+  in
+  let reject what =
+    raise
+      (Wax_utils.Parsing.syntax_error
+         ~location:span ?hint
+         (Wax_utils.Message.text (what ^ "\n")))
+  in
+  let apply hints = function
+    | `Branch b ->
+        if not (is_branch_hint_target i.desc) then
+          reject "A branch hint may only prefix a conditional branch (if, br_if, \
+                  or br_on_*).";
+        Wax_wasm.Hints.branch span b hints
+    | `Freq f ->
+        if not (is_freq_target i.desc) then
+          reject "A frequency hint may only prefix a call or a control \
+                  instruction.";
+        Wax_wasm.Hints.freq span f hints
+    | `Targets l ->
+        if not (is_targets_target i.desc) then
+          reject "A call-target hint may only prefix a call.";
+        Wax_wasm.Hints.targets span l hints
+  in
+  {i with hints = List.fold_left apply i.hints setters}
+
+(* The hint attributes are ordinary attributes (the lexer has no dedicated
+   tokens); recover which hint each stands for, rejecting anything else in a hint
+   position. [#[freq = r]] gives an executions-per-call ratio, which the section
+   stores as an offset base-2 logarithm. *)
+let hint_of_attr loc (name, value, _guard) =
+  let bad () =
     raise
       (Wax_utils.Parsing.syntax_error_pair
-         (aloc,
-           Wax_utils.Message.text ("A branch hint may only prefix a conditional branch (if, br_if, or \
-           br_on_*).\n") ))
-
-(* [#[likely]]/[#[unlikely]] are parsed as ordinary attributes (the lexer no
-   longer has dedicated tokens); recover the hint's boolean, rejecting any other
-   attribute in a branch-hint position. *)
-let branch_hint_of_attr loc (name, value, _guard) =
+         (loc,
+           Wax_utils.Message.text ("Expected a hint attribute: '#[likely]', \
+           '#[unlikely]', '#[freq = n]', '#[never_opt]' or '#[always_opt]'.\n") ))
+  in
   match (name, value) with
-  | "likely", None -> true
-  | "unlikely", None -> false
-  | _ ->
-      raise
-        (Wax_utils.Parsing.syntax_error_pair
-           (loc,
-           Wax_utils.Message.text ("Expected a branch hint '#[likely]' or '#[unlikely]'.\n") ))
+  | "likely", None -> `Branch true
+  | "unlikely", None -> `Branch false
+  | "never_opt", None -> `Freq Wax_wasm.Hints.never_opt
+  | "always_opt", None -> `Freq Wax_wasm.Hints.always_opt
+  | "freq", Some {desc = Int n; _} -> `Freq (Wax_wasm.Hints.freq_of_ratio (float_of_string n))
+  | "freq", Some {desc = Float n; _} -> `Freq (Wax_wasm.Hints.freq_of_ratio (float_of_string n))
+  | _ -> bad ()
+
 
 (* Statement-level conditional annotations. The parser cannot pair [#[if]] with a
    following [#[else]] itself: with [#[else]] no longer a single token, that
@@ -257,14 +318,22 @@ let branch_hint_of_attr loc (name, value, _guard) =
    [If_annotation], leaving every other statement untouched. *)
 type raw_stmt =
   | RS_plain of location instr
+  (* An empty [;] statement. Kept in the raw list — not dropped at the [;]
+     production — so the statement-level hint production, whose action sees the
+     raw tail, can insist on being ADJACENT to its instruction: [#[likely] ; f()]
+     is rejected rather than the hint silently reaching [f()] across the [;].
+     [process_stmts] strips the markers before pairing, so an [#[if]]/[#[else]]
+     pair separated by a stray [;] keeps pairing as it always has. *)
+  | RS_semi
   | RS_if of (Lexing.position * Lexing.position) * Wax_wasm.Ast.cond
       * (location instr list, location) annotated
   | RS_else of (Lexing.position * Lexing.position)
       * (location instr list, location) annotated
 
-let rec process_stmts = function
+let rec pair_stmts = function
   | [] -> []
-  | RS_plain i :: rest -> i :: process_stmts rest
+  | RS_semi :: _ -> assert false (* filtered by [process_stmts] *)
+  | RS_plain i :: rest -> i :: pair_stmts rest
   | RS_if (loc, cond, then_body) :: RS_else (eloc, else_body) :: rest ->
       (* Keep each branch's own [#[if]/#[else] { … }] span (marker included) on
          its located body, not just the combined span on the node, so a consumer
@@ -276,7 +345,7 @@ let rec process_stmts = function
              then_body = { then_body with info = location_of loc };
              else_body = Some { else_body with info = location_of eloc };
            })
-      :: process_stmts rest
+      :: pair_stmts rest
   | RS_if (loc, cond, then_body) :: rest ->
       with_loc loc
         (If_annotation
@@ -285,12 +354,15 @@ let rec process_stmts = function
              then_body = { then_body with info = location_of loc };
              else_body = None;
            })
-      :: process_stmts rest
+      :: pair_stmts rest
   | RS_else (loc, _) :: _ ->
       raise
         (Wax_utils.Parsing.syntax_error_pair
            (loc,
            Wax_utils.Message.text ("An '#[else]' must directly follow an '#[if(...)]' group.\n") ))
+
+let process_stmts l =
+  pair_stmts (List.filter (function RS_semi -> false | _ -> true) l)
 
 (* Build a binary/unary operator node, giving the operator itself a source
    location (its token span [oploc]) so a comment sitting between an operand and
@@ -714,15 +786,19 @@ attribute:
 | "#" "[" name = attribute_name "=" i = attribute_expression g = attribute_guard "]" { (name, Some i, g) }
 | "#" "[" name = attribute_name g = attribute_guard "]" { (name, None, g) }
 
-(* Branch-hinting proposal: [#[likely]]/[#[unlikely]] prefixing an [if]/[br_if].
-   Parsed as an ordinary attribute (the lexer no longer has dedicated tokens);
-   [branch_hint_of_attr] recovers the hint and rejects any other attribute. *)
-%inline branch_hint_attr:
-| a = attribute { ($loc(a), branch_hint_of_attr $loc(a) a) }
+(* Branch-hinting and compilation-hints proposals: [#[likely]]/[#[unlikely]],
+   [#[freq = n]]/[#[never_opt]]/[#[always_opt]] prefixing an expression. Parsed as
+   an ordinary attribute (the lexer has no dedicated tokens); [hint_of_attr]
+   recovers which hint each stands for and rejects any other attribute.
+
+   One hint attribute, with its own span so a diagnostic about a misplaced hint
+   points at it. *)
+hint_attr:
+| a = attribute { ($loc(a), hint_of_attr $loc(a) a) }
+
 
 (* The conditional branches that carry an operand ([if] is a [blockinstr], handled
-   separately). Shared by the plain plaininstr productions and the hinted wrapper
-   so a [#[likely]]/[#[unlikely]] prefix needs no per-branch duplication. *)
+   separately). Grouped so their shared [prec_branch] is declared once. *)
 branch_expr:
 | BR_IF l = label i = expression { with_loc $sloc (Br_if (l, i)) } %prec prec_branch
 | BR_ON_NULL l = label i = expression { with_loc $sloc (Br_on_null (l, i)) } %prec prec_branch
@@ -921,10 +997,7 @@ semi_list(X):
 | x = X l = semi_list(X) { x :: l }
 
 blockinstr:
-(* Branch-hinting proposal: a hinted [if] stays a [blockinstr] (so, like a plain
-   [if], it needs no trailing [;]); [hinted] rejects the attribute on any other
-   block form. *)
-| h = branch_hint_attr i = blockinstr { hinted (fst h) (snd h) i }
+
 | DISPATCH index = expression
   "[" le = case_labels "]"
   "{" arms = semi_list(dispatch_arm) "}"
@@ -943,7 +1016,7 @@ blockinstr:
    Parentheses are required (a bare statement would collide with the body brace
    for branch statements). *)
 | label = block_label WHILE cond = condition_expression
-  ":" "(" step = statement ")"
+  ":" "(" step = hinted_statement ")"
   l = braced_block
   { with_loc $sloc (While{label; cond; step = Some step; block = l}) }
 | label = block_label LOOP bt = option(block_type)
@@ -983,10 +1056,14 @@ parenthesized_expression: e = expression { e }
    ([struct.new_desc], [ref.cast_desc_eq], [br_on_cast_desc_eq]): the target type
    is recovered from [d]'s (descriptor) type, so only the operand is written. *)
 descriptor_operand: DESCRIPTOR "(" d = expression ")" { d }
-index_expression: e = expression { e }
-then_branch: e = expression { e }
-condition_expression: e = expression { e }
-length_expression: e = expression { e }
+index_expression:
+| e = expression { e }
+then_branch:
+| e = expression { e }
+condition_expression:
+| e = expression { e }
+length_expression:
+| e = expression { e }
 
 expression_list:
 | l = separated_list_trailing(",", expression) { l }
@@ -1080,10 +1157,7 @@ plaininstr:
 | i = expression o = "<=s" j = expression { binop $sloc o $loc(o) (Le (Some Signed)) i j }
 | i = expression o = "<=u" j = expression { binop $sloc o $loc(o) (Le (Some Unsigned)) i j }
 | b = branch_expr { b }
-(* Branch-hinting proposal: [#[likely]] / [#[unlikely]] annotates the
-   [br_if]/[br_on_*] that follows; a hinted [if] is a [blockinstr] (above). *)
-| h = branch_hint_attr b = branch_expr
-  { hinted (fst h) (snd h) b }
+
 | SUSPEND t = tag_name "(" l = expression_list ")"
   { with_loc $sloc (Suspend (t, l)) }
 (* The postfix handler clause of a [resume]-family method call, binding tightly
@@ -1112,6 +1186,14 @@ array_body:
 expression:
 | i = blockinstr %prec prec_block { i }
 | i = plaininstr { i }
+(* A hint attribute prefixing an expression is deliberately GREEDY
+   ([prec_block] is the lowest precedence, so every operator shifts): the hint
+   takes the whole expression, and a placement whose extent a reader could not
+   guess -- [#[freq = 4] f(x) + 1] -- lands on the [BinOp] and is rejected by
+   [hinted]'s target check rather than silently binding to one of the two
+   readings. Rust's [stmt_expr_attributes] refuses the same case. Parenthesize
+   to say which was meant. *)
+| h = hint_attr e = expression %prec prec_block { hinted (fst h) [snd h] e }
 
 let_pattern:
 | p = simple_pattern t = ioption(":" t = value_type {t}) { (p, t) }
@@ -1136,6 +1218,17 @@ compound_assign_op:
 | "<<=" { annot $sloc Shl }
 | ">>s=" { annot $sloc (Shr Signed) }
 | ">>u=" { annot $sloc (Shr Unsigned) }
+
+(* A statement with an optional stack of hint attributes. Statement-LIST
+   positions do not use this: there a hint is a prefix of the list itself (see
+   [raw_statement_list]), because [statement] here excludes [blockinstr] and a
+   list position must also serve the [;]-less hinted block form. This
+   nonterminal is for the one isolated statement position, the [while]
+   continue-expression, where the closing [)] keeps the recursion
+   conflict-free. *)
+hinted_statement:
+| s = statement { s }
+| h = hint_attr s = hinted_statement { hinted (fst h) [snd h] s }
 
 statement:
 | i = plaininstr { i }
@@ -1181,18 +1274,49 @@ statement_list:
 
 raw_statement_list:
 | { [] }
-(* A bare [;] is an empty statement: it contributes nothing to the list. This
-   makes a redundant [;] harmless anywhere — most usefully after a block-shaped
-   statement ([do]/[if]/[while]/[loop]/[dispatch]/[match]/[try]), which needs
-   none (its [}] ends it) but where the [;]-per-statement habit is strong (the
-   docs' own author wrote the [;] form more than once). A block followed by [;]
-   parses as the block then this empty statement; it is conflict-free because a
-   block reaches statement position only through [statement_list] (there is no
+(* A bare [;] is an empty statement: [process_stmts] strips its marker, so it
+   contributes nothing to the result. This makes a redundant [;] harmless
+   anywhere — most usefully after a block-shaped statement
+   ([do]/[if]/[while]/[loop]/[dispatch]/[match]/[try]), which needs none (its
+   [}] ends it) but where the [;]-per-statement habit is strong (the docs' own
+   author wrote the [;] form more than once). A block followed by [;] parses as
+   the block then this empty statement; it is conflict-free because a block
+   reaches statement position only through [statement_list] (there is no
    [plaininstr: expression], so it cannot arrive via the expression/plaininstr
    path), so a following [;] never clashes with reducing [expression: blockinstr]
    (which continues a plaininstr on an operator, never on [;]). *)
-| ";" l = raw_statement_list { l }
+| ";" l = raw_statement_list { RS_semi :: l }
 | i = blockinstr l = raw_statement_list { RS_plain i :: l }
+(* A statement-level hint is not parsed together with its statement: it is a
+   prefix of the LIST, attached to the first statement that follows — the same
+   move [process_stmts] makes for the [#[if]]/[#[else]] markers, here done
+   directly in the action since no pairing decision is needed.
+
+   Parsing the pair as one unit cannot be done conflict-free. [plaininstr] has
+   [expression "(" argument_list ")"], so a hinted expression — [expression] is
+   where the hint production lives — is reachable at statement start, and any
+   hint-plus-statement production overlaps it: [#[a] if c { … }] is then derivable
+   both ways (measured: one shift/reduce plus one reduce/reduce for a
+   [hint_attr blockinstr] statement production, 5 reduce/reduce for a recursive
+   one). Attaching after the fact instead leaves the grammar after the attribute
+   EXACTLY the plain statement grammar — same states, same precedence
+   resolutions, zero conflicts — and the [;]-less block form ([#[unlikely]
+   if … { … }] followed by another statement, which the spec suite's own
+   [branch_hint.wast] decompiles to) and [;]-less stacking come for free.
+
+   The hint must sit directly on its instruction: with nothing to land on (at
+   the end of a block), or landing on something that is not an instruction (an
+   empty [;] statement — [RS_semi] is still in the raw list here — or an
+   [#[if(...)]] group), it is rejected at the attribute. *)
+| h = hint_attr l = raw_statement_list
+  { match l with
+    | RS_plain i :: l -> RS_plain (hinted (fst h) [snd h] i) :: l
+    | (RS_semi | RS_if _ | RS_else _) :: _ | [] ->
+        raise
+          (Wax_utils.Parsing.syntax_error
+             ~location:(location_of (fst h))
+             (Wax_utils.Message.text
+                "A hint may only prefix an instruction.\n")) }
 | i = cond_stmt l = raw_statement_list { i :: l }
 (* A statement is followed by an optional [";" more-statements]: the final [;]
    of a block is OPTIONAL (a statement may close the list with no trailing
