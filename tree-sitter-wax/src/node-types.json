@@ -58,6 +58,10 @@
         "named": true
       },
       {
+        "type": "array_set_expression",
+        "named": true
+      },
+      {
         "type": "binary_expression",
         "named": true
       },
@@ -192,7 +196,7 @@
         "named": true
       },
       {
-        "type": "array_set_statement",
+        "type": "array_set_expression",
         "named": true
       },
       {
@@ -491,25 +495,15 @@
     }
   },
   {
-    "type": "array_set_statement",
+    "type": "array_set_expression",
     "named": true,
     "fields": {
-      "array": {
+      "target": {
         "multiple": false,
         "required": true,
         "types": [
           {
-            "type": "_expression",
-            "named": true
-          }
-        ]
-      },
-      "index": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "_expression",
+            "type": "array_get_expression",
             "named": true
           }
         ]
@@ -939,7 +933,7 @@
       }
     },
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": false,
       "types": [
         {
@@ -2362,6 +2356,16 @@
     "type": "import_function",
     "named": true,
     "fields": {
+      "exact": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "!",
+            "named": false
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -3860,11 +3864,11 @@
         "required": false,
         "types": [
           {
-            "type": "_expression",
+            "type": "descriptor_operand",
             "named": true
           },
           {
-            "type": "descriptor_operand",
+            "type": "type_identifier",
             "named": true
           }
         ]
@@ -3880,11 +3884,11 @@
         "required": false,
         "types": [
           {
-            "type": "_expression",
+            "type": "descriptor_operand",
             "named": true
           },
           {
-            "type": "descriptor_operand",
+            "type": "type_identifier",
             "named": true
           }
         ]

@@ -42,3 +42,23 @@ data d @ m [0] = "abc";
     init: (data_init
       (string_literal))))
 
+
+==========================
+exact import declarations
+==========================
+
+import "m" { fn f!(); fn g: !T; }
+
+---
+
+(source_file
+  (import_group
+    module: (string_literal)
+    (import_item
+      (import_function
+        name: (identifier)
+        parameters: (parameter_list)))
+    (import_item
+      (import_function
+        name: (identifier)
+        type: (type_identifier)))))

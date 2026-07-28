@@ -70,3 +70,20 @@ fn f() { 'a'; '\n'; '\u{1F600}'; }
       (char_literal)
       (char_literal))))
 
+
+==================
+char apostrophe
+==================
+
+fn f() -> i32 { ''' }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    result: (primitive_type
+      (identifier))
+    body: (block
+      (char_literal))))

@@ -10,7 +10,8 @@
 /// <reference types="tree-sitter-cli/dsl" />
 // @ts-check
 
-// Higher binds tighter (tree-sitter convention). Mirrors parser.mly:105-119.
+// Higher binds tighter (tree-sitter convention). Mirrors the %left/%right/
+// %nonassoc declarations of parser.mly.
 const PREC = {
   block: 1, // prec_ident / prec_block   (lowest tiebreak)
   branch: 2, // prec_branch  (right)   -- br_if/br_on_* payloads
@@ -28,8 +29,9 @@ const PREC = {
   postfix: 15, // . ( [   and postfix `!` (NonNull)
 };
 
-// Word-keywords (lexer.ml:231-282). Reserved via `word: $ => $.identifier`.
-// Also accepted as label names (parser.mly:405-459), so listed for `label`.
+// Word-keywords (the keyword arms of lexer.ml's `token_rec`). Reserved via
+// `word: $ => $.identifier`. Also accepted as label names (parser.mly's
+// `ident_or_keyword`), so listed for `label`.
 const KEYWORDS = [
   'null', 'inf', 'nan', 'tag', 'fn', 'mut', 'type', 'rec', 'open', 'nop',
   'unreachable', 'do', 'while', 'loop', 'if', 'else', 'let', 'const', 'as',
@@ -75,17 +77,19 @@ module.exports = grammar({
     // ---------------------------------------------------------------------
 
     // (XID_Start | _) XID_Continue*  with apostrophe allowed in continue
-    // position (lexer.ml:3-12). A lone `_` is UNDERSCORE, handled elsewhere.
+    // position (lexer.ml's `ident`). A lone `_` is UNDERSCORE, handled elsewhere.
     identifier: $ =>
       /[\p{XID_Start}][\p{XID_Continue}']*|_[\p{XID_Continue}']+/u,
 
-    // Decimal or 0x-hex, with `_` digit separators (lexer.ml:38-43). No sign.
+    // Decimal or 0x-hex, with `_` digit separators (lexer.ml's `int`). No sign.
+    // The hex prefix is lowercase `0x` only, as in the lexer (`0X10` is not a
+    // literal); the exponent markers below do accept either case.
     integer_literal: $ => token(choice(
       /[0-9](_?[0-9])*/,
-      /0[xX][0-9a-fA-F](_?[0-9a-fA-F])*/,
+      /0x[0-9a-fA-F](_?[0-9a-fA-F])*/,
     )),
 
-    // decfloat | hexfloat | nan:0x… (lexer.ml:45-54).
+    // decfloat | hexfloat | nan:0x… (lexer.ml's `float`).
     float_literal: $ => {
       const dec = /[0-9](_?[0-9])*/;
       const hex = /[0-9a-fA-F](_?[0-9a-fA-F])*/;
@@ -98,11 +102,11 @@ module.exports = grammar({
           seq('.', optional(dec)),
         )),
         // 0x hexnum ('.' hexnum?)? pexp   |   0x hexnum '.' hexnum?
-        seq(/0[xX]/, hex, choice(
+        seq(/0x/, hex, choice(
           seq(optional(seq('.', optional(hex))), hexExp),
           seq('.', optional(hex)),
         )),
-        seq(/nan:0[xX]/, hex),
+        seq(/nan:0x/, hex),
       ));
     },
 
@@ -118,10 +122,12 @@ module.exports = grammar({
     // A single atomic token (like the sedlex lexer), so `'a'` competes as one
     // 3-char token against the 1-char label quote and wins by longest match —
     // while `'foo` (no closing quote) fails here and falls through to a label.
+    // The unescaped character class excludes `"` (and not `'`), exactly as the
+    // lexer does: `'''` is the apostrophe, `'"'` must be written `'\"'`.
     char_literal: $ => token(seq(
       "'",
       choice(
-        /[^'\\\x00-\x1f\x7f]/,
+        /[^"\\\x00-\x1f\x7f]/,
         /\\[tnr'"\\]/,
         /\\x[0-9a-fA-F][0-9a-fA-F]/,
         /\\u\{[0-9a-fA-F](_?[0-9a-fA-F])*\}/,
@@ -137,7 +143,7 @@ module.exports = grammar({
 
     line_comment: $ => token(seq('//', /[^\r\n]*/)),
 
-    // A `'` followed by an identifier or keyword (parser.mly:460-464). Kept at
+    // A `'` followed by an identifier or keyword (parser.mly's `label`). Kept at
     // the grammar level (not a single token) so `'a'` still lexes as a char.
     label: $ => seq("'", field('name', $._label_name)),
 
@@ -156,7 +162,7 @@ module.exports = grammar({
     // and cast names — all plain identifiers, distinguished in queries.
     primitive_type: $ => $.identifier,
 
-    // & ?? !? heap_type   (parser.mly:470-481)
+    // & ?? !? heap_type   (parser.mly's `reference_type`)
     reference_type: $ => seq(
       '&',
       optional(field('nullable', '?')),
@@ -168,7 +174,7 @@ module.exports = grammar({
 
     _type_name: $ => alias($.identifier, $.type_identifier),
 
-    // cast_type (parser.mly:489-497): a value/cast name, a reference type, or
+    // cast_type (parser.mly's `cast_type`): a value/cast name, a reference type, or
     // `& ?? fn functype`.
     _cast_type: $ => choice(
       $.primitive_type,
@@ -176,7 +182,7 @@ module.exports = grammar({
       seq('&', optional('?'), 'fn', $.function_type),
     ),
 
-    // ( params ) (-> results)?   (parser.mly:624-626)
+    // ( params ) (-> results)?   (parser.mly's `function_type`)
     function_type: $ => seq(
       field('parameters', $.parameter_list),
       optional(seq('->', field('result', $._result_type))),
@@ -199,7 +205,7 @@ module.exports = grammar({
       seq('(', sepBy1Trailing(',', $._value_type), ')'),
     ),
 
-    // Struct/array/func/cont composite types (parser.mly:532-548).
+    // Struct/array/func/cont composite types (parser.mly's `composite_type`).
     struct_type: $ => seq(
       '{',
       choice(
@@ -285,6 +291,7 @@ module.exports = grammar({
       $.unary_expression,
       $.non_null_expression,
       $.array_get_expression,
+      $.array_set_expression,
       $.select_expression,
       $.branch_expression,
       $.suspend_expression,
@@ -334,11 +341,12 @@ module.exports = grammar({
       field('value', $.string_literal),
     )),
 
-    // {} | { fields } | { x | fields } | { descriptor(d) | fields }.
+    // {} | { fields } | { x | fields } | { descriptor(d) | fields }. The base is
+    // a type name or a `descriptor(…)` clause, never an arbitrary expression.
     struct_expression: $ => prec(PREC.block, seq(
       '{',
       optional(choice(
-        seq(field('base', choice($._expression, $.descriptor_operand)), '|',
+        seq(field('base', $._struct_base), '|',
           sepByTrailing(',', $.field_initializer)),
         sepBy1Trailing(',', $.field_initializer),
       )),
@@ -348,10 +356,12 @@ module.exports = grammar({
     // { x | .. } | { .. } | { descriptor(d) | .. }
     struct_default_expression: $ => prec(PREC.block, seq(
       '{',
-      optional(seq(field('base', choice($._expression, $.descriptor_operand)), '|')),
+      optional(seq(field('base', $._struct_base), '|')),
       '..',
       '}',
     )),
+
+    _struct_base: $ => choice($._type_name, $.descriptor_operand),
 
     field_initializer: $ => choice(
       seq(field('name', $.identifier), ':', field('value', $._expression)),
@@ -426,6 +436,17 @@ module.exports = grammar({
       ']',
     )),
 
+    // `a[i] = v` is a plaininstr, not a statement form (parser.mly ArraySet), so
+    // it may also appear in expression position — as a sequence element, say.
+    // Built on `array_get_expression` like `struct_set_expression` is on
+    // `struct_get_expression`: the target has to reduce before the `=`, since the
+    // postfix precedence of the access outranks the assignment.
+    array_set_expression: $ => prec.right(PREC.assign, seq(
+      field('target', $.array_get_expression),
+      '=',
+      field('value', $._expression),
+    )),
+
     non_null_expression: $ => prec(PREC.postfix, seq($._expression, '!')),
 
     select_expression: $ => prec.right(PREC.ternary, seq(
@@ -466,9 +487,11 @@ module.exports = grammar({
       }));
     },
 
-    // Operand-carrying conditional branches (parser.mly:598-605).
+    // Operand-carrying conditional branches (parser.mly's `branch_expr`).
     branch_expression: $ => prec.right(PREC.branch, seq(
-      repeat($.attribute),
+      // At most one branch hint (`#[likely]` / `#[unlikely]`); the hint's name is
+      // checked by the compiler, not here.
+      optional($.attribute),
       choice(
         seq('br_if', field('label', $.label), field('value', $._expression)),
         seq('br_on_null', field('label', $.label), field('value', $._expression)),
@@ -537,7 +560,6 @@ module.exports = grammar({
       $.throw_statement,
       $.throw_ref_statement,
       $.become_statement,
-      $.array_set_statement,
     ),
 
     nop: $ => 'nop',
@@ -618,16 +640,7 @@ module.exports = grammar({
       $.argument_list,
     ),
 
-    array_set_statement: $ => seq(
-      field('array', $._expression),
-      '[',
-      field('index', $._expression),
-      ']',
-      '=',
-      field('value', $._expression),
-    ),
-
-    // Block-shaped instructions: no trailing `;` needed (parser.mly:745-785).
+    // Block-shaped instructions: no trailing `;` needed (parser.mly's `blockinstr`).
     _block_instruction: $ => choice(
       $.do_expression,
       $.while_expression,
@@ -663,7 +676,7 @@ module.exports = grammar({
     ),
 
     if_expression: $ => prec.right(seq(
-      repeat($.attribute),
+      optional($.attribute),
       optional($.block_label),
       'if',
       field('condition', $._expression),
@@ -776,7 +789,7 @@ module.exports = grammar({
 
     legacy_catch_all: $ => seq('_', '=>', field('body', $._braced_block)),
 
-    // block_type (parser.mly:674-679): a parenthesized param/result signature,
+    // block_type (parser.mly's `block_type`): a parenthesized param/result signature,
     // or a bare single value type.
     _block_type: $ => choice(
       seq('(', sepByTrailing(',', $._value_type), ')',
@@ -784,7 +797,7 @@ module.exports = grammar({
       $._value_type,
     ),
 
-    // Statement-level conditional compilation (parser.mly:1012-1014). Kept as
+    // Statement-level conditional compilation (parser.mly's `cond_stmt`). Kept as
     // sibling nodes; not paired with a following `#[else]`.
     _conditional_statement: $ => choice(
       $.conditional_if_statement,
@@ -828,14 +841,22 @@ module.exports = grammar({
       $.tag_definition,
     ),
 
+    // A definition takes no exact marker (`fn f!` / `fn f: !T` is an error: a
+    // definition is always exact) and, like every signature, only carries a
+    // result type when it has a parameter list.
     function_definition: $ => seq(
       'fn',
       field('name', $.identifier),
-      optional('!'),
-      optional(seq(':', optional('!'), field('type', $._type_name))),
-      optional(field('parameters', $.parameter_list)),
-      optional(seq('->', field('result', $._result_type))),
+      optional(seq(':', field('type', $._type_name))),
+      optional($._signature),
       field('body', $.block),
+    ),
+
+    // The `( … ) -> …` tail of an `fn`/`tag` declaration. Same shape as
+    // `function_type`, but with the parts fielded on the declaration itself.
+    _signature: $ => seq(
+      field('parameters', $.parameter_list),
+      optional(seq('->', field('result', $._result_type))),
     ),
 
     global_definition: $ => seq(
@@ -978,13 +999,17 @@ module.exports = grammar({
       $.import_table,
     ),
 
+    // An imported function may be declared exact, with the `!` on either the name
+    // or the type reference (never both).
     import_function: $ => seq(
       'fn',
       field('name', $.identifier),
-      optional('!'),
-      optional(seq(':', optional('!'), field('type', $._type_name))),
-      optional(field('parameters', $.parameter_list)),
-      optional(seq('->', field('result', $._result_type))),
+      choice(
+        seq(field('exact', '!'), optional(seq(':', field('type', $._type_name)))),
+        optional(seq(':', optional(field('exact', '!')),
+          field('type', $._type_name))),
+      ),
+      optional($._signature),
     ),
 
     import_global: $ => seq(

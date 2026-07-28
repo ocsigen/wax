@@ -53,7 +53,7 @@ const z = {T| };
   (global_definition
     name: (identifier)
     value: (struct_expression
-      base: (identifier))))
+      base: (type_identifier))))
 
 ==================
 empty struct
