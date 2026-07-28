@@ -39,7 +39,7 @@ val suggest_compound_assignment :
 val suggest_punning :
   Typing_env.module_context ->
   Ast.ident ->
-  ('a Ast.instr_desc, Ast.location) Ast.annotated option ->
+  Ast.location Ast.instr option ->
   unit
 (** Suggest the punning shorthand [{x}] for a field written [x: x]. *)
 

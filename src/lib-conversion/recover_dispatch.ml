@@ -110,7 +110,10 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   Ast_utils.map_desc ~instr:rewrite_instr ~block:rewrite_list desc
 
 let rec field_desc (f : location modulefield) =
-  let map_fields = List.map (fun a -> { a with desc = field_desc a.desc }) in
+  let map_fields =
+    List.map (fun (a : (location modulefield, _) Ast.annotated) ->
+        { a with desc = field_desc a.desc })
+  in
   match f with
   | Func ({ body = label, instrs; _ } as r) ->
       Func { r with body = (label, rewrite_list instrs) }
@@ -121,7 +124,10 @@ let rec field_desc (f : location modulefield) =
           then_fields = { then_fields with desc = map_fields then_fields.desc };
           else_fields =
             Option.map
-              (fun b -> { b with desc = map_fields b.desc })
+              (fun (b :
+                     ( (location modulefield, location) Ast.annotated list,
+                       location )
+                     Ast.annotated) -> { b with desc = map_fields b.desc })
               else_fields;
         }
   | ( Type _ | Module_annotation _ | Import _ | Import_group _ | Global _
@@ -129,4 +135,7 @@ let rec field_desc (f : location modulefield) =
       f
 
 let module_ (m : location module_) : location module_ =
-  List.map (fun a -> { a with desc = field_desc a.desc }) m
+  List.map
+    (fun (a : (location modulefield, location) Ast.annotated) ->
+      { a with desc = field_desc a.desc })
+    m

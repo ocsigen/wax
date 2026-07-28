@@ -198,8 +198,12 @@ and cmp_string ctx env whole v op s =
 let start_of (l : Ast.location) = l.Ast.loc_start.Lexing.pos_cnum
 let end_of (l : Ast.location) = l.Ast.loc_end.Lexing.pos_cnum
 
-let branch_end ~default nodes =
-  match List.rev nodes with n :: _ -> end_of n.Ast.info | [] -> default
+(* [ends] are the spans of the then-branch's nodes, in order. Only the spans are
+   passed, not the nodes: the field walk carries [annotated] module fields and the
+   instruction walk carries instruction records, which are no longer the same
+   shape. *)
+let branch_end ~default ends =
+  match List.rev ends with (l : Ast.location) :: _ -> end_of l | [] -> default
 
 (* Splice out / simplify every conditional in a WAT module, returning the
    specialized module and the byte ranges of the branches that were removed. The
@@ -211,22 +215,26 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
   Wax_utils.Debug.timed "specialize" @@ fun () ->
   let open Ast.Text in
   let ranges = ref [] in
+  let field_ends l =
+    List.map (fun (f : (_, Ast.location) Ast.annotated) -> f.Ast.info) l
+  in
+  let instr_ends l = List.map (fun (i : Ast.location instr) -> i.info) l in
   (* The boundary between the two branches. With no else the conditional ends at
      the then-branch, so its own end (past any closing brace) is exact; with an
      else, the best position the AST offers is the end of the last then-node. *)
-  let split loc then_nodes ~else_present =
-    if else_present then branch_end ~default:(end_of loc) then_nodes
+  let split loc then_ends ~else_present =
+    if else_present then branch_end ~default:(end_of loc) then_ends
     else end_of loc
   in
   (* Then kept, else dropped: the dropped span runs from the boundary to the end
      of the conditional. *)
-  let drop_else loc then_nodes ~else_present =
-    ranges := (split loc then_nodes ~else_present, end_of loc) :: !ranges
+  let drop_else loc then_ends ~else_present =
+    ranges := (split loc then_ends ~else_present, end_of loc) :: !ranges
   in
   (* Else kept (or nothing), then dropped: the dropped span runs from the start
      of the conditional through the boundary. *)
-  let drop_then loc then_nodes ~else_present =
-    ranges := (start_of loc, split loc then_nodes ~else_present) :: !ranges
+  let drop_then loc then_ends ~else_present =
+    ranges := (start_of loc, split loc then_ends ~else_present) :: !ranges
   in
   let rec sfields fl = List.concat_map sfield fl
   and sfield (f : (Ast.location modulefield, Ast.location) Ast.annotated) =
@@ -235,10 +243,10 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
         let else_present = Option.is_some else_fields in
         match eval ctx env cond with
         | True ->
-            drop_else f.info then_fields.desc ~else_present;
+            drop_else f.info (field_ends then_fields.desc) ~else_present;
             sfields then_fields.desc
         | False -> (
-            drop_then f.info then_fields.desc ~else_present;
+            drop_then f.info (field_ends then_fields.desc) ~else_present;
             match else_fields with Some e -> sfields e.desc | None -> [])
         | Residual cond ->
             [
@@ -293,10 +301,10 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
         let else_present = Option.is_some else_body in
         match eval ctx env cond with
         | True ->
-            drop_else i.info then_body.desc ~else_present;
+            drop_else i.info (instr_ends then_body.desc) ~else_present;
             sinstrs then_body.desc
         | False -> (
-            drop_then i.info then_body.desc ~else_present;
+            drop_then i.info (instr_ends then_body.desc) ~else_present;
             match else_body with Some e -> sinstrs e.desc | None -> [])
         | Residual cond ->
             [
@@ -347,8 +355,6 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
                 b.catch_all;
           }
     | Folded (h, l) -> Folded ({ h with desc = sstructured h.desc }, sinstrs l)
-    | Hinted (hint, inner) ->
-        Hinted (hint, { inner with desc = sstructured inner.desc })
     (* Every instruction that carries no nested instruction is returned as-is.
        Enumerated rather than caught by a wildcard so a future instruction that
        nests others is a compile error here instead of silently escaping

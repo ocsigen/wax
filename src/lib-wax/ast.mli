@@ -12,6 +12,12 @@ type location = Wax_utils.Ast.location = {
 
 val no_loc : 'desc -> ('desc, location) annotated
 
+(* [instr] shares the [desc]/[info] field names with [annotated] and, being
+   declared later, wins field disambiguation wherever the receiver's type is not
+   already known. Read a *generic* node's fields through this alias to say which
+   record is meant: [x.Annot.desc]. *)
+module Annot = Wax_utils.Ast
+
 type ident = (string, location) annotated
 (** An identifier with its source location. *)
 
@@ -31,6 +37,20 @@ val is_splice_field : (ident * fieldtype, location) annotated -> bool
 
 val splice_field : location -> (ident * fieldtype, location) annotated
 (** Build a [..] splice sentinel field at the given location. *)
+
+(** The located [(name, thing)] pairs the type family carries: a function
+    parameter (its name optional), a struct field, a rec-group member. Named
+    accessors rather than [fst]/[snd] over [.desc], because [desc] on a node
+    whose type is not already known resolves to the instruction record's field
+    of that name (see {!Annot}). Their declared return types also let a chained
+    read — [(field_name f).desc] — resolve on its own. *)
+
+val param_name : (ident option * valtype, location) annotated -> ident option
+val param_type : (ident option * valtype, location) annotated -> valtype
+val field_name : (ident * fieldtype, location) annotated -> ident
+val field_type : (ident * fieldtype, location) annotated -> fieldtype
+val member_name : (ident * subtype, location) annotated -> ident
+val member_type : (ident * subtype, location) annotated -> subtype
 
 (** Signage for integer operations. *)
 type signage = Wax_wasm.Ast.signage = Signed | Unsigned
@@ -206,11 +226,6 @@ type 'info instr_desc =
       label * (* nullable *) bool * 'info instr * 'info instr
   | Br_on_cast_desc_eq_fail of
       label * (* nullable *) bool * 'info instr * 'info instr
-  (* Branch-hinting proposal: wraps a conditional branch ([if], [br_if], or a
-     [br_on_*]) with its hint ([true] = likely taken, [false] = unlikely). It has
-     no runtime effect; on lowering the hint is emitted into the
-     [metadata.code.branch_hint] section at the wrapped instruction's offset. *)
-  | Hinted of (* likely *) bool * 'info instr
   | Throw of ident * 'info instr list
   | ThrowRef of 'info instr
   | ContNew of ident * 'info instr
@@ -232,7 +247,17 @@ type 'info instr_desc =
       else_body : ('info instr list, location) annotated option;
     }
 
-and 'info instr = ('info instr_desc, 'info) annotated
+and 'info instr = {
+  desc : 'info instr_desc;
+  info : 'info;
+  hints : ident Wax_wasm.Hints.t;
+      (** The advisory [metadata.code.*] metadata of this instruction
+          (branch-hinting and compilation-hints proposals), written in Wax as an
+          attribute prefixing it ([#[likely]], [#[freq = 16]], ...). A field
+          rather than a wrapper node, so that the matches on [desc] — which is
+          nearly every match on an instruction — neither see it nor have to see
+          through it. *)
+}
 
 and 'info trycatch_arm = {
   arm_tag : ident option;  (** [None] for the trailing catch-all *)
@@ -247,6 +272,11 @@ and 'info trycatch_arm = {
 (* Each attribute is a name, an optional value, and an optional
    conditional-compilation guard ([#[export = "f", if not(portable)]]); only
    [export] may be guarded; the guard is located at its [if] keyword. *)
+val no_loc_instr : location instr_desc -> location instr
+(** A synthesized instruction: no source location, no hints. The instruction
+    counterpart of {!no_loc}, which builds an {!annotated} and so cannot serve a
+    record that carries hints as well. *)
+
 type attributes =
   (string
   * location instr option

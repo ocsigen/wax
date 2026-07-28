@@ -272,8 +272,23 @@ let page_size_log2 loc (n : Uint32.t) =
       (Wax_utils.Parsing.syntax_error_pair
          (loc, Wax_utils.Message.text "The page size must be a power of two."))
 
+(* An instruction. Its record carries a [hints] field beside its location (the
+   advisory [metadata.code] metadata, see [Ast.instr]); freshly parsed source has
+   none until a [(@metadata.code.…)] annotation fills it in. *)
 let with_loc loc desc =
+  let info = {Wax_utils.Ast.loc_start = fst loc; loc_end = snd loc} in
+  Wax_utils.Trivia.record_pos Context.context info;
+  {desc; info; hints = Hints.none}
+
+(* Any other located node: a module field, an identifier, a name list, an
+   instruction *list*. *)
+let annot loc desc =
   Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
+
+(* An instruction at an already-built location, for the places that reuse another
+   node's span rather than a [$loc] pair (an [elem] index promoted to a
+   [ref.func], say). *)
+let instr_at info desc = {desc; info; hints = Hints.none}
 
 let map_fst f (x, y) = (f x, y)
 
@@ -383,14 +398,27 @@ let branch_hint_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
            (loc,
              Wax_utils.Message.text ("A branch hint must be \"\\00\" or \"\\01\".\n") ))
 
-(* The branch hint wraps the instruction that follows it. Whether that
+(* The branch hint annotates the instruction that follows it. Whether that
    instruction is a legal target (only [if]/[br_if]/[br_on_*]) is a *validation*
    concern, not a syntactic one — the reference tools attach the annotation
    during parsing and diagnose a bad placement afterwards, which also lets a
    malformed inline module inside an [assert_invalid] parse far enough to be
    rejected. So the grammar attaches it unconditionally; [validation] (and the
-   Wax typer) reject a hint on anything but a conditional branch. *)
-let hinted loc h (i : _ instr) = with_loc loc (Hinted (h, i))
+   Wax typer) reject a hint on anything but a conditional branch.
+
+   [loc] spans the annotation and the instruction; the instruction keeps its own
+   location, since the hint is no longer a node of its own. The wider span is
+   still recorded, so trivia attaches exactly as it did when it was. *)
+let hinted loc h (i : _ instr) =
+  let set i =
+    {i with hints = Hints.branch {loc_start = fst loc; loc_end = snd loc} h i.hints}
+  in
+  (* The hint belongs on the operation itself, never on a [Folded] wrapper: the
+     branch opcode is emitted only after the folded operands, so that is where the
+     encoder must take the offset, and where the decoder puts it back. *)
+  match i.desc with
+  | Folded (head, args) -> {i with desc = Folded (set head, args)}
+  | _ -> set i
 
 
 %}
@@ -446,8 +474,8 @@ f64:
 { check_constant Misc.is_float64 $sloc f; f }
 
 index:
-| n = u32 { with_loc $sloc (Num n) }
-| i = ID { with_loc $sloc (Id i.Ast.desc) }
+| n = u32 { annot $sloc (Num n) }
+| i = ID { annot $sloc (Id i.Ast.desc) }
 
 name: s = STRING
   { if not (String.is_valid_utf_8 s.Ast.desc) then
@@ -512,14 +540,14 @@ functype:
    [(param t1 t2 …)] yields one located entry per type (distinct spans, unlike
    the [field] case which shares one span and must fall back to no location). *)
 unnamed_parameter:
-| t = value_type { with_loc $sloc (None, t) }
+| t = value_type { annot $sloc (None, t) }
 
 (* A single [(param …)] group. Kept non-recursive so its [$sloc] spans just the
    group: folding the list tail in here (as a recursive [parameters] rule would)
    makes [$sloc] reach to the end of the whole list, so each parameter's
    location would overlap every following one. *)
 param_group:
-| LPAREN_PARAM i = ID t = value_type ")" { [ with_loc $sloc (Some i, t) ] }
+| LPAREN_PARAM i = ID t = value_type ")" { [ annot $sloc (Some i, t) ] }
 | LPAREN_PARAM l = unnamed_parameter * ")" { l }
 
 parameters:
@@ -550,18 +578,18 @@ parameters_and_results_without_bindings:
 
 field:
 | "(" FIELD i = ID t = field_type ")"
-   { [ with_loc $sloc (Some i, snd t.Ast.desc) ] }
+   { [ annot $sloc (Some i, snd t.Ast.desc) ] }
 (* An anonymous (field t1 t2 ...) declares several fields sharing one source
    span; locating them all at $sloc would create duplicate keys, so only the
    single-field case gets a real (comment-anchoring) location. *)
 | "(" FIELD l = field_type * ")"
   { match l with
-    | [ t ] -> [ with_loc $sloc t.Ast.desc ]
+    | [ t ] -> [ annot $sloc t.Ast.desc ]
     | _ -> l }
 
 field_type:
-| typ = storage_type { with_loc $sloc (None, {mut = false; typ}) }
-| "(" MUT typ = storage_type ")" { with_loc $sloc  (None, {mut = true; typ}) }
+| typ = storage_type { annot $sloc (None, {mut = false; typ}) }
+| "(" MUT typ = storage_type ")" { annot $sloc  (None, {mut = true; typ}) }
 
 storage_type:
 | t = value_type { Value t }
@@ -575,12 +603,12 @@ composite_type:
 
 rectype:
 | "(" REC l = type_definition * ")"
-  { with_loc $sloc (Types (Array.of_list l)) }
+  { annot $sloc (Types (Array.of_list l)) }
 | t = type_definition { {t with desc = Types [| t |]} }
 
 type_definition:
 | LPAREN_TYPE name = ID ? t = subtype ")"
- { with_loc $sloc (name, t) }
+ { annot $sloc (name, t) }
 
 (* custom-descriptors: optional [(describes $o)] then [(descriptor $d)] clauses
    preceding the composite type. Inside [(sub …)] the (possibly empty) form is
@@ -623,13 +651,13 @@ address_type:
 
 limits:
 | mi = u64
-  { with_loc $sloc {mi; ma = None; address_type = `I32; page_size_log2 = None; shared = false} }
+  { annot $sloc {mi; ma = None; address_type = `I32; page_size_log2 = None; shared = false} }
 | mi = u64 ma = u64
-  { with_loc $sloc {mi; ma = Some ma; address_type = `I32; page_size_log2 = None; shared = false} }
+  { annot $sloc {mi; ma = Some ma; address_type = `I32; page_size_log2 = None; shared = false} }
 | at = address_type mi = u64
-  { with_loc $sloc {mi; ma = None; address_type = at; page_size_log2 = None; shared = false} }
+  { annot $sloc {mi; ma = None; address_type = at; page_size_log2 = None; shared = false} }
 | at = address_type mi = u64 ma = u64
-  { with_loc $sloc {mi; ma = Some ma; address_type = at; page_size_log2 = None; shared = false} }
+  { annot $sloc {mi; ma = Some ma; address_type = at; page_size_log2 = None; shared = false} }
 
 pagesize_clause:
 | "(" PAGESIZE p = u32 ")" { page_size_log2 $loc(p) p }
@@ -651,33 +679,33 @@ blockinstr:
 | BLOCK label = label typ = block_type block =instructions END label2 = label
   { check_labels label label2;
     with_loc $sloc
-      (Block {label; typ; block = with_loc $loc(block) block}) }
+      (Block {label; typ; block = annot $loc(block) block}) }
 | LOOP label = label typ = block_type block = instructions END label2 = label
   { check_labels label label2;
-    with_loc $sloc (Loop {label; typ; block = with_loc $loc(block) block}) }
+    with_loc $sloc (Loop {label; typ; block = annot $loc(block) block}) }
 | IF label = label typ = block_type if_block = instructions ELSE
   label2 = label else_block = instructions END
   label3 = label
   { check_labels label label2;
     check_labels label label3;
     with_loc $sloc
-      (If {label; typ; if_block = with_loc $loc(if_block) if_block;
-           else_block = with_loc $loc(else_block) else_block }) }
+      (If {label; typ; if_block = annot $loc(if_block) if_block;
+           else_block = annot $loc(else_block) else_block }) }
 | IF label = label typ = block_type if_block = instructions END
   label2 = label
   { check_labels label label2;
     with_loc $sloc
-      (If {label; typ; if_block = with_loc $loc(if_block) if_block;
-           else_block = with_loc $sloc [] }) }
+      (If {label; typ; if_block = annot $loc(if_block) if_block;
+           else_block = annot $sloc [] }) }
 | TRY_TABLE label = label typ = block_type catches = catches block = instructions
   END label2 = label
    { check_labels label label2;
-     with_loc $sloc (TryTable {label; typ; catches; block = with_loc $loc(block) block}) }
+     with_loc $sloc (TryTable {label; typ; catches; block = annot $loc(block) block}) }
 | TRY label = label typ = block_type block = instructions c = legacy_catches label2 = label
   { check_labels label label2;
     let (catches, catch_all) = c in
     with_loc $sloc
-      (Try {label; typ; block = with_loc $loc(block) block; catches; catch_all}) }
+      (Try {label; typ; block = annot $loc(block) block; catches; catch_all}) }
 
 catches:
 | { [] }
@@ -699,9 +727,9 @@ on_clauses:
 
 legacy_catches:
 | END { [], None }
-| CATCH_ALL l = instructions END { [], Some (with_loc $loc(l) l) }
+| CATCH_ALL l = instructions END { [], Some (annot $loc(l) l) }
 | CATCH i = index l = instructions rem = legacy_catches
-  { map_fst (fun r -> (i, with_loc $loc(l) l) :: r) rem }
+  { map_fst (fun r -> (i, annot $loc(l) l) :: r) rem }
 
 label:
 | i = ID ? { i }
@@ -714,10 +742,10 @@ block_type:
     | _ -> Some (Typeuse tu) }
 
 %inline memindex:
-| i = ioption(index) { Option.value ~default:(with_loc $sloc (Num Uint32.zero)) i}
+| i = ioption(index) { Option.value ~default:(annot $sloc (Num Uint32.zero)) i}
 
 %inline tableindex:
-| i = ioption(index) { Option.value ~default:(with_loc $sloc (Num Uint32.zero)) i}
+| i = ioption(index) { Option.value ~default:(annot $sloc (Num Uint32.zero)) i}
 
 list_of_indices: l = index+ { l }
 
@@ -781,7 +809,7 @@ plain_instruction:
 | MEMORY_GROW i = memindex { with_loc $sloc (MemoryGrow i) }
 | MEMORY_FILL i = memindex { with_loc $sloc (MemoryFill i) }
 | MEMORY_COPY p = ioption(i1 = index i2 = index { (i1, i2) })
-  { let zero = with_loc $loc(p) (Num Uint32.zero) in
+  { let zero = annot $loc(p) (Num Uint32.zero) in
     let (i, i') = Option.value ~default:(zero, zero) p in
     with_loc $sloc (MemoryCopy (i, i')) }
 | MEMORY_INIT i = memindex d = index { with_loc $sloc (MemoryInit (i, d)) }
@@ -792,7 +820,7 @@ plain_instruction:
 | TABLE_GROW i = tableindex { with_loc $sloc (TableGrow i) }
 | TABLE_FILL i = tableindex { with_loc $sloc (TableFill i) }
 | TABLE_COPY p = ioption(i1 = index i2 = index { (i1, i2) })
-  { let zero = with_loc $loc(p) (Num Uint32.zero) in
+  { let zero = annot $loc(p) (Num Uint32.zero) in
     let (i, i') = Option.value ~default:(zero, zero) p in
     with_loc $sloc (TableCopy (i, i')) }
 | TABLE_INIT i = tableindex d = index { with_loc $sloc (TableInit (i, d)) }
@@ -944,10 +972,10 @@ comparison_operator:
    clause (the annotation and closing paren included) so a comment trailing the
    clause attaches to it rather than leaking into the next one. *)
 cond_then:
-| THEN_ANNOT then_body = instructions ")" { with_loc $sloc then_body }
+| THEN_ANNOT then_body = instructions ")" { annot $sloc then_body }
 
 cond_else:
-| ELSE_ANNOT e = instructions ")" { with_loc $sloc e }
+| ELSE_ANNOT e = instructions ")" { annot $sloc e }
 
 cond_instr:
 | IF_ANNOT c = condition
@@ -976,10 +1004,10 @@ folded_instruction:
    that closing position. *)
 | "(" BLOCK label = label typ = block_type block = instructions ")"
   { with_loc $sloc
-      (Folded (with_loc ($startpos, $endpos(block)) (Block {label; typ; block = with_loc ($startpos(block), $endpos(block)) block}), [])) }
+      (Folded (with_loc ($startpos, $endpos(block)) (Block {label; typ; block = annot ($startpos(block), $endpos(block)) block}), [])) }
 | "(" LOOP label = label typ = block_type block = instructions ")"
   { with_loc $sloc
-      (Folded (with_loc ($startpos, $endpos(block)) (Loop {label; typ; block = with_loc ($startpos(block), $endpos(block)) block}), [])) }
+      (Folded (with_loc ($startpos, $endpos(block)) (Loop {label; typ; block = annot ($startpos(block), $endpos(block)) block}), [])) }
 | "(" IF label = label
   typ = block_type l = folded_instructions if_block = folded_then
   else_block = option(folded_else)
@@ -988,13 +1016,13 @@ folded_instruction:
       (Folded
         (with_loc ($startpos, $endpos(else_block))
           (If {label; typ; if_block;
-               else_block = Option.value ~default:(with_loc $sloc []) else_block }),
+               else_block = Option.value ~default:(annot $sloc []) else_block }),
          l)) }
 | "(" TRY_TABLE label = label typ = block_type catches = catches
   block = instructions  ")"
    { with_loc $sloc
        (Folded
-          (with_loc ($startpos, $endpos(block)) (TryTable {label; typ; catches; block = with_loc ($startpos(block), $endpos(block)) block}),
+          (with_loc ($startpos, $endpos(block)) (TryTable {label; typ; catches; block = annot ($startpos(block), $endpos(block)) block}),
           [])) }
 | "(" TRY label = label
   typ = block_type "(" DO block = instructions ")"
@@ -1002,7 +1030,7 @@ folded_instruction:
   { let (catches, catch_all) = c in
     with_loc $sloc
       (Folded
-        (with_loc ($startpos, $endpos(c)) (Try {label; typ; block = with_loc ($startpos(block), $endpos(block)) block; catches; catch_all}), [])) }
+        (with_loc ($startpos, $endpos(c)) (Try {label; typ; block = annot ($startpos(block), $endpos(block)) block; catches; catch_all}), [])) }
 | STRING_ANNOT id = option(index) l = string_list ")"
     { with_loc $sloc (String (id, l)) }
 | CHAR_ANNOT s = STRING ")"
@@ -1022,16 +1050,16 @@ folded_instruction:
    location of the whole clause (parens included) so a comment trailing
    the clause attaches to it rather than leaking into the next clause. *)
 folded_then:
-| LPAREN_THEN block = instructions ")" { with_loc $sloc block }
+| LPAREN_THEN block = instructions ")" { annot $sloc block }
 
 folded_else:
-| "(" ELSE block = instructions ")" { with_loc $sloc block }
+| "(" ELSE block = instructions ")" { annot $sloc block }
 
 folded_catches:
 | { [], None }
-| LPAREN_CATCH_ALL l = instructions ")" { [], Some (with_loc ($startpos(l), $endpos(l)) l) }
+| LPAREN_CATCH_ALL l = instructions ")" { [], Some (annot ($startpos(l), $endpos(l)) l) }
 | LPAREN_CATCH i = index l = instructions ")" rem = folded_catches
-  { map_fst (fun r -> (i, with_loc ($startpos(l), $endpos(l)) l) :: r) rem }
+  { map_fst (fun r -> (i, annot ($startpos(l), $endpos(l)) l) :: r) rem }
 
 folded_instructions:
 | { [] }
@@ -1060,9 +1088,9 @@ type_use_without_bindings:
 import:
 | LPAREN_IMPORT module_ = name name = name desc = external_type ")"
     { let (id, desc) = desc in
-      with_loc $sloc (Import {module_; name; id; desc; exports = [] }) }
+      annot $sloc (Import {module_; name; id; desc; exports = [] }) }
 | LPAREN_IMPORT module_ = name elems = nonempty_list(import_group_item) ")"
-    { with_loc $sloc (compact_import $sloc module_ elems) }
+    { annot $sloc (compact_import $sloc module_ elems) }
 
 import_group_item:
 | "(" ITEM id = ioption(ID) name = name t = ioption(external_type) ")"
@@ -1086,18 +1114,18 @@ external_type:
 func:
 | "(" FUNC id = ID ? exports = exports typ = type_use
    locals = locals instrs = instructions ")"
-  { with_loc $sloc (Func {id; typ; locals; instrs; exports}) }
+  { annot $sloc (Func {id; typ; locals; instrs; exports}) }
 | "(" FUNC id = ID ?
   exports = exports imp = inline_import
   t = type_use ")"
   { let (module_, name) = imp in
-    with_loc $sloc
+    annot $sloc
       (Import {module_; name; id; desc = Func { exact = false; typ = t }; exports }) }
 | "(" FUNC id = ID ?
   exports = exports imp = inline_import
   "(" EXACT t = type_use ")" ")"
   { let (module_, name) = imp in
-    with_loc $sloc
+    annot $sloc
       (Import {module_; name; id; desc = Func { exact = true; typ = t }; exports }) }
 
 exports:
@@ -1123,17 +1151,17 @@ locals:
    point at) across every later local. *)
 local_decl:
 | LPAREN_LOCAL i = ID t = value_type ")"
-  { [ with_loc $sloc (Some i, t) ] }
+  { [ annot $sloc (Some i, t) ] }
 (* As for fields, only the single-local case gets a comment-anchoring
    location; an anonymous (local t1 t2 ...) shares one span. *)
-| LPAREN_LOCAL l = list(v = value_type { with_loc $sloc (None, v) }) ")"
+| LPAREN_LOCAL l = list(v = value_type { annot $sloc (None, v) }) ")"
   { match l with
-    | [ t ] -> [ with_loc $sloc (None, snd t.Ast.desc) ]
+    | [ t ] -> [ annot $sloc (None, snd t.Ast.desc) ]
     | _ -> l }
 
 memory:
 | "(" MEMORY id = ID? exports = exports limits = memory_type ")"
-  { with_loc $sloc (Memory {id; limits; init = None; exports}) }
+  { annot $sloc (Memory {id; limits; init = None; exports}) }
 | "(" MEMORY id = ID?
   exports = exports at = ioption(address_type) ps = ioption(pagesize_clause)
   "(" DATA s = data_string ")" ")"
@@ -1147,16 +1175,16 @@ memory:
       Ast.no_loc
         {mi = sz; ma = Some sz; address_type; page_size_log2 = ps;
          shared = false} in
-    with_loc $sloc (Memory {id; limits; init = Some s; exports}) }
+    annot $sloc (Memory {id; limits; init = Some s; exports}) }
 | "(" MEMORY id = ID ?
   exports = exports imp = inline_import t = memory_type ")"
   { let (module_, name) = imp in
-    with_loc $sloc (Import {module_; name; id; desc = Memory t; exports}) }
+    annot $sloc (Import {module_; name; id; desc = Memory t; exports}) }
 
 table:
 | "(" TABLE id = ID? exports = exports typ = table_type e = expression ")"
   { let init = if e = [] then Init_default else Init_expr e in
-    with_loc $sloc (Table {id; typ; init; exports}) }
+    annot $sloc (Table {id; typ; init; exports}) }
 | "(" TABLE id = ID?
   exports = exports at = ioption(address_type) reftype = reference_type
   "(" ELEM elem = list(elemexpr) ")" ")"
@@ -1164,7 +1192,7 @@ table:
     let len = Uint64.of_int (List.length elem) in
     let limits =
       Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None; shared = false} in
-    with_loc $sloc
+    annot $sloc
       (Table {id; typ = {limits; reftype};
               init = Init_segment elem; exports}) }
 | "(" TABLE id = ID?
@@ -1172,35 +1200,35 @@ table:
   "(" ELEM elem = list_of_indices ")" ")"
   { let address_type = Option.value ~default:`I32 at in
     let len = Uint64.of_int (List.length elem) in
-    let elem = List.map (fun i -> [{i with Ast.desc = RefFunc i}]) elem in
+    let elem = List.map (fun i -> [instr_at i.Ast.info (RefFunc i)]) elem in
     let limits =
       Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None; shared = false} in
-    with_loc $sloc
+    annot $sloc
       (Table {id; typ = { limits; reftype };
               init = Init_segment elem; exports}) }
 | "(" TABLE id = ID ?
   exports = exports imp = inline_import
   t = table_type ")"
   { let (module_, name) = imp in
-    with_loc $sloc (Import {module_; name; id; desc = Table t; exports }) }
+    annot $sloc (Import {module_; name; id; desc = Table t; exports }) }
 
 tag:
 | "(" TAG id = ID ? exports = exports typ = type_use ")"
-    { with_loc $sloc (Tag {id; typ; exports}) }
+    { annot $sloc (Tag {id; typ; exports}) }
 | "(" TAG id = ID ?
   exports = exports imp = inline_import
   typ = type_use")"
   { let (module_, name) = imp in
-    with_loc $sloc (Import {module_; name; id; desc = Tag typ; exports }) }
+    annot $sloc (Import {module_; name; id; desc = Tag typ; exports }) }
 
 global:
 | "(" GLOBAL id = ID ? exports = exports typ = global_type init = expression ")"
-  { with_loc $sloc (Global {id; typ; init; exports}) }
+  { annot $sloc (Global {id; typ; init; exports}) }
 | "(" GLOBAL id = ID ?
   exports = exports imp = inline_import
   typ = global_type ")"
   { let (module_, name) = imp in
-    with_loc $sloc (Import {module_; name; id; desc = Global typ; exports }) }
+    annot $sloc (Import {module_; name; id; desc = Global typ; exports }) }
 
 global_type:
 | typ = value_type { {mut = false; typ} }
@@ -1209,7 +1237,7 @@ global_type:
 export:
 | LPAREN_EXPORT name = name d = extern_index ")"
   { let (index, kind) = d in
-    with_loc $sloc (Export {name; kind; index}) }
+    annot $sloc (Export {name; kind; index}) }
 
 extern_index:
 | "(" FUNC i = index ")" { (i, Func) }
@@ -1219,28 +1247,28 @@ extern_index:
 | "(" TAG i = index ")" { (i, (Tag : exportable)) }
 
 start:
-| "(" START i = index ")" { with_loc $sloc (Start i) }
+| "(" START i = index ")" { annot $sloc (Start i) }
 
 elem:
 | "(" ELEM id = ID ? l = element_list ")"
   { let (typ, init) = l in
-    with_loc $sloc (Elem {id; mode = Passive; typ; init}) }
+    annot $sloc (Elem {id; mode = Passive; typ; init}) }
 | "(" ELEM id = ID ? t = tableuse o = offset l = element_list ")"
   { let (typ, init) = l in
-    with_loc $sloc (Elem {id; mode = Active (t, o); typ; init}) }
+    annot $sloc (Elem {id; mode = Active (t, o); typ; init}) }
 | "(" ELEM id = ID ? DECLARE l = element_list ")"
   { let (typ, init) = l in
-    with_loc $sloc (Elem {id; mode = Declare; typ; init}) }
+    annot $sloc (Elem {id; mode = Declare; typ; init}) }
 | "(" ELEM id = ID ? o = offset init = list(index) ")"
-  { let init = List.map (fun i -> [{i with Ast.desc = RefFunc i}]) init in
-    with_loc $sloc
+  { let init = List.map (fun i -> [instr_at i.Ast.info (RefFunc i)]) init in
+    annot $sloc
       (Elem {id; mode = Active (Ast.no_loc (Num Uint32.zero), o);
              typ = { nullable = false ; typ = Func }; init}) }
 
 element_list:
 | t = reference_type l = elemexpr * { (t, l) }
 | FUNC l = list(index)
-  { let l = List.map (fun i -> [{i with Ast.desc = RefFunc i}]) l in
+  { let l = List.map (fun i -> [instr_at i.Ast.info (RefFunc i)]) l in
     ({nullable = false; typ = Func}, l) }
 
 elemexpr:
@@ -1249,13 +1277,13 @@ elemexpr:
 
 %inline tableuse:
 | "(" TABLE i = index ")" { i }
-| { with_loc $sloc (Num Uint32.zero) }
+| { annot $sloc (Num Uint32.zero) }
 
 data:
 | "(" DATA id = ID ? init = data_string ")"
-  { with_loc $sloc (Data { id; init; mode = Passive }) }
+  { annot $sloc (Data { id; init; mode = Passive }) }
 | "(" DATA id = ID ? m = memuse e = offset init = data_string ")"
-  { with_loc $sloc (Data { id; init; mode = Active (m, e) }) }
+  { annot $sloc (Data { id; init; mode = Active (m, e) }) }
 
 offset:
 | "(" OFFSET e = expression ")" { e }
@@ -1274,21 +1302,21 @@ data_element:
   { List.iter
       (check_constant (match t with I8 -> Misc.is_int8 | I16 -> Misc.is_int16) $sloc)
       l;
-    with_loc $sloc (Numlist (Packed t, l)) }
+    annot $sloc (Numlist (Packed t, l)) }
 | "(" I32 l = list(integer_literal) ")"
   { List.iter (check_constant Misc.is_int32 $sloc) l;
-    with_loc $sloc (Numlist (Value I32, l)) }
+    annot $sloc (Numlist (Value I32, l)) }
 | "(" I64 l = list(integer_literal) ")"
   { List.iter (check_constant Misc.is_int64 $sloc) l;
-    with_loc $sloc (Numlist (Value I64, l)) }
+    annot $sloc (Numlist (Value I64, l)) }
 | "(" F32 l = list(float_literal) ")"
   { List.iter (check_constant Misc.is_float32 $sloc) l;
-    with_loc $sloc (Numlist (Value F32, l)) }
+    annot $sloc (Numlist (Value F32, l)) }
 | "(" F64 l = list(float_literal) ")"
   { List.iter (check_constant Misc.is_float64 $sloc) l;
-    with_loc $sloc (Numlist (Value F64, l)) }
+    annot $sloc (Numlist (Value F64, l)) }
 | "(" V128 l = nonempty_list(v128_const_body) ")"
-  { with_loc $sloc (V128list l) }
+  { annot $sloc (V128list l) }
 
 integer_literal:
 | n = NAT { n }
@@ -1315,17 +1343,17 @@ v128_const_body:
 
 %inline memuse:
 | "(" MEMORY i = index ")" { i }
-| { with_loc $sloc (Num Uint32.zero) }
+| { annot $sloc (Num Uint32.zero) }
 
 globalstring:
 | STRING_ANNOT id = ID typ = option(index) init = string_list ")"
-  { with_loc $sloc (String_global {id; typ; init}) }
+  { annot $sloc (String_global {id; typ; init}) }
 
 (* A module-level [(@feature "name")] annotation: the module declares it uses
    the named optional proposal (the Wax [#![feature = "…"]] inner attribute). *)
 feature_annotation:
 | FEATURE_ANNOT s = STRING ")"
-  { with_loc $sloc (Feature_annotation s) }
+  { annot $sloc (Feature_annotation s) }
 
 module_field:
 | f = rectype
@@ -1345,17 +1373,17 @@ module_field:
   { f }
 
 cond_then_fields:
-| THEN_ANNOT then_fields = list(module_field) ")" { with_loc $sloc then_fields }
+| THEN_ANNOT then_fields = list(module_field) ")" { annot $sloc then_fields }
 
 cond_else_fields:
-| ELSE_ANNOT e = list(module_field) ")" { with_loc $sloc e }
+| ELSE_ANNOT e = list(module_field) ")" { annot $sloc e }
 
 cond_module_field:
 | IF_ANNOT c = condition
   then_fields = cond_then_fields
   else_fields = option(cond_else_fields)
   ")"
-  { with_loc $sloc
+  { annot $sloc
       (Module_if_annotation { cond = c; then_fields; else_fields }) }
 
 parse:

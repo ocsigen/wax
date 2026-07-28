@@ -120,9 +120,9 @@ let render_reftype (rt : Ast.reftype) = Output.valtype_string (Ast.Ref rt)
 let struct_candidates fields =
   Array.to_list fields
   |> List.map (fun f ->
-      let nm, typ = f.Ast.desc in
+      let nm, typ = f.Annot.desc in
       {
-        member_name = nm.Ast.desc;
+        member_name = nm.Annot.desc;
         member_kind = Field;
         member_detail = render_fieldtype typ;
       })

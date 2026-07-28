@@ -241,13 +241,15 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
         List.iter
           (fun (tag, body) ->
             use tags tag;
-            walk_instrs locals ls body.desc)
+            walk_instrs locals ls (body : (_ instr list, _) Ast.annotated).desc)
           catches;
-        Option.iter (fun body -> walk_instrs locals ls body.desc) catch_all
+        Option.iter
+          (fun (body : (_ instr list, _) Ast.annotated) ->
+            walk_instrs locals ls body.desc)
+          catch_all
     | Folded (head, args) ->
         walk_instr locals labels head;
         walk_instrs locals labels args
-    | Hinted (_, inner) -> walk_instr locals labels inner
     (* Branches: label uses. *)
     | Br idx | Br_if idx | Br_on_null idx | Br_on_non_null idx ->
         use_label labels idx

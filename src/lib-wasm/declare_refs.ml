@@ -93,7 +93,7 @@ let module_ ((name, fields) : Ast.location T.module_) : Ast.location T.module_ =
     if undeclared = [] then (name, fields)
     else
       let new_inits =
-        List.map (fun idx -> [ Ast.no_loc (T.RefFunc idx) ]) undeclared
+        List.map (fun idx -> [ T.no_loc (T.RefFunc idx) ]) undeclared
       in
       (* Extend the first declarative funcref segment if there is one, else
          append a fresh one. *)

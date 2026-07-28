@@ -80,8 +80,10 @@ let report_token ctx pos =
   ctx.at_start_of_line <- false;
   ctx.prev_token_end <- pos
 
+let record_pos ctx info = ctx.locations <- info :: ctx.locations
+
 let with_pos ctx info desc =
-  ctx.locations <- info :: ctx.locations;
+  record_pos ctx info;
   { Ast.desc; info }
 
 let drop_in_ranges ctx ranges =

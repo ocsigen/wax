@@ -159,17 +159,23 @@ let push_label ctx label =
 
 (* A [@string] lowers to [array.new_fixed]. An [i8] array holds the raw bytes
    (its UTF-8 encoding); an [i16] array ([wide]) holds the UTF-16 code units. *)
-let string ~wide i ty s =
+(* [loc] is the source span of the [(@string ...)] annotation being expanded; the
+   instructions it lowers to are all located there. Built explicitly rather than
+   with [{ i with desc = ... }] on the text instruction: a text and a binary
+   instruction differ in the type of their call-target hints, so one cannot be
+   reinterpreted as the other. *)
+let string ~wide loc ty s =
   let s = Wax_utils.Ast.concat_desc s in
   let values =
     if wide then Wax_utils.Unicode.utf16_code_units s
     else List.init (String.length s) (fun j -> Char.code s.[j])
   in
+  let at desc : Ast.location B.instr =
+    { desc; info = loc; hints = Hints.none }
+  in
   B.Folded
-    ( { i with desc = ArrayNewFixed (ty, Uint32.of_int (List.length values)) },
-      List.map
-        (fun c -> { i with desc = B.Const (I32 (Int32.of_int c)) })
-        values )
+    ( at (ArrayNewFixed (ty, Uint32.of_int (List.length values))),
+      List.map (fun c -> at (B.Const (I32 (Int32.of_int c)))) values )
 
 (*** Instruction conversion ***)
 
@@ -221,8 +227,6 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | Nop -> Nop
     | Br i -> Br (resolve_label ctx.labels i)
     | Br_if i -> Br_if (resolve_label ctx.labels i)
-    | Hinted (h, inner) ->
-        Hinted (h, instr ~resolve_string_type ~resolve_func_type ctx inner)
     | Br_table (ls, d) ->
         Br_table
           (List.map (resolve_label ctx.labels) ls, resolve_label ctx.labels d)
@@ -439,7 +443,7 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
           | None -> resolve_string_type ()
           | Some id -> resolve_idx ctx.types id
         in
-        string ~wide:(IntSet.mem ty ctx.wide_arrays) i ty s
+        string ~wide:(IntSet.mem ty ctx.wide_arrays) i.T.info ty s
     | Char c -> Const (I32 (Int32.of_int (Uchar.to_int c)))
     | If_annotation _ -> raise (Conditional_in_binary i.info)
     | Folded (i, is) ->
@@ -447,7 +451,13 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
           ( instr ~resolve_string_type ~resolve_func_type ctx i,
             List.map (instr ~resolve_string_type ~resolve_func_type ctx) is )
   in
-  { desc; info = i.info }
+  (* The hints ride along unchanged except for their call targets, which are
+     named references in the text and function indices in the binary. *)
+  {
+    desc;
+    info = i.info;
+    hints = Hints.map_targets (resolve_idx ctx.funcs) i.hints;
+  }
 
 (*** Module conversion ***)
 
@@ -482,10 +492,6 @@ let collect_labels instrs ctr map =
                body. *)
             let map = go operands ctr map in
             go [ head ] ctr map
-        | Hinted (_, inner) ->
-            (* A branch hint is a transparent wrapper around one instruction
-               (e.g. a labelled [if]); recurse into it. *)
-            go [ inner ] ctr map
         | If_annotation _ ->
             (* An unresolved [(@if ...)] conditional never reaches the binary
                name section: emission rejects it ([Conditional_in_binary]). Its
@@ -951,7 +957,14 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
               {
                 B.typ =
                   { mut = false; typ = Ref { nullable = false; typ = Type ty } };
-                B.init = [ { f with desc = string ~wide f ty init } ];
+                B.init =
+                  [
+                    {
+                      desc = string ~wide f.Ast.info ty init;
+                      info = f.Ast.info;
+                      hints = Hints.none;
+                    };
+                  ];
               }
         | _ -> None)
       fields
@@ -1088,7 +1101,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             B.Active
               ( table_idx,
                 [
-                  Ast.no_loc
+                  B.no_loc
                     (B.Const
                        (match typ.limits.desc.address_type with
                        | `I32 -> B.I32 0l
@@ -1144,7 +1157,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             B.Active
               ( mem_idx,
                 [
-                  Ast.no_loc
+                  B.no_loc
                     (B.Const
                        (match limits.desc.address_type with
                        | `I32 -> B.I32 0l

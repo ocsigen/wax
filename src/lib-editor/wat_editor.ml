@@ -662,7 +662,9 @@ let rec wat_iter_fields f fields =
       match field.desc with
       | Text.Module_if_annotation { then_fields; else_fields; _ } ->
           wat_iter_fields f then_fields.desc;
-          Option.iter (fun b -> wat_iter_fields f b.desc) else_fields
+          Option.iter
+            (fun b -> wat_iter_fields f b.Wax_utils.Ast.desc)
+            else_fields
       | _ -> ())
     fields
 
@@ -732,7 +734,7 @@ let wat_field_symbols
   | Types rectype ->
       Array.to_list rectype
       |> List.filter_map (fun entry ->
-          let id, _ = entry.desc in
+          let id, _ = entry.Wax_utils.Ast.desc in
           match (id : name option) with
           | Some n ->
               Some
@@ -843,7 +845,7 @@ let signature_help_string ?(encoding = UTF16) src line ch =
               let active =
                 let open Wax_wasm.Ast in
                 List.fold_left
-                  (fun acc a ->
+                  (fun acc (a : location Text.instr) ->
                     if lt (pos a.info.loc_end) target then acc + 1 else acc)
                   0 args
               in
@@ -981,7 +983,10 @@ let folding_string src =
           | Import_group1 _ | Import_group2 _ -> add_loc "imports" field.info
           | Module_if_annotation { then_fields; else_fields; _ } ->
               add_loc "region" then_fields.info;
-              Option.iter (fun b -> add_loc "region" b.info) else_fields
+              Option.iter
+                (fun (b : (_, location) Wax_utils.Ast.annotated) ->
+                  add_loc "region" b.info)
+                else_fields
           | _ -> add_loc "region" field.info);
           wat_field_iter_instr
             (fun i ->

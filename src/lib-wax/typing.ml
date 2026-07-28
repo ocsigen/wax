@@ -42,7 +42,7 @@ module Error = struct
   let text = Message.text
   let ( ++ ) = Message.( ++ )
   let ( ^^ ) = Message.( ^^ )
-  let name x = Message.ident x.desc
+  let name x = Message.ident x.Wax_utils.Ast.desc
   let kw = Message.code
   let num s = Message.styled Colors.Constant s
 
@@ -938,7 +938,9 @@ module Namespace = struct
   include Typing_env.Namespace
 
   let make ?(links = None) cond = { cond; tbl = Hashtbl.create 16; links }
-  let entries ns x = try Hashtbl.find ns.tbl x.desc with Not_found -> []
+
+  let entries ns (x : Ast.ident) =
+    try Hashtbl.find ns.tbl x.desc with Not_found -> []
 
   (* A name conflicts with an earlier declaration only if their assumptions can
      both hold; declarations in mutually-exclusive branches do not conflict. *)
@@ -987,7 +989,9 @@ module Tbl = struct
     Hashtbl.iter (fun name referrer -> f referrer name) env.used
 
   let cur env = !(env.namespace.cond)
-  let entries env x = try Hashtbl.find env.tbl x.desc with Not_found -> []
+
+  let entries env (x : Ast.ident) =
+    try Hashtbl.find env.tbl x.desc with Not_found -> []
 
   let add d env x v =
     Namespace.register d env.namespace env.kind x;
@@ -1171,7 +1175,7 @@ let check_unique_param_names d params =
   ignore
     (Array.fold_left
        (fun s p ->
-         match fst p.desc with
+         match param_name p with
          | None -> s
          | Some name ->
              (match List.assoc_opt name.desc s with
@@ -1232,7 +1236,9 @@ let n_valtype d ctx ty : Nz.valtype option =
 
 let n_functype d ctx { params; results } : Nz.functype option =
   check_unique_param_names d params;
-  let*@ params = array_map_opt (fun p -> n_valtype d ctx (snd p.desc)) params in
+  let*@ params =
+    array_map_opt (fun p -> n_valtype d ctx (param_type p)) params
+  in
   let+@ results = array_map_opt (fun ty -> n_valtype d ctx ty) results in
   { Nz.params; results }
 
@@ -1253,8 +1259,8 @@ let comptype d (ctx : type_context) (ty : comptype) : Nz.comptype option =
   | Struct fields ->
       let _ : (string * location) list =
         Array.fold_left
-          (fun s field ->
-            let name, _ = field.desc in
+          (fun s (field : (ident * fieldtype, location) Ast.annotated) ->
+            let name = field_name field in
             (match List.assoc_opt name.desc s with
             | Some prev_loc ->
                 Error.duplicated_field d ~location:name.info ~prev_loc name
@@ -1263,7 +1269,7 @@ let comptype d (ctx : type_context) (ty : comptype) : Nz.comptype option =
           [] fields
       in
       let+@ fields =
-        array_map_opt (fun field -> n_fieldtype d ctx (snd field.desc)) fields
+        array_map_opt (fun field -> n_fieldtype d ctx (field_type field)) fields
       in
       (Struct fields : Nz.comptype)
   | Array field ->
@@ -1300,7 +1306,7 @@ let subtype d (ctx : type_context) current
      declared-before restriction applies. *)
   let resolve_opt = function
     | None -> Some None
-    | Some idx ->
+    | Some (idx : Ast.ident) ->
         require_feature d ctx ~location:idx.info
           Wax_utils.Feature.Custom_descriptors;
         let+@ r = resolve_type_ref d ctx idx in
@@ -1320,8 +1326,8 @@ let rectype d (ctx : type_context) ty =
     array_mapi_opt
       (fun i elt ->
         if outer <> Ignored then
-          ctx.types.current := From_type (fst elt.desc).desc;
-        subtype d ctx i (snd elt.desc))
+          ctx.types.current := From_type (member_name elt).desc;
+        subtype d ctx i (member_type elt))
       ty
   in
   ctx.types.current := outer;
@@ -1338,7 +1344,7 @@ let expand_splices d (ctx : type_context) ty =
   let expanded = Array.copy ty in
   Array.iteri
     (fun i elt ->
-      let name, (sub : subtype) = elt.desc in
+      let name = member_name elt and sub = member_type elt in
       match sub.typ with
       | Struct fields
         when Array.length fields > 0 && Ast.is_splice_field fields.(0) ->
@@ -1357,7 +1363,8 @@ let expand_splices d (ctx : type_context) ty =
                     let parent =
                       match idx with
                       | Wax_wasm.Types.Rec j ->
-                          if j < i then Some (snd expanded.(j).desc) else None
+                          if j < i then Some (member_type expanded.(j))
+                          else None
                       | Def _ -> Some parent
                     in
                     match parent with
@@ -1413,7 +1420,7 @@ let reserved_type_names =
 let add_type d (ctx : type_context) ty =
   Array.iteri
     (fun i elt ->
-      let name, (typ : subtype) = elt.desc in
+      let name = member_name elt and typ = member_type elt in
       if List.mem name.desc reserved_type_names then
         Error.reserved_type_name d ~location:name.info name;
       Tbl.add d ctx.types name (Wax_wasm.Types.Rec i, typ))
@@ -1424,7 +1431,7 @@ let add_type d (ctx : type_context) ty =
   match rectype d ctx ty with
   | None ->
       (* Remove temporary names on failure *)
-      Array.iter (fun elt -> Tbl.remove ctx.types (fst elt.desc)) ty;
+      Array.iter (fun elt -> Tbl.remove ctx.types (member_name elt)) ty;
       None
   | Some ity ->
       (* Well-formedness of [descriptor]/[describes] clauses, which must link two
@@ -1465,7 +1472,7 @@ let add_type d (ctx : type_context) ty =
       ctx.subtyping_info_cache <- None;
       Array.iteri
         (fun i elt ->
-          let name, (typ : subtype) = elt.desc in
+          let name = member_name elt and typ = member_type elt in
           (* Normalization drops a supertype the spec forbids — a forward or self
              reference, which is not "declared before" (see [subtype]/
              [defined_before]). Drop it from the source type stored here too, so
@@ -1542,7 +1549,9 @@ let field_set_key names = String.concat "," (List.sort_uniq compare names)
    [None] when none or several do (then the type is ambiguous and must be
    named). O(#fields) given the precomputed [ctx.structs_by_fields] map. *)
 let infer_struct_by_fields ctx fields =
-  let key = field_set_key (List.map (fun (idx, _) -> idx.desc) fields) in
+  let key =
+    field_set_key (List.map (fun ((idx : Ast.ident), _) -> idx.desc) fields)
+  in
   match Hashtbl.find_opt ctx.structs_by_fields key with
   | Some (Some name) -> Some name
   | Some None | None -> None
@@ -1553,7 +1562,7 @@ let infer_struct_by_fields ctx fields =
    sees a pun. *)
 let field_value (name : ident) = function
   | Some i -> i
-  | None -> { desc = Get name; info = name.info }
+  | None -> { desc = Get name; info = name.info; hints = Wax_wasm.Hints.none }
 
 let lookup_array_type ?location ctx name =
   let*@ ty = Tbl.find ctx.diagnostics ctx.type_context.types name in
@@ -2056,6 +2065,7 @@ let ( let*! ) e f =
         {
           desc = Ast.Unreachable;
           info = ([| Cell.make Error |], (Ast.no_loc ()).info);
+          hints = Wax_wasm.Hints.none;
         }
 
 (* Pop the top operand's type. An [Unreachable] (polymorphic) stack yields a
@@ -2271,15 +2281,15 @@ let branch_target ctx label =
           Wax_utils.Spell_check.f
             (fun f ->
               List.iter
-                (fun (l, _) -> Option.iter (fun l -> f l.desc) l)
+                (fun (l, _) -> Option.iter (fun (l : Ast.ident) -> f l.desc) l)
                 ctx.control_types)
-            label.desc
+            label.Annot.desc
         in
         Error.unbound_name ctx.diagnostics ~location:label.info ~suggestions
           "label" label;
         ctx.unresolved_label := true;
         [||]
-    | (Some label', res) :: _ when label.desc = label'.desc ->
+    | (Some label', res) :: _ when label.desc = label'.Annot.desc ->
         ctx.used_labels :=
           IntSet.add label'.info.loc_start.pos_cnum !(ctx.used_labels);
         record_reference ctx.resolve_links label.info [ label'.info ];
@@ -2292,9 +2302,9 @@ let branch_target ctx label =
    [branch_target], reports nothing and records no use; used to tell an unbound
    label (already diagnosed) from a legitimately void target when both present as
    [[||]]. *)
-let label_in_scope ctx label =
+let label_in_scope ctx (label : Ast.ident) =
   List.exists
-    (fun (l, _) ->
+    (fun ((l : Ast.ident option), _) ->
       match l with Some l' -> l'.desc = label.desc | None -> false)
     ctx.control_types
 
@@ -2346,7 +2356,7 @@ type resolved_var =
          at its definition, reads as [Error] with no further report. *)
   | Unbound
 
-let resolve_variable ctx idx =
+let resolve_variable ctx (idx : Ast.ident) =
   match StringMap.find_opt idx.desc ctx.locals with
   | Some (ty, def) ->
       record_reference ~hover:(hover_of_valtype ty) ctx.resolve_links idx.info
@@ -2366,18 +2376,18 @@ let resolve_variable ctx idx =
    shadows it: Wax resolves a bare name to a local first, and globals, functions,
    memories and tables share one namespace (so only a local can collide), so the
    receiver form must defer to the local just as [Get name] does. *)
-let memory_receiver ctx name =
+let memory_receiver ctx (name : Ast.ident) =
   (not (StringMap.mem name.desc ctx.locals))
   && Tbl.find_opt ctx.memories name <> None
 
-let table_receiver ctx name =
+let table_receiver ctx (name : Ast.ident) =
   (not (StringMap.mem name.desc ctx.locals))
   && Tbl.find_opt ctx.tables name <> None
 
 (* Likewise for a data/element segment named by [seg.drop()] (and the segment
    operand of [mem.init]/[tab.init]/array segment ops): usable as such only when
    not shadowed by a local. *)
-let segment_receiver ctx name =
+let segment_receiver ctx (name : Ast.ident) =
   (not (StringMap.mem name.desc ctx.locals))
   && (Tbl.find_opt ctx.datas name <> None || Tbl.find_opt ctx.elems name <> None)
 
@@ -2483,14 +2493,16 @@ let field_has_default (ty : fieldtype) =
       | I32 | I64 | F32 | F64 | V128 -> true
       | Ref { nullable; _ } -> nullable)
 
+(* The typed node for [i]: its hints ride along, being advisory metadata the
+   typer neither reads nor changes. *)
 let return_statement (i : location instr)
     (desc : (inferred_type Cell.t array * location) instr_desc) (ty : _ array)
     st =
-  (st, { desc; info = ((ty : _ array), i.info) })
+  (st, { desc; info = ((ty : _ array), i.info); hints = i.hints })
 
 let return_expression i desc ty = return_statement i desc [| ty |]
 
-let expression_type ctx i =
+let expression_type ctx (i : _ Ast.instr) =
   let typ, location = i.info in
   match typ with
   | [| ty |] -> ty
@@ -2793,7 +2805,7 @@ let bind_let_value ctx ~location result_ty (name, typ) =
            Option.iter
              (fun name ->
                ctx.locals <-
-                 StringMap.add name.desc (Some ity, name.info) ctx.locals;
+                 StringMap.add name.Annot.desc (Some ity, name.info) ctx.locals;
                ctx.local_decls := name :: !(ctx.local_decls);
                mark_initialized ctx name.desc)
              name;
@@ -2810,7 +2822,8 @@ let bind_let_value ctx ~location result_ty (name, typ) =
              poison ([None]) rather than defaulting to [i32], and an [Unknown]
              initializer is additionally reported (see [bound_value_type]). *)
           let ity = bound_value_type ctx ~location result_ty in
-          ctx.locals <- StringMap.add name.desc (ity, name.info) ctx.locals;
+          ctx.locals <-
+            StringMap.add name.Annot.desc (ity, name.info) ctx.locals;
           ctx.local_decls := name :: !(ctx.local_decls);
           mark_initialized ctx name.desc)
         name;
@@ -2847,7 +2860,8 @@ let merge_let_tuple ctx head rest =
     | Some (bindings, rest')
       when List.exists (fun (name, _) -> Option.is_some name) bindings ->
         let info = ([||], snd head.info) in
-        { desc = Let (List.rev bindings, Some head); info } :: rest'
+        { desc = Let (List.rev bindings, Some head); info; hints = head.hints }
+        :: rest'
     | _ -> head :: rest
 
 (* Check a list of typed operands against an array of expected types. *)
@@ -2901,7 +2915,7 @@ let internal_functype ctx (ft : functype) : Internal.functype option =
   let*@ params =
     array_map_opt
       (fun p ->
-        let+@ iv = internalize_valtype ctx (snd p.desc) in
+        let+@ iv = internalize_valtype ctx (param_type p) in
         iv.internal)
       ft.params
   in
@@ -2977,7 +2991,7 @@ let check_resume_handlers ctx ~result_types handlers =
                   | _ -> ());
                   Array.iteri
                     (fun i p ->
-                      let _, t = p.desc in
+                      let t = param_type p in
                       match
                         (internalize_valtype ctx t, internal_of_inferred ts'.(i))
                       with
@@ -3145,7 +3159,7 @@ let rec list_split n l =
    operand does; every other operand emits at least one value-producing
    instruction. Static receivers (memory/table/segment names, a [tab[..]] table)
    are immediates, not operands, and never reach here. *)
-let rec emits_value ctx node =
+let rec emits_value ctx (node : _ Ast.instr) =
   match node.desc with
   | Hole -> false
   | Cast (inner, _) when cast_is_transparent ctx ~cast:node ~operand:inner ->
@@ -3515,7 +3529,7 @@ let cont_receiver ctx ct =
   let params, results =
     match sign with
     | Some sg ->
-        ( Array.to_list (Array.map (fun p -> render (snd p.Ast.desc)) sg.params),
+        ( Array.to_list (Array.map (fun p -> render (param_type p)) sg.params),
           Array.to_list (Array.map render sg.results) )
     | None -> ([], [])
   in
@@ -3531,7 +3545,7 @@ let cont_receiver ctx ct =
             let*@ sg2 = lookup_func_type ctx inner2 in
             Some
               (Array.to_list
-                 (Array.map (fun p -> render (snd p.Ast.desc)) sg2.params))
+                 (Array.map (fun p -> render (param_type p)) sg2.params))
         | _ -> None
     with
     | Some rs -> rs
@@ -3814,7 +3828,7 @@ let anon_function_type ctx (sign : functype) =
   Buffer.add_string buf "<fn:";
   Array.iter
     (fun p ->
-      vt (snd p.desc);
+      vt (param_type p);
       Buffer.add_char buf ';')
     sign.params;
   Buffer.add_string buf "->";
@@ -3879,9 +3893,10 @@ let rebuild_dispatch typed_list arms =
       let idx, rest_bodies = extract_dispatch outer (List.length rest_arms) in
       ( idx,
         List.rev
-          ((outer_label, { outer_orig with desc = outer_body })
+          ((outer_label, { outer_orig with Annot.desc = outer_body })
           :: List.map2
-               (fun (l, orig) b -> (l, { orig with desc = b }))
+               (fun (l, (orig : (_ instr list, location) Ast.annotated)) b ->
+                 (l, { orig with desc = b }))
                rest_arms rest_bodies) )
   | _ -> assert false
 
@@ -3987,7 +4002,7 @@ let rebuild_match typed_list arms =
         | (pat, orig) :: rest_rev ->
             let inner, arm_body = unwrap pat (block_body blk) in
             let rest, scrut = peel inner rest_rev in
-            ((pat, { orig with desc = arm_body }) :: rest, scrut)
+            ((pat, { orig with Annot.desc = arm_body }) :: rest, scrut)
       in
       let arms_rev, scrut = peel escape (List.rev arms) in
       (List.rev arms_rev, default, Some scrut)
@@ -4045,8 +4060,6 @@ let rec classify_trailing ctx desc =
          self-resolving nested block. *)
       ( fst (classify_trailing ctx a.desc) || fst (classify_trailing ctx b.desc),
         false )
-  (* A branch hint is advisory: classify the wrapped branch itself. *)
-  | Hinted (_, i) -> classify_trailing ctx i.desc
   | _ -> (false, false)
 
 (* The re-inference of a checked node: what an unannotated binding
@@ -4208,7 +4221,6 @@ let rec count_holes i =
   | NonNull i
   | Br (_, Some i)
   | Br_if (_, i)
-  | Hinted (_, i)
   | On (i, _)
   | Br_table (_, i)
   | Br_on_null (_, i)
@@ -4317,7 +4329,7 @@ let type_trailing_operand ctx run =
   let replay () =
     List.iter
       (fun idx ->
-        if not (StringSet.mem idx.desc ctx.initialized_locals) then
+        if not (StringSet.mem idx.Annot.desc ctx.initialized_locals) then
           report_uninitialized ctx idx)
       deferred;
     ctx.initialized_locals <- StringSet.union ctx.initialized_locals delta
@@ -4393,8 +4405,7 @@ let reject_control_holes ctx ~construct ~role ~recovery operand =
 let float_literal_lattice s =
   if Wax_wasm.Misc.is_float32 s then Float else Valtype f64_valtype
 
-let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
-    =
+let rec instruction ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
   if debug then Wax_utils.Printer.run_err (fun p -> Printer_output.instr p i);
   match i.desc with
   | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | If_annotation _
@@ -4483,8 +4494,7 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_, _ array * _) annotated
   | BinOp _ | UnOp _ -> type_arith ctx i
   | Let _ -> type_let ctx i
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-  | Hinted _ ->
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
       type_branch ctx i
   | Throw _ | ThrowRef _ -> type_exception ctx i
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
@@ -4642,11 +4652,6 @@ and type_branch ctx i =
         else types
       in
       return_statement i (Br_if (label, i')) result
-  (* Branch-hinting proposal: the hint is advisory; type the wrapped branch and
-     carry its result through unchanged. *)
-  | Hinted (h, inner) ->
-      let* inner = instruction ctx inner in
-      return_statement i (Hinted (h, inner)) (fst inner.info)
   | Br_table (labels, i') ->
       let* i' = instruction ctx i' in
       let loc = snd i'.info in
@@ -4680,7 +4685,7 @@ and type_branch ctx i =
               ~expected:len ~provided:(Array.length types);
           let seen = Hashtbl.create 8 in
           List.iter
-            (fun (label, bound, params) ->
+            (fun ((label : Ast.ident), bound, params) ->
               if bound && not (Hashtbl.mem seen label.desc) then begin
                 Hashtbl.add seen label.desc ();
                 (* A target whose arity disagrees with the reference one — a
@@ -5134,7 +5139,7 @@ and finish_cont_bind ctx i src dst l' =
   (let n = max 0 np in
    let>@ bound =
      array_map_opt
-       (fun p -> internalize ctx (snd p.desc))
+       (fun p -> internalize ctx (param_type p))
        (Array.sub src_sig.params 0 n)
    in
    let>@ srcref = internalize ctx (Ref { nullable = true; typ = Type src }) in
@@ -5169,7 +5174,7 @@ and type_stack_switching_ops ctx i =
       let* l' = instructions ctx l in
       let*! { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
       (let>@ ptypes =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+         array_map_opt (fun p -> internalize ctx (param_type p)) params
        in
        check_operands ctx ~location:i.info l' ptypes);
       let*! rtypes = array_map_opt (internalize ctx) results in
@@ -5192,7 +5197,7 @@ and finish_resume ctx i ct handlers l' =
   let*! inner = lookup_cont_inner ctx ct in
   let*! sg = lookup_func_type ctx inner in
   (let>@ ptypes =
-     array_map_opt (fun p -> internalize ctx (snd p.desc)) sg.params
+     array_map_opt (fun p -> internalize ctx (param_type p)) sg.params
    in
    let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
    check_operands ctx ~location:i.info l' (Array.append ptypes [| cref |]));
@@ -5205,7 +5210,7 @@ and finish_resume_throw ctx i ct tag handlers l' =
   let*! sg = lookup_func_type ctx inner in
   let*! { params = tparams; _ } = Tbl.find ctx.diagnostics ctx.tags tag in
   (let>@ ptypes =
-     array_map_opt (fun p -> internalize ctx (snd p.desc)) tparams
+     array_map_opt (fun p -> internalize ctx (param_type p)) tparams
    in
    let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
    check_operands ctx ~location:i.info l' (Array.append ptypes [| cref |]));
@@ -5231,7 +5236,7 @@ and finish_switch ctx i ct tag l' =
   (if np >= 1 then
      let>@ lead =
        array_map_opt
-         (fun p -> internalize ctx (snd p.desc))
+         (fun p -> internalize ctx (param_type p))
          (Array.sub sg.params 0 (np - 1))
      in
      let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
@@ -5288,7 +5293,7 @@ and finish_switch ctx i ct tag l' =
     match inner_sg with Some s2 -> s2.params | None -> [||]
   in
   let*! rtypes =
-    array_map_opt (fun p -> internalize ctx (snd p.desc)) result_params
+    array_map_opt (fun p -> internalize ctx (param_type p)) result_params
   in
   return_statement i (Switch (ct, tag, l')) rtypes
 
@@ -5347,14 +5352,14 @@ and cont_operand_source_types ctx ~meth ~tag ct : Ast.valtype array option =
       (* Both take the invoked tag's parameters as their value operands. *)
       let*@ tag = tag in
       let+@ { params; _ } = Tbl.find_opt ctx.tags tag in
-      Array.map (fun p -> snd p.desc) params
+      Array.map (fun p -> param_type p) params
   | "resume" ->
       let+@ params = cont_params () in
-      Array.map (fun p -> snd p.desc) params
+      Array.map (fun p -> param_type p) params
   | "switch" ->
       let+@ params = cont_params () in
       let np = Array.length params in
-      Array.map (fun p -> snd p.desc) (Array.sub params 0 (max 0 (np - 1)))
+      Array.map (fun p -> param_type p) (Array.sub params 0 (max 0 (np - 1)))
   | _ -> None
 
 (* The types of the bound (leading) operands of a [cont.bind] from source
@@ -5368,7 +5373,7 @@ and bind_bound_types ctx ~src ~dst =
   let*@ dp = cont_func_params ctx dst in
   let np = Array.length sp - Array.length dp in
   if np < 0 then None
-  else Some (Array.map (fun p -> snd p.desc) (Array.sub sp 0 np))
+  else Some (Array.map (fun p -> param_type p) (Array.sub sp 0 np))
 
 (* Fill in an omitted result type of a block-construct operand from the type its
    consumer expects, so it types through the annotated block path (a concrete
@@ -5407,7 +5412,7 @@ and annotate_omitted_blocks args = function
    [c.resume_throw_ref(e)], [c.switch(x, tag: t)], with [handlers] from a
    wrapping [on] clause. The receiver compiles last (Wasm stack order, as for
    call_ref), so the arguments are typed first and the receiver appended. *)
-and type_cont_method_call ctx i ~handlers recv meth args =
+and type_cont_method_call ctx i ~handlers recv (meth : Ast.ident) args =
   (* [switch]'s enabling tag is a required labelled immediate, extracted before
      the arguments are typed (it names a tag, not a value); [resume_throw]'s
      tag is invoked with its payload, as in [throw exc(p)] — the callee is
@@ -5522,7 +5527,7 @@ and type_on_clause ctx i inner handlers =
    [T::] namespace constructs a [&T]. [bind]'s source type — the type
    immediate — is inferred from its continuation operand (the last argument),
    as the method receivers' types are. *)
-and type_cont_construct_call ctx i func ns name args =
+and type_cont_construct_call ctx i func ns (name : Ast.ident) args =
   match (name.desc, List.rev args) with
   | "bind", cont_arg :: rev_bound ->
       (* [cont.bind]'s bound (leading) operands take their types from the SOURCE
@@ -5565,7 +5570,13 @@ and type_cont_construct_call ctx i func ns name args =
       let* args' = instructions ctx args in
       let recover () =
         return_statement i
-          (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+          (Call
+             ( {
+                 desc = Path (ns, name);
+                 info = ([||], func.info);
+                 hints = Wax_wasm.Hints.none;
+               },
+               args' ))
           [| Cell.make Error |]
       in
       match name.desc with
@@ -6279,7 +6290,7 @@ and type_aggregate_access ctx i =
                 match
                   Array.find_map
                     (fun f ->
-                      let nm, typ = f.desc in
+                      let nm = field_name f and typ = field_type f in
                       if nm.desc = field.desc then Some typ else None)
                     fields
                 with
@@ -6373,8 +6384,8 @@ and type_aggregate_access ctx i =
                 match
                   Array.find_map
                     (fun f ->
-                      let nm, ftyp = f.desc in
-                      if nm.desc = field.desc then Some ftyp else None)
+                      let nm = field_name f in
+                      if nm.desc = field.desc then Some (field_type f) else None)
                     fields
                 with
                 | None ->
@@ -6416,7 +6427,13 @@ and type_aggregate_access ctx i =
       check_type ctx i2' (address_cell at);
       let*! typ = internalize ctx (Ref rt) in
       return_expression i
-        (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
+        (ArrayGet
+           ( {
+               desc = Get tabname;
+               info = ([||], recv.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             i2' ))
         typ
   | ArrayGet (i1, i2) -> (
       (* Emission order: the array, then the index. *)
@@ -6458,7 +6475,14 @@ and type_aggregate_access ctx i =
         | None -> typed ctx i3
       in
       return_statement i
-        (ArraySet ({ desc = Get tabname; info = ([||], recv.info) }, i2', i3'))
+        (ArraySet
+           ( {
+               desc = Get tabname;
+               info = ([||], recv.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             i2',
+             i3' ))
         [||]
   | ArraySet (i1, i2, i3) -> (
       (* Emission order: the array, the index, then the stored value. *)
@@ -6567,7 +6591,18 @@ and type_variable_access ctx i =
         match op with
         | None -> i'
         | Some op ->
-            { i' with desc = BinOp (op, { idx with desc = Get idx }, i') }
+            {
+              i' with
+              desc =
+                BinOp
+                  ( op,
+                    {
+                      desc = Get idx;
+                      info = idx.info;
+                      hints = Wax_wasm.Hints.none;
+                    },
+                    i' );
+            }
       in
       let* checked =
         match resolved with
@@ -6676,7 +6711,7 @@ and type_let ctx i =
           Option.iter
             (fun name ->
               ctx.locals <-
-                StringMap.add name.desc (Some ity, name.info) ctx.locals;
+                StringMap.add name.Annot.desc (Some ity, name.info) ctx.locals;
               ctx.local_decls := name :: !(ctx.local_decls);
               mark_initialized ctx name.desc)
             name_opt;
@@ -6767,7 +6802,7 @@ and type_let ctx i =
           | Some name, Some typ ->
               let>@ ity = internalize_valtype ctx typ in
               ctx.locals <-
-                StringMap.add name.desc (Some ity, name.info) ctx.locals;
+                StringMap.add name.Annot.desc (Some ity, name.info) ctx.locals;
               ctx.local_decls := name :: !(ctx.local_decls);
               (* A defaultable local holds its zero value; a non-defaultable one
                  stays uninitialized until assigned. *)
@@ -6787,7 +6822,7 @@ and type_exception ctx i =
        if results <> [||] then
          Error.tag_with_results ctx.diagnostics ~location:tag.info;
        let>@ types =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+         array_map_opt (fun p -> internalize ctx (param_type p)) params
        in
        (* An argument may itself produce several values (a multi-result call),
           so check the flattened values against the tag's parameters, each at
@@ -6833,7 +6868,7 @@ and type_block_construct ctx i =
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+            array_map_opt (fun p -> internalize ctx (param_type p)) typ.params
           in
           let*! results = array_map_opt (internalize ctx) typ.results in
           let instrs' = block ctx i.info label params results results instrs in
@@ -6845,7 +6880,7 @@ and type_block_construct ctx i =
          key the arm bodies, so they must be distinct. *)
       let rec check_dups seen = function
         | [] -> ()
-        | (l, _) :: r ->
+        | ((l : Ast.ident), _) :: r ->
             (match List.assoc_opt l.desc seen with
             | Some prev_loc ->
                 Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info
@@ -6904,7 +6939,8 @@ and type_block_construct ctx i =
         try rebuild_match typed arms
         with Match_shape ->
           ( List.map
-              (fun (pat, orig) -> (pat, { desc = []; info = orig.info }))
+              (fun (pat, (orig : (_ instr list, location) Ast.annotated)) ->
+                (pat, { orig with desc = [] }))
               arms,
             [],
             None )
@@ -6934,7 +6970,7 @@ and type_block_construct ctx i =
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+            array_map_opt (fun p -> internalize ctx (param_type p)) typ.params
           in
           let*! results = array_map_opt (internalize ctx) typ.results in
           let instrs' = block ctx i.info label params results params instrs in
@@ -6979,7 +7015,7 @@ and type_block_construct ctx i =
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+            array_map_opt (fun p -> internalize ctx (param_type p)) typ.params
           in
           let*! results = array_map_opt (internalize ctx) typ.results in
           let if_block' =
@@ -7028,9 +7064,9 @@ and type_block_construct ctx i =
           (fun b ->
             {
               b with
-              desc =
+              Annot.desc =
                 with_cond ctx ~location:i.info cond false (fun () ->
-                    block ctx i.info None [||] [||] [||] b.desc);
+                    block ctx i.info None [||] [||] [||] b.Annot.desc);
             })
           else_body
       in
@@ -7044,7 +7080,10 @@ and type_block_construct ctx i =
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+            array_map_opt
+              (fun (p : (_, location) Ast.annotated) ->
+                internalize ctx (snd p.desc))
+              typ.params
           in
           let*! results = array_map_opt (internalize ctx) typ.results in
           let body' = block ctx i.info label params results results body in
@@ -7101,7 +7140,7 @@ and type_block_construct ctx i =
             results)
   | _ -> assert false (* only invoked on a block-like construct *)
 
-and type_mem_method_call ctx i func recv memname meth args =
+and type_mem_method_call ctx i func recv memname (meth : Ast.ident) args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
   let addr_vt = address_cell address_type in
   let is_store = mem_store_method meth.desc in
@@ -7155,13 +7194,21 @@ and type_mem_method_call ctx i func recv memname meth args =
     (Call
        ( {
            desc =
-             StructGet ({ desc = Get memname; info = ([||], recv.info) }, meth);
+             StructGet
+               ( {
+                   desc = Get memname;
+                   info = ([||], recv.info);
+                   hints = Wax_wasm.Hints.none;
+                 },
+                 meth );
            info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
          },
          args' ))
     result
 
-and type_atomic_method_call ctx i func recv memname meth family args =
+and type_atomic_method_call ctx i func recv memname (meth : Ast.ident) family
+    args =
   let module A = Wax_wasm.Atomics in
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
   (* The address, then the value operands; then optional labelled immediates. *)
@@ -7273,13 +7320,20 @@ and type_atomic_method_call ctx i func recv memname meth family args =
     (Call
        ( {
            desc =
-             StructGet ({ desc = Get memname; info = ([||], recv.info) }, meth);
+             StructGet
+               ( {
+                   desc = Get memname;
+                   info = ([||], recv.info);
+                   hints = Wax_wasm.Hints.none;
+                 },
+                 meth );
            info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
          },
          args' ))
     result
 
-and type_simd_mem_method_call ctx i func recv memname meth args =
+and type_simd_mem_method_call ctx i func recv memname (meth : Ast.ident) args =
   let mop = Option.get (Simd.mem_method meth.desc) in
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
   let addr_vt = address_cell address_type in
@@ -7345,20 +7399,34 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
     (Call
        ( {
            desc =
-             StructGet ({ desc = Get memname; info = ([||], recv.info) }, meth);
+             StructGet
+               ( {
+                   desc = Get memname;
+                   info = ([||], recv.info);
+                   hints = Wax_wasm.Hints.none;
+                 },
+                 meth );
            info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
          },
          args' ))
     result
 
-and type_mem_mgmt_call ctx i func recv name meth args =
+and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
   let _, at = Option.get (Tbl.find_opt ctx.memories name) in
   let addr () = address_cell at in
   let i32 () = i32_cell in
-  let recv' = { desc = Get name; info = ([||], recv.info) } in
+  let recv' =
+    { desc = Get name; info = ([||], recv.info); hints = Wax_wasm.Hints.none }
+  in
   let mk args' =
     Ast.Call
-      ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args')
+      ( {
+          desc = StructGet (recv', meth);
+          info = ([||], func.info);
+          hints = Wax_wasm.Hints.none;
+        },
+        args' )
   in
   let bad () =
     Error.invalid_management_call ctx.diagnostics ~location:i.info meth.desc;
@@ -7390,7 +7458,7 @@ and type_mem_mgmt_call ctx i func recv name meth args =
       check_type ctx s' (addr ());
       check_type ctx n' (addr ());
       return_statement i (mk [ d'; s'; n' ]) [||]
-  | "copy", { desc = Get src; info = sinfo } :: ([ _; _; _ ] as rest)
+  | "copy", { desc = Get src; info = sinfo; _ } :: ([ _; _; _ ] as rest)
     when memory_receiver ctx src ->
       let src_at =
         match Tbl.find_opt ctx.memories src with Some (_, a) -> a | None -> at
@@ -7401,7 +7469,9 @@ and type_mem_mgmt_call ctx i func recv name meth args =
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
-      let src' = { desc = Get src; info = ([||], sinfo) } in
+      let src' =
+        { desc = Get src; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+      in
       let* rest' = instructions ctx rest in
       (match rest' with
       | [ d'; s'; n' ] ->
@@ -7410,9 +7480,11 @@ and type_mem_mgmt_call ctx i func recv name meth args =
           check_type ctx n' (addr_of min_at)
       | _ -> ());
       return_statement i (mk (src' :: rest')) [||]
-  | "init", { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ->
+  | "init", { desc = Get seg; info = sinfo; _ } :: ([ _; _; _ ] as rest) ->
       ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option);
-      let seg' = { desc = Get seg; info = ([||], sinfo) } in
+      let seg' =
+        { desc = Get seg; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+      in
       let* rest' = instructions ctx rest in
       (match rest' with
       | [ d'; s'; n' ] ->
@@ -7423,7 +7495,7 @@ and type_mem_mgmt_call ctx i func recv name meth args =
       return_statement i (mk (seg' :: rest')) [||]
   | _ -> bad ()
 
-and type_table_mgmt_call ctx i func recv name meth args =
+and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
   let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
   let addr () = address_cell at in
   let i32 () = i32_cell in
@@ -7431,10 +7503,17 @@ and type_table_mgmt_call ctx i func recv name meth args =
     let>@ t = internalize ctx (Ref rt) in
     check_type ctx e t
   in
-  let recv' = { desc = Get name; info = ([||], recv.info) } in
+  let recv' =
+    { desc = Get name; info = ([||], recv.info); hints = Wax_wasm.Hints.none }
+  in
   let mk args' =
     Ast.Call
-      ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args')
+      ( {
+          desc = StructGet (recv', meth);
+          info = ([||], func.info);
+          hints = Wax_wasm.Hints.none;
+        },
+        args' )
   in
   let bad () =
     Error.invalid_management_call ctx.diagnostics ~location:i.info meth.desc;
@@ -7468,7 +7547,7 @@ and type_table_mgmt_call ctx i func recv name meth args =
       check_type ctx s' (addr ());
       check_type ctx n' (addr ());
       return_statement i (mk [ d'; s'; n' ]) [||]
-  | "copy", { desc = Get src; info = sinfo } :: ([ _; _; _ ] as rest)
+  | "copy", { desc = Get src; info = sinfo; _ } :: ([ _; _; _ ] as rest)
     when table_receiver ctx src ->
       let src_at =
         match Tbl.find_opt ctx.tables src with
@@ -7483,7 +7562,9 @@ and type_table_mgmt_call ctx i func recv name meth args =
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
-      let src' = { desc = Get src; info = ([||], sinfo) } in
+      let src' =
+        { desc = Get src; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+      in
       let* rest' = instructions ctx rest in
       (match rest' with
       | [ d'; s'; n' ] ->
@@ -7492,10 +7573,12 @@ and type_table_mgmt_call ctx i func recv name meth args =
           check_type ctx n' (addr_of min_at)
       | _ -> ());
       return_statement i (mk (src' :: rest')) [||]
-  | "init", { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ->
+  | "init", { desc = Get seg; info = sinfo; _ } :: ([ _; _; _ ] as rest) ->
       (let>@ src_rt = Tbl.find ctx.diagnostics ctx.elems seg in
        check_elem_subtype ctx ~location:i.info ~src:src_rt ~dst:rt);
-      let seg' = { desc = Get seg; info = ([||], sinfo) } in
+      let seg' =
+        { desc = Get seg; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+      in
       let* rest' = instructions ctx rest in
       (match rest' with
       | [ d'; s'; n' ] ->
@@ -7506,7 +7589,7 @@ and type_table_mgmt_call ctx i func recv name meth args =
       return_statement i (mk (seg' :: rest')) [||]
   | _ -> bad ()
 
-and type_array_fill_call ctx i func a meth j v n =
+and type_array_fill_call ctx i func a (meth : Ast.ident) j v n =
   (* Emission order: the array receiver, then index, value, count. *)
   let* a' = typed ctx a in
   let* j' = typed ctx j in
@@ -7533,11 +7616,15 @@ and type_array_fill_call ctx i func a meth j v n =
   | _ -> Error.expected_array ctx.diagnostics ~location:a.info);
   return_statement i
     (Call
-       ( { desc = StructGet (a', meth); info = ([||], func.info) },
+       ( {
+           desc = StructGet (a', meth);
+           info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
+         },
          [ j'; v'; n' ] ))
     [||]
 
-and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
+and type_array_copy_call ctx i func a1 (meth : Ast.ident) i1 a2 i2 n =
   (* Emission order: dest array, dest index, src array, src index, count. *)
   let* a1' = typed ctx a1 in
   let* i1' = typed ctx i1 in
@@ -7570,11 +7657,15 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
   | _ -> Error.expected_array ctx.diagnostics ~location:a1.info);
   return_statement i
     (Call
-       ( { desc = StructGet (a1', meth); info = ([||], func.info) },
+       ( {
+           desc = StructGet (a1', meth);
+           info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
+         },
          [ i1'; a2'; i2'; n' ] ))
     [||]
 
-and type_array_init_call ctx i func a meth arg1 rest =
+and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
   (* Emission order: the array receiver, then the dest/src/len operands (the
      segment [arg1] is a static immediate typed below). *)
   let* a' = typed ctx a in
@@ -7606,10 +7697,16 @@ and type_array_init_call ctx i func a meth arg1 rest =
              cannot be compiled. *)
           Error.unknown_operand_type ctx.diagnostics ~location:a.info
       | _ -> Error.expected_array ctx.diagnostics ~location:a.info);
-      let seg' = { desc = Get seg; info = ([||], sinfo) } in
+      let seg' =
+        { desc = Get seg; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+      in
       return_statement i
         (Call
-           ( { desc = StructGet (a', meth); info = ([||], func.info) },
+           ( {
+               desc = StructGet (a', meth);
+               info = ([||], func.info);
+               hints = Wax_wasm.Hints.none;
+             },
              seg' :: rest' ))
         [||]
   | _ ->
@@ -7620,7 +7717,13 @@ and type_array_init_call ctx i func a meth arg1 rest =
       let* args' = instructions ctx (arg1 :: rest) in
       Error.invalid_management_call ctx.diagnostics ~location:i.info meth.desc;
       return_statement i
-        (Call ({ desc = StructGet (a', meth); info = ([||], func.info) }, args'))
+        (Call
+           ( {
+               desc = StructGet (a', meth);
+               info = ([||], func.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             args' ))
         [||]
 
 (* An array bulk method ([fill]/[copy]/[init]) on an array receiver but with the
@@ -7629,7 +7732,7 @@ and type_array_init_call ctx i func a meth arg1 rest =
    the receiver and arguments and reports the arity, but keeps the method node so
    recovery and editor features (signature help) still see the call. Gated on an
    array receiver, so a struct field of the same name stays an indirect call. *)
-and type_array_method_recovery ctx i func recv meth args =
+and type_array_method_recovery ctx i func recv (meth : Ast.ident) args =
   let* recv' = typed ctx recv in
   let* args' = instructions ctx args in
   let expected = match meth.desc with "fill" -> 3 | _ -> 4 in
@@ -7637,17 +7740,29 @@ and type_array_method_recovery ctx i func recv meth args =
     Error.operand_count_mismatch ctx.diagnostics ~location:func.info ~expected
       ~provided:(List.length args');
   return_statement i
-    (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))
+    (Call
+       ( {
+           desc = StructGet (recv', meth);
+           info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
+         },
+         args' ))
     [||]
 
-and type_binary_intrinsic_call ctx i func i1 meth op args =
+and type_binary_intrinsic_call ctx i func i1 (meth : Ast.ident) op args =
   (* A scalar binary intrinsic on a value receiver ([x.min(y)]): the receiver is
      pushed first, then the operand. *)
   let* i1' = typed ctx i1 in
   let* args' = instructions ctx args in
   let is_int = match op with "rotl" | "rotr" -> true | _ -> false in
   let call args'' =
-    Ast.Call ({ desc = StructGet (i1', meth); info = ([||], func.info) }, args'')
+    Ast.Call
+      ( {
+          desc = StructGet (i1', meth);
+          info = ([||], func.info);
+          hints = Wax_wasm.Hints.none;
+        },
+        args'' )
   in
   match args' with
   | [ i2' ] ->
@@ -7686,7 +7801,7 @@ and type_binary_intrinsic_call ctx i func i1 meth op args =
         ~expected:1 ~provided:(List.length args');
       return_expression i (call args') (expression_type ctx i1')
 
-and type_unary_intrinsic_call ctx i func recv meth =
+and type_unary_intrinsic_call ctx i func recv (meth : Ast.ident) =
   let* recv' = instruction ctx recv in
   let*! ty =
     let ty = expression_type ctx recv' in
@@ -7759,10 +7874,16 @@ and type_unary_intrinsic_call ctx i func recv meth =
         None
   in
   return_expression i
-    (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, []))
+    (Call
+       ( {
+           desc = StructGet (recv', meth);
+           info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
+         },
+         [] ))
     ty
 
-and type_simd_vector_op_call ctx i func recv meth args =
+and type_simd_vector_op_call ctx i func recv (meth : Ast.ident) args =
   let op = Option.get (Simd.classify meth.desc) in
   let nimm = match op.imm with No_imm -> 0 | Lane _ -> 1 | Shuffle -> 16 in
   (* Emission order: the v128 (or scalar, for splat) receiver, then the trailing
@@ -7831,12 +7952,24 @@ and type_simd_vector_op_call ctx i func recv meth args =
     else match op.result with Some t -> [| simd_cell t |] | None -> [||]
   in
   return_statement i
-    (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))
+    (Call
+       ( {
+           desc = StructGet (recv', meth);
+           info = ([||], func.info);
+           hints = Wax_wasm.Hints.none;
+         },
+         args' ))
     result
 
-and type_simd_free_intrinsic_call ctx i func ns name args =
+and type_simd_free_intrinsic_call ctx i func ns (name : Ast.ident) args =
   let full = Simd.free_full name.desc in
-  let callee = { desc = Path (ns, name); info = ([||], func.info) } in
+  let callee =
+    {
+      desc = Path (ns, name);
+      info = ([||], func.info);
+      hints = Wax_wasm.Hints.none;
+    }
+  in
   let* args' = instructions ctx args in
   if not (Simd.is_free_intrinsic full) then (
     Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
@@ -7942,7 +8075,7 @@ and check_instruction ctx expected (i : location instr) =
      type, so it can be dropped (and is, on output). *)
   let name_redundant name =
     match exact_named_type expected with
-    | Some n -> n.desc = name.desc
+    | Some n -> n.desc = name.Annot.desc
     | None -> false
   in
   (* The type name to emit for a construction whose source name was [original]
@@ -8063,7 +8196,7 @@ and check_instruction ctx expected (i : location instr) =
                [Error] result. *)
             let* fields' =
               List.fold_left
-                (fun prev (name, written) ->
+                (fun prev ((name : Ast.ident), written) ->
                   let* l = prev in
                   if written = None then record_pun ctx.pun_spans name.info;
                   let* fi' = typed ctx (field_value name written) in
@@ -8083,9 +8216,11 @@ and check_instruction ctx expected (i : location instr) =
             let* fields' =
               Array.fold_left
                 (fun prev field ->
-                  let name, (f : fieldtype) = field.desc in
+                  let name = field_name field and f = field_type field in
                   match
-                    List.find_opt (fun (idx, _) -> name.desc = idx.desc) fields
+                    List.find_opt
+                      (fun ((idx : Ast.ident), _) -> name.desc = idx.desc)
+                      fields
                   with
                   | None ->
                       Error.missing_field ctx.diagnostics ~location:i.info name;
@@ -8159,7 +8294,7 @@ and check_instruction ctx expected (i : location instr) =
             if
               not
                 (Array.for_all
-                   (fun field -> field_has_default (snd field.desc))
+                   (fun field -> field_has_default (field_type field))
                    fields)
             then Error.not_defaultable ctx.diagnostics ~location:typ.info;
             require_no_descriptor typ;
@@ -8212,7 +8347,7 @@ and check_instruction ctx expected (i : location instr) =
           | None | Some None ->
               let* fields' =
                 List.fold_left
-                  (fun prev (name, written) ->
+                  (fun prev ((name : Ast.ident), written) ->
                     let* l = prev in
                     if written = None then record_pun ctx.pun_spans name.info;
                     let* fi' = typed ctx (field_value name written) in
@@ -8231,10 +8366,10 @@ and check_instruction ctx expected (i : location instr) =
               let* fields' =
                 Array.fold_left
                   (fun prev field ->
-                    let name, (f : fieldtype) = field.desc in
+                    let name = field_name field and f = field_type field in
                     match
                       List.find_opt
-                        (fun (idx, _) -> name.desc = idx.desc)
+                        (fun ((idx : Ast.ident), _) -> name.desc = idx.desc)
                         fields
                     with
                     | None ->
@@ -8278,7 +8413,7 @@ and check_instruction ctx expected (i : location instr) =
             if
               not
                 (Array.for_all
-                   (fun field -> field_has_default (snd field.desc))
+                   (fun field -> field_has_default (field_type field))
                    fields)
             then Error.not_defaultable ctx.diagnostics ~location:i.info;
             let*! result = construction_result typ in
@@ -8425,7 +8560,7 @@ and check_instruction ctx expected (i : location instr) =
          [chars]). As for the array literals a redundant name is dropped (on
          conversion from Wasm); the annotation is kept only when a bare string
          would not already take the expected type. *)
-      let string_typ = { i with desc = "<string>" } in
+      let string_typ : Ast.ident = { desc = "<string>"; info = i.info } in
       let string_valtype =
         internalize_valtype ctx
           (Ref { nullable = false; typ = Type string_typ })
@@ -8815,14 +8950,6 @@ and check_instruction ctx expected (i : location instr) =
       in
       let* node = return_expression i (Select (i1', i2', i3')) ty in
       return (node, join_reinfer ctx reinf2 reinf3)
-  | Hinted (h, inner) ->
-      (* The hint is advisory: check the wrapped branch against the same
-         expectation — so a trailing hinted [if] still receives the context's
-         result type and can drop a redundant annotation — and carry the result
-         and re-inference through unchanged. *)
-      let* inner', reinfer = check_instruction ctx expected inner in
-      let* node = return_statement i (Hinted (h, inner')) (fst inner'.info) in
-      return (node, reinfer)
   | _ ->
       let* i' = instruction ctx i in
       (* Snapshot the value's own type BEFORE [check_type] mutates the cell: this
@@ -8918,7 +9045,10 @@ and type_indirect_call ctx i i' l =
   in
   let param_types =
     Option.bind functype (fun typ ->
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params)
+        array_map_opt
+          (fun (p : (_, location) Ast.annotated) ->
+            internalize ctx (snd p.desc))
+          typ.params)
   in
   let type_body =
     let* l' = typed_call_args ctx l param_types in
@@ -8935,6 +9065,7 @@ and type_indirect_call ctx i i' l =
               {
                 desc = Ast.Unreachable;
                 info = ([| Cell.make Error |], (Ast.no_loc ()).info);
+                hints = Wax_wasm.Hints.none;
               }
         | Some typ ->
             (match param_types with
@@ -9018,9 +9149,21 @@ and call_instruction ctx i =
          } as func),
         [] )
     when segment_receiver ctx name ->
-      let recv' = { desc = Get name; info = ([||], recv.info) } in
+      let recv' =
+        {
+          desc = Get name;
+          info = ([||], recv.info);
+          hints = Wax_wasm.Hints.none;
+        }
+      in
       return_statement i
-        (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, []))
+        (Call
+           ( {
+               desc = StructGet (recv', meth);
+               info = ([||], func.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             [] ))
         [||]
   (* Stack-switching methods on a continuation receiver: [c.resume(x)],
      [c.resume_throw(exc(p))], [c.resume_throw_ref(e)], [c.switch(x, tag: t)];
@@ -9120,7 +9263,13 @@ and type_path_intrinsic_call ctx i func ns name args =
         Error.operand_count_mismatch ctx.diagnostics ~location:func.info
           ~expected:0 ~provided:(List.length args');
       return_statement i
-        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        (Call
+           ( {
+               desc = Path (ns, name);
+               info = ([||], func.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             args' ))
         [||]
   (* A declared continuation type is a namespace holding its constructors,
      [k::new] / [k::bind] (the [T::] namespace constructs a [&T]). *)
@@ -9134,7 +9283,13 @@ and type_path_intrinsic_call ctx i func ns name args =
       Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
         name.desc;
       return_expression i
-        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        (Call
+           ( {
+               desc = Path (ns, name);
+               info = ([||], func.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             args' ))
         (Cell.make Error)
 
 (* The [i64::] wide-arithmetic intrinsics: [add128]/[sub128] take four i64
@@ -9156,7 +9311,13 @@ and type_wide_arith_call ctx i func ns name args =
       (* Recover with two [Error] results (the arity every wide-arithmetic
          intrinsic has), so a typo does not cascade into a value-count error. *)
       return_statement i
-        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        (Call
+           ( {
+               desc = Path (ns, name);
+               info = ([||], func.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             args' ))
         [| Cell.make Error; Cell.make Error |]
   | Some n ->
       if List.length args' <> n then
@@ -9164,7 +9325,13 @@ and type_wide_arith_call ctx i func ns name args =
           ~expected:n ~provided:(List.length args');
       List.iter (fun a -> check_type ctx a i64_cell) args';
       return_statement i
-        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        (Call
+           ( {
+               desc = Path (ns, name);
+               info = ([||], func.info);
+               hints = Wax_wasm.Hints.none;
+             },
+             args' ))
         [| valtype_cell i64_valtype; valtype_cell i64_valtype |]
 
 and instructions ctx l : _ -> _ * _ list =
@@ -9208,7 +9375,12 @@ and mem_call_arguments ctx l : _ -> _ * _ list =
           let* e' = instruction ctx e in
           let* r' = mem_call_arguments ctx r in
           return
-            ({ desc = Labelled (lbl, e'); info = (fst e'.info, i.info) } :: r')
+            ({
+               desc = Labelled (lbl, e');
+               info = (fst e'.info, i.info);
+               hints = Wax_wasm.Hints.none;
+             }
+            :: r')
       | _ ->
           let* i' = typed ctx i in
           let* r' = mem_call_arguments ctx r in
@@ -9234,7 +9406,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
   match i.desc with
   | Block { label; typ; block = { desc = instrs; _ } as blkloc } ->
       let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+        array_map_opt
+          (fun (p : (_, location) Ast.annotated) ->
+            internalize ctx (snd p.desc))
+          typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx `Input ~location:i.info params in
@@ -9244,7 +9419,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         results
   | Loop { label; typ; block = { desc = instrs; _ } as blkloc } ->
       let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+        array_map_opt
+          (fun (p : (_, location) Ast.annotated) ->
+            internalize ctx (snd p.desc))
+          typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx `Input ~location:i.info params in
@@ -9263,7 +9441,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let* cond = toplevel_instruction ctx cond in
       check_type ctx cond i32_cell;
       let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+        array_map_opt
+          (fun (p : (_, location) Ast.annotated) ->
+            internalize ctx (snd p.desc))
+          typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx `Input ~location:i.info params in
@@ -9287,16 +9468,12 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
             None
       in
       return_statement i (If { label; typ; cond; if_block; else_block }) results
-  | Hinted (h, inner) ->
-      (* The hint is advisory: type the wrapped branch in the same statement
-         position — so a hinted statement [if] stays void rather than being
-         inferred as an expression — and carry its result through unchanged
-         (the expression-position counterpart is in [type_branch]). *)
-      let* inner = toplevel_instruction ctx inner in
-      return_statement i (Hinted (h, inner)) (fst inner.info)
   | TryTable { label; typ; block = { desc = body; _ } as blkloc; catches } ->
       let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+        array_map_opt
+          (fun (p : (_, location) Ast.annotated) ->
+            internalize ctx (snd p.desc))
+          typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx `Input ~location:i.info params in
@@ -9308,7 +9485,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
   | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
     ->
       let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+        array_map_opt
+          (fun (p : (_, location) Ast.annotated) ->
+            internalize ctx (snd p.desc))
+          typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx `Input ~location:i.info params in
@@ -9347,7 +9527,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
          the equivalent blocks. *)
       let rec check_dups seen = function
         | [] -> ()
-        | (l, _) :: r ->
+        | ((l : Ast.ident), _) :: r ->
             (match List.assoc_opt l.desc seen with
             | Some prev_loc ->
                 Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info
@@ -9394,7 +9574,8 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         try rebuild_match typed arms
         with Match_shape ->
           ( List.map
-              (fun (pat, orig) -> (pat, { desc = []; info = orig.info }))
+              (fun (pat, (orig : (_ instr list, location) Ast.annotated)) ->
+                (pat, { orig with desc = [] }))
               arms,
             [],
             None )
@@ -9449,7 +9630,10 @@ and check_trytable_catches ctx catches =
           if r <> [||] then
             Error.tag_with_results ctx.diagnostics ~location:tag.info;
           let>@ params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+            array_map_opt
+              (fun (p : (_, location) Ast.annotated) ->
+                internalize ctx (snd p.desc))
+              params
           in
           check_catch params label
       | CatchRef (tag, label) ->
@@ -9459,7 +9643,10 @@ and check_trytable_catches ctx catches =
           if r <> [||] then
             Error.tag_with_results ctx.diagnostics ~location:tag.info;
           let>@ params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+            array_map_opt
+              (fun (p : (_, location) Ast.annotated) ->
+                internalize ctx (snd p.desc))
+              params
           in
           let>@ ref_exn =
             internalize ctx (Ref { nullable = false; typ = Exn })
@@ -9493,7 +9680,7 @@ and type_trycatch_arms ctx i label ~results arms =
           | Some { params; results = r } ->
               if r <> [||] then
                 Error.tag_with_results ctx.diagnostics ~location:tag.info;
-              Array.map (fun p -> snd p.desc) params
+              Array.map (fun p -> param_type p) params
           | None -> [||])
       | None -> [||]
     in
@@ -9560,9 +9747,14 @@ and type_try_catches ctx i label ~results catches catch_all =
         if r <> [||] then
           Error.tag_with_results ctx.diagnostics ~location:tag.info;
         let+@ params =
-          array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+          array_map_opt
+            (fun (p : (_, location) Ast.annotated) ->
+              internalize ctx (snd p.desc))
+            params
         in
-        let body' = block ctx i.info label params results results body.desc in
+        let body' =
+          block ctx i.info label params results results body.Annot.desc
+        in
         (tag, { body with desc = body' }))
       catches
   in
@@ -9571,7 +9763,8 @@ and type_try_catches ctx i label ~results catches catch_all =
       (fun body ->
         {
           body with
-          desc = block ctx i.info label [||] results results body.desc;
+          Annot.desc =
+            block ctx i.info label [||] results results body.Annot.desc;
         })
       catch_all
   in
@@ -10316,9 +10509,9 @@ and constant_instruction ctx i =
   | GetDescriptor _ | StructSet _ | ArraySegment _ | ArrayGet _ | ArraySet _
   | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
   | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Hinted _ | Throw _ | ThrowRef _ | ContBind _
-  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | On _
-  | Return _ | Sequence _ | Select _ | If_annotation _ | Labelled _ ->
+  | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContBind _ | Suspend _
+  | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | On _ | Return _
+  | Sequence _ | Select _ | If_annotation _ | Labelled _ ->
       required ()
 
 (* A struct-literal field in a constant expression. An explicit value is checked
@@ -10328,7 +10521,12 @@ and constant_field ctx (name, i) =
   match i with
   | Some i -> constant_instruction ctx i
   | None ->
-      constant_instruction ctx { desc = Get name; info = ([||], name.info) }
+      constant_instruction ctx
+        {
+          desc = Get name;
+          info = ([||], name.info);
+          hints = Wax_wasm.Hints.none;
+        }
 
 (*** Globals, functions, and declarations ***)
 
@@ -10431,7 +10629,7 @@ let type_data_init ctx init = List.iter (type_data_element ctx) init
 
 let rec globals ctx fields =
   List.map
-    (fun field ->
+    (fun (field : (_ modulefield, location) Ast.annotated) ->
       match field.desc with
       | Memory ({ address_type; data; _ } as m) ->
           check_limits ctx ~location:field.info "memory" ~shared:m.shared
@@ -10601,7 +10799,7 @@ let rec globals ctx fields =
                 Option.map
                   (fun e ->
                     with_cond ctx ~location:field.info cond false (fun () ->
-                        globals ctx e.desc))
+                        globals ctx e.Annot.desc))
                   else_fields;
             }
       | _ -> Before field)
@@ -10613,7 +10811,8 @@ let rec functions ctx fields =
       match field with
       | Before
           ({
-             desc = Func { name; sign; body = label, body; typ; attributes };
+             Annot.desc =
+               Func { name; sign; body = label, body; typ; attributes };
              info = location;
            } as f) ->
           (* Attribute everything this definition resolves — its declared type as
@@ -10691,14 +10890,15 @@ let rec functions ctx fields =
           | Some { params; _ } ->
               Array.iter
                 (fun p ->
-                  let id, typ = p.desc in
+                  let id = param_name p and typ = param_type p in
                   match id with
                   | Some id ->
                       (* A parameter type that does not resolve still binds the
                          name, as a poison local (read as [Error]), so the
                          body's uses of it do not cascade. *)
                       let typ = internalize_valtype mctx typ in
-                      locals := StringMap.add id.desc (typ, id.info) !locals
+                      locals :=
+                        StringMap.add id.Annot.desc (typ, id.info) !locals
                   | None -> ())
                 params
           | _ -> ());
@@ -10749,7 +10949,7 @@ let rec functions ctx fields =
              unused. *)
           if ctx.warn_unused then begin
             List.iter
-              (fun name ->
+              (fun (name : Ast.ident) ->
                 let n = name.desc in
                 if
                   (not
@@ -10758,7 +10958,7 @@ let rec functions ctx fields =
                 then Error.unused_local ctx.diagnostics ~location:name.info name)
               (List.rev !(ctx.local_decls));
             List.iter
-              (fun name ->
+              (fun (name : Ast.ident) ->
                 let n = name.desc in
                 if
                   (not
@@ -10864,7 +11064,9 @@ let fundecl_typ ctx name typ sign =
   | None -> (
       match sign with
       | Some sign ->
-          let name = { name with desc = "<func:" ^ name.desc ^ ">" } in
+          let name =
+            { (name : Ast.ident) with desc = "<func:" ^ name.desc ^ ">" }
+          in
           let+@ i =
             (* [add_type] runs the [functype] converter, which already checks
                  parameter-name uniqueness, so [sign] needs no separate
@@ -10925,9 +11127,11 @@ let field_attributes (field : _ modulefield) =
    inside an [import "module" { ... }] block, where a name-only
    [#[import = "name"]] overrides the imported name. *)
 let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
-    ~default_location attributes =
+    ~default_location (attributes : Ast.attributes) =
   List.iter
-    (fun (name, value, guard) ->
+    (fun ( name,
+           value,
+           (guard : (Wax_wasm.Ast.cond, location) Ast.annotated option) ) ->
       let location =
         match value with Some v -> v.info | None -> default_location
       in
@@ -10987,7 +11191,8 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
 (* Validate the annotations on a module field: reject unknown ones, check the
    value shape of [export] / [start] / [module], and allow each only where it is
    meaningful. *)
-let check_attributes diagnostics field =
+let check_attributes diagnostics
+    (field : (_ modulefield, location) Ast.annotated) =
   let export_ok, start_ok, module_ok =
     match field.desc with
     | Func _ -> (true, true, false)
@@ -11042,7 +11247,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
             Option.iter
               (fun e ->
                 with_cond_ref cond cond_env diagnostics ~location:field.info c
-                  false (fun () -> walk_fields f e.desc))
+                  false (fun () -> walk_fields f e.Annot.desc))
               else_fields
         | _ -> f field)
       fields
@@ -11067,7 +11272,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       | Struct sfields -> (
           let key =
             field_set_key
-              (Array.to_list (Array.map (fun f -> (fst f.desc).desc) sfields))
+              (Array.to_list (Array.map (fun f -> (field_name f).desc) sfields))
           in
           match Hashtbl.find_opt structs_by_fields key with
           | None ->
@@ -11170,7 +11375,10 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
             data
       | Import { decl; _ } -> register_import decl.desc
       | Import_group { decls; _ } ->
-          List.iter (fun d -> register_import d.desc) decls
+          List.iter
+            (fun (d : (Ast.import_decl, location) Ast.annotated) ->
+              register_import d.desc)
+            decls
       | Func { name; typ; sign; _ } ->
           (* A module-defined function has exactly its declared type, so a
              reference to it is exact — but exact reference types are part of
@@ -11199,7 +11407,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   let starts = ref [] in
   let module_seen = ref None in
   (* The Wax name a bare [#[export]] reuses as its export name. *)
-  let field_name field =
+  let field_name (field : (_ modulefield, location) Ast.annotated) =
     match field.desc with
     | Func { name; _ }
     | Global { name; _ }
@@ -11216,7 +11424,8 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      [location] blames the entity when an attribute carries no value. *)
   let process_attrs ~default_name ~location attributes =
     List.iter
-      (fun (key, v, guard) ->
+      (fun (key, v, (guard : (Wax_wasm.Ast.cond, location) Ast.annotated option))
+         ->
         (* The condition under which this attribute is actually present: the
            field's own branch assumption ([!cond]) narrowed by an optional
            per-attribute [if <cond>] guard (only [export]/[start] carry one). *)
@@ -11530,7 +11739,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
         | Type rectype ->
             Array.iter
               (fun elt ->
-                let name = fst elt.desc in
+                let name = member_name elt in
                 if
                   (not (intentional name))
                   && not (Hashtbl.mem live_types name.desc)
@@ -11573,7 +11782,10 @@ let project_module (m : inferred_module_annotation Ast.module_) :
     typed_module_annotation Ast.module_ =
   List.map
     (fun f ->
-      { f with desc = Ast_utils.map_modulefield project_annotation f.desc })
+      {
+        f with
+        Annot.desc = Ast_utils.map_modulefield project_annotation f.Annot.desc;
+      })
     m
 
 (* Conditional annotations denote mutually-exclusive branches, so they are
@@ -11582,7 +11794,7 @@ let project_module (m : inferred_module_annotation Ast.module_) :
 
 (*** Conditional compilation and entry points ***)
 
-let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
+let rec instr_has_conditional (i : _ instr) =
   match i.desc with
   | If_annotation _ -> true
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
@@ -11593,11 +11805,15 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       || ihc_list block.desc
   | If { cond; if_block; else_block; _ } ->
       instr_has_conditional cond || ihc_list if_block.desc
-      || Option.fold ~none:false ~some:(fun b -> ihc_list b.desc) else_block
+      || Option.fold ~none:false
+           ~some:(fun b -> ihc_list b.Annot.desc)
+           else_block
   | Try { block; catches; catch_all; _ } ->
       ihc_list block.desc
-      || List.exists (fun (_, l) -> ihc_list l.desc) catches
-      || Option.fold ~none:false ~some:(fun b -> ihc_list b.desc) catch_all
+      || List.exists (fun (_, l) -> ihc_list l.Annot.desc) catches
+      || Option.fold ~none:false
+           ~some:(fun b -> ihc_list b.Annot.desc)
+           catch_all
   | TryCatch { block; arms; _ } ->
       ihc_list block.desc
       || List.exists (fun a -> ihc_list a.arm_body.desc) arms
@@ -11605,10 +11821,10 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | ArrayFixed (_, l) -> ihc_list l
   | Dispatch { index; arms; _ } ->
       instr_has_conditional index
-      || List.exists (fun (_, body) -> ihc_list body.desc) arms
+      || List.exists (fun (_, body) -> ihc_list body.Annot.desc) arms
   | Match { scrutinee; arms; default } ->
       instr_has_conditional scrutinee
-      || List.exists (fun (_, body) -> ihc_list body.desc) arms
+      || List.exists (fun (_, body) -> ihc_list body.Annot.desc) arms
       || ihc_list default.desc
   | ContBind (_, _, l)
   | Suspend (_, l)
@@ -11653,7 +11869,6 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | StructDefaultDesc i
   | ArrayDefault (_, i)
   | Br_if (_, i)
-  | Hinted (_, i)
   | On (i, _)
   | Br_table (_, i)
   | Br_on_null (_, i)
@@ -11715,7 +11930,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | i :: rest ->
         let instrs, asm = sinstr asm i in
         instrs @ sinstrs asm rest
-  and sinstr asm (i : (_ instr_desc, _) annotated) =
+  and sinstr asm (i : _ instr) =
     match i.desc with
     | If_annotation { cond; then_body; else_body } ->
         choose asm cond ~location:i.info
@@ -11749,7 +11964,8 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             if_block = { if_block with desc = sinstrs asm if_block.desc };
             else_block =
               Option.map
-                (fun b -> { b with desc = sinstrs asm b.desc })
+                (fun (b : (_ instr list, location) Ast.annotated) ->
+                  { b with desc = sinstrs asm b.desc })
                 else_block;
           }
     | TryTable { label; typ; catches; block } ->
@@ -11768,11 +11984,12 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             block = { block with desc = sinstrs asm block.desc };
             catches =
               List.map
-                (fun (t, l) -> (t, { l with desc = sinstrs asm l.desc }))
+                (fun (t, l) ->
+                  (t, { l with Annot.desc = sinstrs asm l.Annot.desc }))
                 catches;
             catch_all =
               Option.map
-                (fun b -> { b with desc = sinstrs asm b.desc })
+                (fun b -> { b with Annot.desc = sinstrs asm b.Annot.desc })
                 catch_all;
           }
     | TryCatch { label; typ; block; arms } ->
@@ -11823,7 +12040,6 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Let (bs, body) -> Let (bs, Option.map (sone asm) body)
     | Br (l, v) -> Br (l, Option.map (sone asm) v)
     | Br_if (l, v) -> Br_if (l, sone asm v)
-    | Hinted (h, v) -> Hinted (h, sone asm v)
     | On (v, h) -> On (sone asm v, h)
     | Br_table (ls, v) -> Br_table (ls, sone asm v)
     | Dispatch { index; cases; default; arms } ->
@@ -11835,7 +12051,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             arms =
               List.map
                 (fun (l, body) ->
-                  (l, { body with desc = sinstrs asm body.desc }))
+                  (l, { body with Annot.desc = sinstrs asm body.Annot.desc }))
                 arms;
           }
     | Match { scrutinee; arms; default } ->
@@ -11845,7 +12061,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             arms =
               List.map
                 (fun (pat, body) ->
-                  (pat, { body with desc = sinstrs asm body.desc }))
+                  (pat, { body with Annot.desc = sinstrs asm body.Annot.desc }))
                 arms;
             default = { default with desc = sinstrs asm default.desc };
           }
@@ -11889,7 +12105,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
         | None -> (acc @ [ (k, v, None) ], asm)
         | Some g ->
             let kept, asm =
-              choose asm g.desc ~location:g.info
+              choose asm g.Annot.desc ~location:g.info
                 ~then_branch:(fun _ -> [ (k, v, None) ])
                 ~else_branch:(fun _ -> [])
             in
@@ -11960,12 +12176,11 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
 (* [let] bindings are not allowed inside a conditional branch: branches are
    transparent and mutually exclusive, so a binding declared in one would leak
    past the conditional and clash with the other branch. *)
-let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
-    =
+let rec check_let_in_conditionals diagnostics (i : _ instr) =
   (match i.desc with
   | If_annotation { then_body; else_body; _ } ->
       let check_branch =
-        List.iter (fun (s : (_ instr_desc, _) annotated) ->
+        List.iter (fun (s : _ instr) ->
             match s.desc with
             (* Only a binding that introduces a name would leak; an anonymous
                [Let] ([_ = e], a drop) binds nothing, so it is allowed. *)
@@ -11976,7 +12191,7 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
             | _ -> ())
       in
       check_branch then_body.desc;
-      Option.iter (fun b -> check_branch b.desc) else_body
+      Option.iter (fun b -> check_branch b.Annot.desc) else_body
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (Ast_utils.sub_instrs i)
 
@@ -12006,7 +12221,7 @@ let apply_declared_features diagnostics features fields =
           List.iter
             (fun (key, value, _) ->
               match (key, value) with
-              | "feature", Some { desc = String (_, name); info = location }
+              | "feature", Some { desc = String (_, name); info = location; _ }
                 -> (
                   match Wax_utils.Feature.of_name name with
                   | None -> Error.unknown_feature diagnostics ~location name
@@ -12047,12 +12262,12 @@ let apply_declared_features diagnostics features fields =
                       attrs
                 | Conditional { then_fields; else_fields; _ } ->
                     reject then_fields.desc;
-                    Option.iter (fun e -> reject e.desc) else_fields
+                    Option.iter (fun e -> reject e.Annot.desc) else_fields
                 | _ -> ())
               fields
           in
           reject then_fields.desc;
-          Option.iter (fun e -> reject e.desc) else_fields
+          Option.iter (fun e -> reject e.Annot.desc) else_fields
       | _ -> ())
     fields
 
@@ -12061,7 +12276,7 @@ let apply_declared_features diagnostics features fields =
    is reported once with the assumption under which it is reachable. Only the
    diagnostics matter here, so the typed module is not built ([~build:false]). *)
 let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
-    diagnostics fields =
+    diagnostics (fields : location module_) =
   Wax_wasm.Cond_explore.check_all diagnostics
     ?truncation_location:
       (match fields with hd :: _ -> Some hd.info | [] -> None)
@@ -12192,7 +12407,7 @@ let lint_confusable diagnostics fields =
         | Conditional { cond; then_fields; else_fields } ->
             check_cond cond;
             walk then_fields.desc;
-            Option.iter (fun f -> walk f.desc) else_fields)
+            Option.iter (fun f -> walk f.Annot.desc) else_fields)
       fields
   in
   walk fields
@@ -12224,4 +12439,7 @@ let check ?(warn_unused = false) ?(suggest = false)
       ~faithful:false diagnostics fields
 
 let erase_types m =
-  List.map (fun m -> { m with desc = Ast_utils.map_modulefield snd m.desc }) m
+  List.map
+    (fun (m : (_ modulefield, location) Ast.annotated) ->
+      { m with desc = Ast_utils.map_modulefield snd m.desc })
+    m

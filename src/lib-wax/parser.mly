@@ -196,26 +196,39 @@ let storagetype_tbl =
      "i32", Value I32; "i64", Value I64; "f32", Value F32; "f64", Value F64;
      "v128", Value V128]
 
-let with_loc loc desc =
-   Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
-
 let location_of loc : location = {loc_start = fst loc; loc_end = snd loc}
+
+(* An instruction. Its record carries a [hints] field beside its location (the
+   advisory [metadata.code] metadata, see [Ast.instr]); freshly parsed source has
+   none until a hint attribute fills it in. *)
+let with_loc loc desc =
+  let info = location_of loc in
+  Wax_utils.Trivia.record_pos Context.context info;
+  {desc; info; hints = Wax_wasm.Hints.none}
+
+(* Any other located node: a module field, an identifier, an instruction *list*. *)
+let annot loc desc =
+   Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
 (* Build an import declaration from its parsed attributes and kind. The
    attributes (a name-only [#[import = "name"]] override, [#[export]], …) are
    kept as-is and interpreted downstream. *)
 let make_import_decl loc attributes (id, kind) =
-  with_loc loc {id; kind; attributes}
+  annot loc {id; kind; attributes}
 
 (* Branch-hinting proposal: [#[likely]]/[#[unlikely]] may only prefix a
-   conditional branch. Wrap it in [Hinted]; reject the attribute anywhere else. *)
+   conditional branch. Set the hint on it; reject the attribute anywhere else. *)
 let is_branch_hint_target = function
   | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ -> true
   | _ -> false
 
+(* [loc] spans the attribute and the instruction; the instruction keeps its own
+   location, since the hint is no longer a node of its own. The wider span is
+   still recorded, so trivia attaches exactly as it did when it was. *)
 let hinted loc h (i : _ instr) =
-  if is_branch_hint_target i.desc then with_loc loc (Hinted (h, i))
+  if is_branch_hint_target i.desc then
+    {i with hints = Wax_wasm.Hints.branch (location_of loc) h i.hints}
   else
     raise
       (Wax_utils.Parsing.syntax_error_pair
@@ -282,16 +295,17 @@ let rec process_stmts = function
    location (its token span [oploc]) so a comment sitting between an operand and
    the operator attaches to the right place. [_tok] is the operator token's
    (unit) value, taken only so its [o = "..."] binder counts as used. *)
-let binop sloc _tok oploc op i j = with_loc sloc (BinOp (with_loc oploc op, i, j))
-let unop sloc _tok oploc op i = with_loc sloc (UnOp (with_loc oploc op, i))
+let binop sloc _tok oploc op i j = with_loc sloc (BinOp (annot oploc op, i, j))
+let unop sloc _tok oploc op i = with_loc sloc (UnOp (annot oploc op, i))
 
 (* Apply a module field's leading attributes. When there are attributes, widen
    the field location (built by [d] from the definition alone) to span them, so
    comments and blank lines preceding the attributes attach to the field rather
    than to an attribute's inner expression. *)
-let attributed loc attributes d =
+let attributed loc attributes d :
+    (location modulefield, location) Ast.annotated =
   let f = d attributes in
-  match attributes with [] -> f | _ :: _ -> with_loc loc f.desc
+  match attributes with [] -> f | _ :: _ -> annot loc f.Ast.desc
 
 (* Module-field conditional annotations, the [#[if(...)]]/[#[else]] counterpart
    of [raw_stmt]. Braces are mandatory: [#[if(c)] { fields }] and
@@ -313,7 +327,7 @@ let rec lower_fields = function
   | RF_if (loc, cond, then_fields) :: RF_else (eloc, else_fields) :: rest ->
       (* Keep each branch's own [#[if]/#[else] { … }] span (marker included) on
          its located body — see [process_stmts]. *)
-      with_loc (fst loc, snd eloc)
+      annot (fst loc, snd eloc)
         (Conditional
            {
              cond;
@@ -322,7 +336,7 @@ let rec lower_fields = function
            })
       :: lower_fields rest
   | RF_if (loc, cond, then_fields) :: rest ->
-      with_loc loc
+      annot loc
         (Conditional
            {
              cond;
@@ -503,7 +517,7 @@ separated_nonempty_list_trailing(sep, X):
 dummy_ctx: EOF { assert false }
 
 %inline ident:
-| t = IDENT { with_loc $sloc t }
+| t = IDENT { annot $sloc t }
 
 ident_or_keyword:
 | t = IDENT { t }
@@ -560,7 +574,7 @@ label_name:
 | l = ident_or_keyword { l }
 
 %inline label:
-| "'" l = label_name { with_loc $sloc l }
+| "'" l = label_name { annot $sloc l }
 
 (* The comma-separated case labels of a [br_table]/[dispatch] bracket, ending
    in the mandatory [else <default>]: ['a, 'b, else 'd] or [else 'd]. *)
@@ -634,7 +648,7 @@ field_name:
 | i = ident { i }
 
 structure_type_field:
-| x = field_name ":" t = field_type { with_loc $sloc (x, t) }
+| x = field_name ":" t = field_type { annot $sloc (x, t) }
 
 structure_type:
 | l = separated_list_trailing(",", structure_type_field) { l }
@@ -667,11 +681,11 @@ type_definition:
   describes = ioption(DESCRIBES o = type_name { o })
   descriptor = ioption(DESCRIPTOR d = type_name { d })
   typ = composite_type ";"
-    { with_loc $sloc
+    { annot $sloc
         (name, {typ; supertype; final = not op; descriptor; describes}) }
 
 rectype:
-| REC "{" l = list(type_definition) "}" { with_loc $loc($1) (Array.of_list l) }
+| REC "{" l = list(type_definition) "}" { annot $loc($1) (Array.of_list l) }
 (* Reuse the type definition's own (already registered) location rather than
    register a duplicate one for the same span, which would split trivia between
    them. *)
@@ -727,8 +741,8 @@ simple_pattern:
 | "_" { None }
 
 function_parameter:
-| x = ident ":" t = value_type { with_loc $sloc (Some x, t) }
-| t = value_type { with_loc $sloc (None, t) }
+| x = ident ":" t = value_type { annot $sloc (Some x, t) }
+| t = value_type { annot $sloc (None, t) }
 
 parameter_list:
 | l = separated_list_trailing(",", function_parameter)
@@ -788,7 +802,7 @@ func:
                ($sloc,
            Wax_utils.Message.text ("A function definition is always exact; the '!' marker \
                         is only allowed on an (imported) function declaration.\n") ));
-    with_loc $sloc (Func {name; typ; sign; body; attributes}) }
+    annot $sloc (Func {name; typ; sign; body; attributes}) }
 
 tag_name:
 | i = ident { i }
@@ -804,7 +818,7 @@ tag_signature:
 (* An anonymous block parameter, located at its value type so a trailing
    comment attaches to it. *)
 block_param_type:
-| t = value_type { with_loc $sloc (None, t) }
+| t = value_type { annot $sloc (None, t) }
 
 parameter_types:
 | l = separated_list_trailing(",", block_param_type) { l }
@@ -961,7 +975,7 @@ blockinstr:
    brace (see [located_block_contents]/[close_block] in [output.ml]). *)
 braced_block:
 | "{" l = statement_list "}"
-  { with_loc $sloc l }
+  { annot $sloc l }
 
 parenthesized_expression: e = expression { e }
 (* The [descriptor(d)] clause shared by the custom-descriptors instructions
@@ -985,7 +999,7 @@ argument:
 (* [tag] is a keyword (tag declarations), so the [tag: t] immediate of a
    [switch] needs its own arm. *)
 | t = TAG ":" e = expression
-  { ignore t; with_loc $sloc (Labelled (with_loc $loc(t) "tag", e)) }
+  { ignore t; with_loc $sloc (Labelled (annot $loc(t) "tag", e)) }
 
 argument_list:
 | l = separated_list_trailing(",", argument) { l }
@@ -1065,10 +1079,10 @@ plaininstr:
 | i = expression o = "<=s" j = expression { binop $sloc o $loc(o) (Le (Some Signed)) i j }
 | i = expression o = "<=u" j = expression { binop $sloc o $loc(o) (Le (Some Unsigned)) i j }
 | b = branch_expr { b }
-(* Branch-hinting proposal: [#[likely]] / [#[unlikely]] wraps the [br_if]/[br_on_*]
-   that follows; a hinted [if] is a [blockinstr] (above). *)
+(* Branch-hinting proposal: [#[likely]] / [#[unlikely]] annotates the
+   [br_if]/[br_on_*] that follows; a hinted [if] is a [blockinstr] (above). *)
 | h = branch_hint_attr b = branch_expr
-  { with_loc $sloc (Hinted (h, b)) }
+  { hinted $sloc h b }
 | SUSPEND t = tag_name "(" l = expression_list ")"
   { with_loc $sloc (Suspend (t, l)) }
 (* The postfix handler clause of a [resume]-family method call, binding tightly
@@ -1107,20 +1121,20 @@ let_pattern_:
 (* The operator of a compound assignment [x op= e]. Mirrors the value-producing
    arithmetic and bitwise binary operators; comparisons are excluded. *)
 compound_assign_op:
-| "+=" { with_loc $sloc Add }
-| "-=" { with_loc $sloc Sub }
-| "*=" { with_loc $sloc Mul }
-| "/=" { with_loc $sloc (Div None) }
-| "/s=" { with_loc $sloc (Div (Some Signed)) }
-| "/u=" { with_loc $sloc (Div (Some Unsigned)) }
-| "%s=" { with_loc $sloc (Rem Signed) }
-| "%u=" { with_loc $sloc (Rem Unsigned) }
-| "&=" { with_loc $sloc And }
-| "|=" { with_loc $sloc Or }
-| "^=" { with_loc $sloc Xor }
-| "<<=" { with_loc $sloc Shl }
-| ">>s=" { with_loc $sloc (Shr Signed) }
-| ">>u=" { with_loc $sloc (Shr Unsigned) }
+| "+=" { annot $sloc Add }
+| "-=" { annot $sloc Sub }
+| "*=" { annot $sloc Mul }
+| "/=" { annot $sloc (Div None) }
+| "/s=" { annot $sloc (Div (Some Signed)) }
+| "/u=" { annot $sloc (Div (Some Unsigned)) }
+| "%s=" { annot $sloc (Rem Signed) }
+| "%u=" { annot $sloc (Rem Unsigned) }
+| "&=" { annot $sloc And }
+| "|=" { annot $sloc Or }
+| "^=" { annot $sloc Xor }
+| "<<=" { annot $sloc Shl }
+| ">>s=" { annot $sloc (Shr Signed) }
+| ">>u=" { annot $sloc (Shr Unsigned) }
 
 statement:
 | i = plaininstr { i }
@@ -1219,13 +1233,13 @@ global:
 | mut = globalmut name = ident
   typ = ioption(":" typ = value_type { typ })
   "=" def = constant_expression ";"
-  { fun attributes -> with_loc $sloc (Global {name; mut; typ; def; attributes}) }
+  { fun attributes -> annot $sloc (Global {name; mut; typ; def; attributes}) }
 
 tag_def:
 | s = tag_signature ";"
   { fun attributes ->
     let (name, typ, sign) = s in
-    with_loc $sloc (Tag {name; typ; sign; attributes}) }
+    annot $sloc (Tag {name; typ; sign; attributes}) }
 
 definition:
 | f = func { f }
@@ -1271,7 +1285,7 @@ data_run_item:
 | n = data_number { `Num n }
 | sh = ident "(" l = separated_list_trailing(",", data_number) ")"
   { `Vec
-      (with_loc $sloc
+      (annot $sloc
          { V128.shape = vec_shape $loc(sh) sh;
            components = List.map (fun (n : _ Ast.annotated) -> n.desc) l }) }
 
@@ -1280,7 +1294,7 @@ data_run_item:
    encoded at typing/lowering, like the WAT numlist form). *)
 data_number:
 | s = ioption(data_sign) n = raw_number
-  { with_loc $sloc (Option.value ~default:"" s ^ n) }
+  { annot $sloc (Option.value ~default:"" s ^ n) }
 
 data_sign:
 | "-" { "-" }
@@ -1304,13 +1318,13 @@ memory:
 | MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
   ps = ioption(mem_pagesize) sh = boption(SHARED) ";"
   { fun attributes ->
-      with_loc $sloc
+      annot $sloc
         (Memory {name; address_type = at; limits = lim; page_size_log2 = ps;
                  shared = sh; data = []; attributes}) }
 | MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
   ps = ioption(mem_pagesize) sh = boption(SHARED) "{" items = list(data_item) "}"
   { fun attributes ->
-      with_loc $sloc
+      annot $sloc
         (Memory
            {name; address_type = at; limits = lim; page_size_log2 = ps;
             shared = sh; data = items; attributes}) }
@@ -1318,31 +1332,31 @@ memory:
 data:
 | DATA n = data_name init = loption("=" i = data_init { i }) ";"
   { fun attributes ->
-      with_loc $sloc (Data {name = n; mode = Passive; init; attributes}) }
+      annot $sloc (Data {name = n; mode = Passive; init; attributes}) }
 | DATA n = data_name "@" mem = ident "[" off = constant_expression "]"
   init = loption("=" i = data_init { i }) ";"
   { fun attributes ->
-      with_loc $sloc
+      annot $sloc
         (Data {name = n; mode = Active (mem, off); init; attributes}) }
 
 table:
 | TABLE name = ident ":" at = ioption(address_type) rt = reference_type
   lim = ioption(mem_limits) init = ioption("=" e = expression { e }) ";"
   { fun attributes ->
-      with_loc $sloc
+      annot $sloc
         (Table {name; address_type = Option.value ~default:`I32 at;
                 reftype = rt; limits = lim; init; attributes}) }
 
 elem:
 | ELEM name = ident ":" rt = reference_type "=" "[" l = expression_list "]" ";"
   { fun attributes ->
-      with_loc $sloc
+      annot $sloc
         (Elem {name; reftype = rt; mode = EPassive; init = l; attributes}) }
 | ELEM name = ident ":" rt = reference_type
   "@" tab = ident "[" off = constant_expression "]"
   "=" "[" l = expression_list "]" ";"
   { fun attributes ->
-      with_loc $sloc
+      annot $sloc
         (Elem {name; reftype = rt; mode = EActive (tab, off); init = l;
                attributes}) }
 
@@ -1352,14 +1366,14 @@ elem:
    field. There is no standalone brace group: [{ … }] only appears as a
    conditional branch body. *)
 module_field:
-| r = rectype { RF_plain {desc = Type r.desc; info = r.info} }
-| a = inner_attribute { RF_plain (with_loc $sloc (Module_annotation [a])) }
+| r = rectype { RF_plain {Ast.desc = Type r.desc; info = r.info} }
+| a = inner_attribute { RF_plain (annot $sloc (Module_annotation [a])) }
 | attributes = list(attribute) d = definition
   { RF_plain (attributed $sloc attributes d) }
 | IMPORT m = STRING d = import_item
-  { RF_plain (with_loc $sloc (Import {module_ = m; decl = d})) }
+  { RF_plain (annot $sloc (Import {module_ = m; decl = d})) }
 | IMPORT m = STRING "{" decls = semi_list(import_item) "}"
-  { RF_plain (with_loc $sloc (Import_group {module_ = m; decls})) }
+  { RF_plain (annot $sloc (Import_group {module_ = m; decls})) }
 | "#" "[" IF "(" c = condition ")" "]" b = braced_fields { RF_if ($sloc, c, b) }
 | "#" "[" ELSE "]" b = braced_fields { RF_else ($sloc, b) }
 
@@ -1368,7 +1382,7 @@ module_field:
    emitted on the far side of the closing brace. *)
 braced_fields:
 | "{" fields = semi_list(module_field) "}"
-  { with_loc $sloc (lower_fields fields) }
+  { annot $sloc (lower_fields fields) }
 
 (* One entry of an import block: an [fn]/[const]/[let]/[tag]/[memory]/[table]
    declaration, optionally carrying a name-only [#[import = "name"]] (imported

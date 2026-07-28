@@ -559,11 +559,33 @@ let branch_hint_annotation (likely : bool) =
         };
     ]
 
+(* Branch-hinting / compilation-hints proposals: the [(@metadata.code.…)]
+   annotations an instruction's hints print as, in section order. *)
+let hint_annotations (h : _ Hints.t) =
+  match h.Hints.branch with
+  | None -> []
+  | Some likely -> [ branch_hint_annotation likely.Hints.value ]
+
 (*** The instruction printer ***)
 
+(* A hinted instruction prints its annotations before itself. A block-form [if]
+   keeps its own multi-line layout, with the annotation on its own line above it;
+   an inline [br_if]/[br_on_*] stays on one line with the annotation. A folded
+   group takes its annotation outside the parentheses, which the [Folded] arm of
+   [instr_unhinted] handles for itself. *)
 let rec instr i =
-  let loc = i.Ast.info in
-  match i.Ast.desc with
+  match hint_annotations i.hints with
+  | [] -> instr_unhinted i
+  | annots -> (
+      let loc = i.info in
+      let bare = instr_unhinted { i with hints = Hints.none } in
+      match i.desc with
+      | If _ -> Vertical_block (Some loc, annots @ [ bare ])
+      | _ -> block ~loc ~transparent:true (annots @ [ bare ]))
+
+and instr_unhinted i =
+  let loc = i.info in
+  match i.desc with
   | ExternConvertAny -> instruction ~loc "extern.convert_any"
   | AnyConvertExtern -> instruction ~loc "any.convert_extern"
   | Const op ->
@@ -890,17 +912,6 @@ let rec instr i =
           reftype ty;
           reftype ty';
         ]
-  (* Branch-hinting proposal: unfolded hinted branch — the annotation precedes the
-     wrapped instruction. A block-form [if] keeps its own multi-line layout (the
-     annotation on its own line above it); an inline [br_if]/[br_on_*] stays on one
-     line with the annotation. *)
-  | Hinted (h, inner) -> (
-      match inner.Ast.desc with
-      | If _ ->
-          Vertical_block (Some loc, [ branch_hint_annotation h; instr inner ])
-      | _ ->
-          block ~loc ~transparent:true [ branch_hint_annotation h; instr inner ]
-      )
   | Return -> instruction ~loc "return"
   | Throw tag -> block ~loc [ instruction "throw"; index tag ]
   | ThrowRef -> block ~loc [ instruction "throw_ref" ]
@@ -923,6 +934,20 @@ let rec instr i =
       block ~loc [ instruction "struct.set"; index typ; index i ]
   | ReturnCall f -> block ~loc [ instruction "return_call"; index f ]
   | ReturnCallRef typ -> block ~loc [ instruction "return_call_ref"; index typ ]
+  (* A folded hinted branch puts the annotation *before* the folded group —
+     [(@…) (br_if …)] / [(@…) (if …)] — not inside it. The head is reprinted
+     without its hints so the group itself comes out plain. *)
+  | Folded (head, l) when not (Hints.is_empty head.hints) ->
+      block ~loc ~transparent:true
+        (hint_annotations head.hints
+        @ [
+            instr_unhinted
+              {
+                desc = Folded ({ head with hints = Hints.none }, l);
+                info = head.info;
+                hints = Hints.none;
+              };
+          ])
   | Folded ({ desc = If { label; typ; if_block; else_block }; _ }, l) ->
       (* Give each clause the location of its (then ...)/(else ...) group so
          a comment trailing the clause attaches to it. *)
@@ -1015,21 +1040,13 @@ let rec instr i =
         (block [ atom ~style:Annotation "@if"; cond_doc cond ]
         :: clause "then" then_body
         :: option (fun e -> [ clause "else" e ]) else_body)
-  (* Branch-hinting proposal: a folded hinted branch puts the annotation *before*
-     the folded group — [(@…) (br_if …)] / [(@…) (if …)] — not inside it. The
-     wrapped instruction is printed as its own folded node. *)
-  | Folded ({ desc = Hinted (h, inner); info }, l) ->
-      block ~loc ~transparent:true
-        [
-          branch_hint_annotation h; instr { Ast.desc = Folded (inner, l); info };
-        ]
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 
 let instr_list_needs_vertical_layout l =
   List.exists
     (fun (i : _ Ast.Text.instr) ->
-      match i.Ast.desc with Folded _ -> false | _ -> true)
+      match i.desc with Folded _ -> false | _ -> true)
     l
 
 let inline_instrs l = List.map instr l
@@ -1097,15 +1114,15 @@ let fundecl (idx, typ) =
 
 let expr name e =
   match e with
-  | [ ({ Ast.desc = Folded _; _ } as i) ] -> instr i
+  | [ ({ desc = Folded _; _ } as i) ] -> instr i
   | _ -> list (keyword name :: inline_instrs e)
 
-let function_indices lst =
+let function_indices (lst : _ Ast.Text.expr list) =
   let extract i =
     match i with
     | [
-     ( { Ast.desc = RefFunc idx; _ }
-     | { Ast.desc = Folded ({ desc = RefFunc idx; _ }, []); _ } );
+     ( { desc = RefFunc idx; _ }
+     | { desc = Folded ({ desc = RefFunc idx; _ }, []); _ } );
     ] ->
         Some idx
     | _ -> None

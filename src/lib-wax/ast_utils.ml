@@ -27,7 +27,8 @@ let map_instr f instr =
               if_block = { if_block with desc = List.map go if_block.desc };
               else_block =
                 Option.map
-                  (fun b -> { b with desc = List.map go b.desc })
+                  (fun (b : (_ instr list, _) Ast.annotated) ->
+                    { b with desc = List.map go b.desc })
                   else_block;
             }
       | TryTable { label; typ; block; catches } ->
@@ -47,11 +48,14 @@ let map_instr f instr =
               catches =
                 List.map
                   (fun (tag, block) ->
-                    (tag, { block with desc = List.map go block.desc }))
+                    ( tag,
+                      { block with Annot.desc = List.map go block.Annot.desc }
+                    ))
                   catches;
               catch_all =
                 Option.map
-                  (fun b -> { b with desc = List.map go b.desc })
+                  (fun (b : (_ instr list, location) Ast.annotated) ->
+                    { b with desc = List.map go b.desc })
                   catch_all;
             }
       | TryCatch { label; typ; block; arms } ->
@@ -102,7 +106,6 @@ let map_instr f instr =
       | Let (bindings, body) -> Let (bindings, Option.map go body)
       | Br (label, v) -> Br (label, Option.map go v)
       | Br_if (label, v) -> Br_if (label, go v)
-      | Hinted (h, i) -> Hinted (h, go i)
       | On (i, h) -> On (go i, h)
       | Br_table (labels, v) -> Br_table (labels, go v)
       | Dispatch { index; cases; default; arms } ->
@@ -114,7 +117,7 @@ let map_instr f instr =
               arms =
                 List.map
                   (fun (l, body) ->
-                    (l, { body with desc = List.map go body.desc }))
+                    (l, { body with Annot.desc = List.map go body.Annot.desc }))
                   arms;
             }
       | Match { scrutinee; arms; default } ->
@@ -124,7 +127,7 @@ let map_instr f instr =
               arms =
                 List.map
                   (fun (pat, body) ->
-                    (pat, { body with desc = List.map go body.desc }))
+                    (pat, { body with Annot.desc = List.map go body.Annot.desc }))
                   arms;
               default = { default with desc = List.map go default.desc };
             }
@@ -157,11 +160,12 @@ let map_instr f instr =
               then_body = { then_body with desc = List.map go then_body.desc };
               else_body =
                 Option.map
-                  (fun b -> { b with desc = List.map go b.desc })
+                  (fun (b : (_ instr list, location) Ast.annotated) ->
+                    { b with desc = List.map go b.desc })
                   else_body;
             }
     in
-    { desc; info = f instr.info }
+    { desc; info = f instr.info; hints = instr.hints }
   in
   go instr
 
@@ -188,7 +192,7 @@ let smart_opt f o =
 (* Share-preserving rewrite of a block ([block] on its statement list) and of an
    optional block. Top-level (not closures inside [map_desc]) so they allocate
    nothing per node — called fully applied, [block] is just passed through. *)
-let smart_block block b =
+let smart_block block (b : (_ instr list, location) Ast.annotated) =
   let d = block b.desc in
   if d == b.desc then b else { b with desc = d }
 
@@ -394,9 +398,6 @@ let map_desc ~instr ~block (desc : 'i instr_desc) : 'i instr_desc =
       let v' = instr v and d' = instr d in
       if v' == v && d' == d then desc
       else Br_on_cast_desc_eq_fail (label, t, v', d')
-  | Hinted (h, i) ->
-      let i' = instr i in
-      if i' == i then desc else Hinted (h, i')
   | Throw (idx, args) ->
       let a' = smart_map instr args in
       if a' == args then desc else Throw (idx, a')
@@ -443,26 +444,27 @@ let map_desc ~instr ~block (desc : 'i instr_desc) : 'i instr_desc =
 (* The instructions immediately nested within [i] (its operands and block
    bodies), in no particular evaluation order. A punned struct field ([None]) is
    a leaf and contributes nothing. *)
-let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
+let sub_instrs (i : _ Ast.instr) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block.desc
   | While { cond; step; block; _ } -> (cond :: Option.to_list step) @ block.desc
   | If { cond; if_block; else_block; _ } ->
       (cond :: if_block.desc)
-      @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block
+      @ Option.fold ~none:[] ~some:(fun b -> b.Annot.desc) else_block
   | Try { block; catches; catch_all; _ } ->
       block.desc
-      @ List.concat_map (fun (_, b) -> b.desc) catches
-      @ Option.fold ~none:[] ~some:(fun b -> b.desc) catch_all
+      @ List.concat_map (fun (_, b) -> b.Annot.desc) catches
+      @ Option.fold ~none:[] ~some:(fun b -> b.Annot.desc) catch_all
   | TryCatch { block; arms; _ } ->
       block.desc @ List.concat_map (fun a -> a.arm_body.desc) arms
   | If_annotation { then_body; else_body; _ } -> (
       then_body.desc @ match else_body with Some b -> b.desc | None -> [])
   | Sequence l | ArrayFixed (_, l) -> l
   | Dispatch { index; arms; _ } ->
-      index :: List.concat_map (fun (_, b) -> b.desc) arms
+      index :: List.concat_map (fun (_, b) -> b.Annot.desc) arms
   | Match { scrutinee; arms; default } ->
-      (scrutinee :: List.concat_map (fun (_, b) -> b.desc) arms) @ default.desc
+      (scrutinee :: List.concat_map (fun (_, b) -> b.Annot.desc) arms)
+      @ default.desc
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)
@@ -496,7 +498,6 @@ let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
   | StructDefaultDesc i
   | ArrayDefault (_, i)
   | Br_if (_, i)
-  | Hinted (_, i)
   | On (i, _)
   | Br_table (_, i)
   | Br_on_null (_, i)
@@ -511,7 +512,7 @@ let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
   | Float _ | StructDefault _ ->
       []
 
-let rec iter_instr f i =
+let rec iter_instr f (i : _ instr) =
   f i;
   List.iter (iter_instr f) (sub_instrs i)
 
@@ -530,7 +531,9 @@ let rec iter_instr f i =
    re-lowers to the original blocks byte-for-byte. Every synthesised block and
    the [br_table] carry [block_info]; the index and case bodies keep their own. *)
 let lower_dispatch ~block_info ~index ~cases ~default ~arms =
-  let mk desc = { desc; info = block_info } in
+  let mk desc : _ instr =
+    { desc; info = block_info; hints = Wax_wasm.Hints.none }
+  in
   let void = { params = [||]; results = [||] } in
   let br = mk (Br_table (cases @ [ default ], index)) in
   let rec build = function
@@ -543,7 +546,7 @@ let lower_dispatch ~block_info ~index ~cases ~default ~arms =
              {
                label = Some c;
                typ = void;
-               block = no_loc (build rest :: next_body.desc);
+               block = no_loc (build rest :: next_body.Annot.desc);
              })
     | [] -> br
   in
@@ -573,7 +576,9 @@ let synthetic_loop_label = "#loop"
    {!Recover_trycatch} and is used by Wax-to-Wasm conversion (type checking
    types the structured node directly). *)
 let lower_trycatch ~block_info ~join ~arm_labels ~typ ~block ~arms =
-  let mk desc = { desc; info = block_info } in
+  let mk desc : _ instr =
+    { desc; info = block_info; hints = Wax_wasm.Hints.none }
+  in
   let catches =
     List.map2
       (fun l arm ->
@@ -622,7 +627,9 @@ let lower_trycatch ~block_info ~join ~arm_labels ~typ ~block ~arms =
    back-edge. An unlabelled stepped loop cannot be continued, so the step is
    simply appended to the body (byte-identical to a trailing-step [while]). *)
 let lower_while ~block_info ~fresh_loop ~label ~cond ~step ~block =
-  let mk desc = { desc; info = block_info } in
+  let mk desc : _ instr =
+    { desc; info = block_info; hints = Wax_wasm.Hints.none }
+  in
   let void = { params = [||]; results = [||] } in
   let if_ cond body =
     mk
@@ -687,8 +694,11 @@ let lower_while ~block_info ~fresh_loop ~label ~cond ~step ~block =
    [labels] supplies [n+1] fresh block labels: one per arm (in order) then the
    [escape] label. This is the exact inverse of {!Recover_match}: a recovered
    match re-lowers to the original blocks. *)
-let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
-  let mk desc = { desc; info = block_info } in
+let lower_match ~block_info ~labels ~scrutinee ~arms
+    ~(default : (_ instr list, location) Ast.annotated) =
+  let mk desc : _ instr =
+    { desc; info = block_info; hints = Wax_wasm.Hints.none }
+  in
   let void = { params = [||]; results = [||] } in
   let res = function
     | MatchCast (_, rt) -> { params = [||]; results = [| Ref rt |] }
@@ -757,10 +767,10 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
                      block = no_loc (consume prev_block prev_pat prev_body);
                    })
             in
-            wrap blk pat body.desc labels' arms'
+            wrap blk pat body.Annot.desc labels' arms'
         | _ -> assert false
       in
-      wrap block_l0 p0 b0.desc rest_labels rest_arms
+      wrap block_l0 p0 b0.Annot.desc rest_labels rest_arms
 
 let rec map_modulefield f field =
   match field with
@@ -805,10 +815,11 @@ let rec map_modulefield f field =
       let map_fields b =
         {
           b with
-          desc =
+          Annot.desc =
             List.map
-              (fun a -> { a with desc = map_modulefield f a.desc })
-              b.desc;
+              (fun (a : (_ modulefield, location) Ast.annotated) ->
+                { a with desc = map_modulefield f a.desc })
+              b.Annot.desc;
         }
       in
       Conditional
@@ -820,12 +831,12 @@ let rec map_modulefield f field =
 
 let rec iter_fields f l =
   List.iter
-    (fun field ->
+    (fun (field : (_ modulefield, location) Ast.annotated) ->
       f field;
       match field.desc with
       | Conditional { then_fields; else_fields; _ } ->
           iter_fields f then_fields.desc;
-          Option.iter (fun b -> iter_fields f b.desc) else_fields
+          Option.iter (fun b -> iter_fields f b.Annot.desc) else_fields
       | _ -> ())
     l
 
@@ -884,7 +895,7 @@ let import_name (decl : import_decl) =
         if k <> "import" then None
         else
           match v with
-          | Some { desc = String (_, s); info } -> Some { desc = s; info }
+          | Some { desc = String (_, s); info; _ } -> Some { desc = s; info }
           | _ -> None)
       decl.attributes
   in

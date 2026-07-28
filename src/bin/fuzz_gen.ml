@@ -45,8 +45,8 @@ let err = Array.exists (fun a -> a = "err") Sys.argv
 let st = Random.State.make [| seed |]
 let rnd n = Random.State.int st n
 let pick a = a.(rnd (Array.length a))
-let nl = Ast.no_loc
-let id s = nl s
+let nl = Ast.no_loc_instr
+let id s = Ast.no_loc s
 
 (* A monotonically increasing counter, for minting unique local / label names
    (see [local_while_seq]) that never collide with each other or with the fixed
@@ -330,8 +330,8 @@ and if_ t d : Ast.location Ast.instr =
          label = None;
          typ;
          cond = gen I32 (d - 1);
-         if_block = nl [ gen t (d - 1) ];
-         else_block = Some (nl [ gen t (d - 1) ]);
+         if_block = Ast.no_loc [ gen t (d - 1) ];
+         else_block = Some (Ast.no_loc [ gen t (d - 1) ]);
        })
 
 (* A legacy `try_legacy`/`catch` expression of type [t] (the deprecated
@@ -345,9 +345,9 @@ and try_ t d : Ast.location Ast.instr =
        {
          label = None;
          typ;
-         block = nl [ gen t (d - 1) ];
-         catches = [ (id "stop", nl [ gen t (d - 1) ]) ];
-         catch_all = Some (nl [ gen t (d - 1) ]);
+         block = Ast.no_loc [ gen t (d - 1) ];
+         catches = [ (id "stop", Ast.no_loc [ gen t (d - 1) ]) ];
+         catch_all = Some (Ast.no_loc [ gen t (d - 1) ]);
        })
 
 (* A structured `try`/`catch` of type [t] (try_table plus a block ladder,
@@ -359,7 +359,13 @@ and try_ t d : Ast.location Ast.instr =
 and try_catch t d : Ast.location Ast.instr =
   let typ = Ast.{ params = [||]; results = [| valtype t |] } in
   let arm ?tag ?(ref_ = false) body =
-    Ast.{ arm_tag = tag; arm_ref = ref_; arm_types = [||]; arm_body = nl body }
+    Ast.
+      {
+        arm_tag = tag;
+        arm_ref = ref_;
+        arm_types = [||];
+        arm_body = Ast.no_loc body;
+      }
   in
   let drop = nl (Ast.Let ([ (None, None) ], Some (nl Ast.Hole))) in
   let catch_all = arm [ gen t (d - 1) ] in
@@ -370,7 +376,9 @@ and try_catch t d : Ast.location Ast.instr =
     | 2 -> [ arm ~tag:(id "stop") ~ref_:true [ drop ]; catch_all ]
     | _ -> [ arm ~tag:(id "oops") [ nl Ast.Hole ] ]
   in
-  nl (Ast.TryCatch { label = None; typ; block = nl [ gen t (d - 1) ]; arms })
+  nl
+    (Ast.TryCatch
+       { label = None; typ; block = Ast.no_loc [ gen t (d - 1) ]; arms })
 
 (* An expression of type [t] at depth [d]. *)
 and gen t d : Ast.location Ast.instr =
@@ -420,17 +428,19 @@ and gen_num t d : Ast.location Ast.instr =
      its leaves. [flit] = a literal-or-gen in a forced spot. *)
   let flit () = operand t (d - 1) (fun () -> gen t (d - 1)) in
   (* Left operand [gen] pins the binop's type; the right may be a literal. *)
-  let bin ops = nl (Ast.BinOp (nl (pick ops), gen t (d - 1), flit ())) in
+  let bin ops =
+    nl (Ast.BinOp (Ast.no_loc (pick ops), gen t (d - 1), flit ()))
+  in
   let umeth ms = meth (gen t (d - 1)) (pick ms) [] in
   let bmeth ms = meth (gen t (d - 1)) (pick ms) [ gen t (d - 1) ] in
   let cmp () =
     (* a comparison over some numeric type u, yielding i32 (only when t=i32) *)
     let u = pick num_ty in
     let op = if is_int u then pick int_cmps else pick flt_cmps in
-    nl (Ast.BinOp (nl op, gen u (d - 1), gen u (d - 1)))
+    nl (Ast.BinOp (Ast.no_loc op, gen u (d - 1), gen u (d - 1)))
   in
   let ternary () = nl (Ast.Select (gen I32 (d - 1), gen t (d - 1), flit ())) in
-  let neg () = nl (Ast.UnOp (nl Ast.Neg, gen t (d - 1))) in
+  let neg () = nl (Ast.UnOp (Ast.no_loc Ast.Neg, gen t (d - 1))) in
   (* Extract a lane of the matching shape from a v128 (produces this scalar). *)
   let extract () =
     let shp =
@@ -633,20 +643,20 @@ let tail_match res : Ast.location Ast.instr =
     if res = I32 then
       let fld = if t = Point then "x" else "a" in
       ( Ast.MatchCast (Some (id "mv"), reftype t),
-        nl
+        Ast.no_loc
           [
             nl
               (Ast.Return
                  (Some (nl (Ast.StructGet (nl (Ast.Get (id "mv")), id fld)))));
           ] )
-    else (Ast.MatchCast (None, reftype t), nl [ ret () ])
+    else (Ast.MatchCast (None, reftype t), Ast.no_loc [ ret () ])
   in
   nl
     (Ast.Match
        {
          scrutinee = leaf Eq;
          arms = [ arm Point; arm Pair ];
-         default = nl [ ret () ];
+         default = Ast.no_loc [ ret () ];
        })
 
 (* A `dispatch` (jump table) as a function TAIL: an i32 selects a case label,
@@ -663,22 +673,23 @@ let tail_dispatch res : Ast.location Ast.instr =
          index = gen I32 1;
          cases;
          default;
-         arms = List.map (fun l -> (l, nl [ ret () ])) (cases @ [ default ]);
+         arms =
+           List.map (fun l -> (l, Ast.no_loc [ ret () ])) (cases @ [ default ]);
        })
 
-(* Branch-hinting proposal: wrap a conditional branch in [#[likely]] (true) or
+(* Branch-hinting proposal: hint a conditional branch [#[likely]] (true) or
    [#[unlikely]] (false) roughly a third of the time, so generated modules
-   exercise the [Hinted] wrapper end to end — the type checker descending through
-   it, the wasm branch-hint section codec, and (via the round-trip oracle) that a
-   hinted binary decompiles and recompiles to a reference-valid module. Only a
+   exercise hints end to end — the type checker carrying them, the wasm
+   branch-hint section codec, and (via the round-trip oracle) that a hinted binary
+   decompiles and recompiles to a reference-valid module. Only a
    statement-position [if] is hinted: a value-producing [if] carries the hint
    as a [blockinstr] (statement) only, not inside an operand, so hinting one there
    would print Wax that does not re-parse. *)
-let maybe_hint i =
-  match rnd 3 with
-  | 0 -> nl (Ast.Hinted (true, i))
-  | 1 -> nl (Ast.Hinted (false, i))
-  | _ -> i
+let maybe_hint (i : Ast.location Ast.instr) =
+  let hinted likely =
+    { i with Ast.hints = Wax_wasm.Hints.branch i.Ast.info likely i.Ast.hints }
+  in
+  match rnd 3 with 0 -> hinted true | 1 -> hinted false | _ -> i
 
 (* A statement (no value escapes): assign a param (fully type-constrained),
    mutate a struct field / array element, or a nested control statement. *)
@@ -699,7 +710,7 @@ let rec stmt d : Ast.location Ast.instr =
          [x op= e] does) is well-typed. *)
       let t = pick num_ty in
       let op = pick (if is_int t then int_binops else flt_binops) in
-      nl (Ast.Set (id (pname t), Some (nl op), gen t d))
+      nl (Ast.Set (id (pname t), Some (Ast.no_loc op), gen t d))
   | n when n < 46 ->
       nl (Ast.Let ([ (None, None) ], Some (gen (pick num_ty) (max 1 d))))
       (* `_ = <determined>` (a drop, an anonymous [Let]) *)
@@ -722,8 +733,8 @@ let rec stmt d : Ast.location Ast.instr =
                 label = None;
                 typ = void;
                 cond = gen I32 (d - 1);
-                if_block = nl [ stmt (d - 1) ];
-                else_block = Some (nl [ stmt (d - 1) ]);
+                if_block = Ast.no_loc [ stmt (d - 1) ];
+                else_block = Some (Ast.no_loc [ stmt (d - 1) ]);
               }))
   | _ when d > 0 ->
       (* Sometimes a Zig-style continue-expression: a compound assignment on a
@@ -734,7 +745,8 @@ let rec stmt d : Ast.location Ast.instr =
         else
           let t = pick num_ty in
           let op = pick (if is_int t then int_binops else flt_binops) in
-          Some (nl (Ast.Set (id (pname t), Some (nl op), gen t (d - 1))))
+          Some
+            (nl (Ast.Set (id (pname t), Some (Ast.no_loc op), gen t (d - 1))))
       in
       nl
         (Ast.While
@@ -742,7 +754,7 @@ let rec stmt d : Ast.location Ast.instr =
              label = None;
              cond = gen I32 (d - 1);
              step;
-             block = nl [ stmt (d - 1) ];
+             block = Ast.no_loc [ stmt (d - 1) ];
            })
   | _ ->
       let t = pick num_ty in
@@ -774,9 +786,11 @@ let local_while_seq d : Ast.location Ast.instr list =
            cond = gen I32 (d - 1);
            step =
              Some
-               (nl (Ast.Set (id "a", Some (nl Ast.Add), nl (Ast.Get (id v)))));
+               (nl
+                  (Ast.Set
+                     (id "a", Some (Ast.no_loc Ast.Add), nl (Ast.Get (id v)))));
            block =
-             nl
+             Ast.no_loc
                [
                  nl (Ast.Set (id v, None, gen I32 (d - 1)));
                  nl (Ast.Br_if (id lbl, gen I32 (d - 1)));
@@ -803,7 +817,8 @@ let local_liveness_seq d : Ast.location Ast.instr list =
   let use () =
     let read =
       match rnd 3 with
-      | 0 -> nl (Ast.Set (id "a", Some (nl Ast.Add), nl (Ast.Get (id v))))
+      | 0 ->
+          nl (Ast.Set (id "a", Some (Ast.no_loc Ast.Add), nl (Ast.Get (id v))))
       | 1 -> nl (Ast.StructSet (leaf Point, id "x", nl (Ast.Get (id v))))
       | _ -> nl (Ast.Let ([ (None, None) ], Some (nl (Ast.Get (id v)))))
     in
@@ -817,8 +832,8 @@ let local_liveness_seq d : Ast.location Ast.instr list =
            label = None;
            typ = void;
            cond = gen I32 (d - 1);
-           if_block = nl then_;
-           else_block = Some (nl else_);
+           if_block = Ast.no_loc then_;
+           else_block = Some (Ast.no_loc else_);
          })
   in
   let control =
@@ -837,7 +852,7 @@ let local_liveness_seq d : Ast.location Ast.instr list =
                label = None;
                cond = gen I32 (d - 1);
                step = None;
-               block = nl (use ());
+               block = Ast.no_loc (use ());
              })
     | _ ->
         let lbl = id ("lb" ^ string_of_int n) in
@@ -846,7 +861,8 @@ let local_liveness_seq d : Ast.location Ast.instr list =
              {
                label = Some lbl;
                typ = void;
-               block = nl (use () @ [ nl (Ast.Br_if (lbl, gen I32 (d - 1))) ]);
+               block =
+                 Ast.no_loc (use () @ [ nl (Ast.Br_if (lbl, gen I32 (d - 1))) ]);
              })
   in
   [ nl (Ast.Let ([ (Some (id v), Some (valtype I32)) ], None)); control ]
@@ -861,8 +877,9 @@ let poison () : Ast.location Ast.instr =
              Some
                (nl
                   (Ast.BinOp
-                     (nl Ast.Add, nl (Ast.Get (id "a")), nl (Ast.Get (id "d")))))
-           ))
+                     ( Ast.no_loc Ast.Add,
+                       nl (Ast.Get (id "a")),
+                       nl (Ast.Get (id "d")) ))) ))
       (* i32 + f64 *)
   | 1 -> nl (Ast.Set (id "b", None, nl (Ast.Get (id "c")))) (* f32 into i64 *)
   | 2 -> nl (Ast.StructGet (leaf Point, id "nope")) (* unknown field *)
@@ -880,7 +897,7 @@ let poison () : Ast.location Ast.instr =
   | 5 ->
       nl
         (Ast.BinOp
-           ( nl (Ast.Lt (Some Ast.Signed)),
+           ( Ast.no_loc (Ast.Lt (Some Ast.Signed)),
              nl (Ast.Get (id "c")),
              nl (Ast.Get (id "d")) ))
       (* signed cmp on floats *)
@@ -900,7 +917,7 @@ let poison () : Ast.location Ast.instr =
                        label = Some lbl;
                        typ = Ast.{ params = [||]; results = [| valtype I32 |] };
                        block =
-                         nl
+                         Ast.no_loc
                            [
                              nl
                                (Ast.Br_table
@@ -934,8 +951,8 @@ let poison () : Ast.location Ast.instr =
                                {
                                  params =
                                    [|
-                                     nl (None, valtype F64);
-                                     nl (None, valtype F32);
+                                     Ast.no_loc (None, valtype F64);
+                                     Ast.no_loc (None, valtype F32);
                                    |];
                                  results = [| valtype I64 |];
                                };
@@ -947,7 +964,7 @@ let subtype (typ : Ast.comptype) : Ast.subtype =
   { typ; supertype = None; final = true; descriptor = None; describes = None }
 
 let field name mut t : (Ast.ident * Ast.fieldtype, Ast.location) Ast.annotated =
-  nl (id name, ftype mut t)
+  Ast.no_loc (id name, ftype mut t)
 
 (* Attributes on an imported declaration: a name-only [#[import = "…"]] renames
    the entity in the host module, and [#[export]] re-exports it (which also
@@ -965,11 +982,11 @@ let import_func_decl k : (Ast.import_decl, Ast.location) Ast.annotated =
   let sign =
     Ast.
       {
-        params = Array.map (fun t -> nl (None, valtype t)) all_params;
+        params = Array.map (fun t -> Ast.no_loc (None, valtype t)) all_params;
         results = [| valtype gtys.(k) |];
       }
   in
-  nl
+  Ast.no_loc
     {
       Ast.id = id name;
       kind = Ast.Import_func { typ = None; sign = Some sign; exact = false };
@@ -979,7 +996,7 @@ let import_func_decl k : (Ast.import_decl, Ast.location) Ast.annotated =
 (* An imported mutable numeric global, read (and written) by the generated
    bodies — see [gen_num] / [stmt]. *)
 let import_global_decl name t : (Ast.import_decl, Ast.location) Ast.annotated =
-  nl
+  Ast.no_loc
     {
       Ast.id = id name;
       kind = Ast.Import_global { mut = true; typ = valtype t };
@@ -989,7 +1006,7 @@ let import_global_decl name t : (Ast.import_decl, Ast.location) Ast.annotated =
 (* An imported tag ([tag itag(i32);]): exercises [register_import]'s tag arm.
    Left unreferenced — tags carry no unused-import lint. *)
 let import_tag_decl : (Ast.import_decl, Ast.location) Ast.annotated =
-  nl
+  Ast.no_loc
     {
       Ast.id = id "itag";
       kind =
@@ -997,7 +1014,12 @@ let import_tag_decl : (Ast.import_decl, Ast.location) Ast.annotated =
           {
             typ = None;
             sign =
-              Some Ast.{ params = [| nl (None, valtype I32) |]; results = [||] };
+              Some
+                Ast.
+                  {
+                    params = [| Ast.no_loc (None, valtype I32) |];
+                    results = [||];
+                  };
           };
       attributes = [];
     }
@@ -1008,10 +1030,10 @@ let import_tag_decl : (Ast.import_decl, Ast.location) Ast.annotated =
    the call pool; the globals are read/written above. *)
 let import_decls : Ast.location Ast.modulefield list =
   [
-    Ast.Import { module_ = nl "env2"; decl = import_func_decl 0 };
+    Ast.Import { module_ = Ast.no_loc "env2"; decl = import_func_decl 0 };
     Ast.Import_group
       {
-        module_ = nl "env";
+        module_ = Ast.no_loc "env";
         decls =
           List.init (ng - 1) (fun k -> import_func_decl (k + 1))
           @ [
@@ -1026,28 +1048,29 @@ let type_decls : Ast.location Ast.modulefield list =
   [
     Ast.Type
       [|
-        nl
+        Ast.no_loc
           ( id "point",
             subtype (Ast.Struct [| field "x" true I32; field "y" false I32 |])
           );
       |];
     Ast.Type
       [|
-        nl
+        Ast.no_loc
           ( id "pair",
             subtype (Ast.Struct [| field "a" false I32; field "b" false I32 |])
           );
       |];
-    Ast.Type [| nl (id "ints", subtype (Ast.Array (ftype true I32))) |];
+    Ast.Type [| Ast.no_loc (id "ints", subtype (Ast.Array (ftype true I32))) |];
     (* The two array types string literals build: [i8] (raw UTF-8 bytes) and
        [i16] (UTF-16 code units). *)
     Ast.Type
       [|
-        nl (id "chars", subtype (Ast.Array { mut = true; typ = Ast.Packed I8 }));
+        Ast.no_loc
+          (id "chars", subtype (Ast.Array { mut = true; typ = Ast.Packed I8 }));
       |];
     Ast.Type
       [|
-        nl
+        Ast.no_loc
           (id "wchars", subtype (Ast.Array { mut = true; typ = Ast.Packed I16 }));
       |];
     (* A continuation scaffold: a task function type, its continuation type, and
@@ -1055,13 +1078,17 @@ let type_decls : Ast.location Ast.modulefield list =
        cont typing arms are exercised. *)
     Ast.Type
       [|
-        nl
+        Ast.no_loc
           ( id "task",
             subtype
               (Ast.Func
-                 Ast.{ params = [| nl (None, I32) |]; results = [| I32 |] }) );
+                 Ast.
+                   {
+                     params = [| Ast.no_loc (None, I32) |];
+                     results = [| I32 |];
+                   }) );
       |];
-    Ast.Type [| nl (id "k", subtype (Ast.Cont (id "task"))) |];
+    Ast.Type [| Ast.no_loc (id "k", subtype (Ast.Cont (id "task"))) |];
     (* Immutable i32 globals named after the [point] fields [x]/[y] (which have no
        like-named parameter), so a struct literal can *pun* those fields — a
        punned [x]/[y] reads these globals. The [pair] field [a] puns instead to
@@ -1095,14 +1122,17 @@ let type_decls : Ast.location Ast.modulefield list =
       {
         name = id "oops";
         typ = None;
-        sign = Some Ast.{ params = [| nl (None, I32) |]; results = [||] };
+        sign =
+          Some Ast.{ params = [| Ast.no_loc (None, I32) |]; results = [||] };
         attributes = [];
       };
     Ast.Tag
       {
         name = id "yield";
         typ = None;
-        sign = Some Ast.{ params = [| nl (None, I32) |]; results = [| I32 |] };
+        sign =
+          Some
+            Ast.{ params = [| Ast.no_loc (None, I32) |]; results = [| I32 |] };
         attributes = [];
       };
     Ast.Memory
@@ -1121,7 +1151,11 @@ let type_decls : Ast.location Ast.modulefield list =
         typ = None;
         sign =
           Some
-            Ast.{ params = [| nl (Some (id "x"), I32) |]; results = [| I32 |] };
+            Ast.
+              {
+                params = [| Ast.no_loc (Some (id "x"), I32) |];
+                results = [| I32 |];
+              };
         body =
           (None, [ nl (Ast.Suspend (id "yield", [ nl (Ast.Get (id "x")) ])) ]);
         attributes = [];
@@ -1131,7 +1165,7 @@ let type_decls : Ast.location Ast.modulefield list =
 let func k : Ast.location Ast.modulefield =
   let res = rtys.(k) in
   let params =
-    Array.map (fun t -> nl (Some (id (pname t)), valtype t)) all_params
+    Array.map (fun t -> Ast.no_loc (Some (id (pname t)), valtype t)) all_params
   in
   let sign = Ast.{ params; results = [| valtype res |] } in
   let body =
@@ -1175,7 +1209,7 @@ let func k : Ast.location Ast.modulefield =
 
 let () =
   let fields = type_decls @ import_decls @ List.init nf func in
-  let m : Ast.location Ast.module_ = List.map nl fields in
+  let m : Ast.location Ast.module_ = List.map Ast.no_loc fields in
   Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width stdout (fun p ->
       Wax_lang.Output.module_ ~color:Wax_utils.Colors.Never p
         ~trivia:(Wax_utils.Trivia.empty ())

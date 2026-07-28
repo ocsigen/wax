@@ -2859,9 +2859,30 @@ let track_label ctx label =
     label;
   used
 
+(* Branch-hinting proposal: a hint is advisory and has no stack effect, but it is
+   only meaningful on a conditional branch — [if], [br_if] or a [br_on_*], reached
+   through a folded head. Reject it anywhere else, matching the Wax typer; the
+   text and binary front ends both attach a hint wherever it was written and leave
+   the placement to be diagnosed here. *)
+let rec is_branch_hint_target (d : _ Ast.Text.instr_desc) =
+  match d with
+  | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
+      true
+  | Folded (b, _) -> is_branch_hint_target b.desc
+  | _ -> false
+
+let check_hints ctx (i : _ Ast.Text.instr) =
+  match i.hints.Hints.branch with
+  | Some h when not (is_branch_hint_target i.desc) ->
+      Error.branch_hint_invalid_target ctx.modul.diagnostics
+        ~location:h.Hints.loc
+  | _ -> ()
+
 let rec instruction_core ctx (i : _ Ast.Text.instr) =
   if false then print_instr i;
   let loc = i.info in
+  check_hints ctx i;
   match i.desc with
   | Block { label; typ; block = b } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
@@ -3143,23 +3164,6 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let*! params, param_source = branch_target ctx idx in
       let* () = pop_args ctx loc ~source:param_source params in
       push_results ~sink:false ~loc ~source:param_source params
-  (* Branch-hinting proposal: the wrapper is advisory and has the exact stack
-     effect of the branch it wraps. The hint is only allowed on a conditional
-     branch ([if]/[br_if]/[br_on_*], through a folded wrapper); reject it
-     anywhere else. *)
-  | Hinted (_, inner) ->
-      let rec is_branch_hint_target (d : _ Ast.Text.instr_desc) =
-        match d with
-        | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-        | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-          ->
-            true
-        | Folded (b, _) -> is_branch_hint_target b.Ast.desc
-        | _ -> false
-      in
-      if not (is_branch_hint_target inner.Ast.desc) then
-        Error.branch_hint_invalid_target ctx.modul.diagnostics ~location:loc;
-      instruction ctx inner
   | Br_table (lst, idx) ->
       let* () = pop_known ctx loc I32 in
       let*! params, _ = branch_target ctx idx in
@@ -4304,7 +4308,6 @@ and instruction ctx i st =
   | None -> instruction_core ctx i st
   | Some r -> (
       match i.desc with
-      | Hinted _ -> instruction_core ctx i st
       | Folded (head, _) ->
           let st', () = instruction_core ctx i st in
           (* The head is validated last, so its entries are at the front. Pop
@@ -4312,7 +4315,7 @@ and instruction ctx i st =
              keeping each entry's configuration index. *)
           let rec take acc =
             match !r with
-            | (l0, cfg, t) :: tl when l0 = head.Ast.info ->
+            | (l0, cfg, t) :: tl when l0 = head.info ->
                 r := tl;
                 take ((cfg, t) :: acc)
             | _ -> acc
@@ -4386,18 +4389,17 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | ThrowRef | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Hinted _ | Return | Call _ | CallRef _
-  | CallIndirect _ | ReturnCall _ | ReturnCallRef _ | ReturnCallIndirect _
-  | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _ | GlobalSet _
-  | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _ | AtomicFence
-  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
-  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
-  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefIsNull
-  | RefAsNonNull | RefEq | RefTest _ | RefCast _ | RefCastDescEq _
-  | RefGetDesc _ | StructGet _ | StructSet _ | ArrayNewData _ | ArrayNewElem _
-  | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
-  | ArrayInitData _ | ArrayInitElem _ | I31Get _ | UnOp _ | Add128 | Sub128
-  | MulWide _
+  | Br_on_cast_desc_eq_fail _ | Return | Call _ | CallRef _ | CallIndirect _
+  | ReturnCall _ | ReturnCallRef _ | ReturnCallIndirect _ | Drop | Select _
+  | LocalGet _ | LocalSet _ | LocalTee _ | GlobalSet _ | Load _ | LoadS _
+  | Store _ | StoreS _ | Atomic _ | AtomicFence | MemorySize _ | MemoryGrow _
+  | MemoryFill _ | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _
+  | TableSet _ | TableSize _ | TableGrow _ | TableFill _ | TableCopy _
+  | TableInit _ | ElemDrop _ | RefIsNull | RefAsNonNull | RefEq | RefTest _
+  | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructGet _ | StructSet _
+  | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
+  | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | I31Get _
+  | UnOp _ | Add128 | Sub128 | MulWide _
   | BinOp
       ( F32 _ | F64 _
       | I32
@@ -5419,8 +5421,8 @@ let lint_body ctx instrs =
        would need a whole-body purity analysis (and reasoning about branches
        escaping the block) to be treated as a value producer; [Drop]/[Folded]
        are handled structurally in [step]; the rest are Wax extensions. *)
-    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Hinted _ | Drop | Folded _
-    | String _ | Char _ | If_annotation _ ->
+    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Drop | Folded _ | String _
+    | Char _ | If_annotation _ ->
         `Unhandled
   in
   let rec drop_n n l =
@@ -5469,7 +5471,6 @@ let lint_body ctx instrs =
            folded constant pushes, and a folded operator checks and clears). *)
         let st' = List.fold_left step st operands in
         step st' op
-    | Hinted (_, inner) -> step st inner
     (* Propagate a constant float through a demote/promote so a trapping
        conversion of an out-of-f32-range constant ([<big> as f32 as i32_u]) is
        still caught: [f32.demote_f64] rounds to f32, [f64.promote_f32] is exact. *)
@@ -5519,7 +5520,7 @@ let lint_body ctx instrs =
     | Block _ | Loop _ | If _ | TryTable _ | Try _ | Select _ | Br _ | Br_if _
     | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
     | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-    | Return | Folded _ | Hinted _ ->
+    | Return | Folded _ ->
         true
     | _ -> false
   in
@@ -5540,7 +5541,6 @@ let lint_body ctx instrs =
         if is_control op.desc then None
         else if is_eager_hazard op.desc then Some op.info
         else List.find_map has_hazard operands
-    | Hinted (_, inner) -> has_hazard inner
     | d ->
         if (not (is_control d)) && is_eager_hazard d then Some i.info else None
   in
@@ -5568,7 +5568,6 @@ let lint_body ctx instrs =
         List.iter sel_walk block.desc;
         List.iter (fun (_, b) -> List.iter sel_walk b.Ast.desc) catches;
         Option.iter (fun b -> List.iter sel_walk b.Ast.desc) catch_all
-    | Hinted (_, inner) -> sel_walk inner
     | _ -> ()
   in
   walk instrs;
@@ -6069,7 +6068,7 @@ let check_syntax ctx lst =
     | None -> Hashtbl.add tbl id.desc id.info
   in
   let iter_instrs f instrs =
-    List.iter (Ast_utils.iter_instr (fun i -> f i.Ast.desc)) instrs
+    List.iter (Ast_utils.iter_instr (fun i -> f i.desc)) instrs
   in
   (* An inline type annotation [(type idx) (param ...) (result ...)] must name a
      function type whose signature equals the inline one. The reference is
@@ -6471,8 +6470,6 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
           }
     | Folded (h, l) ->
         Folded ({ h with desc = sstructured asm h.desc }, sinstrs asm l)
-    | Hinted (hint, inner) ->
-        Hinted (hint, { inner with desc = sstructured asm inner.desc })
     (* Every instruction that carries no nested instruction is returned as-is.
        Enumerated rather than caught by a wildcard so a future instruction that
        nests others is a compile error here instead of silently escaping

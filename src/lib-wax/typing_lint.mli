@@ -19,9 +19,7 @@ val is_effectless : 'a Ast.instr -> bool
 (** Whether evaluating an expression has no side effect and cannot trap. *)
 
 val collect_assigned_locals :
-  Typing_env.StringSet.t ->
-  ('a Ast.instr_desc, 'a) Ast.annotated ->
-  Typing_env.StringSet.t
+  Typing_env.StringSet.t -> 'a Ast.instr -> Typing_env.StringSet.t
 (** Accumulate the local names assigned ([Set]/[Tee] targets) anywhere in an
     instruction. *)
 
@@ -61,7 +59,7 @@ val lint_division :
 
 val float_literal_value : string -> float option
 val round_to_f32 : float -> float
-val float_operand_value : ('a Ast.instr_desc, 'a) Ast.annotated -> float option
+val float_operand_value : 'a Ast.instr -> float option
 
 val float_conversion_traps : [< `I32 | `I64 ] -> Ast.signage -> float -> bool
 (** Constant-float-operand parsing and the trapping-conversion predicate for
@@ -71,7 +69,7 @@ val lint_conversion :
   Typing_env.module_context ->
   location:Ast.location ->
   Ast.casttype ->
-  ('a Ast.instr_desc, 'a) Ast.annotated ->
+  'a Ast.instr ->
   unit
 (** Flag a strict float-to-integer conversion of a constant out of range. *)
 
@@ -111,7 +109,7 @@ val binop_kind_name : [< `Arith | `Bitwise | `Comparison | `Shift ] -> string
 
 val operand_parenthesized :
   Typing_env.module_context ->
-  op:('a, Ast.location) Ast.annotated ->
+  op:(Ast.binop, Ast.location) Ast.annotated ->
   side:[< `Left | `Right ] ->
   Ast.location Ast.instr ->
   bool
@@ -121,8 +119,8 @@ val operand_parenthesized :
 val lint_precedence :
   Typing_env.module_context ->
   (Ast.binop, Ast.location) Ast.annotated ->
-  (Ast.location Ast.instr_desc, Ast.location) Ast.annotated ->
-  (Ast.location Ast.instr_desc, Ast.location) Ast.annotated ->
+  Ast.location Ast.instr ->
+  Ast.location Ast.instr ->
   unit
 (** Flag a confusing precedence mix written without disambiguating parentheses.
 *)

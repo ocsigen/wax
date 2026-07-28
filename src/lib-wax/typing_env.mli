@@ -45,7 +45,7 @@ val is_source : Ast.location -> bool
 val same_span : Ast.location -> Ast.location -> bool
 (** Whether two locations cover the same byte range. *)
 
-val expression_type_opt : ('a, 'b array * 'c) Ast.annotated -> 'b option
+val expression_type_opt : ('b array * 'c) Ast.instr -> 'b option
 (** The single inference cell an instruction leaves on the stack, or [None] if
     it is not a one-value expression. The error-free counterpart of the typer's
     [expression_type]: a lint/suggest site reads it silently and skips

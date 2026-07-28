@@ -101,7 +101,8 @@ let suggest_compound_assignment ctx ~location idx (rhs_expr : _ instr) =
   match rhs_expr.desc with
   | BinOp (op, lhs, rhs)
     when compound_assignable op.desc
-         && match lhs.desc with Get g -> g.desc = idx.desc | _ -> false -> (
+         && match lhs.desc with Get g -> g.desc = idx.Annot.desc | _ -> false
+    -> (
       match
         ( source_slice ctx idx.info,
           source_slice ctx op.info,

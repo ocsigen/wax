@@ -266,8 +266,6 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | Switch (i, j) -> Switch (index ~map:names.types i, index ~map:names.tags j)
     | Br i -> Br (get_label_reference stack i)
     | Br_if i -> Br_if (get_label_reference stack i)
-    | Hinted (h, inner) ->
-        Hinted (h, instr names local_names label_names label_counter stack inner)
     | Br_table (l, d) ->
         let target i = (get_label_reference stack) i in
         Br_table (List.map target l, target d)
@@ -426,7 +424,13 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | VecTernOp op -> VecTernOp op
     | String _ | Char _ | If_annotation _ -> (*ZZZZ *) assert false
   in
-  { desc; info = i.info }
+  (* The hints ride along unchanged except for their call targets, which are
+     function indices in the binary and named references in the text. *)
+  {
+    desc;
+    info = i.info;
+    hints = Hints.map_targets (index ~map:names.functions) i.hints;
+  }
 
 let expr names local_names e =
   List.map (instr names local_names B.IntMap.empty (ref 0) []) e

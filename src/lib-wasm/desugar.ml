@@ -109,9 +109,16 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
      [(i32.const N)] sub-expression), not a bare stack instruction. *)
   let const loc v =
     {
-      Ast.desc =
-        Folded ({ Ast.desc = Const (I32 (string_of_int v)); info = loc }, []);
+      desc =
+        Folded
+          ( {
+              desc = Const (I32 (string_of_int v));
+              info = loc;
+              hints = Hints.none;
+            },
+            [] );
       info = loc;
+      hints = Hints.none;
     }
   in
   (* A string [array.new_fixed] over its encoded elements: UTF-16 code units for
@@ -125,10 +132,11 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
     in
     Folded
       ( {
-          Ast.desc =
+          desc =
             ArrayNewFixed
               (type_idx, Wax_utils.Uint32.of_int (List.length values));
           info = loc;
+          hints = Hints.none;
         },
         List.map (const loc) values )
   in
@@ -187,10 +195,10 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
           }
     (* [@string]/[@char] print as a folded head with no operands; expand them at
        the folded level so no redundant parenthesis is left behind. *)
-    | Folded ({ desc = String (idxo, s); info }, []) -> string_expr info idxo s
+    | Folded ({ desc = String (idxo, s); info; _ }, []) ->
+        string_expr info idxo s
     | Folded ({ desc = Char c; _ }, []) -> char_expr c
     | Folded (h, l) -> Folded (map_instr h, List.map map_instr l)
-    | Hinted (b, inner) -> Hinted (b, map_instr inner)
     | desc -> desc
   in
 
@@ -214,7 +222,13 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
           let gtyp : globaltype =
             { mut = false; typ = Ref { nullable = false; typ = Type type_idx } }
           in
-          let e = { Ast.desc = string_expr f.info typ init; info = f.info } in
+          let e =
+            {
+              desc = string_expr f.info typ init;
+              info = f.info;
+              hints = Hints.none;
+            }
+          in
           Global { id = Some id; typ = gtyp; init = [ e ]; exports = [] }
       | Module_if_annotation _ -> raise (Conditional_remains f.info)
       | desc -> desc

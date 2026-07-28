@@ -154,7 +154,9 @@ let rec diverges_instr i =
   | If { if_block; else_block = Some else_block; _ } ->
       diverges_list if_block.desc && diverges_list else_block.desc
   | Match { arms; default; _ } ->
-      List.for_all (fun (_, b) -> diverges_list b.desc) arms
+      List.for_all
+        (fun (_, (b : (_ instr list, _) Ast.annotated)) -> diverges_list b.desc)
+        arms
       && diverges_list default.desc
   | Loop { block; _ } ->
       (* A loop whose body always branches (back to the loop or out) never falls
@@ -369,7 +371,8 @@ and rewrite_desc ~faithful (desc : location instr_desc) : location instr_desc =
 
 let rec field_desc ~faithful (f : location modulefield) =
   let map_fields =
-    List.map (fun a -> { a with desc = field_desc ~faithful a.desc })
+    List.map (fun (a : (location modulefield, _) Ast.annotated) ->
+        { a with desc = field_desc ~faithful a.desc })
   in
   match f with
   | Func ({ body = label, instrs; _ } as r) ->
@@ -381,7 +384,10 @@ let rec field_desc ~faithful (f : location modulefield) =
           then_fields = { then_fields with desc = map_fields then_fields.desc };
           else_fields =
             Option.map
-              (fun b -> { b with desc = map_fields b.desc })
+              (fun (b :
+                     ( (location modulefield, location) Ast.annotated list,
+                       location )
+                     Ast.annotated) -> { b with desc = map_fields b.desc })
               else_fields;
         }
   | ( Type _ | Module_annotation _ | Import _ | Import_group _ | Global _
@@ -389,4 +395,7 @@ let rec field_desc ~faithful (f : location modulefield) =
       f
 
 let module_ ?(faithful = false) (m : location module_) : location module_ =
-  List.map (fun a -> { a with desc = field_desc ~faithful a.desc }) m
+  List.map
+    (fun (a : (location modulefield, location) Ast.annotated) ->
+      { a with desc = field_desc ~faithful a.desc })
+    m

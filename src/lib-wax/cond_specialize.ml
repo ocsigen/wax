@@ -15,9 +15,17 @@ let module_ ctx env (fields : location Ast.module_) :
   let ranges = ref [] in
   let start_of (l : location) = l.loc_start.Lexing.pos_cnum in
   let end_of (l : location) = l.loc_end.Lexing.pos_cnum in
-  let branch_end ~default nodes =
-    match List.rev nodes with n :: _ -> end_of n.info | [] -> default
+  (* [ends] are the spans of the then-branch's nodes, in order. Only the spans are
+     passed, not the nodes: the field walk carries [annotated] module fields and
+     the instruction walk carries instruction records, which are no longer the
+     same shape. *)
+  let branch_end ~default ends =
+    match List.rev ends with (l : location) :: _ -> end_of l | [] -> default
   in
+  let field_ends l =
+    List.map (fun (f : (_, location) Ast.annotated) -> f.info) l
+  in
+  let instr_ends l = List.map (fun (i : _ Ast.instr) -> i.info) l in
   (* The boundary between the two branches. With no else the conditional ends at
      the then-branch, so its own end (past any closing brace) is exact; with an
      else, the best position the AST offers is the end of the last then-node. *)
@@ -41,10 +49,10 @@ let module_ ctx env (fields : location Ast.module_) :
         let else_present = Option.is_some else_body in
         match eval cond with
         | True ->
-            drop_else i.info then_body.desc ~else_present;
+            drop_else i.info (instr_ends then_body.desc) ~else_present;
             sinstrs then_body.desc
         | False -> (
-            drop_then i.info then_body.desc ~else_present;
+            drop_then i.info (instr_ends then_body.desc) ~else_present;
             match else_body with Some e -> sinstrs e.desc | None -> [])
         | Residual cond ->
             [
@@ -58,7 +66,8 @@ let module_ ctx env (fields : location Ast.module_) :
                         { then_body with desc = sinstrs then_body.desc };
                       else_body =
                         Option.map
-                          (fun b -> { b with desc = sinstrs b.desc })
+                          (fun (b : (_ instr list, _) Ast.annotated) ->
+                            { b with desc = sinstrs b.desc })
                           else_body;
                     };
               };
@@ -89,7 +98,10 @@ let module_ ctx env (fields : location Ast.module_) :
             cond = sone cond;
             if_block = { if_block with desc = sinstrs if_block.desc };
             else_block =
-              Option.map (fun b -> { b with desc = sinstrs b.desc }) else_block;
+              Option.map
+                (fun (b : (_ Ast.instr list, _) Ast.annotated) ->
+                  { b with desc = sinstrs b.desc })
+                else_block;
           }
     | TryTable { label; typ; catches; block } ->
         TryTable
@@ -107,10 +119,13 @@ let module_ ctx env (fields : location Ast.module_) :
             block = { block with desc = sinstrs block.desc };
             catches =
               List.map
-                (fun (t, l) -> (t, { l with desc = sinstrs l.desc }))
+                (fun (t, l) ->
+                  (t, { l with Annot.desc = sinstrs l.Annot.desc }))
                 catches;
             catch_all =
-              Option.map (fun b -> { b with desc = sinstrs b.desc }) catch_all;
+              Option.map
+                (fun b -> { b with Annot.desc = sinstrs b.Annot.desc })
+                catch_all;
           }
     | TryCatch { label; typ; block; arms } ->
         TryCatch
@@ -157,7 +172,6 @@ let module_ ctx env (fields : location Ast.module_) :
     | Let (bs, body) -> Let (bs, Option.map sone body)
     | Br (l, v) -> Br (l, Option.map sone v)
     | Br_if (l, v) -> Br_if (l, sone v)
-    | Hinted (h, i) -> Hinted (h, sone i)
     | Br_table (ls, v) -> Br_table (ls, sone v)
     | Dispatch { index; cases; default; arms } ->
         Dispatch
@@ -167,7 +181,8 @@ let module_ ctx env (fields : location Ast.module_) :
             default;
             arms =
               List.map
-                (fun (l, body) -> (l, { body with desc = sinstrs body.desc }))
+                (fun (l, body) ->
+                  (l, { body with Annot.desc = sinstrs body.Annot.desc }))
                 arms;
           }
     | Match { scrutinee; arms; default } ->
@@ -177,7 +192,7 @@ let module_ ctx env (fields : location Ast.module_) :
             arms =
               List.map
                 (fun (pat, body) ->
-                  (pat, { body with desc = sinstrs body.desc }))
+                  (pat, { body with Annot.desc = sinstrs body.Annot.desc }))
                 arms;
             default = { default with desc = sinstrs default.desc };
           }
@@ -216,7 +231,7 @@ let module_ ctx env (fields : location Ast.module_) :
         match guard with
         | None -> Some (k, v, None)
         | Some g -> (
-            match eval g.desc with
+            match eval g.Annot.desc with
             | True -> Some (k, v, None)
             | False -> None
             | Residual c -> Some (k, v, Some { g with desc = c })))
@@ -235,10 +250,10 @@ let module_ ctx env (fields : location Ast.module_) :
         let else_present = Option.is_some else_fields in
         match eval cond with
         | True ->
-            drop_else f.info then_fields.desc ~else_present;
+            drop_else f.info (field_ends then_fields.desc) ~else_present;
             sfields then_fields.desc
         | False -> (
-            drop_then f.info then_fields.desc ~else_present;
+            drop_then f.info (field_ends then_fields.desc) ~else_present;
             match else_fields with Some e -> sfields e.desc | None -> [])
         | Residual cond ->
             [
@@ -252,7 +267,8 @@ let module_ ctx env (fields : location Ast.module_) :
                         { then_fields with desc = sfields then_fields.desc };
                       else_fields =
                         Option.map
-                          (fun b -> { b with desc = sfields b.desc })
+                          (fun b ->
+                            { b with Annot.desc = sfields b.Annot.desc })
                           else_fields;
                     };
               };

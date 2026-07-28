@@ -52,7 +52,7 @@ let same_span (a : location) (b : location) =
    and yields an [Error] cell): a lint/suggest site reads the cell when there is
    exactly one and silently skips otherwise, never emitting the duplicate
    diagnostic the typer already owns. *)
-let expression_type_opt i =
+let expression_type_opt (i : _ Ast.instr) =
   match fst i.info with [| ty |] -> Some ty | _ -> None
 
 (* The value type [&?none] / [&none] (the nullable / non-nullable bottom

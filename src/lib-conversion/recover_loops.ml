@@ -34,8 +34,9 @@ let rec refs_instr name (i : location instr) : bool =
   | Br (l, e) -> String.equal l.desc name || refs_opt name e
   | Br_if (l, e) -> String.equal l.desc name || refs_instr name e
   | Br_table (ls, e) ->
-      List.exists (fun l -> String.equal l.desc name) ls || refs_instr name e
-  | Hinted (_, e) | On (e, _) -> refs_instr name e
+      List.exists (fun l -> String.equal l.Annot.desc name) ls
+      || refs_instr name e
+  | On (e, _) -> refs_instr name e
   | Br_on_null (l, e) | Br_on_non_null (l, e) ->
       String.equal l.desc name || refs_instr name e
   | Br_on_cast (l, _, e) | Br_on_cast_fail (l, _, e) ->
@@ -44,12 +45,18 @@ let rec refs_instr name (i : location instr) : bool =
       String.equal l.desc name || refs_instr name e || refs_instr name d
   | Dispatch { index; cases; default; arms } ->
       String.equal default.desc name
-      || List.exists (fun l -> String.equal l.desc name) cases
+      || List.exists (fun l -> String.equal l.Annot.desc name) cases
       || refs_instr name index
-      || List.exists (fun (_, b) -> refs_instrs name b.desc) arms
+      || List.exists
+           (fun (_, (b : (_ instr list, _) Ast.annotated)) ->
+             refs_instrs name b.desc)
+           arms
   | Match { scrutinee; arms; default } ->
       refs_instr name scrutinee
-      || List.exists (fun (_, b) -> refs_instrs name b.desc) arms
+      || List.exists
+           (fun (_, (b : (_ instr list, _) Ast.annotated)) ->
+             refs_instrs name b.desc)
+           arms
       || refs_instrs name default.desc
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       refs_instrs name block.desc
@@ -64,7 +71,7 @@ let rec refs_instr name (i : location instr) : bool =
       | None -> false)
   | Try { block; catches; catch_all; _ } -> (
       refs_instrs name block.desc
-      || List.exists (fun (_, b) -> refs_instrs name b.desc) catches
+      || List.exists (fun (_, b) -> refs_instrs name b.Annot.desc) catches
       ||
       match catch_all with
       | Some b -> refs_instrs name b.desc
@@ -130,7 +137,7 @@ let refs_list = refs_instrs
 (* Whether the (already-rewritten) body of void loop [l] still references [l]
    after dropping its back-edge, with [cond] the loop's recovered test. *)
 let keep_label l cond body =
-  if refs_list l.desc body || refs_instr l.desc cond then Some l else None
+  if refs_list l.Annot.desc body || refs_instr l.desc cond then Some l else None
 
 (* Whether [i] reads the variable [name] (a [Get]). Conservative: unlisted forms
    report [false], which only makes the induction-step heuristic in [fold_loop]
@@ -145,7 +152,6 @@ let rec reads_var name (i : location instr) : bool =
   | NonNull e
   | StructGet (e, _)
   | GetDescriptor e
-  | Hinted (_, e)
   | On (e, _) ->
       reads_var name e
   | Select (a, b, c) -> reads_var name a || reads_var name b || reads_var name c
@@ -170,7 +176,7 @@ and reads_var_list name l =
 
 (* Fold an already-rewritten void [loop] labelled [l] into a [while] when its
    body is the leading-test shape, else leave it a [loop]. *)
-let fold_loop l typ block =
+let fold_loop l typ (block : (_ Ast.instr list, _) Ast.annotated) =
   match block.desc with
   (* Leading test: the body is a single label-less void [if] with no else whose
      own body ends in the back-edge. *)
@@ -182,8 +188,8 @@ let fold_loop l typ block =
   ]
     when is_void it -> (
       match List.rev if_block.desc with
-      | { desc = Br (bl, None); _ } :: rev_body when String.equal bl.desc l.desc
-        -> (
+      | { desc = Br (bl, None); _ } :: rev_body
+        when String.equal bl.desc l.Annot.desc -> (
           let body = List.rev rev_body in
           match body with
           (* Continue-expression shape (see [Ast_utils.lower_while]): the body is
@@ -244,7 +250,10 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       Ast_utils.map_desc ~instr:rewrite_instr ~block:rewrite_list d
 
 let rec field_desc (f : location modulefield) =
-  let map_fields = List.map (fun a -> { a with desc = field_desc a.desc }) in
+  let map_fields =
+    List.map (fun (a : (location modulefield, location) Ast.annotated) ->
+        { a with desc = field_desc a.desc })
+  in
   match f with
   | Func ({ body = label, instrs; _ } as r) ->
       Func { r with body = (label, rewrite_list instrs) }
@@ -255,7 +264,10 @@ let rec field_desc (f : location modulefield) =
           then_fields = { then_fields with desc = map_fields then_fields.desc };
           else_fields =
             Option.map
-              (fun b -> { b with desc = map_fields b.desc })
+              (fun (b :
+                     ( (location modulefield, location) Ast.annotated list,
+                       location )
+                     Ast.annotated) -> { b with desc = map_fields b.desc })
               else_fields;
         }
   | ( Type _ | Module_annotation _ | Import _ | Import_group _ | Global _
@@ -263,4 +275,7 @@ let rec field_desc (f : location modulefield) =
       f
 
 let module_ (m : location module_) : location module_ =
-  List.map (fun a -> { a with desc = field_desc a.desc }) m
+  List.map
+    (fun (a : (location modulefield, location) Ast.annotated) ->
+      { a with desc = field_desc a.desc })
+    m

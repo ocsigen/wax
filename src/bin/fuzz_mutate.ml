@@ -127,7 +127,7 @@ let site () =
    renaming, or plant a hole in a value). These are the shapes behind the
    [check_hole_order]/hole-order recovery crashes: a missing field, an extra
    field, and a hole in either. [loc] is a fabricated ident's info. *)
-let mutate_fields loc (fields : (ident * location instr option) list) =
+let mutate_fields _loc (fields : (ident * location instr option) list) =
   let a = Array.of_list fields in
   let n = Array.length a in
   if n = 0 then fields
@@ -142,13 +142,14 @@ let mutate_fields loc (fields : (ident * location instr option) list) =
         (* rename a field to a name the type does not declare *)
         List.mapi
           (fun k (nm, v) ->
-            if k = d then ({ nm with desc = nm.desc ^ "_x" }, v) else (nm, v))
+            if k = d then ({ (nm : Ast.ident) with desc = nm.desc ^ "_x" }, v)
+            else (nm, v))
           fields
     | _ ->
         (* replace a field's value with a hole *)
         List.mapi
           (fun k (nm, v) ->
-            if k = d then (nm, Some { desc = Hole; info = loc }) else (nm, v))
+            if k = d then (nm, Some (Ast.no_loc_instr Hole)) else (nm, v))
           fields
 
 (* The local/global names an expression *reads* (its [Get]s), gathered so a
@@ -171,7 +172,6 @@ let rec get_names_in (i : location instr) : string list =
   | Tee (_, e)
   | StructGet (e, _)
   | ThrowRef e
-  | Hinted (_, e)
   | Br_if (_, e)
   | Br_table (_, e)
   | Br_on_null (_, e)
@@ -312,7 +312,10 @@ and rebuild : location instr_desc -> location instr_desc = function
           cond = go r.cond;
           if_block = { r.if_block with desc = go_list r.if_block.desc };
           else_block =
-            Option.map (fun e -> { e with desc = go_list e.desc }) r.else_block;
+            Option.map
+              (fun (e : (_ Ast.instr list, _) Ast.annotated) ->
+                { e with desc = go_list e.desc })
+              r.else_block;
         }
   | Try r ->
       Try
@@ -321,10 +324,18 @@ and rebuild : location instr_desc -> location instr_desc = function
           block = { r.block with desc = go_list r.block.desc };
           catches =
             List.map
-              (fun (id, b) -> (id, { b with desc = go_list b.desc }))
+              (fun (id, b) ->
+                ( id,
+                  {
+                    (b : (_ Ast.instr list, _) Ast.annotated) with
+                    desc = go_list b.desc;
+                  } ))
               r.catches;
           catch_all =
-            Option.map (fun b -> { b with desc = go_list b.desc }) r.catch_all;
+            Option.map
+              (fun (b : (_ Ast.instr list, _) Ast.annotated) ->
+                { b with desc = go_list b.desc })
+              r.catch_all;
         }
   | TryTable r ->
       TryTable { r with block = { r.block with desc = go_list r.block.desc } }
@@ -337,7 +348,8 @@ and rebuild : location instr_desc -> location instr_desc = function
           scrutinee = go r.scrutinee;
           arms =
             List.map
-              (fun (p, b) -> (p, { b with desc = go_list b.desc }))
+              (fun (p, (b : (_ Ast.instr list, _) Ast.annotated)) ->
+                (p, { b with desc = go_list b.desc }))
               r.arms;
           default = { r.default with desc = go_list r.default.desc };
         }
@@ -348,7 +360,8 @@ and rebuild : location instr_desc -> location instr_desc = function
           index = go r.index;
           arms =
             List.map
-              (fun (l, b) -> (l, { b with desc = go_list b.desc }))
+              (fun (l, (b : (_ Ast.instr list, _) Ast.annotated)) ->
+                (l, { b with desc = go_list b.desc }))
               r.arms;
         }
   | On (e, clauses) -> On (go e, clauses)
@@ -391,7 +404,6 @@ and rebuild : location instr_desc -> location instr_desc = function
   | Select (a, b, c) -> Select (go a, go b, go c)
   | Br (l, e) -> Br (l, Option.map go e)
   | Br_if (l, e) -> Br_if (l, go e)
-  | Hinted (h, e) -> Hinted (h, go e)
   | Br_table (ls, e) -> Br_table (ls, go e)
   | StructGet (e, id) -> StructGet (go e, id)
   | StructSet (e, id, v) -> StructSet (go e, id, go v)
@@ -418,7 +430,7 @@ let mutate_rectype (rt : rectype) : rectype =
     Array.mapi
       (fun i e ->
         if i = k then
-          let name, (sub : subtype) = e.desc in
+          let name, (sub : subtype) = e.Annot.desc in
           { e with desc = (name, { sub with supertype = Some sup }) }
         else e)
       rt

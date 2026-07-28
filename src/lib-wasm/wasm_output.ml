@@ -238,6 +238,8 @@ module Encoder = struct
      (which begins with the locals declaration) — exactly the offset the
      [metadata.code.branch_hint] section stores. Reset to a no-op outside code
      encoding. See [output_branch_hint_section] / the code-section encoder. *)
+  (* NOTE: kept as [offset -> likely] while branch hints are the only hint kind
+     encoded; the compilation-hints sections widen it to the whole hint record. *)
   let branch_hint_sink = ref (fun (_ : int) (_ : bool) -> ())
 
   (* A source position is real when it names a file and carries a line/column; a
@@ -262,15 +264,22 @@ module Encoder = struct
        source location; emit an absent mapping there so the previous location
        does not, by the source map's sticky rule, bleed onto its bytes.
 
-       A [Folded]/[Hinted] wrapper emits no opcode of its own — the wrapped
-       instruction, recursed below, carries the same location and records the
-       mapping — so it is skipped here. Recording one for the wrapper too would
-       leave a second mapping at the same offset (the wrapper shares its start
-       offset with its first operand, or with its head), so a byte would carry
-       several identical mappings instead of one. *)
+       A [Folded] wrapper emits no opcode of its own — its head, recursed below,
+       carries the same location and records the mapping — so it is skipped here.
+       Recording one for the wrapper too would leave a second mapping at the same
+       offset (the wrapper shares its start offset with its first operand), so a
+       byte would carry several identical mappings instead of one. *)
     let generated_offset = Buffer.length b in
+    (* Branch-hinting proposal: the hint is recorded at this instruction's own
+       opcode offset. A folded branch carries its hint on the head, which is
+       encoded only after the operands (see the [Folded] arm), so
+       [generated_offset] is the opcode's position in the folded and the unfolded
+       shape alike. *)
+    (match i.hints.Hints.branch with
+    | Some h -> !branch_hint_sink generated_offset h.Hints.value
+    | None -> ());
     (match i.desc with
-    | Folded _ | Hinted _ -> ()
+    | Folded _ -> ()
     | _ ->
         if is_real_pos i.info.Wax_utils.Ast.loc_start then
           Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
@@ -380,21 +389,6 @@ module Encoder = struct
     | Br_if i ->
         byte b 0x0D;
         uint b i
-    (* Branch-hinting proposal: the wrapper emits no bytecode; it records its
-       hint at the wrapped branch's opcode. When the branch is folded
-       ([Folded (branch, operands)]) the opcode is emitted only after its
-       operands, so encode those first and take the offset there — not at the
-       wrapper's own start, which precedes the operands. An unfolded branch sits
-       at the wrapper's start offset. *)
-    | Hinted (h, inner) -> (
-        match inner.desc with
-        | Folded (head, operands) ->
-            List.iter (instr ~source_map_t b) operands;
-            !branch_hint_sink (Buffer.length b) h;
-            instr ~source_map_t b head
-        | _ ->
-            !branch_hint_sink generated_offset h;
-            instr ~source_map_t b inner)
     | Br_table (ls, d) ->
         byte b 0x0E;
         vec uint b ls;
@@ -1230,7 +1224,7 @@ module Encoder = struct
     let pos =
       match end_pos with
       | Some _ -> end_pos
-      | None -> Option.map (fun i -> i.Ast.info.loc_end) (last e)
+      | None -> Option.map (fun (i : location instr) -> i.info.loc_end) (last e)
     in
     (match pos with
     | Some pos -> map_end ~source_map_t b pos
@@ -1486,12 +1480,16 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   if m.elem <> [] then
     map_section 9
       (Encoder.vec (fun b (e : Ast.location elem) ->
-           let get_func_indices exprs =
+           let get_func_indices (exprs : Ast.location expr list) =
              try
                Some
                  (List.map
                     (function
-                      | [ { Ast.desc = Ast.Binary.RefFunc idx; _ } ] -> idx
+                      | [
+                          ({ desc = Ast.Binary.RefFunc idx; _ } :
+                            Ast.location Ast.Binary.instr);
+                        ] ->
+                          idx
                       | _ -> raise Exit)
                     exprs)
              with Exit -> None

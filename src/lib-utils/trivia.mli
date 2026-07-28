@@ -60,8 +60,15 @@ val report_token : context -> int -> unit
 (** [report_token ctx pos] records that a meaningful token ending at byte [pos]
     has been encountered on the current line. *)
 
+val record_pos : context -> Ast.location -> unit
+(** [record_pos ctx loc] records that a node spans [loc], without building the
+    wrapper. For a node whose record is not an {!Ast.annotated} — an
+    instruction, which carries hints besides its location — and so cannot go
+    through {!with_pos}. *)
+
 val with_pos : context -> Ast.location -> 'a -> ('a, Ast.location) Ast.annotated
-(** [with_pos ctx loc v] wraps [v] with location [loc]. *)
+(** [with_pos ctx loc v] wraps [v] with location [loc], recording the span as
+    {!record_pos} does. *)
 
 val drop_in_ranges : context -> (int * int) list -> unit
 (** [drop_in_ranges ctx ranges] removes every comment whose anchor falls within

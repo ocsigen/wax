@@ -359,7 +359,9 @@ let hover_string ?(encoding = UTF16) src line ch =
                    Wax_lang.Ast.modulefield,
                    Wax_utils.Ast.location )
                  Wax_lang.Ast.annotated) ->
-            ignore (Wax_lang.Ast_utils.map_modulefield observe field.desc))
+            ignore
+              (Wax_lang.Ast_utils.map_modulefield observe
+                 field.Wax_lang.Ast.desc))
           typed;
         Option.bind !best (fun (loc, tys) ->
             Option.map (fun h_type -> (loc, h_type)) (render_result_types tys))
@@ -410,7 +412,7 @@ let inlays_string src =
         | Wax_lang.Ast.Let (bindings, Some init) ->
             let cells, _ = init.info in
             List.iteri
-              (fun idx (id_opt, vt_opt) ->
+              (fun idx ((id_opt : Wax_lang.Ast.ident option), vt_opt) ->
                 match (id_opt, vt_opt) with
                 | Some id, None
                   when idx < Array.length cells
@@ -480,7 +482,7 @@ let type_definition_string ?(encoding = UTF16) src line ch =
       in
       List.iter
         (fun field ->
-          ignore (Wax_lang.Ast_utils.map_modulefield observe field.desc))
+          ignore (Wax_lang.Ast_utils.map_modulefield observe field.Annot.desc))
         typed;
       (* Each [type] declaration's name -> the span of that name (descending into
          conditional branches, so a type defined per-configuration is found). *)
@@ -491,8 +493,9 @@ let type_definition_string ?(encoding = UTF16) src line ch =
           | Type rectype ->
               Array.iter
                 (fun elt ->
-                  let name_ident, _ = elt.desc in
-                  Hashtbl.add type_defs name_ident.desc name_ident.info)
+                  let name_ident, _ = elt.Wax_utils.Ast.desc in
+                  Hashtbl.add type_defs name_ident.Wax_utils.Ast.desc
+                    name_ident.Wax_utils.Ast.info)
                 rectype
           | _ -> ())
         typed;
@@ -781,9 +784,9 @@ let field_symbols
   | Type rectype ->
       Array.to_list rectype
       |> List.map (fun entry ->
-          let id, _ = entry.desc in
+          let id, _ = entry.Annot.desc in
           {
-            s_name = id.desc;
+            s_name = id.Annot.desc;
             s_kind = "type";
             s_range = entry.info;
             s_selection = id.info;
@@ -879,7 +882,7 @@ let render_signature typ (sign : Wax_lang.Ast.functype option) =
   let open Wax_lang.Ast in
   match sign with
   | Some { params; results } -> (
-      let param p =
+      let param (p : (ident option * valtype, _) Wax_utils.Ast.annotated) =
         match p.desc with
         | Some (id : ident), vt -> id.desc ^ ": " ^ render_valtype vt
         | None, vt -> render_valtype vt
@@ -928,8 +931,8 @@ let field_completions
   | Type rectype ->
       Array.to_list rectype
       |> List.map (fun entry ->
-          let id, _ = entry.desc in
-          one id.desc "type" (render_typedef entry))
+          let id, _ = entry.Annot.desc in
+          one id.Annot.desc "type" (render_typedef entry))
   | Memory { name; _ } -> [ one name.desc "memory" "" ]
   | Table { name; _ } -> [ one name.desc "table" "" ]
   | Elem { name; _ } -> [ one name.desc "array" "" ]
@@ -956,16 +959,22 @@ let function_locals ast target =
             match sign with
             | Some { params; _ } ->
                 Array.to_list params
-                |> List.filter_map (fun p ->
-                    match p.desc with
-                    | Some id, vt ->
-                        Some
-                          {
-                            k_name = id.desc;
-                            k_kind = "parameter";
-                            k_detail = render_valtype vt;
-                          }
-                    | None, _ -> None)
+                |> List.filter_map
+                     (fun
+                       (p :
+                         ( Wax_lang.Ast.ident option * Wax_lang.Ast.valtype,
+                           _ )
+                         Wax_utils.Ast.annotated)
+                     ->
+                       match p.desc with
+                       | Some id, vt ->
+                           Some
+                             {
+                               k_name = id.desc;
+                               k_kind = "parameter";
+                               k_detail = render_valtype vt;
+                             }
+                       | None, _ -> None)
             | None -> []
           in
           (* The [let] locals in scope at the cursor: at each block level, those
@@ -985,7 +994,7 @@ let function_locals ast target =
                 | Some id ->
                     Some
                       {
-                        k_name = id.desc;
+                        k_name = id.Annot.desc;
                         k_kind = "local";
                         k_detail =
                           (match vt_opt with
@@ -1064,7 +1073,7 @@ let module_completions src ast target bindings =
   in
   let rec ctx_fields fields =
     List.iter
-      (fun field ->
+      (fun (field : (_ Wax_lang.Ast.modulefield, _) Wax_utils.Ast.annotated) ->
         match field.desc with
         | Conditional { cond; then_fields; else_fields } -> (
             if contains then_fields.info then (
@@ -1086,13 +1095,13 @@ let module_completions src ast target bindings =
      with the cursor's path condition. *)
   let rec defs guard fields =
     List.concat_map
-      (fun field ->
+      (fun (field : (_ Wax_lang.Ast.modulefield, _) Wax_utils.Ast.annotated) ->
         match field.desc with
         | Conditional { cond; then_fields; else_fields } ->
             let f = formula field.info cond in
             defs (guard &&& f) then_fields.desc
             @ Option.fold ~none:[]
-                ~some:(fun b -> defs (guard &&& neg f) b.desc)
+                ~some:(fun b -> defs (guard &&& neg f) b.Annot.desc)
                 else_fields
         | _ -> List.map (fun c -> (c, guard)) (field_completions field))
       fields
@@ -1148,7 +1157,9 @@ let type_definition ast name =
       | Wax_lang.Ast.Type rectype ->
           Array.iter
             (fun entry ->
-              let id, (sub : Wax_lang.Ast.subtype) = entry.Wax_lang.Ast.desc in
+              let (id : Wax_lang.Ast.ident), (sub : Wax_lang.Ast.subtype) =
+                entry.Wax_utils.Ast.desc
+              in
               if id.Wax_lang.Ast.desc = name then found := Some sub)
             rectype
       | _ -> ())
@@ -1171,7 +1182,7 @@ let cont_signature ast name =
   match func_sign name with
   | None -> None
   | Some sign ->
-      let render_param p = render_valtype (snd p.Wax_lang.Ast.desc) in
+      let render_param p = render_valtype (snd p.Wax_utils.Ast.desc) in
       let params = Array.to_list (Array.map render_param sign.params) in
       let results = Array.to_list (Array.map render_valtype sign.results) in
       let switch_results =
@@ -1427,7 +1438,7 @@ let callee_label ast callee =
                 found := Some (render_signature typ sign)
             | Import { decl; _ } -> consider decl.desc
             | Import_group { decls; _ } ->
-                List.iter (fun d -> consider d.desc) decls
+                List.iter (fun d -> consider d.Annot.desc) decls
             | _ -> ())
         ast;
       !found
@@ -1457,7 +1468,9 @@ let array_element typed_module name =
       | Wax_lang.Ast.Type rectype ->
           Array.iter
             (fun entry ->
-              let id, (sub : Wax_lang.Ast.subtype) = entry.Wax_lang.Ast.desc in
+              let (id : Wax_lang.Ast.ident), (sub : Wax_lang.Ast.subtype) =
+                entry.Wax_utils.Ast.desc
+              in
               if id.Wax_lang.Ast.desc = name then
                 match sub.typ with Array elem -> found := Some elem | _ -> ())
             rectype
@@ -1743,7 +1756,10 @@ let folding_string src =
           | Import_group _ -> add_loc "imports" field.info
           | Conditional { then_fields; else_fields; _ } ->
               add_loc "region" then_fields.info;
-              Option.iter (fun b -> add_loc "region" b.info) else_fields
+              Option.iter
+                (fun (b : (_, Wax_utils.Ast.location) Wax_utils.Ast.annotated)
+                   -> add_loc "region" b.info)
+                else_fields
           | Func { name; _ } -> add_named name
           | Global { name; _ } -> add_named name
           | Tag { name; _ } -> add_named name
@@ -1764,27 +1780,48 @@ let folding_string src =
           | If { if_block; else_block; _ } ->
               add_loc "region" i.info;
               add_loc "region" if_block.info;
-              Option.iter (fun b -> add_loc "region" b.info) else_block
+              Option.iter
+                (fun (b : (_, Wax_utils.Ast.location) Wax_utils.Ast.annotated)
+                   -> add_loc "region" b.info)
+                else_block
           | Try { block; catches; catch_all; _ } ->
               add_loc "region" i.info;
               add_loc "region" block.info;
-              List.iter (fun (_, b) -> add_loc "region" b.info) catches;
-              Option.iter (fun b -> add_loc "region" b.info) catch_all
+              List.iter
+                (fun ( _,
+                       (b : (_, Wax_utils.Ast.location) Wax_utils.Ast.annotated)
+                     ) -> add_loc "region" b.info)
+                catches;
+              Option.iter
+                (fun (b : (_, Wax_utils.Ast.location) Wax_utils.Ast.annotated)
+                   -> add_loc "region" b.info)
+                catch_all
           | TryCatch { block; arms; _ } ->
               add_loc "region" i.info;
               add_loc "region" block.info;
               List.iter (fun a -> add_loc "region" a.arm_body.info) arms
           | Match { arms; default; _ } ->
               add_loc "region" i.info;
-              List.iter (fun (_, b) -> add_loc "region" b.info) arms;
+              List.iter
+                (fun ( _,
+                       (b : (_, Wax_utils.Ast.location) Wax_utils.Ast.annotated)
+                     ) -> add_loc "region" b.info)
+                arms;
               add_loc "region" default.info
           | Dispatch { arms; _ } ->
               add_loc "region" i.info;
-              List.iter (fun (_, b) -> add_loc "region" b.info) arms
+              List.iter
+                (fun ( _,
+                       (b : (_, Wax_utils.Ast.location) Wax_utils.Ast.annotated)
+                     ) -> add_loc "region" b.info)
+                arms
           | If_annotation { then_body; else_body; _ } ->
               add_loc "region" i.info;
               add_loc "region" then_body.info;
-              Option.iter (fun b -> add_loc "region" b.info) else_body
+              Option.iter
+                (fun (b : (_, Wax_utils.Ast.location) Wax_utils.Ast.annotated)
+                   -> add_loc "region" b.info)
+                else_body
           | _ -> ())
         ast);
   List.iter (fun (s, e) -> add s e "comment") (block_comment_folds src);
@@ -1821,9 +1858,13 @@ let semantic_tokens_string ?(encoding = UTF16) src =
               (match sign with
               | Some { params; _ } ->
                   Array.iter
-                    (fun p ->
+                    (fun (p :
+                           ( Wax_lang.Ast.ident option * Wax_lang.Ast.valtype,
+                             _ )
+                           Wax_utils.Ast.annotated) ->
                       match p.desc with
-                      | Some id, _ -> add id.info "parameter"
+                      | Some (id : Wax_lang.Ast.ident), _ ->
+                          add id.info "parameter"
                       | None, _ -> ())
                     params
               | None -> ());
@@ -1833,7 +1874,8 @@ let semantic_tokens_string ?(encoding = UTF16) src =
                      | Let (bs, _) ->
                          List.iter
                            (function
-                             | Some id, _ -> add id.info "variable"
+                             | Some (id : Wax_lang.Ast.ident), _ ->
+                                 add id.Wax_utils.Ast.info "variable"
                              | None, _ -> ())
                            bs
                      | _ -> ()))
@@ -1846,12 +1888,15 @@ let semantic_tokens_string ?(encoding = UTF16) src =
               add name.info "variable"
           | Data { name = Some n; _ } -> add n.info "variable"
           | Type rectype ->
-              Array.iter (fun e -> add (fst e.desc).info "type") rectype
+              Array.iter
+                (fun e -> add (Wax_lang.Ast.member_name e).info "type")
+                rectype
           | Import { decl; _ } ->
               add decl.desc.id.info (import_tok decl.desc.kind)
           | Import_group { decls; _ } ->
               List.iter
-                (fun d -> add d.desc.id.info (import_tok d.desc.kind))
+                (fun (d : (Wax_lang.Ast.import_decl, _) Wax_utils.Ast.annotated)
+                   -> add d.desc.id.Wax_utils.Ast.info (import_tok d.desc.kind))
                 decls
           | Data { name = None; _ } | Module_annotation _ | Conditional _ -> ())
         ast;
@@ -1864,7 +1909,10 @@ let semantic_tokens_string ?(encoding = UTF16) src =
               add m.info "function"
           | StructGet (_, f) | StructSet (_, f, _) -> add f.info "property"
           | Struct (_, fields) | StructDesc (_, fields) ->
-              List.iter (fun (id, _) -> add id.info "property") fields
+              List.iter
+                (fun ((id : Wax_lang.Ast.ident), _) ->
+                  add id.Wax_utils.Ast.info "property")
+                fields
           | _ -> ())
         ast;
       (* uses: classify by the definition's recorded kind *)

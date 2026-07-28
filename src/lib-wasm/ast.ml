@@ -11,6 +11,12 @@ type location = Wax_utils.Ast.location = {
 let no_loc = Wax_utils.Ast.no_loc
 let dummy_loc = Wax_utils.Ast.dummy_loc
 
+(* An instruction record shares the [desc]/[info] field names with [annotated];
+   inside [Make_instructions] it is declared later and so wins field
+   disambiguation wherever the receiver's type is not already known. Read a
+   *generic* node's fields through this alias to say which record is meant:
+   [x.desc]. *)
+module Annot = Wax_utils.Ast
 module Uint32 = Wax_utils.Uint32
 module Uint64 = Wax_utils.Uint64
 
@@ -728,11 +734,6 @@ struct
     | Br_on_cast_fail of X.idx * X.reftype * X.reftype
     | Br_on_cast_desc_eq of X.idx * X.reftype * X.reftype
     | Br_on_cast_desc_eq_fail of X.idx * X.reftype * X.reftype
-    (* Branch-hinting proposal: wraps a conditional branch ([if], [br_if], or a
-       [br_on_*]) with its hint ([true] = likely taken, [false] = unlikely). No
-       bytecode of its own; the hint is emitted into the [metadata.code.branch_hint]
-       section at the wrapped instruction's offset. *)
-    | Hinted of (* likely *) bool * 'info instr
     | Return
     | Call of X.idx
     | CallRef of X.idx
@@ -839,7 +840,20 @@ struct
         else_body : ('info instr list, location) annotated option;
       }
 
-  and 'info instr = ('info instr_desc, 'info) annotated
+  (* [hints] carries the advisory [metadata.code.*] metadata (branch-hinting and
+     compilation-hints proposals) of this instruction. It is a field rather than a
+     wrapper node so that the matches on [desc] — which is nearly every match on
+     an instruction — neither see it nor have to see through it. *)
+  and 'info instr = {
+    desc : 'info instr_desc;
+    info : 'info;
+    hints : X.idx Hints.t;
+  }
+
+  (* A synthesized instruction: no source location, no hints. The instruction
+     counterpart of [Ast.no_loc], which builds an [annotated] and so cannot serve
+     a record that carries hints as well. *)
+  let no_loc desc = { desc; info = dummy_loc; hints = Hints.none }
 
   type 'info expr = 'info instr list
 end

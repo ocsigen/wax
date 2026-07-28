@@ -59,6 +59,13 @@ let branch_hint_attr pp likely =
   attribute pp (if likely then "#[likely]" else "#[unlikely]");
   space pp ()
 
+(* Branch-hinting / compilation-hints proposals: the attributes an instruction's
+   hints print as, before the instruction itself. *)
+let hint_attrs pp (h : _ Wax_wasm.Hints.t) =
+  Option.iter
+    (fun (b : bool Wax_wasm.Hints.hint) -> branch_hint_attr pp b.value)
+    h.Wax_wasm.Hints.branch
+
 (* Comment preservation: emit the trivia (comments, blank lines) the lexer
    collected, looked up by AST-node location. The rendering logic is shared with
    the WebAssembly printer in [Wax_utils.Trivia]. *)
@@ -162,7 +169,7 @@ and tuple always_paren pp l =
   | [ t ] when not always_paren -> valtype pp t
   | _ -> print_paren_list valtype pp l
 
-let simple_pat pp p =
+let simple_pat pp (p : ident option) =
   match p with
   | Some x ->
       (* Anchor at the identifier's own location, so a comment trailing the name
@@ -190,7 +197,7 @@ let print_typed_pat pp (pat, opt_typ) =
 let raw_functype pp { params; results } =
   print_arg_list
     (fun pp p ->
-      let id, t = p.desc in
+      let id, t = p.Annot.desc in
       (* Anchor trivia at the whole parameter, so a trailing comment attaches to
          it — named or not. *)
       atomic_node pp (Some p.info) (fun () ->
@@ -273,14 +280,14 @@ let comptype pp (t : comptype) =
       type_ pp s.desc
 
 let subtype pp field =
-  let nm, { typ; supertype; final; descriptor; describes } = field.desc in
+  let nm, { typ; supertype; final; descriptor; describes } = field.Annot.desc in
   atomic_node pp (Some field.info) @@ fun () ->
   hvbox pp (fun () ->
       let is_struct = match typ with Struct _ -> true | _ -> false in
       box pp (fun () ->
           keyword pp "type";
           space pp ();
-          identifier pp nm.desc;
+          identifier pp nm.Annot.desc;
           (match supertype with
           | Some supertype ->
               punctuation pp ":";
@@ -415,7 +422,7 @@ let block_label pp label =
   Option.iter
     (fun label ->
       identifier pp "'";
-      identifier pp label.desc;
+      identifier pp label.Annot.desc;
       punctuation pp ":";
       space pp ())
     label
@@ -436,7 +443,7 @@ let branch_instr instr pp name label i =
       keyword pp name;
       space pp ();
       identifier pp "'";
-      identifier pp label.desc;
+      identifier pp label.Annot.desc;
       Option.iter
         (fun i ->
           space pp ();
@@ -448,7 +455,7 @@ let branch_ref_instr instr pp name label ty i =
       keyword pp name;
       space pp ();
       identifier pp "'";
-      identifier pp label.desc;
+      identifier pp label.Annot.desc;
       space pp ();
       reftype pp ty;
       space pp ();
@@ -474,7 +481,7 @@ let branch_ref_desc_instr instr pp name label nullable i d =
       keyword pp name;
       space pp ();
       identifier pp "'";
-      identifier pp label.desc;
+      identifier pp label.Annot.desc;
       space pp ();
       descriptor_operand instr pp ~nullable d;
       space pp ();
@@ -503,7 +510,7 @@ let drop_last l = match List.rev l with [] -> [] | _ :: r -> List.rev r
 let cont_construct_instr instr pp ct member l =
   box pp ~indent:indent_level (fun () ->
       hbox pp (fun () ->
-          identifier pp ct.desc;
+          identifier pp ct.Annot.desc;
           operator pp "::";
           identifier pp member);
       print_arg_list (instr Instruction) pp l)
@@ -559,7 +566,7 @@ let print_container pp ~opening ~closing ?(indent = 0) opt_type f =
           punctuation pp opening;
           Option.iter
             (fun t ->
-              identifier pp t.desc;
+              identifier pp t.Annot.desc;
               punctuation pp "|")
             opt_type);
       f ();
@@ -599,11 +606,8 @@ let array_instr pp nm f =
           f ());
       cut pp ())
 
-let rec get_prec (i : _ Ast.instr) =
+let get_prec (i : _ Ast.instr) =
   match i.desc with
-  (* Branch-hinting proposal: the hint is a transparent prefix; the wrapped
-     branch drives precedence, block-ness, and layout. *)
-  | Hinted (_, i) -> get_prec i
   | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
   | If_annotation _ | Dispatch _ | Match _ ->
       Atom
@@ -634,9 +638,8 @@ let rec get_prec (i : _ Ast.instr) =
       Branch
   | Select _ -> Select
 
-let rec is_block (i : _ Ast.instr) =
+let is_block (i : _ Ast.instr) =
   match i.desc with
-  | Hinted (_, i) -> is_block i
   | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
   | If_annotation _ | Dispatch _ | Match _ ->
       true
@@ -657,7 +660,6 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   if prec > actual then false
   else
     match i.desc with
-    | Hinted (_, i) -> starts_with_block_prec prec i
     | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
     | If_annotation _ | Dispatch _ | Match _ ->
         true
@@ -740,7 +742,7 @@ let label_seq pp cases default =
       keyword pp "else";
       space pp ();
       identifier pp "'";
-      identifier pp default.desc)
+      identifier pp default.Annot.desc)
 
 (* Print [<before>[ <labels> else <default> ]<after>], shared by [br_table] and
    [dispatch]. On one line when it fits; otherwise [<before>[] stays on the line,
@@ -769,7 +771,7 @@ let match_pattern pp (pat : Ast.match_pattern) =
   | MatchCast (bind, rt) ->
       Option.iter
         (fun x ->
-          identifier pp x.desc;
+          identifier pp x.Annot.desc;
           punctuation pp ":";
           space pp ())
         bind;
@@ -781,6 +783,7 @@ let match_pattern pp (pat : Ast.match_pattern) =
 let rec instr prec pp (i : _ instr) =
   atomic_node pp (pp.locate i.info) @@ fun () ->
   parentheses prec (get_prec i) pp @@ fun () ->
+  hint_attrs pp i.hints;
   match i.desc with
   | Block { label; typ; block = l } ->
       (* A plain block is always introduced by [do] (a bare or labelled [{ … }]
@@ -932,7 +935,7 @@ let rec instr prec pp (i : _ instr) =
                         newline pp ();
                         hvbox pp (fun () ->
                             box pp (fun () ->
-                                identifier pp tag.desc;
+                                identifier pp tag.Annot.desc;
                                 space pp ();
                                 punctuation pp "=>";
                                 space pp ();
@@ -1064,7 +1067,7 @@ let rec instr prec pp (i : _ instr) =
   | String (t, s) ->
       Option.iter
         (fun t ->
-          type_ pp t.desc;
+          type_ pp t.Annot.desc;
           operator pp "#")
         t;
       let len, s = Wax_utils.Unicode.escape_string ~hex_prefix:"x" s in
@@ -1151,7 +1154,7 @@ let rec instr prec pp (i : _ instr) =
               punctuation pp "[";
               Option.iter
                 (fun t ->
-                  identifier pp t.desc;
+                  identifier pp t.Annot.desc;
                   punctuation pp "|")
                 nm;
               space pp ();
@@ -1267,12 +1270,6 @@ let rec instr prec pp (i : _ instr) =
       branch_ref_desc_instr instr pp "br_on_cast" label nullable i d
   | Br_on_cast_desc_eq_fail (label, nullable, i, d) ->
       branch_ref_desc_instr instr pp "br_on_cast_fail" label nullable i d
-  (* Branch-hinting proposal: [#[likely]] / [#[unlikely]] prefixing the wrapped
-     conditional branch. The attribute is a bare prefix so the branch keeps its own
-     layout (and stays on the same line: [#[likely] if …]). *)
-  | Hinted (h, inner) ->
-      branch_hint_attr pp h;
-      instr prec pp inner
   | Br_table (labels, i) ->
       let default, cases =
         match List.rev labels with
@@ -1541,7 +1538,7 @@ let fundecl ?(exact = false) ~tag pp (name, typ, sign) =
       hbox pp (fun () ->
           keyword pp (if tag then "tag" else "fn");
           space pp ();
-          identifier pp name.desc;
+          identifier pp name.Annot.desc;
           (* An exact declaration with an inline signature marks the name
              ([fn f!(…)]); with a named type the marker hugs the type
              ([fn f: !t]). *)
@@ -1551,7 +1548,7 @@ let fundecl ?(exact = false) ~tag pp (name, typ, sign) =
               punctuation pp ":";
               space pp ();
               if exact then punctuation pp "!";
-              identifier pp typ.desc;
+              identifier pp typ.Annot.desc;
               space pp ())
             typ);
       Option.iter (fun ty -> raw_functype pp ty) sign)
@@ -1573,7 +1570,7 @@ let print_attribute_gen open_ pp (name, i, guard) =
       | Some c ->
           attribute pp ",";
           space pp ();
-          attribute pp (Printf.sprintf "if(%s)" (cond_to_string c.desc)));
+          attribute pp (Printf.sprintf "if(%s)" (cond_to_string c.Annot.desc)));
       attribute pp "]")
 
 let print_attribute pp a = print_attribute_gen "#[" pp a
@@ -1715,7 +1712,7 @@ let print_targeted_offset pp target off =
       space pp ();
       operator pp "@";
       space pp ();
-      identifier pp target.desc);
+      identifier pp target.Annot.desc);
   print_offset_brackets pp off
 
 let print_eq_square_instr_list pp l =
@@ -1808,7 +1805,7 @@ let print_import_decl pp (decl : Ast.import_decl) =
               print_limits pp limits);
           semicolon pp))
 
-let rec modulefield pp field =
+let rec modulefield pp (field : (_ modulefield, location) Ast.annotated) =
   atomic_node pp (Some field.info) @@ fun () ->
   match field.desc with
   | Type t -> rectype pp t
@@ -2005,7 +2002,7 @@ let rec modulefield pp field =
                 List.iter
                   (fun d ->
                     newline pp ();
-                    print_import_decl pp d.desc)
+                    print_import_decl pp d.Annot.desc)
                   decls);
             newline pp ());
           punctuation pp "}")
@@ -2015,7 +2012,11 @@ let rec modulefield pp field =
          across lines — hard [newline]s, so the [{] and each field land on their
          own line even for a short branch — and an own-line comment trailing its
          last field renders inside it. *)
-      let branch b =
+      let branch
+          (b :
+            ( (location modulefield, location) Ast.annotated list,
+              location )
+            Ast.annotated) =
         space pp ();
         punctuation pp "{";
         let assoc = get_trivia pp (Some b.info) in

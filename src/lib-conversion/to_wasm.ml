@@ -36,7 +36,14 @@ type ctx = {
 
 (*** Types, indices, and instruction helpers ***)
 
-let with_loc loc desc = { desc; info = loc }
+(* A Text instruction. Its record carries a [hints] field beside the location;
+   the hints of the Wax instruction being lowered are attached by [instruction],
+   which knows which of the emitted instructions is the operation itself. *)
+let with_loc loc desc : _ Text.instr =
+  { desc; info = loc; hints = Wax_wasm.Hints.none }
+
+(* Any other located node: an identifier, a module field, an instruction list. *)
+let annot loc desc = { Ast.desc; info = loc }
 
 (* Rewrites references to internal synthesized types (names starting with ['<'])
    so they reuse a structurally equal declared type; installed per module by
@@ -45,7 +52,7 @@ let type_remap : (Text.name -> Text.name) ref = ref Fun.id
 
 let index wax_idx : Text.idx =
   let wax_idx = !type_remap wax_idx in
-  with_loc wax_idx.info (Text.Id wax_idx.desc)
+  annot wax_idx.Ast.info (Text.Id wax_idx.Ast.desc)
 
 (* The spine ([heaptype]/[reftype]/[valtype]/[storagetype]) only rewrites each
    index with [index]; the index carries no extra context, so [ctx] is unit.
@@ -79,7 +86,8 @@ let is_unary_op_method m =
 let functype typ : Text.functype =
   let params =
     Array.map
-      (fun p -> with_loc p.info (fst p.desc, valtype (snd p.desc)))
+      (fun (p : (_ * _, _) Ast.annotated) ->
+        annot p.info (fst p.desc, valtype (snd p.desc)))
       typ.params
   in
   let results = Array.map valtype typ.results in
@@ -183,7 +191,8 @@ let typeuse typ sign =
       (fun s ->
         let params =
           Array.map
-            (fun p -> with_loc p.info (fst p.desc, valtype (snd p.desc)))
+            (fun (p : (_, location) Ast.annotated) ->
+              annot p.info (param_name p, valtype (param_type p)))
             s.params
         in
         let results = Array.map valtype s.results in
@@ -366,7 +375,7 @@ let on_clause ret (c : on_clause) : Text.on_clause =
 let push ret label =
   let return =
     match (ret.return, label) with
-    | Some (l, _), Some l' when l = l'.desc -> None
+    | Some (l, _), Some l' when l = l'.Annot.desc -> None
     | Some (l, i), _ -> Some (l, i + 1)
     | None, _ -> None
   in
@@ -401,15 +410,15 @@ let labels_in_list l =
         add label;
         instr cond;
         lst if_block.desc;
-        Option.iter (fun b -> lst b.desc) else_block
+        Option.iter (fun b -> lst b.Annot.desc) else_block
     | TryTable { label; block; _ } ->
         add label;
         lst block.desc
     | Try { label; block; catches; catch_all; _ } ->
         add label;
         lst block.desc;
-        List.iter (fun (_, b) -> lst b.desc) catches;
-        Option.iter (fun b -> lst b.desc) catch_all
+        List.iter (fun (_, b) -> lst b.Annot.desc) catches;
+        Option.iter (fun b -> lst b.Annot.desc) catch_all
     | TryCatch { label; block; arms; _ } ->
         add label;
         lst block.desc;
@@ -422,15 +431,15 @@ let labels_in_list l =
         List.iter
           (fun (lb, b) ->
             add (Some lb);
-            lst b.desc)
+            lst b.Annot.desc)
           arms
     | Match { scrutinee; arms; default } ->
         instr scrutinee;
-        List.iter (fun (_, b) -> lst b.desc) arms;
+        List.iter (fun (_, b) -> lst b.Annot.desc) arms;
         lst default.desc
     | If_annotation { then_body; else_body; _ } ->
         lst then_body.desc;
-        Option.iter (fun b -> lst b.desc) else_body
+        Option.iter (fun b -> lst b.Annot.desc) else_body
     | Call (a, l) | TailCall (a, l) ->
         instr a;
         lst l
@@ -478,7 +487,6 @@ let labels_in_list l =
         lst l
     | Let (_, e) | Return e | Br (_, e) -> opt e
     | Br_if (_, e)
-    | Hinted (_, e)
     | On (e, _)
     | Br_table (_, e)
     | Br_on_null (_, e)
@@ -700,7 +708,7 @@ let neg_int_const_fits bits s =
 let rec struct_field_args ret ctx field_names fields =
   let field_map =
     List.fold_left
-      (fun acc (name, instr) -> StringMap.add name.desc (name, instr) acc)
+      (fun acc (name, instr) -> StringMap.add name.Annot.desc (name, instr) acc)
       StringMap.empty fields
   in
   List.concat_map
@@ -708,10 +716,33 @@ let rec struct_field_args ret ctx field_names fields =
       match StringMap.find fname field_map with
       | _, Some e -> instruction ret ctx e
       | name, None ->
-          instruction ret ctx { desc = Get name; info = ([||], name.info) })
+          instruction ret ctx
+            {
+              desc = Get name;
+              info = ([||], name.Ast.info);
+              hints = Wax_wasm.Hints.none;
+            })
     field_names
 
-and instruction ret ctx i : location Text.instr list =
+(* Branch-hinting / compilation-hints proposals: carry a Wax instruction's hints
+   onto the Wasm instruction it lowers to. A Wax instruction generally lowers to a
+   whole stack sequence; the hint belongs on the one instruction that is the
+   operation itself — the head of a folded node, or the single instruction — which
+   is where the encoder takes its byte offset. Anything else (a multi-instruction
+   lowering) has no single carrier, so the hint is dropped: it is advisory. *)
+and instruction ret ctx (i : _ Wax_lang.Ast.instr) : location Text.instr list =
+  let code = instruction_desc ret ctx i in
+  if Wax_wasm.Hints.is_empty i.hints then code
+  else
+    let hints = Wax_wasm.Hints.map_targets index i.hints in
+    match code with
+    | [ ({ desc = Text.Folded (d, args); _ } as i') ] ->
+        [ { i' with desc = Text.Folded ({ d with hints }, args) } ]
+    | [ single ] -> [ { single with Text.hints } ]
+    | code -> code
+
+and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
+    location Text.instr list =
   let _, loc = i.info in
   match i.desc with
   | Block { label; typ; block = body } ->
@@ -801,7 +832,7 @@ and instruction ret ctx i : location Text.instr list =
                 Ast.desc =
                   List.concat_map
                     (instruction (push ret label) inner_ctx)
-                    block.desc;
+                    block.Annot.desc;
               } ))
           catches
       in
@@ -814,7 +845,7 @@ and instruction ret ctx i : location Text.instr list =
               Ast.desc =
                 List.concat_map
                   (instruction (push ret label) inner_ctx)
-                  block.desc;
+                  block.Annot.desc;
             })
           catch_all
       in
@@ -851,7 +882,7 @@ and instruction ret ctx i : location Text.instr list =
   | Get idx ->
       if StringMap.mem idx.desc ctx.locals then
         let wasm_name = StringMap.find idx.desc ctx.locals in
-        folded loc (Text.LocalGet (with_loc idx.info (Text.Id wasm_name))) []
+        folded loc (Text.LocalGet (annot idx.Ast.info (Text.Id wasm_name))) []
       else if Hashtbl.mem ctx.functions idx.desc then
         (Hashtbl.replace ctx.referenced_functions idx.desc ();
          folded loc (Text.RefFunc (index idx)))
@@ -867,7 +898,8 @@ and instruction ret ctx i : location Text.instr list =
       let store, load =
         if StringMap.mem idx.desc ctx.locals then
           let id =
-            with_loc idx.info (Text.Id (StringMap.find idx.desc ctx.locals))
+            annot idx.Ast.info
+              (Text.Id (StringMap.find idx.Ast.desc ctx.locals))
           in
           (Text.LocalSet id, Text.LocalGet id)
         else (Text.GlobalSet (index idx), Text.GlobalGet (index idx))
@@ -885,7 +917,7 @@ and instruction ret ctx i : location Text.instr list =
   | Tee (idx, expr) ->
       let code = instruction ret ctx expr in
       let wasm_name = StringMap.find idx.desc ctx.locals in
-      folded loc (LocalTee (with_loc idx.info (Text.Id wasm_name))) code
+      folded loc (LocalTee (annot idx.Ast.info (Text.Id wasm_name))) code
   | Call (f, args) -> (
       (* Shared lowering of the positional operands, forced only by the arms that
          actually use it. It is [lazy] because several arms (memory/table
@@ -1683,7 +1715,7 @@ and instruction ret ctx i : location Text.instr list =
         match id with
         | Some name ->
             let ty = Option.get ty in
-            let wasm_name = Namespace.add ctx.namespace name.desc in
+            let wasm_name = Namespace.add ctx.namespace name.Annot.desc in
             ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
             ctx.allocated_locals :=
               (Some { name with desc = wasm_name }, valtype ty)
@@ -1719,7 +1751,7 @@ and instruction ret ctx i : location Text.instr list =
           let code = instruction ret ctx body in
           ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
           folded loc
-            (Text.LocalSet (with_loc name.info (Text.Id wasm_name)))
+            (Text.LocalSet (annot name.Ast.info (Text.Id wasm_name)))
             code
       | None -> folded loc Text.Drop (instruction ret ctx body))
   | Let (decls, Some body) ->
@@ -1752,13 +1784,13 @@ and instruction ret ctx i : location Text.instr list =
                   | Some t -> unpack_type t
                   | None -> I32)
             in
-            let wasm_name = Namespace.add ctx.namespace name.desc in
+            let wasm_name = Namespace.add ctx.namespace name.Annot.desc in
             ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
             ctx.allocated_locals :=
               (Some { name with desc = wasm_name }, valtype ty)
               :: !(ctx.allocated_locals);
             folded name.info
-              (Text.LocalSet (with_loc name.info (Text.Id wasm_name)))
+              (Text.LocalSet (annot name.Ast.info (Text.Id wasm_name)))
               []
         | None -> folded loc Text.Drop []
       in
@@ -1772,20 +1804,6 @@ and instruction ret ctx i : location Text.instr list =
       folded loc (Br (label ret l)) (instruction ret ctx expr)
   | Br_if (l, expr) ->
       folded loc (Br_if (label ret l)) (instruction ret ctx expr)
-  (* Branch-hinting proposal: convert the wrapped branch, then insert [Hinted]
-     just inside its folded node — matching the shape the fold pass produces
-     ([Folded (Hinted (h, inner), args)]) so print/unfold handle it uniformly. *)
-  | Hinted (h, inner) -> (
-      match instruction ret ctx inner with
-      | [ ({ Ast.desc = Text.Folded (d, args); _ } as i') ] ->
-          [
-            {
-              i' with
-              Ast.desc = Text.Folded (with_loc loc (Text.Hinted (h, d)), args);
-            };
-          ]
-      | [ single ] -> [ with_loc loc (Text.Hinted (h, single)) ]
-      | code -> code)
   | Br_table (labels, expr) -> (
       let code = instruction ret ctx expr in
       match List.rev labels with
@@ -1831,7 +1849,7 @@ and instruction ret ctx i : location Text.instr list =
       let block_info = ([| Some (expr_type scrutinee) |], loc) in
       let avoid =
         labels_in_list
-          (default.desc @ List.concat_map (fun (_, b) -> b.desc) arms)
+          (default.desc @ List.concat_map (fun (_, b) -> b.Annot.desc) arms)
       in
       let labels =
         List.map
@@ -1943,7 +1961,7 @@ and instruction ret ctx i : location Text.instr list =
                then_body = { then_body with Ast.desc = conv then_body.desc };
                else_body =
                  Option.map
-                   (fun b -> { b with Ast.desc = conv b.desc })
+                   (fun b -> { b with Ast.desc = conv b.Annot.desc })
                    else_body;
              });
       ]
@@ -1960,7 +1978,7 @@ and instruction ret ctx i : location Text.instr list =
    form. *)
 let export_name ~name v =
   match v with
-  | Some ({ desc = String (_, n); _ } as v) -> { v with desc = n }
+  | Some ({ desc = String (_, n); _ } as v) -> annot v.info n
   | _ -> name
 
 (* [#[export = "nm"]] exports under the given name; the bare [#[export]] reuses
@@ -1994,11 +2012,11 @@ let guarded_export_fields ~loc ~kind ~field_name attributes =
               }
           in
           Some
-            (with_loc loc
+            (annot loc
                (Text.Module_if_annotation
                   {
                     cond = cond.Ast.desc;
-                    then_fields = with_loc loc [ with_loc loc export ];
+                    then_fields = annot loc [ annot loc export ];
                     else_fields = None;
                   }))
       | _ -> None)
@@ -2012,7 +2030,7 @@ let guarded_export_fields ~loc ~kind ~field_name attributes =
 let inline_export_fields ~loc ~kind ~field_name attributes =
   List.map
     (fun name ->
-      with_loc loc (Text.Export { name; kind; index = index field_name }))
+      annot loc (Text.Export { name; kind; index = index field_name }))
     (exports ~name:field_name attributes)
 
 (* The [(start $f)] field for a function's [#[start]] attribute: inline when
@@ -2021,16 +2039,15 @@ let start_fields ~loc ~field_name attributes =
   List.filter_map
     (fun (k, _, guard) ->
       match (k, guard) with
-      | "start", None -> Some (with_loc loc (Text.Start (index field_name)))
+      | "start", None -> Some (annot loc (Text.Start (index field_name)))
       | "start", Some cond ->
           Some
-            (with_loc loc
+            (annot loc
                (Text.Module_if_annotation
                   {
                     cond = cond.Ast.desc;
                     then_fields =
-                      with_loc loc
-                        [ with_loc loc (Text.Start (index field_name)) ];
+                      annot loc [ annot loc (Text.Start (index field_name)) ];
                     else_fields = None;
                   }))
       | _ -> None)
@@ -2085,7 +2102,7 @@ let module_name attributes =
   List.find_map
     (fun (k, v, _) ->
       match (k, v) with
-      | "module", Some { desc = String (_, n); info } ->
+      | "module", Some { desc = String (_, n); info; _ } ->
           Some { Ast.desc = n; info }
       | _ -> None)
     attributes
@@ -2101,7 +2118,7 @@ let feature_annotations fields =
           List.filter_map
             (fun (k, v, _) ->
               match (k, v) with
-              | "feature", Some { desc = String (_, n); info } ->
+              | "feature", Some { desc = String (_, n); info; _ } ->
                   Some
                     {
                       Ast.desc = Text.Feature_annotation { desc = n; info };
@@ -2124,9 +2141,8 @@ let lower_data_elem (e : Wax_lang.Ast.data_elem) : Text.datavalelem =
   match e with
   | Data_string s -> Text.Str s
   | Data_run (st, values) ->
-      Text.Numlist
-        (Map.storagetype () st, List.map (fun v -> v.Wax_lang.Ast.desc) values)
-  | Data_v128 vs -> Text.V128list (List.map (fun v -> v.Wax_lang.Ast.desc) vs)
+      Text.Numlist (Map.storagetype () st, List.map (fun v -> v.Ast.desc) values)
+  | Data_v128 vs -> Text.V128list (List.map (fun v -> v.Ast.desc) vs)
 
 let lower_data_init loc (init : Wax_lang.Ast.data_elem list) : Text.dataval =
   List.map (fun e -> { desc = lower_data_elem e; info = loc }) init
@@ -2193,7 +2209,7 @@ let subtype s : Text.subtype =
         Struct
           (Array.map
              (fun field ->
-               let name, { mut; typ } = field.desc in
+               let name, { mut; typ } = field.Annot.desc in
                {
                  Ast.desc =
                    (Some name, { Text.Types.mut; typ = storagetype typ });
@@ -2400,7 +2416,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
       | Type rectype ->
           Array.iter
             (fun rt ->
-              let idx, subtype = rt.desc in
+              let idx, subtype = rt.Annot.desc in
               let subtype = resolve_subtype idx subtype in
               let kind =
                 match subtype.typ with
@@ -2412,7 +2428,9 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                 | Struct fields ->
                     let field_names =
                       Array.to_list
-                        (Array.map (fun field -> (fst field.desc).desc) fields)
+                        (Array.map
+                           (fun field -> (field_name field).desc)
+                           fields)
                     in
                     Hashtbl.add ctx.struct_fields idx.desc field_names;
                     `Struct
@@ -2423,13 +2441,13 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
       | Global { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
       | Import { decl; _ } -> register_import decl.desc
       | Import_group { decls; _ } ->
-          List.iter (fun d -> register_import d.desc) decls
+          List.iter (fun d -> register_import d.Annot.desc) decls
       | Memory { name; _ } -> Hashtbl.replace ctx.memories name.desc ()
       | Table { name; reftype = rt; _ } ->
           Hashtbl.replace ctx.tables name.desc rt
       | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
       | Data { name; _ } ->
-          Option.iter (fun n -> Hashtbl.replace ctx.datas n.desc ()) name
+          Option.iter (fun n -> Hashtbl.replace ctx.datas n.Annot.desc ()) name
       | Tag _ | Conditional _ | Module_annotation _ -> ())
     fields;
   (* Record unconditionally-declared types as reuse targets for synthesized
@@ -2439,12 +2457,12 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
   let collect_reuse_types fields =
     let aux acc fields =
       List.fold_left
-        (fun acc field ->
+        (fun acc (field : (_ modulefield, _) Ast.Annot.annotated) ->
           match field.desc with
           | Type rectype ->
               Array.fold_left
                 (fun acc rt ->
-                  let idx, subtype = rt.desc in
+                  let idx, subtype = rt.Annot.desc in
                   let subtype = resolve_subtype idx subtype in
                   if idx.desc <> "" && idx.desc.[0] <> '<' then
                     (subtype, idx.desc) :: acc
@@ -2590,11 +2608,11 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
         Import_group1
           { module_; items = List.map (fun (n, id, d, _) -> (n, id, d)) items }
     in
-    with_loc loc group :: List.concat_map (fun (_, _, _, s) -> s) items
+    annot loc group :: List.concat_map (fun (_, _, _, s) -> s) items
   in
   let rec convert_fields fields =
     List.concat_map
-      (fun field ->
+      (fun (field : (_ modulefield, _) Ast.Annot.annotated) ->
         match field.desc with
         | Import { module_; decl } ->
             let import, guarded = lower_import module_ decl in
@@ -2763,7 +2781,8 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                         };
                       else_fields =
                         Option.map
-                          (fun b -> { b with Ast.desc = conv_branch b.desc })
+                          (fun b ->
+                            { b with Ast.desc = conv_branch b.Annot.desc })
                           else_fields;
                     };
               };
@@ -2775,7 +2794,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                   Text.Types
                     (Array.map
                        (fun rt ->
-                         let idx, s = rt.desc in
+                         let idx, s = rt.Annot.desc in
                          Ast.no_loc (Some idx, subtype (resolve_subtype idx s)))
                        rectype)
               | Global { name; mut; typ; def; attributes } ->
@@ -2808,7 +2827,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                   let locals =
                     Array.fold_left
                       (fun locals p ->
-                        match fst p.desc with
+                        match param_name p with
                         | Some id ->
                             let wasm_name = Namespace.add namespace id.desc in
                             StringMap.add id.desc wasm_name locals
@@ -2831,7 +2850,10 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                     List.concat_map
                       (instruction
                          {
-                           return = Option.map (fun l -> (l.desc, 0)) label;
+                           return =
+                             Option.map
+                               (fun (l : Wax_lang.Ast.ident) -> (l.desc, 0))
+                               label;
                            labels =
                              (match label with
                              | Some l -> [ l.desc ]
@@ -2909,7 +2931,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
       let init =
         List.map
           (fun name ->
-            [ Ast.no_loc (Text.RefFunc (Ast.no_loc (Text.Id name))) ])
+            [ Text.no_loc (Text.RefFunc (Ast.no_loc (Text.Id name))) ])
           funcs
       in
       [

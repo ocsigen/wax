@@ -28,7 +28,10 @@ let rec occurs name i =
       | None -> false)
   | Try { block; catches; catch_all; _ } -> (
       occurs_list name block.desc
-      || List.exists (fun (_, b) -> occurs_list name b.desc) catches
+      || List.exists
+           (fun (_, (b : (_ instr list, _) Ast.annotated)) ->
+             occurs_list name b.desc)
+           catches
       ||
       match catch_all with
       | Some b -> occurs_list name b.desc
@@ -47,7 +50,6 @@ let rec occurs name i =
   | StructDefaultDesc e
   | UnOp (_, e)
   | Br_if (_, e)
-  | Hinted (_, e)
   | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
@@ -84,10 +86,10 @@ let rec occurs name i =
       occurs_list name l
   | Dispatch { index; arms; _ } ->
       occurs name index
-      || List.exists (fun (_, b) -> occurs_list name b.desc) arms
+      || List.exists (fun (_, b) -> occurs_list name b.Annot.desc) arms
   | Match { scrutinee; arms; default } ->
       occurs name scrutinee
-      || List.exists (fun (_, b) -> occurs_list name b.desc) arms
+      || List.exists (fun (_, b) -> occurs_list name b.Annot.desc) arms
       || occurs_list name default.desc
   | Let (_, body) -> occurs_opt name body
   | Br (_, o) | Return o -> occurs_opt name o
@@ -113,10 +115,16 @@ and field_occurs name (fn, e) =
   match e with Some e -> occurs name e | None -> String.equal fn.desc name
 
 let list_occurs = occurs_list
-let bare_let (name, typ) = no_loc (Let ([ (Some name, Some typ) ], None))
+
+let bare_let (name, typ) =
+  Ast.no_loc_instr (Let ([ (Some name, Some typ) ], None))
 
 let init_let (name, typ) e info =
-  { desc = Let ([ (Some name, Some typ) ], Some e); info }
+  {
+    desc = Let ([ (Some name, Some typ) ], Some e);
+    info;
+    hints = Wax_wasm.Hints.none;
+  }
 
 (* [name = e] is fusable into [let name = e] only when the assignment is the
    first use of [name] (the caller guarantees that) and [e] does not read
@@ -183,7 +191,7 @@ let rec first_access name i =
       fst2
         (first_access_list name block.desc)
         (List.fold_left
-           (fun acc (_, b) -> agree acc (first_access_list name b.desc))
+           (fun acc (_, b) -> agree acc (first_access_list name b.Annot.desc))
            (match catch_all with
            | Some b -> first_access_list name b.desc
            | None -> None)
@@ -205,7 +213,6 @@ let rec first_access name i =
   | StructDefaultDesc e
   | UnOp (_, e)
   | Br_if (_, e)
-  | Hinted (_, e)
   | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
@@ -245,7 +252,7 @@ let rec first_access name i =
   | Dispatch { index; arms; _ } ->
       fst2 (first_access name index)
         (List.fold_left
-           (fun acc (_, b) -> agree acc (first_access_list name b.desc))
+           (fun acc (_, b) -> agree acc (first_access_list name b.Annot.desc))
            None arms)
   | Match { scrutinee; arms; default } ->
       (* The scrutinee is evaluated first; the arms and default are the
@@ -254,7 +261,7 @@ let rec first_access name i =
       fst2
         (first_access name scrutinee)
         (List.fold_left
-           (fun acc (_, b) -> agree acc (first_access_list name b.desc))
+           (fun acc (_, b) -> agree acc (first_access_list name b.Annot.desc))
            (first_access_list name default.desc)
            arms)
   | Let (_, body) -> first_access_opt name body
@@ -288,7 +295,8 @@ and field_list_access name fields =
       | None -> (
           match e with
           | Some e -> first_access name e
-          | None -> if String.equal fn.desc name then Some `Read else None))
+          | None -> if String.equal fn.Annot.desc name then Some `Read else None
+          ))
     None fields
 
 (* A loop / while body runs many times, so a local the body reads
@@ -304,8 +312,10 @@ let loop_carried name l = first_access_list name l = Some `Read
    [If_annotation] branch, so those are never entered. *)
 let rec sink_into ((name, _) as decl) s =
   let bl block = sink_decl decl block in
-  let bl_loc block = { block with desc = sink_decl decl block.desc } in
-  let occ e = occurs name.desc e in
+  let bl_loc (block : (_ instr list, location) Ast.annotated) =
+    { block with desc = sink_decl decl block.desc }
+  in
+  let occ e = occurs (name : ident).desc e in
   (* Recurse into the unique sub-expression of [s] holding every use of the
      local and rebuild [s] around the result. With all uses in one operand no
      sibling reads the local, so their evaluation order is irrelevant; uses
@@ -401,7 +411,8 @@ let rec sink_into ((name, _) as decl) s =
                     r with
                     else_block =
                       Option.map
-                        (fun b -> { b with desc = bl b.desc })
+                        (fun (b : (_ instr list, location) Ast.annotated) ->
+                          { b with desc = bl b.desc })
                         r.else_block;
                   };
             }
@@ -410,7 +421,9 @@ let rec sink_into ((name, _) as decl) s =
       let in_block = list_occurs name.desc r.block.desc in
       let n_catches =
         List.length
-          (List.filter (fun (_, b) -> list_occurs name.desc b.desc) r.catches)
+          (List.filter
+             (fun (_, b) -> list_occurs name.desc b.Annot.desc)
+             r.catches)
       in
       let in_all =
         match r.catch_all with
@@ -433,7 +446,8 @@ let rec sink_into ((name, _) as decl) s =
         let catches =
           List.map
             (fun (tag, b) ->
-              if list_occurs name.desc b.desc then (tag, bl_loc b) else (tag, b))
+              if list_occurs name.desc b.Annot.desc then (tag, bl_loc b)
+              else (tag, b))
             r.catches
         in
         Some { s with desc = Try { r with catches } }
@@ -444,14 +458,17 @@ let rec sink_into ((name, _) as decl) s =
       if occ r.index then None
       else if
         List.length
-          (List.filter (fun (_, b) -> list_occurs name.desc b.desc) r.arms)
+          (List.filter
+             (fun (_, b) -> list_occurs name.desc b.Annot.desc)
+             r.arms)
         <> 1
       then None
       else
         let arms =
           List.map
             (fun (l, b) ->
-              if list_occurs name.desc b.desc then (l, bl_loc b) else (l, b))
+              if list_occurs name.desc b.Annot.desc then (l, bl_loc b)
+              else (l, b))
             r.arms
         in
         Some { s with desc = Dispatch { r with arms } }
@@ -471,7 +488,7 @@ let rec sink_into ((name, _) as decl) s =
            (List.exists
               (fun (id, _) ->
                 match id with
-                | Some n -> String.equal n.desc name.desc
+                | Some n -> String.equal n.Annot.desc name.desc
                 | None -> false)
               bindings) ->
       (* [let y = <block>] (binding some other local) holds every use of [name]
@@ -547,7 +564,6 @@ let rec sink_into ((name, _) as decl) s =
   | ArrayDefault (idx, e) -> pick [ (e, fun e' -> ArrayDefault (idx, e')) ]
   | ContNew (ct, e) -> pick [ (e, fun e' -> ContNew (ct, e')) ]
   | Br_if (l, e) -> pick [ (e, fun e' -> Br_if (l, e')) ]
-  | Hinted (h, e) -> pick [ (e, fun e' -> Hinted (h, e')) ]
   | On (e, h) -> pick [ (e, fun e' -> On (e', h)) ]
   | Br_table (ls, e) -> pick [ (e, fun e' -> Br_table (ls, e')) ]
   | Br_on_null (l, e) -> pick [ (e, fun e' -> Br_on_null (l, e')) ]
@@ -601,13 +617,16 @@ let process_body instrs =
      settle. Place the used ones via the fold, then prepend the unused ones in
      their original order so the output is a fixpoint. *)
   let used, unused =
-    List.partition (fun (name, _) -> list_occurs name.desc rest) decls
+    List.partition (fun (name, _) -> list_occurs name.Annot.desc rest) decls
   in
   let body = List.fold_left (fun acc decl -> sink_decl decl acc) rest used in
   List.fold_right (fun decl acc -> bare_let decl :: acc) unused body
 
 let rec field_desc (f : location modulefield) =
-  let map_fields = List.map (fun a -> { a with desc = field_desc a.desc }) in
+  let map_fields =
+    List.map (fun (a : (location modulefield, location) Ast.annotated) ->
+        { a with desc = field_desc a.desc })
+  in
   match f with
   | Func ({ body = label, instrs; _ } as r) ->
       Func { r with body = (label, process_body instrs) }
@@ -618,7 +637,10 @@ let rec field_desc (f : location modulefield) =
           then_fields = { then_fields with desc = map_fields then_fields.desc };
           else_fields =
             Option.map
-              (fun b -> { b with desc = map_fields b.desc })
+              (fun (b :
+                     ( (location modulefield, location) Ast.annotated list,
+                       location )
+                     Ast.annotated) -> { b with desc = map_fields b.desc })
               else_fields;
         }
   | ( Type _ | Module_annotation _ | Import _ | Import_group _ | Global _
@@ -626,4 +648,7 @@ let rec field_desc (f : location modulefield) =
       f
 
 let module_ (m : location module_) : location module_ =
-  List.map (fun a -> { a with desc = field_desc a.desc }) m
+  List.map
+    (fun (a : (location modulefield, location) Ast.annotated) ->
+      { a with desc = field_desc a.desc })
+    m

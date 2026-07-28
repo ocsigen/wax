@@ -212,17 +212,17 @@ let rec collect_assigned_locals acc i =
           if_block.desc
       in
       Option.fold ~none:acc
-        ~some:(fun b -> collect_assigned_locals_list acc b.desc)
+        ~some:(fun b -> collect_assigned_locals_list acc b.Annot.desc)
         else_block
   | Try { block; catches; catch_all; _ } ->
       let acc = collect_assigned_locals_list acc block.desc in
       let acc =
         List.fold_left
-          (fun acc (_, b) -> collect_assigned_locals_list acc b.desc)
+          (fun acc (_, b) -> collect_assigned_locals_list acc b.Annot.desc)
           acc catches
       in
       Option.fold ~none:acc
-        ~some:(fun b -> collect_assigned_locals_list acc b.desc)
+        ~some:(fun b -> collect_assigned_locals_list acc b.Annot.desc)
         catch_all
   | TryCatch { block; arms; _ } ->
       let acc = collect_assigned_locals_list acc block.desc in
@@ -239,7 +239,6 @@ let rec collect_assigned_locals acc i =
   | StructDefaultDesc e
   | UnOp (_, e)
   | Br_if (_, e)
-  | Hinted (_, e)
   | On (e, _)
   | Labelled (_, e)
   | Br_table (_, e)
@@ -288,14 +287,15 @@ let rec collect_assigned_locals acc i =
       collect_assigned_locals_list acc l
   | Dispatch { index; arms; _ } ->
       List.fold_left
-        (fun acc (_, b) -> collect_assigned_locals_list acc b.desc)
+        (fun acc (_, (b : (_ instr list, _) Ast.annotated)) ->
+          collect_assigned_locals_list acc b.desc)
         (collect_assigned_locals acc index)
         arms
   | Match { scrutinee; arms; default } ->
       let acc = collect_assigned_locals acc scrutinee in
       let acc =
         List.fold_left
-          (fun acc (_, b) -> collect_assigned_locals_list acc b.desc)
+          (fun acc (_, b) -> collect_assigned_locals_list acc b.Annot.desc)
           acc arms
       in
       collect_assigned_locals_list acc default.desc
@@ -304,7 +304,7 @@ let rec collect_assigned_locals acc i =
   | If_annotation { then_body; else_body; _ } ->
       let acc = collect_assigned_locals_list acc then_body.desc in
       Option.fold ~none:acc
-        ~some:(fun b -> collect_assigned_locals_list acc b.desc)
+        ~some:(fun b -> collect_assigned_locals_list acc b.Annot.desc)
         else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
@@ -339,17 +339,17 @@ let rec collect_labels acc (i : _ Ast.instr) =
         collect_labels_list (collect_labels (add acc label) cond) if_block.desc
       in
       Option.fold ~none:acc
-        ~some:(fun b -> collect_labels_list acc b.desc)
+        ~some:(fun b -> collect_labels_list acc b.Annot.desc)
         else_block
   | Try { label; block; catches; catch_all; _ } ->
       let acc = collect_labels_list (add acc label) block.desc in
       let acc =
         List.fold_left
-          (fun acc (_, b) -> collect_labels_list acc b.desc)
+          (fun acc (_, b) -> collect_labels_list acc b.Annot.desc)
           acc catches
       in
       Option.fold ~none:acc
-        ~some:(fun b -> collect_labels_list acc b.desc)
+        ~some:(fun b -> collect_labels_list acc b.Annot.desc)
         catch_all
   | TryCatch { label; block; arms; _ } ->
       let acc = collect_labels_list (add acc label) block.desc in
@@ -369,7 +369,6 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | StructDefaultDesc e
   | UnOp (_, e)
   | Br_if (_, e)
-  | Hinted (_, e)
   | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
@@ -409,13 +408,13 @@ let rec collect_labels acc (i : _ Ast.instr) =
       collect_labels_list acc l
   | Dispatch { index; arms; _ } ->
       List.fold_left
-        (fun acc (_, b) -> collect_labels_list acc b.desc)
+        (fun acc (_, b) -> collect_labels_list acc b.Annot.desc)
         (collect_labels acc index) arms
   | Match { scrutinee; arms; default } ->
       let acc = collect_labels acc scrutinee in
       let acc =
         List.fold_left
-          (fun acc (_, b) -> collect_labels_list acc b.desc)
+          (fun acc (_, b) -> collect_labels_list acc b.Annot.desc)
           acc arms
       in
       collect_labels_list acc default.desc
@@ -424,7 +423,7 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | If_annotation { then_body; else_body; _ } ->
       let acc = collect_labels_list acc then_body.desc in
       Option.fold ~none:acc
-        ~some:(fun b -> collect_labels_list acc b.desc)
+        ~some:(fun b -> collect_labels_list acc b.Annot.desc)
         else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
@@ -486,8 +485,8 @@ let rec find_eager_hazard (e : _ Ast.instr) =
   | StructDefault _ | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _
   | TryCatch _ | Br _ | Br_if _ | Br_table _ | Dispatch _ | Match _
   | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _
-  | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ | Hinted _ | Return _
-  | Select _ | If_annotation _ ->
+  | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ | Return _ | Select _
+  | If_annotation _ ->
       None
 
 (*** Lint checks on constant operands ***)
@@ -551,7 +550,7 @@ let lint_shift ctx op result rhs =
     | UnOp ({ desc = Pos; _ }, a) -> shift_count a
     | _ -> None
   in
-  match op.desc with
+  match op.Annot.desc with
   | Shl | Shr _ -> (
       match
         match Cell.get result with
@@ -578,7 +577,7 @@ let flush_deferred_lints ctx =
 (* Integer [/] or [%] by a constant zero always traps. [Div (Some _)] and
    [Rem _] are the integer forms ([Div None] is float division, which does not
    trap on a zero divisor). *)
-let lint_division ctx op rhs =
+let lint_division ctx (op : (Ast.binop, location) Ast.annotated) rhs =
   match op.desc with
   | (Div (Some _) | Rem _) when int_literal_value_is_zero rhs ->
       Error.division_by_zero ctx.diagnostics ~location:op.info
@@ -658,8 +657,9 @@ let identical_operands (l : _ Ast.instr) (r : _ Ast.instr) =
    signage, so a self-comparison is only flagged for a concrete integer operand
    (a float [a == a] is false on NaN, and reference identity is a separate
    concern). *)
-let lint_comparison ctx op l r =
-  let is_int e =
+let lint_comparison ctx (op : (Ast.binop, location) Ast.annotated)
+    (l : _ Ast.instr) (r : _ Ast.instr) =
+  let is_int (e : _ Ast.instr) =
     match expression_type_opt e with
     | Some c -> (
         match Cell.get c with
@@ -687,7 +687,8 @@ let lint_comparison ctx op l r =
 (* An arithmetic operation with no effect on its result (an identity operand or
    two identical operands), or whose result is a constant regardless of the
    variable operand (an absorbing operand). Off by default. *)
-let lint_redundant ctx op l r =
+let lint_redundant ctx (op : (Ast.binop, location) Ast.annotated)
+    (l : _ Ast.instr) (r : _ Ast.instr) =
   (* Look through a leading sign so a signed identity literal — [x + -0],
      [x * +1] — is recognised, as the Wasm validator does (it sees the folded
      [iNN.const]; [-0] is [UnOp (Neg, Int 0)], not a bare [Int], on this side). *)
@@ -777,7 +778,8 @@ let binop_kind_name = function
    operand is immediately preceded by [(] (a right operand) or followed by [)]
    (a left operand), skipping whitespace. With no source available, assume it is
    parenthesized (so the lint stays silent rather than risk a false positive). *)
-let operand_parenthesized ctx ~op ~side (child : _ Ast.instr) =
+let operand_parenthesized ctx ~(op : (Ast.binop, location) Ast.annotated) ~side
+    (child : _ Ast.instr) =
   match Wax_utils.Diagnostic.source ctx.diagnostics with
   | None -> true
   | Some src ->
@@ -867,7 +869,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
       lint_condition ctx cond;
       lint_source ctx cond;
       list if_block.desc;
-      Option.iter (fun b -> list b.desc) else_block
+      Option.iter (fun b -> list b.Annot.desc) else_block
   | While { cond; step; block; _ } ->
       lint_condition ctx ~is_while:true cond;
       lint_source ctx cond;
@@ -895,8 +897,8 @@ let rec lint_source ctx (i : _ Ast.instr) =
       list block.desc
   | Try { block; catches; catch_all; _ } ->
       list block.desc;
-      List.iter (fun (_, b) -> list b.desc) catches;
-      Option.iter (fun b -> list b.desc) catch_all
+      List.iter (fun (_, b) -> list b.Annot.desc) catches;
+      Option.iter (fun b -> list b.Annot.desc) catch_all
   | TryCatch { block; arms; _ } ->
       list block.desc;
       List.iter (fun a -> list a.arm_body.desc) arms
@@ -924,7 +926,6 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | GetDescriptor e
   | StructDefaultDesc e
   | UnOp (_, e)
-  | Hinted (_, e)
   | On (e, _)
   | Br_table (_, e)
   | Br_on_null (_, e)
@@ -969,10 +970,10 @@ let rec lint_source ctx (i : _ Ast.instr) =
       list l
   | Dispatch { index; arms; _ } ->
       lint_source ctx index;
-      List.iter (fun (_, b) -> list b.desc) arms
+      List.iter (fun (_, b) -> list b.Annot.desc) arms
   | Match { scrutinee; arms; default } ->
       lint_source ctx scrutinee;
-      List.iter (fun (_, b) -> list b.desc) arms;
+      List.iter (fun (_, b) -> list b.Annot.desc) arms;
       list default.desc
   | Let (bindings, body) ->
       (* A drop [_ = e] is a single anonymous binding; if [e] is effect-free,
@@ -985,7 +986,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | Br (_, o) | Return o -> opt o
   | If_annotation { then_body; else_body; _ } ->
       list then_body.desc;
-      Option.iter (fun b -> list b.desc) else_body
+      Option.iter (fun b -> list b.Annot.desc) else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       ()

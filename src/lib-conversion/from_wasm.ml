@@ -118,7 +118,8 @@ module Sequence = struct
         | None ->
             let found =
               List.find_map
-                (fun nm -> Hashtbl.find_opt seq.export_mapping nm.Ast.desc)
+                (fun nm ->
+                  Hashtbl.find_opt seq.export_mapping nm.Wax_utils.Ast.desc)
                 exports
             in
             if Option.is_none found && not seq.forbid_numeric then
@@ -149,7 +150,7 @@ module Sequence = struct
              explicit [$id] is authoritative and kept as-is even when it is a
              keyword (it is renamed with a warning, as before). *)
           let usable_inferred nm =
-            Lexer.is_valid_identifier nm.Ast.desc
+            Lexer.is_valid_identifier nm.Wax_utils.Ast.desc
             && not (Namespace.is_reserved seq.namespace nm.Ast.desc)
           in
           let default_or_hint () =
@@ -188,7 +189,7 @@ module Sequence = struct
     seq.last_index <- seq.last_index + 1;
     Hashtbl.add seq.index_mapping idx name;
     Option.iter
-      (fun id -> Hashtbl.replace seq.label_mapping id.Ast.desc name)
+      (fun id -> Hashtbl.replace seq.label_mapping id.Wax_utils.Ast.desc name)
       id;
     (* Record only the head export as this entity's cross-branch identity, not
        every export: a single multi-export function in one branch may correspond
@@ -348,7 +349,9 @@ module LabelStack = struct
       {
         ns;
         stack =
-          (Option.map (fun l -> l.Ast.desc) label, (name, used)) :: st.stack;
+          ( Option.map (fun (l : Src.name) -> l.Wax_utils.Ast.desc) label,
+            (name, used) )
+          :: st.stack;
       } )
 
   let get st (idx : Src.idx) =
@@ -495,8 +498,8 @@ type ctx = {
 
 (*** Names, indices, and type conversions ***)
 
-let get_annot e = fst e.Ast.desc
-let get_type e = snd e.Ast.desc
+let get_annot e = fst e.Wax_utils.Ast.desc
+let get_type e = snd e.Wax_utils.Ast.desc
 
 (* Build a located [annotated_array] element ([name : type] in a struct, or a
    subtype in a rec group), keeping the source location so a trailing comment
@@ -579,12 +582,13 @@ let functype_params ctx params =
   let ns = Namespace.make () in
   Array.map
     (fun p ->
-      let id, t = p.Ast.desc in
+      let id, t = p.Wax_utils.Ast.desc in
       let id =
         Option.map
           (fun id ->
             let name, outcome =
-              Namespace.add' ~loc:id.Ast.info ns id.Ast.desc
+              Namespace.add' ~loc:(id : Src.name).Wax_utils.Ast.info ns
+                id.Wax_utils.Ast.desc
             in
             (match outcome with
             | Namespace.Renamed { reserved; previous } ->
@@ -621,7 +625,7 @@ let comptype st name (t : Src.comptype) : Ast.comptype =
                Sequence.get seq
                  (match get_annot t with
                  | None -> Ast.no_loc (Src.Num (Uint32.of_int i))
-                 | Some id -> { id with desc = Id id.Ast.desc })
+                 | Some id -> { id with desc = Id id.Wax_utils.Ast.desc })
              in
              annotated t.Ast.info id (fieldtype st (get_type t)))
            l)
@@ -639,9 +643,9 @@ let subtype st name (t : Src.subtype) : Ast.subtype =
 
 let rectype st (t : Src.rectype) : Ast.rectype =
   Array.map
-    (fun t ->
-      let name = Sequence.get_current st.types in
-      annotated t.Ast.info name (subtype st name.desc (get_type t)))
+    (fun (t : (_, Ast.location) Ast.Annot.annotated) ->
+      let name : Ast.ident = Sequence.get_current st.types in
+      annotated t.info name (subtype st name.desc (get_type t)))
     t
 
 let globaltype st = muttype valtype st
@@ -700,7 +704,7 @@ let conversion_error ctx ~location message =
    Report it and abort like other conversion errors rather than crash on the
    missing table entry. *)
 let struct_fields ctx type_name =
-  match Hashtbl.find_opt ctx.struct_fields type_name.Ast.desc with
+  match Hashtbl.find_opt ctx.struct_fields type_name.Wax_utils.Ast.desc with
   | Some fields -> fields
   | None ->
       conversion_error ctx ~location:type_name.Ast.info
@@ -717,7 +721,7 @@ let struct_fields ctx type_name =
 let collapse_splices ctx (rt : Ast.rectype) : Ast.rectype =
   let src_struct name =
     match
-      try Some (CondTbl.find ctx.type_defs ctx.cond_asm name.Ast.desc)
+      try Some (CondTbl.find ctx.type_defs ctx.cond_asm name.Wax_utils.Ast.desc)
       with Not_found -> None
     with
     | Some { Src.typ = Struct fields; _ } -> Some fields
@@ -735,7 +739,7 @@ let collapse_splices ctx (rt : Ast.rectype) : Ast.rectype =
   in
   Array.map
     (fun elt ->
-      let name, (sub : Ast.subtype) = elt.Ast.desc in
+      let (name : Ast.ident), (sub : Ast.subtype) = elt.Wax_utils.Ast.desc in
       match (sub.typ, sub.supertype) with
       | Struct child_ast_fields, Some parent_name -> (
           match
@@ -755,7 +759,7 @@ let collapse_splices ctx (rt : Ast.rectype) : Ast.rectype =
                 for i = 0 to n - 1 do
                   if
                     not
-                      (String.equal (fst child_ast_fields.(i).Ast.desc).desc
+                      (String.equal (fst child_ast_fields.(i).Ast.desc).Ast.desc
                          parent_names.(i)
                       && same_type
                            (snd child_ast_fields.(i).Ast.desc)
@@ -772,7 +776,7 @@ let collapse_splices ctx (rt : Ast.rectype) : Ast.rectype =
                 let fields =
                   Array.append [| Ast.splice_field name.Ast.info |] delta
                 in
-                { elt with desc = (name, { sub with typ = Struct fields }) }
+                { elt with Ast.desc = (name, { sub with typ = Struct fields }) }
               else elt
           | _ -> elt)
       | _ -> elt)
@@ -925,7 +929,7 @@ module Stack = struct
   type 'a t = stack -> stack * 'a
 
   let rec complete n cur =
-    if n = 0 then cur else complete (n - 1) (Ast.no_loc Ast.Hole :: cur)
+    if n = 0 then cur else complete (n - 1) (Ast.no_loc_instr Ast.Hole :: cur)
 
   let rec grab_rec n stack cur =
     if n = 0 then (stack, cur)
@@ -950,7 +954,7 @@ module Stack = struct
 
   (* Wrap [i] in an identity cast to its non-i32 opcode width (see the module
      comment). [None]/[I32] are the re-parse default, so leave the tree as is. *)
-  let pin_width w i =
+  let pin_width w (i : _ Ast.instr) =
     match w with
     | Some `I64 -> { i with Ast.desc = Ast.Cast (i, Valtype I64) }
     | Some `F32 -> { i with Ast.desc = Ast.Cast (i, Valtype F32) }
@@ -972,14 +976,14 @@ module Stack = struct
   let pop_width_preserved stack =
     match stack with
     | (1, _, i) :: rem -> (rem, i)
-    | _ -> (stack, Ast.no_loc Ast.Hole)
+    | _ -> (stack, Ast.no_loc_instr Ast.Hole)
 
   (* Pop, pinning the operand's opcode width. Used by single-operand width
      erasers ([drop], [wrap], [promote], [demote]). *)
   let pop_width_erased stack =
     match stack with
     | (1, w, i) :: rem -> (rem, pin_width w i)
-    | _ -> (stack, Ast.no_loc Ast.Hole)
+    | _ -> (stack, Ast.no_loc_instr Ast.Hole)
 
   (* Pop with the width tag, without pinning — the caller decides. Used by [drop],
      which records the tag in its [Let]'s type annotation rather than an identity
@@ -988,7 +992,7 @@ module Stack = struct
   let pop_tagged stack =
     match stack with
     | (1, w, i) :: rem -> (rem, (i, w))
-    | _ -> (stack, (Ast.no_loc Ast.Hole, None))
+    | _ -> (stack, (Ast.no_loc_instr Ast.Hole, None))
 
   let try_pop stack =
     match stack with (1, _, i) :: rem -> (rem, Some i) | _ -> (stack, None)
@@ -1078,7 +1082,9 @@ let ( let* ) e f st =
   f v st
 
 let return v st = (st, v)
-let sequence l = match l with [ i ] -> i | _ -> Ast.no_loc (Ast.Sequence l)
+
+let sequence l =
+  match l with [ i ] -> i | _ -> Ast.no_loc_instr (Ast.Sequence l)
 
 (*** Instruction-conversion helpers ***)
 
@@ -1107,13 +1113,19 @@ let remove_sign n =
 (* A Wax operator carries its own source location; reuse the (source or target)
    instruction's, which is the best approximation we have when reconstructing
    from Wasm. Polymorphic in the carried [desc] so it works for either AST. *)
-let op_loc (i : (_, Ast.location) Ast.annotated) op :
-    (_, Ast.location) Ast.annotated =
-  { i with Ast.desc = op }
+(* A located operator, sharing the span of the node it was recovered from. Takes
+   the span rather than the node: the node can be an [annotated] or an instruction,
+   which are no longer the same shape. *)
+let op_loc (loc : Ast.location) op : (_, Ast.location) Ast.annotated =
+  { Ast.desc = op; info = loc }
 
-let integer i n : _ Ast.instr =
-  let e : _ Ast.instr = { i with desc = Int (remove_sign n) } in
-  if is_negative n then { i with desc = UnOp (op_loc i Ast.Neg, e) } else e
+(* [loc] is the span of the instruction the literal was decoded from. *)
+let integer (loc : Ast.location) n : _ Ast.instr =
+  let at desc : _ Ast.instr =
+    { desc; info = loc; hints = Wax_wasm.Hints.none }
+  in
+  let e = at (Int (remove_sign n)) in
+  if is_negative n then at (UnOp (op_loc loc Ast.Neg, e)) else e
 
 let float i n =
   (* Test the magnitude, not the signed string: a negative integer-valued float
@@ -1121,16 +1133,28 @@ let float i n =
      becomes a [Float] node whose integer-looking text ([-4]) re-lexes as an
      integer literal on the round-trip — dropping the block/cast annotation that
      pinned it to a float and leaving [.to_bits()] applied to an [i64]. *)
-  if is_integer (remove_sign n) then integer i n
+  if is_integer (remove_sign n) then integer i.Src.info n
   else
-    let e : _ Ast.instr = { i with desc = Float (remove_sign n) } in
-    if is_negative n then { i with desc = UnOp (op_loc i Ast.Neg, e) } else e
+    let e : _ Ast.instr =
+      {
+        desc = Float (remove_sign n);
+        info = i.Src.info;
+        hints = Wax_wasm.Hints.none;
+      }
+    in
+    if is_negative n then
+      {
+        Ast.desc = UnOp (op_loc i.Src.info Ast.Neg, e);
+        info = i.Src.info;
+        hints = Wax_wasm.Hints.none;
+      }
+    else e
 
 let sequence_opt l =
   match l with
   | [] -> None
   | [ i ] -> Some i
-  | l -> Some (Ast.no_loc (Ast.Sequence l))
+  | l -> Some (Ast.no_loc_instr (Ast.Sequence l))
 
 let reasonable_string =
   Re.(
@@ -1224,7 +1248,12 @@ let rec reparse_adaptive (i : _ Ast.instr) =
   | _ -> false
 
 let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
-  let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
+  (* A Wax instruction at the source instruction's span. Built fresh rather than
+     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
+     their call-target hints, so one cannot be reinterpreted as the other. *)
+  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
+    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+  in
   (* A no-argument instruction method [recv.meth()]. *)
   let method_call recv meth =
     with_loc (Call (with_loc (StructGet (recv, Ast.no_loc meth)), []))
@@ -1241,7 +1270,8 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
   let e ty =
     match e' with
     | Some e -> e
-    | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty))
+    | None ->
+        Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty))
   in
   (* Materialise the operand with its scalar width [ty] pinned by a cast when
      [ty] is a non-default width (i64/f32/f64) and the operand is inlined —
@@ -1297,8 +1327,8 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
            it turns [t.eq; i32.eqz] into a single [t.ne], so keep the [!(...)]
            form, which re-lowers to the original [eq; eqz] pair. *)
         | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) when not faithful ->
-            with_loc (BinOp (op_loc i0 Ast.Ne, e1, e2))
-        | _ -> with_loc (UnOp (op_loc i0 Ast.Not, operand)))
+            with_loc (BinOp (op_loc i0.info Ast.Ne, e1, e2))
+        | _ -> with_loc (UnOp (op_loc i0.info Ast.Not, operand)))
     | Trunc (f, signage) ->
         (* The operand is a float of [f]'s width, NOT [floattype sz] ([sz] is the
            integer *result* size — wrong for e.g. [i32.trunc_f64], whose operand
@@ -1354,7 +1384,8 @@ let pop_typed ty =
   return
     (match o with
     | Some e -> e
-    | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)))
+    | None ->
+        Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty)))
 
 (* Give a conversion's absent operand — a hole on the polymorphic stack in dead
    code — the opcode's source type, [(_ as src)], so the conversion survives the
@@ -1449,7 +1480,9 @@ let pop_typed_tagged ty =
   return
     (match o with
     | Some (e, w) -> (e, w)
-    | None -> (Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)), None))
+    | None ->
+        ( Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty)),
+          None ))
 
 (* A popped operand is a width ANCHOR — its printed form fixes the operator's
    width on its own, so a width-erasing consumer (a comparison, the sibling of a
@@ -1465,8 +1498,13 @@ let is_anchor = function
   | Some (e, None) -> not (reparse_adaptive e)
   | _ -> false
 
-let int_bin_op i0 sz (op : Src.int_bin_op) =
-  let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
+let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
+  (* A Wax instruction at the source instruction's span. Built fresh rather than
+     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
+     their call-target hints, so one cannot be reinterpreted as the other. *)
+  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
+    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+  in
   (* An operand popped off the stack is one of three kinds:
      - an *anchor*: a present entry with tag [None] (a local, a call result) —
        its printed form fixes the width by itself, so it needs no pin;
@@ -1477,7 +1515,7 @@ let int_bin_op i0 sz (op : Src.int_bin_op) =
      [is_anchor] (top level) also excludes an adaptive select-of-holes, whose
      [None] tag would otherwise read as a grounded anchor. *)
   let is_hole = function None -> true | _ -> false in
-  let bare = Ast.no_loc Ast.Hole in
+  let bare = Ast.no_loc_instr Ast.Hole in
   let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
   (* A pinned hole: [(_ as i64)] etc. [pin_width] leaves it bare for [i32] (the
      re-parse default needs no pin), so an [i32] op adds no noise. *)
@@ -1506,7 +1544,7 @@ let int_bin_op i0 sz (op : Src.int_bin_op) =
       | _ -> false
     in
     let width = if both_flexible then width else None in
-    Stack.push_num width (with_loc (BinOp (op_loc i0 op, e1, e2)))
+    Stack.push_num width (with_loc (BinOp (op_loc i0.info op, e1, e2)))
   in
   (* A comparison yields i32 whatever its operands' width, so it *erases* it:
      [(4096 >>u 40) == 0] would re-default the shift to i32 and flip true->false.
@@ -1534,7 +1572,7 @@ let int_bin_op i0 sz (op : Src.int_bin_op) =
       | Some (e, _) -> e
       | None -> if pin2_hole then pinned else bare
     in
-    Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
+    Stack.push 1 (with_loc (BinOp (op_loc i0.info op, e1, e2)))
   in
   (* [rotl]/[rotr]: result width = receiver width, so it carries the receiver's
      flexibility (the count arg is pinned by the method once the receiver fixes
@@ -1566,7 +1604,12 @@ let int_bin_op i0 sz (op : Src.int_bin_op) =
   | Ge s -> compare (Ge (Some s))
 
 let float_un_op i0 sz (op : Src.float_un_op) =
-  let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
+  (* A Wax instruction at the source instruction's span. Built fresh rather than
+     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
+     their call-target hints, so one cannot be reinterpreted as the other. *)
+  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
+    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+  in
   (* A no-argument instruction method [recv.meth()]. *)
   let method_call recv meth =
     with_loc (Call (with_loc (StructGet (recv, Ast.no_loc meth)), []))
@@ -1577,7 +1620,8 @@ let float_un_op i0 sz (op : Src.float_un_op) =
   let e ty =
     match e' with
     | Some e -> e
-    | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty))
+    | None ->
+        Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty))
   in
   (* Pin an inlined convert SOURCE to its non-i32 opcode width, so
      [f32.convert_i64_s (i64.const 8)] does not decompile to a bare [8] that
@@ -1623,7 +1667,7 @@ let float_un_op i0 sz (op : Src.float_un_op) =
   let e_method_pinned ty = match ty with Ast.F64 -> e ty | _ -> e_pinned ty in
   Stack.push_num result_w
     (match op with
-    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e_pinned (floattype sz)))
+    | Neg -> with_loc (UnOp (op_loc i0.info Ast.Neg, e_pinned (floattype sz)))
     | Abs -> method_call (e_method_pinned (floattype sz)) "abs"
     | Ceil -> method_call (e_method_pinned (floattype sz)) "ceil"
     | Floor -> method_call (e_method_pinned (floattype sz)) "floor"
@@ -1644,13 +1688,18 @@ let float_un_op i0 sz (op : Src.float_un_op) =
           "from_bits")
 
 let float_bin_op i0 sz (op : Src.float_bin_op) =
-  let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
+  (* A Wax instruction at the source instruction's span. Built fresh rather than
+     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
+     their call-target hints, so one cannot be reinterpreted as the other. *)
+  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
+    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+  in
   (* As for [int_bin_op] (see there for the anchor/flexible/hole terminology): an
      arithmetic operator preserves the operand width and its result is flexible
      only when both operands are (else grounded, no tag); with no anchor a hole is
      pinned so it does not re-default to i32. *)
   let is_hole = function None -> true | _ -> false in
-  let bare = Ast.no_loc Ast.Hole in
+  let bare = Ast.no_loc_instr Ast.Hole in
   let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
   let pinned = Stack.pin_width arith bare in
   let symbol width op =
@@ -1669,7 +1718,7 @@ let float_bin_op i0 sz (op : Src.float_bin_op) =
       | _ -> false
     in
     let width = if both_flexible then width else None in
-    Stack.push_num width (with_loc (BinOp (op_loc i0 op, e1, e2)))
+    Stack.push_num width (with_loc (BinOp (op_loc i0.info op, e1, e2)))
   in
   (* As for [int_bin_op]: pin exactly one operand whenever no operand is an
      anchor — a hole if there is one (cast on the hole), else the first flexible
@@ -1693,7 +1742,7 @@ let float_bin_op i0 sz (op : Src.float_bin_op) =
       | Some (e, _) -> e
       | None -> if pin2_hole then pinned else bare
     in
-    Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
+    Stack.push 1 (with_loc (BinOp (op_loc i0.info op, e1, e2)))
   in
   (* [min]/[max]/[copysign]: result width = receiver width (as [rotl]). *)
   let meth name =
@@ -1742,13 +1791,17 @@ let blocktype ctx (typ : Src.blocktype option) =
       {
         Ast.params =
           Array.map
-            (fun p -> annotated p.Ast.info None (valtype ctx (snd p.Ast.desc)))
+            (fun p ->
+              (* A *Wasm* parameter entry, so not [Ast.param_type] (which reads a
+                 Wax one). *)
+              annotated p.Wax_utils.Ast.info None
+                (valtype ctx (snd p.Wax_utils.Ast.desc)))
             params;
         results = Array.map (fun t -> valtype ctx t) results;
       }
 
 let label_name (label : Src.name option) =
-  Option.map (fun l -> l.Ast.desc) label
+  Option.map (fun (l : Src.name) -> l.Wax_utils.Ast.desc) label
 
 let label_targeted ?self (instrs : _ Src.instr list) =
   (* [self] is the block's own source label name, if any. A symbolic [br $self]
@@ -1793,7 +1846,9 @@ let label_targeted ?self (instrs : _ Src.instr list) =
              catches
     | Try { block; catches; catch_all; _ } -> (
         any (depth + 1) block.desc
-        || List.exists (fun (_, b) -> any (depth + 1) b.Ast.desc) catches
+        || List.exists
+             (fun (_, b) -> any (depth + 1) b.Wax_utils.Ast.desc)
+             catches
         ||
         match catch_all with
         | Some b -> any (depth + 1) b.Ast.desc
@@ -1805,7 +1860,6 @@ let label_targeted ?self (instrs : _ Src.instr list) =
           (fun (c : Src.on_clause) ->
             match c with OnLabel (_, l) -> hit depth l | OnSwitch _ -> false)
           handlers
-    | Hinted (_, i) -> one depth i
     (* Folded WAT form: the operands [l] and the head [i] run at this same
        depth (the wrapper opens no block scope), mirroring how [instruction]
        flattens it. *)
@@ -1818,7 +1872,8 @@ let push_label ctx ~loop ~targeted label typ =
   let arity = blocktype_arity ctx typ in
   let i = if loop then fst arity else snd arity in
   let label_arities =
-    (Option.map (fun l -> l.Ast.desc) label, i) :: ctx.label_arities
+    (Option.map (fun (l : Src.name) -> l.Wax_utils.Ast.desc) label, i)
+    :: ctx.label_arities
   in
   let label, labels =
     LabelStack.push ~diagnostics:ctx.diagnostics ~targeted ctx.labels label
@@ -1940,7 +1995,8 @@ let has_compound_form : Ast.binop -> bool = function
 let set_desc target e =
   match e.Ast.desc with
   | Ast.BinOp (op, { desc = Get y; _ }, rhs)
-    when has_compound_form op.desc && String.equal y.desc target.Ast.desc ->
+    when has_compound_form op.desc
+         && String.equal y.desc target.Wax_utils.Ast.desc ->
       Ast.Set (target, Some op, rhs)
   | _ -> Ast.Set (target, None, e)
 
@@ -1965,8 +2021,24 @@ let is_poly_terminator (i : _ Ast.instr) =
       true
   | _ -> false
 
+(* Branch-hinting / compilation-hints proposals: carry a Wasm instruction's hints
+   onto the Wax instruction it decompiles to. A Wasm instruction contributes one
+   entry to the stack of Wax expressions being built, so the hints go on whatever
+   [instruction_desc] left on top. *)
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
-  let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
+  let* () = instruction_desc ctx i in
+  if Wax_wasm.Hints.is_empty i.hints then return ()
+  else
+    let hints = Wax_wasm.Hints.map_targets (fun f -> idx ctx `Func f) i.hints in
+    fun stack ->
+      match stack with
+      | (arity, w, top) :: rem -> ((arity, w, { top with Ast.hints }) :: rem, ())
+      | [] -> ([], ())
+
+and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
+  let with_loc (i' : _ Ast.instr_desc) : _ Ast.instr =
+    { Ast.desc = i'; info = i.info; hints = Wax_wasm.Hints.none }
+  in
   let mem_call m meth args =
     with_loc
       (Ast.Call
@@ -2138,7 +2210,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let targeted =
         let self = label_name label in
         label_targeted ?self block.desc
-        || List.exists (fun (_, b) -> label_targeted ?self b.Ast.desc) catches
+        || List.exists
+             (fun (_, b) -> label_targeted ?self b.Wax_utils.Ast.desc)
+             catches
         ||
         match catch_all with
         | Some b -> label_targeted ?self b.Ast.desc
@@ -2152,15 +2226,16 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
           (fun (t, block) ->
             ( idx ctx `Tag t,
               Ast.no_loc
-                (Stack.run ~results:outputs (instructions ctx block.Ast.desc))
-            ))
+                (Stack.run ~results:outputs
+                   (instructions ctx block.Wax_utils.Ast.desc)) ))
           catches
       in
       let catch_all =
         Option.map
           (fun block ->
             Ast.no_loc
-              (Stack.run ~results:outputs (instructions ctx block.Ast.desc)))
+              (Stack.run ~results:outputs
+                 (instructions ctx block.Wax_utils.Ast.desc)))
           catch_all
       in
       let* () = Stack.consume inputs in
@@ -2202,15 +2277,6 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let input = label_arity ctx i in
       let* args = Stack.grab (input + 1) in
       Stack.push input (with_loc (Br_if (label ctx i, sequence args)))
-  (* Branch-hinting proposal: convert the wrapped branch, then re-wrap the Wax
-     instruction it left on the stack in [Hinted]. *)
-  | Hinted (h, inner) -> (
-      let* () = instruction ctx inner in
-      fun stack ->
-        match stack with
-        | (arity, w, top) :: rem ->
-            ((arity, w, with_loc (Hinted (h, top))) :: rem, ())
-        | [] -> ([], ()))
   | Br_table (labels, lab) ->
       let input = label_arity ctx lab in
       let* args = Stack.grab (input + 1) in
@@ -2265,7 +2331,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
          value/condition reorder, is the ternary's *first* element (the
          condition), not its last, breaking the wax→wat→wax round-trip. *)
       let* () = instructions ctx l in
-      instruction ctx { head with Ast.info = i.info }
+      instruction ctx { head with Src.info = i.Src.info }
   | LocalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Local x)))
   | GlobalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Global x)))
   | LocalSet x ->
@@ -2465,8 +2531,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Const c ->
       let lit, ty, width =
         match c with
-        | I32 n -> (integer i n, Ast.I32, `I32)
-        | I64 n -> (integer i n, Ast.I64, `I64)
+        | I32 n -> (integer i.Src.info n, Ast.I32, `I32)
+        | I64 n -> (integer i.Src.info n, Ast.I64, `I64)
         | F32 f -> (float i f, Ast.F32, `F32)
         | F64 f -> (float i f, Ast.F64, `F64)
       in
@@ -2649,7 +2715,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* o2 = Stack.try_pop in
       let* o1 = Stack.try_pop in
       let* backing = Stack.effective_backing is_poly_terminator in
-      let bare = Ast.no_loc Ast.Hole in
+      let bare = Ast.no_loc_instr Ast.Hole in
       let backed =
         Option.is_some o1 || Option.is_some o2 || Option.is_some backing
       in
@@ -2659,11 +2725,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         | None ->
             if backed then bare
             else
-              Ast.no_loc
+              Ast.no_loc_instr
                 (Ast.Cast (bare, Valtype (Ref { nullable = true; typ = Eq })))
       in
       let e2 = match o2 with Some e -> e | None -> bare in
-      Stack.push 1 (with_loc (BinOp (op_loc i Ast.Eq, e1, e2)))
+      Stack.push 1 (with_loc (BinOp (op_loc i.info Ast.Eq, e1, e2)))
   | RefFunc f -> Stack.push 1 (with_loc (Get (idx ctx `Func f)))
   | RefNull typ ->
       Stack.push 1
@@ -2694,17 +2760,18 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* o = Stack.try_pop in
       let* backing = Stack.effective_backing is_poly_terminator in
       let any_pin e =
-        Ast.no_loc (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Any })))
+        Ast.no_loc_instr
+          (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Any })))
       in
       let e =
         match o with
         | Some ({ Ast.desc = Ast.Select _; _ } as e) -> any_pin e
         | Some e -> e
         | None ->
-            if Option.is_some backing then Ast.no_loc Ast.Hole
-            else any_pin (Ast.no_loc Ast.Hole)
+            if Option.is_some backing then Ast.no_loc_instr Ast.Hole
+            else any_pin (Ast.no_loc_instr Ast.Hole)
       in
-      Stack.push 1 (with_loc (UnOp (op_loc i Ast.Not, e)))
+      Stack.push 1 (with_loc (UnOp (op_loc i.info Ast.Not, e)))
   | Select tys -> (
       (* The Wax [?:] carries no result type, so resolve the annotation (if any)
          both to catch an out-of-range type reference and to recover the single
@@ -2739,17 +2806,19 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
           let pin1_hole = is_hole o1 in
           let pin2_hole = is_hole o2 && not pin1_hole in
           let pin1_flex = (not pin1_hole) && not pin2_hole in
-          let pinned = Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype t)) in
+          let pinned =
+            Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype t))
+          in
           let cast e = { e with Ast.desc = Ast.Cast (e, Valtype t) } in
           let e1 =
             match o1 with
             | Some (e, _) -> if pin1_flex then cast e else e
-            | None -> if pin1_hole then pinned else Ast.no_loc Ast.Hole
+            | None -> if pin1_hole then pinned else Ast.no_loc_instr Ast.Hole
           in
           let e2 =
             match o2 with
             | Some (e, _) -> e
-            | None -> if pin2_hole then pinned else Ast.no_loc Ast.Hole
+            | None -> if pin2_hole then pinned else Ast.no_loc_instr Ast.Hole
           in
           Stack.push_num None (with_loc (Select (cond, e1, e2)))
       | _ ->
@@ -2767,7 +2836,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
              width tag ([f32.const], a small [i64.const]) is pinned directly
              ([_ ? (0x0 as f32) : _]) — otherwise the bare literal re-defaults
              (f32 -> f64, i64 -> i32) on re-parse. *)
-          let hole = Ast.no_loc Ast.Hole in
+          let hole = Ast.no_loc_instr Ast.Hole in
           let e1, e2, width =
             match (o1, o2) with
             | Some (a, wa), Some (b, wb) ->
@@ -3005,12 +3074,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       let else_body =
         Option.map
-          (fun b ->
+          (fun (b : (_ Src.instr list, Ast.location) Ast.Annot.annotated) ->
             {
               b with
               Ast.desc =
                 with_cond ctx ~location:i.info cond false (fun () ->
-                    Stack.run (instructions ctx b.Ast.desc));
+                    Stack.run (instructions ctx b.desc));
             })
           else_body
       in
@@ -3124,25 +3193,26 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* v = Stack.pop_width_preserved in
       Stack.push 1
         (meth_call v (Simd.extract_name s sign)
-           [ integer i (Int.to_string lane) ])
+           [ integer i.Src.info (Int.to_string lane) ])
   | VecReplace (s, lane) ->
       let* value = Stack.pop_width_preserved in
       let* v = Stack.pop_width_preserved in
       Stack.push 1
         (meth_call v (Simd.replace_name s)
-           [ integer i (Int.to_string lane); value ])
+           [ integer i.Src.info (Int.to_string lane); value ])
   | VecShuffle lanes ->
       let* e2 = Stack.pop_width_preserved in
       let* e1 = Stack.pop_width_preserved in
       let imms =
-        List.init 16 (fun k -> integer i (Int.to_string (Char.code lanes.[k])))
+        List.init 16 (fun k ->
+            integer i.Src.info (Int.to_string (Char.code lanes.[k])))
       in
       Stack.push 1 (meth_call e1 Simd.shuffle_name (imms @ [ e2 ]))
   | VecConst v ->
       let lit =
         match v.Wax_utils.V128.shape with
         | F32x4 | F64x2 -> float i
-        | I8x16 | I16x8 | I32x4 | I64x2 -> integer i
+        | I8x16 | I16x8 | I32x4 | I64x2 -> integer i.Src.info
       in
       Stack.push 1
         (path_call Simd.free_namespace
@@ -3173,7 +3243,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1
         (mem_call m (Simd.load_lane_name w)
            (addr :: v
-           :: labelled with_loc "lane" (integer i (Int.to_string lane))
+           :: labelled with_loc "lane" (integer i.Src.info (Int.to_string lane))
            :: mem_extra with_loc memarg nat))
   | VecStoreLane (m, w, memarg, lane) ->
       let* v = Stack.pop_width_preserved in
@@ -3182,7 +3252,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0
         (mem_call m (Simd.store_lane_name w)
            (addr :: v
-           :: labelled with_loc "lane" (integer i (Int.to_string lane))
+           :: labelled with_loc "lane" (integer i.Src.info (Int.to_string lane))
            :: mem_extra with_loc memarg nat))
 
 and instructions ctx l =
@@ -3197,8 +3267,8 @@ and instructions ctx l =
 let bind_locals st l =
   List.map
     (fun e ->
-      let _, t = e.Ast.desc in
-      Ast.no_loc
+      let _, t = e.Wax_utils.Ast.desc in
+      Ast.no_loc_instr
         (Ast.Let
            ( [ (Some (Sequence.get_current st.locals), Some (valtype st t)) ],
              None )))
@@ -3219,8 +3289,12 @@ let typeuse ctx ((typ, sign) : Src.typeuse) =
   | None ->
       (Option.map (fun i -> idx ctx `Type i) typ, Option.map signature sign)
 
-let string_of_name (nm : Src.name) =
-  { nm with desc = Ast.String (None, nm.desc) }
+let string_of_name (nm : Src.name) : Ast.location Ast.instr =
+  {
+    desc = Ast.String (None, nm.Wax_utils.Ast.desc);
+    info = nm.Wax_utils.Ast.info;
+    hints = Wax_wasm.Hints.none;
+  }
 
 (* Reserve, in a function's fresh local namespace, the Wax names of the
    module-level entities its body references by a bare identifier: globals (via
@@ -3240,20 +3314,21 @@ let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   | Try { block; catches; catch_all; _ } ->
       reserve_module_names_in_instrs ctx ns block.desc;
       List.iter
-        (fun (_, block) -> reserve_module_names_in_instrs ctx ns block.Ast.desc)
+        (fun (_, block) ->
+          reserve_module_names_in_instrs ctx ns block.Wax_utils.Ast.desc)
         catches;
       Option.iter
-        (fun block -> reserve_module_names_in_instrs ctx ns block.Ast.desc)
+        (fun block ->
+          reserve_module_names_in_instrs ctx ns block.Wax_utils.Ast.desc)
         catch_all
   | If_annotation { then_body; else_body; _ } ->
       reserve_module_names_in_instrs ctx ns then_body.desc;
       Option.iter
-        (fun b -> reserve_module_names_in_instrs ctx ns b.Ast.desc)
+        (fun b -> reserve_module_names_in_instrs ctx ns b.Wax_utils.Ast.desc)
         else_body
   | Folded (i, l) ->
       reserve_module_names_in_instrs ctx ns l;
       reserve_module_names_in_instr ctx ns i
-  | Hinted (_, i) -> reserve_module_names_in_instr ctx ns i
   | GlobalGet x | GlobalSet x -> Namespace.reserve ns (idx ctx `Global x).desc
   | Call f | ReturnCall f | RefFunc f ->
       Namespace.reserve ns (idx ctx `Func f).desc
@@ -3313,20 +3388,19 @@ let rec collect_elem_refs ctx acc (i : _ Src.instr) =
   | If_annotation { then_body; else_body; _ } ->
       collect_elem_refs_instrs ctx acc then_body.desc;
       Option.iter
-        (fun b -> collect_elem_refs_instrs ctx acc b.Ast.desc)
+        (fun b -> collect_elem_refs_instrs ctx acc b.Wax_utils.Ast.desc)
         else_body
   | Try { block; catches; catch_all; _ } ->
       collect_elem_refs_instrs ctx acc block.desc;
       List.iter
-        (fun (_, b) -> collect_elem_refs_instrs ctx acc b.Ast.desc)
+        (fun (_, b) -> collect_elem_refs_instrs ctx acc b.Wax_utils.Ast.desc)
         catches;
       Option.iter
-        (fun b -> collect_elem_refs_instrs ctx acc b.Ast.desc)
+        (fun b -> collect_elem_refs_instrs ctx acc b.Wax_utils.Ast.desc)
         catch_all
   | Folded (i, l) ->
       collect_elem_refs_instrs ctx acc l;
       collect_elem_refs ctx acc i
-  | Hinted (_, i) -> collect_elem_refs ctx acc i
   | TableInit (_, e) | ElemDrop e | ArrayNewElem (_, e) | ArrayInitElem (_, e)
     -> (
       try Hashtbl.replace acc (idx ctx `Elem e).desc () with _ -> ())
@@ -3347,15 +3421,20 @@ let rec collect_local_refs acc (i : _ Src.instr) =
       collect_local_refs_instrs acc else_block.desc
   | If_annotation { then_body; else_body; _ } ->
       collect_local_refs_instrs acc then_body.desc;
-      Option.iter (fun b -> collect_local_refs_instrs acc b.Ast.desc) else_body
+      Option.iter
+        (fun b -> collect_local_refs_instrs acc b.Wax_utils.Ast.desc)
+        else_body
   | Try { block; catches; catch_all; _ } ->
       collect_local_refs_instrs acc block.desc;
-      List.iter (fun (_, b) -> collect_local_refs_instrs acc b.Ast.desc) catches;
-      Option.iter (fun b -> collect_local_refs_instrs acc b.Ast.desc) catch_all
+      List.iter
+        (fun (_, b) -> collect_local_refs_instrs acc b.Wax_utils.Ast.desc)
+        catches;
+      Option.iter
+        (fun b -> collect_local_refs_instrs acc b.Wax_utils.Ast.desc)
+        catch_all
   | Folded (i, l) ->
       collect_local_refs_instrs acc l;
       collect_local_refs acc i
-  | Hinted (_, i) -> collect_local_refs acc i
   | LocalGet x | LocalSet x | LocalTee x -> (
       match x.Ast.desc with Num n -> Hashtbl.replace acc n () | Id _ -> ())
   | _ -> ()
@@ -3401,13 +3480,14 @@ let folded_attrs ctx ~location entries make =
       else Some (make (Some (simplify_guard ctx ~location syn)) nm))
     entries
 
-let exports ctx kind name e =
+let exports ctx kind name e : Ast.attributes =
   (* Reuse the bare [#[export]] short form when the export name matches the
      field's own Wax name; only a differing name needs to be spelled out.
      [guard] makes just this export conditional. *)
-  let attr guard nm =
+  let attr guard (nm : Src.name) =
     let value =
-      if nm.Ast.desc = name.Ast.desc then None else Some (string_of_name nm)
+      if nm.Wax_utils.Ast.desc = (name : Src.name).Wax_utils.Ast.desc then None
+      else Some (string_of_name nm)
     in
     ("export", value, guard)
   in
@@ -3431,8 +3511,8 @@ let exports ctx kind name e =
 
 (* The [#[start]] attribute(s) on function [name]: a [(start …)] whose branch is
    reachable here, plain or guarded like a standalone export. *)
-let start_attribute ctx name =
-  match Hashtbl.find_opt ctx.starts name.Ast.desc with
+let start_attribute ctx name : Ast.attributes =
+  match Hashtbl.find_opt ctx.starts name.Wax_utils.Ast.desc with
   | None -> []
   | Some entries ->
       folded_attrs ctx ~location:name.Ast.info
@@ -3496,7 +3576,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         let convert_params ~claimed params =
           Array.mapi
             (fun i p ->
-              let id, t = p.Ast.desc in
+              let id, t = p.Wax_utils.Ast.desc in
               let pat =
                 if
                   Option.is_none id
@@ -3556,14 +3636,14 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         let claim id =
           match id with
           | Some nm
-            when Lexer.is_valid_identifier nm.Ast.desc
+            when Lexer.is_valid_identifier nm.Wax_utils.Ast.desc
                  && not (Hashtbl.mem claimed nm.Ast.desc) ->
               Hashtbl.replace claimed nm.Ast.desc
                 (Sequence.claim_name ctx.locals ~loc:nm.Ast.info nm.Ast.desc)
           | _ -> ()
         in
-        Array.iter (fun p -> claim (fst p.Ast.desc)) param_arr;
-        List.iter (fun e -> claim (fst e.Ast.desc)) locals;
+        Array.iter (fun p -> claim (fst p.Wax_utils.Ast.desc)) param_arr;
+        List.iter (fun e -> claim (fst e.Wax_utils.Ast.desc)) locals;
         let sign =
           let params = convert_params ~claimed param_arr in
           Sequence.consume_currents ctx.locals;
@@ -3582,7 +3662,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         List.iter
           (fun e ->
             Sequence.register ~claimed ctx.locals export_tbl None
-              (fst e.Ast.desc) [])
+              (fst e.Wax_utils.Ast.desc) [])
           locals;
         let locals = bind_locals ctx locals in
         let name = Sequence.get_current ctx.functions in
@@ -3603,7 +3683,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         let build ?(start = []) id kind export_kind =
           let attributes =
             start
-            @ (if nm.Ast.desc = id.Ast.desc then []
+            @ (if nm.Ast.desc = id.Wax_utils.Ast.desc then []
                else [ ("import", Some (string_of_name nm), None) ])
             @ exports ctx export_kind id e
           in
@@ -3684,7 +3764,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
               [
                 {
                   Ast.data_name = None;
-                  offset = Ast.no_loc (Ast.Int "0");
+                  offset = Ast.no_loc_instr (Ast.Int "0");
                   init = data_init_to_wax ctx bytes;
                 };
               ]
@@ -3739,7 +3819,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                   {
                     name = Sequence.fresh_name ctx.elems;
                     reftype = reftype ctx tt.Src.reftype;
-                    mode = EActive (name, Ast.no_loc (Ast.Int "0"));
+                    mode = EActive (name, Ast.no_loc_instr (Ast.Int "0"));
                     init = elem_init;
                     attributes = [];
                   }
@@ -3821,11 +3901,12 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                typ = None;
                def =
                  {
-                   f with
                    desc =
                      String
                        ( Option.map (idx ctx `Type) typ,
                          Wax_utils.Ast.concat_desc init );
+                   info = f.Ast.info;
+                   hints = Wax_wasm.Hints.none;
                  };
                attributes = [];
              })
@@ -3848,12 +3929,18 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         in
         let else_fields =
           Option.map
-            (fun e ->
+            (fun (e :
+                   ( ( Ast.location Src.modulefield,
+                       Ast.location )
+                     Ast.Annot.annotated
+                     list,
+                     Ast.location )
+                   Ast.Annot.annotated) ->
               {
                 e with
                 Ast.desc =
                   with_cond ctx ~location:f.info cond false (fun () ->
-                      List.concat_map (modulefield ctx export_tbl) e.Ast.desc);
+                      List.concat_map (modulefield ctx export_tbl) e.desc);
               })
             else_fields
         in
@@ -3901,7 +3988,7 @@ let functype_key ctx (ft : Src.functype) =
     | Ref { nullable; typ } -> `Ref (nullable, heaptype_key typ)
     | v -> `Scalar v
   in
-  ( Array.map (fun p -> valtype_key (snd p.Ast.desc)) ft.params,
+  ( Array.map (fun p -> valtype_key (snd p.Wax_utils.Ast.desc)) ft.params,
     Array.map valtype_key ft.results )
 
 (* Populate [ctx.implicit_types] with the function types the WAT text format
@@ -3928,7 +4015,7 @@ let elaborate_implicit_types ctx fields =
       | Types rectype ->
           Array.iter
             (fun e ->
-              (match (snd e.Ast.desc : Src.subtype).typ with
+              (match (snd e.Wax_utils.Ast.desc : Src.subtype).typ with
               | Func ft -> record ft
               | Struct _ | Array _ | Cont _ -> ());
               incr next)
@@ -3950,7 +4037,7 @@ let elaborate_implicit_types ctx fields =
   in
   let blocktype = function Some (Src.Typeuse tu) -> consider tu | _ -> () in
   let rec instr (i : _ Src.instr) =
-    match i.Ast.desc with
+    match i.desc with
     | CallIndirect (_, tu) | ReturnCallIndirect (_, tu) -> consider tu
     | Block { typ; block; _ } | Loop { typ; block; _ } ->
         blocktype typ;
@@ -3965,15 +4052,14 @@ let elaborate_implicit_types ctx fields =
     | Try { typ; block; catches; catch_all; _ } ->
         blocktype typ;
         instrs block.desc;
-        List.iter (fun (_, b) -> instrs b.Ast.desc) catches;
-        Option.iter (fun b -> instrs b.Ast.desc) catch_all
+        List.iter (fun (_, b) -> instrs b.Wax_utils.Ast.desc) catches;
+        Option.iter (fun b -> instrs b.Wax_utils.Ast.desc) catch_all
     | If_annotation { then_body; else_body; _ } ->
         instrs then_body.desc;
-        Option.iter (fun b -> instrs b.Ast.desc) else_body
+        Option.iter (fun b -> instrs b.Wax_utils.Ast.desc) else_body
     | Folded (i, l) ->
         instr i;
         instrs l
-    | Hinted (_, i) -> instr i
     | _ -> ()
   and instrs l = List.iter instr l in
   List.iter
@@ -4028,7 +4114,7 @@ let register_names ctx export_tbl fields =
         | Types rectype ->
             Array.iter
               (fun e ->
-                let id, ty = e.Ast.desc in
+                let id, ty = e.Wax_utils.Ast.desc in
                 let name = Sequence.register' ctx.types export_tbl None id [] in
                 CondTbl.add ctx.type_defs ctx.cond_asm name ty;
                 match (ty : Src.subtype).typ with
@@ -4094,7 +4180,7 @@ let register_names ctx export_tbl fields =
             Option.iter
               (fun e ->
                 with_cond ctx ~location:field.info cond false (fun () ->
-                    pass1 e.Ast.desc))
+                    pass1 e.Wax_utils.Ast.desc))
               else_fields)
       (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
   in
@@ -4120,7 +4206,7 @@ let register_names ctx export_tbl fields =
             Option.iter
               (fun e ->
                 with_cond ctx ~location:field.info cond false (fun () ->
-                    pass2 e.Ast.desc))
+                    pass2 e.Wax_utils.Ast.desc))
               else_fields
         | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
         | Table _ | Tag _ | String_global _ | Import_group1 _ | Import_group2 _
@@ -4165,7 +4251,7 @@ let collect_exports cond_env diagnostics fields =
               (fun e ->
                 go
                   (Cond.and_ asm (Cond.not_ c))
-                  (syn @ [ Cond_not cond ]) e.Ast.desc)
+                  (syn @ [ Cond_not cond ]) e.Wax_utils.Ast.desc)
               else_fields
         | _ -> ())
       fields
@@ -4182,7 +4268,7 @@ let rec module_has_conditional fields =
       | Module_if_annotation { then_fields; else_fields; _ } ->
           module_has_conditional then_fields.desc
           || Option.fold ~none:false
-               ~some:(fun e -> module_has_conditional e.Ast.desc)
+               ~some:(fun e -> module_has_conditional e.Wax_utils.Ast.desc)
                else_fields
           || true
       | _ -> false)
@@ -4203,7 +4289,7 @@ let rec count_memories fields =
           + max
               (count_memories then_fields.desc)
               (Option.fold ~none:0
-                 ~some:(fun e -> count_memories e.Ast.desc)
+                 ~some:(fun e -> count_memories e.Wax_utils.Ast.desc)
                  else_fields)
       | _ -> n)
     0
@@ -4219,7 +4305,7 @@ let rec count_tables fields =
           + max
               (count_tables then_fields.desc)
               (Option.fold ~none:0
-                 ~some:(fun e -> count_tables e.Ast.desc)
+                 ~some:(fun e -> count_tables e.Wax_utils.Ast.desc)
                  else_fields)
       | _ -> n)
     0
@@ -4260,8 +4346,8 @@ let extra_type_decls ctx =
    one [import "module" { ... }] block; a lone import stays as the standalone
    [import "module" <decl>;] form. Recurses through groups and conditionals. *)
 let rec group_imports fields =
-  let recurse f =
-    match f.Ast.desc with
+  let recurse (f : (_ Ast.modulefield, _) Ast.Annot.annotated) =
+    match f.desc with
     | Ast.Conditional c ->
         {
           f with
@@ -4276,7 +4362,8 @@ let rec group_imports fields =
                   };
                 else_fields =
                   Option.map
-                    (fun b -> { b with Ast.desc = group_imports b.Ast.desc })
+                    (fun b ->
+                      { b with Ast.Annot.desc = group_imports b.Ast.Annot.desc })
                     c.else_fields;
               };
         }
@@ -4284,12 +4371,12 @@ let rec group_imports fields =
   in
   let rec merge acc = function
     | [] -> List.rev acc
-    | f :: rest -> (
-        match f.Ast.desc with
+    | (f : (_ Ast.modulefield, _) Ast.Annot.annotated) :: rest -> (
+        match f.desc with
         | Ast.Import { module_; decl } ->
             let rec take group_acc = function
-              | g :: tl
-                when match g.Ast.desc with
+              | (g : (_ Ast.modulefield, _) Ast.Annot.annotated) :: tl
+                when match g.desc with
                      | Ast.Import { module_ = m2; _ } ->
                          m2.Ast.desc = module_.desc
                      | _ -> false ->
@@ -4413,7 +4500,9 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
           collect_elem_refs_instrs ctx ctx.referenced_elems instrs
       | Module_if_annotation { then_fields; else_fields; _ } ->
           List.iter collect_field then_fields.desc;
-          Option.iter (fun e -> List.iter collect_field e.Ast.desc) else_fields
+          Option.iter
+            (fun e -> List.iter collect_field e.Wax_utils.Ast.desc)
+            else_fields
       | _ -> ()
     in
     List.iter collect_field fields;
@@ -4467,7 +4556,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
                         [
                           ( "feature",
                             Some
-                              (Ast.no_loc
+                              (Ast.no_loc_instr
                                  (Ast.String
                                     (None, Wax_utils.Feature.name feature))),
                             None );

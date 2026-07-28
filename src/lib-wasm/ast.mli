@@ -18,6 +18,13 @@ val no_loc : 'desc -> ('desc, location) annotated
 val dummy_loc : location
 (** A location with dummy start/end positions, for synthesized nodes. *)
 
+module Annot = Wax_utils.Ast
+(** An instruction record shares the [desc]/[info] field names with
+    {!annotated}; inside {!Make_instructions} it is declared later and so wins
+    field disambiguation wherever the receiver's type is not already known. Read
+    a *generic* node's fields through this alias to say which record is meant:
+    [x.Annot.desc]. *)
+
 module Uint32 = Wax_utils.Uint32
 module Uint64 = Wax_utils.Uint64
 
@@ -592,11 +599,6 @@ end) : sig
     | Br_on_cast_fail of X.idx * X.reftype * X.reftype
     | Br_on_cast_desc_eq of X.idx * X.reftype * X.reftype
     | Br_on_cast_desc_eq_fail of X.idx * X.reftype * X.reftype
-    (* Branch-hinting proposal: wraps a conditional branch ([if], [br_if], or a
-       [br_on_*]) with its hint ([true] = likely taken, [false] = unlikely). No
-       bytecode of its own; the hint is emitted into the [metadata.code.branch_hint]
-       section at the wrapped instruction's offset. *)
-    | Hinted of (* likely *) bool * 'info instr
     | Return
     | Call of X.idx
     | CallRef of X.idx
@@ -703,7 +705,21 @@ end) : sig
         else_body : ('info instr list, location) annotated option;
       }
 
-  and 'info instr = ('info instr_desc, 'info) annotated
+  and 'info instr = {
+    desc : 'info instr_desc;
+    info : 'info;
+    hints : X.idx Hints.t;
+        (** The advisory [metadata.code.*] metadata of this instruction
+            (branch-hinting and compilation-hints proposals). A field rather
+            than a wrapper node, so that the matches on [desc] — which is nearly
+            every match on an instruction — neither see it nor have to see
+            through it. *)
+  }
+
+  val no_loc : location instr_desc -> location instr
+  (** A synthesized instruction: no source location, no hints. The instruction
+      counterpart of {!Ast.no_loc}, which builds an {!annotated} and so cannot
+      serve a record that carries hints as well. *)
 
   type 'info expr = 'info instr list
   (** A sequence of instructions. *)

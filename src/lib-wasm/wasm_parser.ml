@@ -479,10 +479,15 @@ let memarg ch =
   let o = uint64 ch in
   (m, { align = Wax_utils.Uint64.of_int (1 lsl a); offset = o })
 
+(* An instruction, located at the byte range it was decoded from: its
+   [loc_start.pos_cnum] is the absolute file offset of its opcode, which is what
+   lets the [metadata.code.…] attach passes match a hint's body-relative offset.
+   The hints start empty and those passes fill them in. *)
 let with_loc ch pos desc =
   {
-    Ast.desc;
+    desc;
     info = { Ast.loc_start = position ch pos; loc_end = position ch ch.pos };
+    hints = Hints.none;
   }
 
 (* Consume the [end] opcode (0x0B) that terminates a block or expression. *)
@@ -1549,7 +1554,7 @@ let indirect_name_map ch =
    entries: for each (absolute) function index, a list of (body-relative offset,
    hint). [code_starts] gives, in defined-function order, the byte offset where
    each function body (its locals declaration) begins — the origin for those
-   offsets. Wrap in [Hinted] the instruction whose opcode sits at the matching
+   offsets. Set the hint on the instruction whose opcode sits at the matching
    offset (its source location records that absolute offset). Whether that
    instruction is a legal target is a validation concern, not a decoding one, so
    the hint is attached wherever its offset lands and [validation] rejects a
@@ -1611,7 +1616,7 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
       let i = { i with desc } in
       let rel = i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum - start_pos in
       match Hashtbl.find_opt tbl rel with
-      | Some h -> { i with desc = Hinted (h, i) }
+      | Some h -> { i with hints = Hints.branch i.info h i.hints }
       | None -> i
     in
     List.mapi
