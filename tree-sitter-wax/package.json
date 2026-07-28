@@ -27,8 +27,9 @@
   ],
   "scripts": {
     "generate": "tree-sitter generate",
-    "test": "tree-sitter test && ./scripts/smoke-parse.sh",
-    "smoke": "tree-sitter generate && ./scripts/smoke-parse.sh",
+    "test": "tree-sitter test && ./scripts/smoke-parse.sh && ./scripts/check-queries.sh",
+    "smoke": "tree-sitter generate && ./scripts/smoke-parse.sh && ./scripts/check-queries.sh",
+    "check-queries": "./scripts/check-queries.sh",
     "parse": "tree-sitter parse",
     "install": "node-gyp-build"
   },

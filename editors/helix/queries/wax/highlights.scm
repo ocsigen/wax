@@ -8,16 +8,19 @@
 ["if" "else" "match" "dispatch"] @keyword.control.conditional
 ["do" "while" "loop"] @keyword.control.repeat
 ["return" "become"] @keyword.control.return
-["throw" "throw_ref" "try" "catch"] @keyword.control.exception
+["throw" "throw_ref" "try" "try_legacy" "catch"] @keyword.control.exception
 [
   "br" "br_if" "br_table"
   "br_on_null" "br_on_non_null" "br_on_cast" "br_on_cast_fail"
 ] @keyword.control
 "import" @keyword.control.import
-[
-  "tag" "cont" "cont_new" "cont_bind" "suspend"
-  "resume" "resume_throw" "resume_throw_ref" "switch"
-] @keyword
+; The stack-switching operations are method calls and `T::` constructors, not
+; keywords; `suspend` and the postfix `on` clause are all that is left.
+["tag" "cont" "suspend" "on"] @keyword
+
+; `switch` is a plain identifier everywhere else, but names a handler target in
+; an `on` clause.
+(on_clause "switch" @keyword)
 ["fn" "let" "const" "type" "rec" "memory" "data" "table" "elem"] @keyword.storage.type
 ["mut" "open" "shared" "pagesize" "descriptor" "describes"] @keyword.storage.modifier
 ["as" "is"] @keyword.operator
@@ -31,6 +34,9 @@
 
 ; Constants / special values
 [(null) (nop) (unreachable) (inf) (nan)] @constant.builtin
+
+; A match arm's null test is the bare token, not a `null` expression node.
+(match_arm "null" @constant.builtin)
 
 ; Literals
 (integer_literal) @constant.numeric.integer
@@ -73,7 +79,7 @@
   "<=" "<=s" "<=u" ">=" ">=s" ">=u"
   "+=" "-=" "*=" "/=" "/s=" "/u=" "%s=" "%u="
   "&=" "|=" "^=" "<<=" ">>s=" ">>u="
-  "=" ":=" "!" "?" "->" "=>" ".." "@"
+  "=" ":=" "!" "?" "->" "=>" ".." "@" "++"
 ] @operator
 
 ["(" ")" "{" "}" "[" "]"] @punctuation.bracket

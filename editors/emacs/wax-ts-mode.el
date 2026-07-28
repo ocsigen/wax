@@ -42,11 +42,15 @@ result to standard output."
 ;; imports; the rest declare or control.
 (defvar wax-ts-mode--keywords
   '("fn" "let" "const" "type" "rec" "memory" "data" "table" "elem" "import"
-    "tag" "cont" "cont_new" "cont_bind" "suspend" "resume" "resume_throw"
-    "resume_throw_ref" "switch" "if" "else" "match" "dispatch" "do" "while"
-    "loop" "return" "become" "try" "catch" "throw" "throw_ref" "br" "br_if"
-    "br_table" "br_on_null" "br_on_non_null" "br_on_cast" "br_on_cast_fail")
-  "Wax keywords for font-locking.")
+    "tag" "cont" "suspend" "on" "if" "else" "match" "dispatch" "do" "while"
+    "loop" "return" "become" "try" "try_legacy" "catch" "throw" "throw_ref"
+    "br" "br_if" "br_table" "br_on_null" "br_on_non_null" "br_on_cast"
+    "br_on_cast_fail")
+  "Wax keywords for font-locking.
+Every entry must be an anonymous token of the tree-sitter grammar; one
+that is not breaks the whole font-lock query.  The stack-switching
+operations are method calls and `T::' constructors, not keywords, and
+`switch' is a keyword only inside an `on' clause (see below).")
 
 (defvar wax-ts-mode--modifiers
   '("mut" "open" "shared" "pagesize" "descriptor" "describes")
@@ -76,11 +80,15 @@ result to standard output."
    :feature 'keyword
    `([,@wax-ts-mode--keywords] @font-lock-keyword-face
      [,@wax-ts-mode--modifiers] @font-lock-keyword-face
-     ["as" "is"] @font-lock-keyword-face)
+     ["as" "is"] @font-lock-keyword-face
+     ;; `switch' is a plain identifier everywhere but an `on' clause.
+     (on_clause "switch" @font-lock-keyword-face))
 
    :language 'wax
    :feature 'constant
    '([(null) (nop) (unreachable) (inf) (nan)] @font-lock-constant-face
+     ;; A match arm's null test is the bare token, not a `null' node.
+     (match_arm "null" @font-lock-constant-face)
      (label) @font-lock-constant-face)
 
    :language 'wax
@@ -128,7 +136,9 @@ result to standard output."
    :feature 'operator
    '(["+" "-" "*" "/" "/s" "/u" "%s" "%u" "&" "|" "^" "<<" ">>s" ">>u"
       "==" "!=" "<" "<s" "<u" ">" ">s" ">u" "<=" "<=s" "<=u" ">=" ">=s" ">=u"
-      "=" ":=" "!" "?" "->" "=>" ".." "@"]
+      "+=" "-=" "*=" "/=" "/s=" "/u=" "%s=" "%u="
+      "&=" "|=" "^=" "<<=" ">>s=" ">>u="
+      "=" ":=" "!" "?" "->" "=>" ".." "@" "++"]
      @font-lock-operator-face))
   "Tree-sitter font-lock settings for `wax-ts-mode'.")
 

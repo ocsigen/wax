@@ -30,6 +30,7 @@ with a small set of documented, value-level exceptions (see below).
 | `test/corpus/*.txt` | S-expression unit tests (`tree-sitter test`). |
 | `test/expected-errors.txt` | Fixtures that must be *rejected* (negative tests). |
 | `scripts/smoke-parse.sh` | Parse the whole curated corpus; assert zero `ERROR`/`MISSING`. |
+| `scripts/check-queries.sh` | Compile every query in the repo (here and under `editors/`) against the grammar. |
 | `scripts/extract-doc-blocks.sh` | Pull ```` ```wax ```` blocks out of `docs/src/examples.md`. |
 | `bindings/` | Node and Rust bindings. |
 
@@ -43,11 +44,17 @@ npm install
 npx tree-sitter generate      # regenerate src/parser.c from grammar.js
 npx tree-sitter test          # run test/corpus/*.txt
 ./scripts/smoke-parse.sh      # differential/zero-error check over the corpus
+./scripts/check-queries.sh    # every query still names nodes the grammar has
 npx tree-sitter parse FILE    # parse one file
 ```
 
 After editing `grammar.js`, always re-run `tree-sitter generate` and commit the
 regenerated `src/` files.
+
+When a node or token disappears (a keyword becoming a method call, say), the
+queries that named it stop compiling, and the host silently loses the whole
+feature — so run `check-queries.sh`, which covers `queries/` here *and* the
+Helix and Emacs query sets under [`editors/`](../editors/).
 
 ## Relationship to the compiler
 
@@ -58,9 +65,11 @@ tooling-appropriate ways:
 
 1. **No type or semantic checking.** Syntactically well-formed but
    ill-typed programs parse cleanly (they are positive parse tests).
-2. **No value-range checks.** A page size that is not a power of two, a `\u{…}`
-   escape beyond `U+10FFFF`, or an exact marker on an abstract heap type
-   (`&!any`) parse here but are rejected by the compiler's parser.
+2. **No value- or name-level checks.** A page size that is not a power of two, a
+   `\u{…}` escape beyond `U+10FFFF`, an exact marker on an abstract heap type
+   (`&!any`), an unknown type name in a value-type position, or an attribute
+   other than `#[likely]`/`#[unlikely]` in front of a conditional branch parse
+   here but are rejected by the compiler's parser.
 3. **Comparisons are left-associative.** The compiler makes them non-associative
    (chaining is a type error); tree-sitter has no non-associativity, so `a == b
    == c` parses (as `(a == b) == c`) and would fail type-checking.

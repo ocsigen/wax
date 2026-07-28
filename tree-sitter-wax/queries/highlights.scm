@@ -13,7 +13,7 @@
 ; ---------------------------------------------------------------------------
 [
   "if" "else" "match" "dispatch" "do" "while" "loop"
-  "return" "become" "try" "catch"
+  "return" "become" "try" "try_legacy" "catch"
 ] @keyword.control
 
 [
@@ -25,6 +25,10 @@
   "throw" "throw_ref" "tag"
   "cont" "suspend" "on"
 ] @keyword
+
+; `switch` is a plain identifier everywhere else, but names a handler target in
+; an `on` clause.
+(on_clause "switch" @keyword)
 
 [
   "fn" "let" "const" "type" "rec"
@@ -49,6 +53,9 @@
 ; Constants / special values
 ; ---------------------------------------------------------------------------
 [(null) (nop) (unreachable) (inf) (nan)] @constant.builtin
+
+; A match arm's null test is the bare token, not a `null` expression node.
+(match_arm "null" @constant.builtin)
 
 ; ---------------------------------------------------------------------------
 ; Literals
@@ -110,7 +117,7 @@
   "<=" "<=s" "<=u" ">=" ">=s" ">=u"
   "+=" "-=" "*=" "/=" "/s=" "/u=" "%s=" "%u="
   "&=" "|=" "^=" "<<=" ">>s=" ">>u="
-  "=" ":=" "!" "?" "->" "=>" ".." "@"
+  "=" ":=" "!" "?" "->" "=>" ".." "@" "++"
 ] @operator
 
 ["(" ")" "{" "}" "[" "]"] @punctuation.bracket
