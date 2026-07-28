@@ -108,12 +108,22 @@ module Error = struct
       ~location
       (text "The" ++ text kind ++ name x ++ text "is never used.")
 
-  (* An imported function or global never referenced, exported, or used as the
-     start function. Prefix its name with [_] to silence the warning. *)
+  (* An imported field never referenced, exported, or used as the start function.
+     Prefix its name with [_] to silence the warning. *)
   let unused_import context ~location kind x =
     warn ~warning:Wax_utils.Warning.Unused_import ~universal:true context
       ~location
       (text "The imported" ++ text kind ++ name x ++ text "is never used.")
+
+  (* A [let]-declared (mutable) global that is never assigned, so it could be a
+     [const]. An import (whose mutability is part of the linking contract) and an
+     exported global (which the host may assign) are exempt, as is a name starting
+     with [_]. *)
+  let unnecessary_mut context ~location x =
+    warn ~warning:Wax_utils.Warning.Unnecessary_mut ~universal:true context
+      ~location
+      ~hint:(text "Declare it with 'const' instead of 'let'.")
+      (text "The global" ++ name x ++ text "is mutable but is never assigned.")
 
   (* A cast/test whose operand can never have the target type. *)
   let cast_always_fails context ~location ~is_test =
@@ -6551,6 +6561,10 @@ and type_variable_access ctx i =
       | Global (mut, _) ->
           if not mut then
             Error.immutable ctx.diagnostics ~location:idx.info "global"
+          else
+            (* The only place a global is written, so also where a [mut] global is
+               recorded as actually assigned (for [unnecessary-mut]). *)
+            Hashtbl.replace ctx.assigned_globals idx.desc ()
       | Func_ref _ ->
           Error.not_assignable ctx.diagnostics ~location:idx.info idx
       | Poisoned -> (* already reported at the definition *) ()
@@ -11022,6 +11036,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       functions = Tbl.make namespace "function";
       globals = Tbl.make ~hover:hover_of_global namespace "global";
       import_globals = Tbl.make ~hover:hover_of_global namespace "global";
+      assigned_globals = Hashtbl.create 16;
       memories = Tbl.make namespace "memory";
       datas = Tbl.make (Namespace.make ~links cond) "data segment";
       tables = Tbl.make namespace "table";
@@ -11309,54 +11324,87 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      in source order. *)
   Typing_lint.flush_deferred_lints ctx;
   let typed_fields = functions ctx phased_fields in
-  (* Report module fields — functions and globals — that are defined but never
-     referenced (the module-level analog of an unused local). A field is exempt
-     if its name starts with [_], if it is exported or is the start function
-     (both externally reachable), or if it is an import (an external contract,
-     not a definition; those are [Fundecl]/[GlobalDecl] and never reach the
-     arms below). Uses are collected by [Tbl.resolve] as names are looked up
-     while typing the globals and function bodies above. *)
+  (* Report module fields that are defined but never referenced (the module-level
+     analog of an unused local). A field is exempt if its name starts with [_], if
+     it is exported or is the start function (both externally reachable), or if it
+     is an import (an external contract, not a definition; those are
+     [Fundecl]/[GlobalDecl] and never reach the arms below). Uses are collected by
+     [Tbl.resolve] as names are looked up while typing the globals and function
+     bodies above.
+
+     Then report the mutable ([let]) globals never assigned, which could be
+     [const] instead. *)
   if warn_unused then begin
     let exempt field =
       List.exists
         (fun (k, _, _) -> k = "export" || k = "start")
         (field_attributes field)
     in
-    let unused tbl (name : ident) =
-      (not (String.length name.desc > 0 && name.desc.[0] = '_'))
-      && not (Tbl.is_used tbl name.desc)
+    (* A leading [_] marks a declaration as deliberately unused (and, for a
+       global, deliberately as written), exempting it from these lints. *)
+    let intentional (name : ident) =
+      String.length name.desc > 0 && name.desc.[0] = '_'
     in
-    (* An imported function or global that is never referenced (and not
-       re-exported) is reported, the same way an unused definition is. *)
+    let unused tbl (name : ident) =
+      (not (intentional name)) && not (Tbl.is_used tbl name.desc)
+    in
+    (* A defined field of any kind: report it at its name unless exempt. *)
+    let check_unused field tbl kind (name : ident) =
+      if (not (exempt field)) && unused tbl name then
+        Error.unused_field ctx.diagnostics ~location:name.info kind name
+    in
+    (* An import that is never referenced (and not re-exported) is reported, the
+       same way an unused definition is. *)
     let check_unused_import (decl : (Ast.import_decl, location) annotated) =
       let exempt =
         List.exists
           (fun (k, _, _) -> k = "export" || k = "start")
           decl.desc.attributes
       in
+      let report tbl kind =
+        if unused tbl decl.desc.id then
+          Error.unused_import ctx.diagnostics ~location:decl.desc.id.info kind
+            decl.desc.id
+      in
       if not exempt then
         match decl.desc.kind with
-        | Import_func _ when unused ctx.functions decl.desc.id ->
-            Error.unused_import ctx.diagnostics ~location:decl.desc.id.info
-              "function" decl.desc.id
-        | Import_global _ when unused ctx.globals decl.desc.id ->
-            Error.unused_import ctx.diagnostics ~location:decl.desc.id.info
-              "global" decl.desc.id
-        | _ -> ()
+        | Import_func _ -> report ctx.functions "function"
+        | Import_global _ -> report ctx.globals "global"
+        | Import_memory _ -> report ctx.memories "memory"
+        | Import_table _ -> report ctx.tables "table"
+        | Import_tag _ -> report ctx.tags "tag"
     in
     walk_fields
       (fun field ->
         match field.desc with
-        | Func { name; _ }
-          when (not (exempt field.desc)) && unused ctx.functions name ->
-            Error.unused_field ctx.diagnostics ~location:name.info "function"
-              name
-        | Global { name; _ }
-          when (not (exempt field.desc)) && unused ctx.globals name ->
-            Error.unused_field ctx.diagnostics ~location:name.info "global" name
+        | Func { name; _ } ->
+            check_unused field.desc ctx.functions "function" name
+        | Global { name; mut; _ } ->
+            check_unused field.desc ctx.globals "global" name;
+            (* A global not used at all is already reported just above, so do not
+               pile a second diagnostic on the same declaration; an exported one
+               may be assigned by the host. *)
+            if
+              mut
+              && (not (intentional name))
+              && (not (exempt field.desc))
+              && Tbl.is_used ctx.globals name.desc
+              && not (Hashtbl.mem ctx.assigned_globals name.desc)
+            then Error.unnecessary_mut ctx.diagnostics ~location:name.info name
+        | Memory { name; _ } ->
+            check_unused field.desc ctx.memories "memory" name
+        | Table { name; _ } -> check_unused field.desc ctx.tables "table" name
+        | Tag { name; _ } -> check_unused field.desc ctx.tags "tag" name
+        (* An active segment runs at instantiation, so only a passive one can be
+           unused: it is reachable solely through [mem.init]/[tab.init] and
+           [seg.drop]. *)
+        | Data { name = Some name; mode = Passive; _ } ->
+            check_unused field.desc ctx.datas "data segment" name
+        | Elem { name; mode = EPassive; _ } ->
+            check_unused field.desc ctx.elems "element segment" name
         | Import { decl; _ } -> check_unused_import decl
         | Import_group { decls; _ } -> List.iter check_unused_import decls
-        | _ -> ())
+        | Data _ | Elem _ | Type _ | Module_annotation _ | Conditional _ -> ())
       fields
   end;
   ( ctx.type_context.types,

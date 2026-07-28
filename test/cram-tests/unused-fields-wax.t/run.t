@@ -9,6 +9,13 @@ The parent `dune` sets `WAX_WARN=correctness=hidden`, so re-enable the `unused`
 group explicitly:
 
   $ wax check -W unused=warning unused.wax
+  Warning [unnecessary-mut]: The global 'used' is mutable but is never assigned.
+   ──➤  unused.wax:1:5
+  1 │ let used: i32 = 1;
+    ·     ^^^^
+  2 │ let unused: i32 = 2;
+  3 │ let _ignored: i32 = 3;
+  Hint: Declare it with 'const' instead of 'let'.
   Warning [unused-field]: The global 'unused' is never used.
    ──➤  unused.wax:2:5
   1 │ let used: i32 = 1;

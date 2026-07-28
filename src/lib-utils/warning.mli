@@ -9,12 +9,19 @@
 type t =
   | Unused_local  (** A local that is declared but never read. *)
   | Unused_field
-      (** A module field (a function or global) that is defined but never
-          referenced, exported, or used as the start function. *)
+      (** A module field — a function, global, memory, table, tag, or a passive
+          data/element segment — that is defined but never referenced, exported,
+          or used as the start function. *)
   | Unused_import
-      (** An imported function or global that is never referenced, exported, or
-          used as the start function. *)
+      (** An imported function, global, memory, table, or tag that is never
+          referenced, exported, or used as the start function. *)
   | Unused_label  (** A block label that is declared but never branched to. *)
+  | Unnecessary_mut
+      (** A global declared mutable but never assigned, so it could be declared
+          immutable (Wax [const], Wasm without [mut]). Only a module-defined,
+          non-exported global is flagged: an import's mutability is fixed by the
+          linking contract, and an exported mutable global can be assigned by
+          the host. *)
   | Shift_overflow
       (** A shift by a constant count at least as large as the operand's bit
           width; Wasm masks the count modulo the width, so the shift is almost

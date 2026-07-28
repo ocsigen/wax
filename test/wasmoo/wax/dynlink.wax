@@ -26,7 +26,6 @@ import "bindings" {
     fn load_wasmo(&?any);
     fn register_fragments(&?any, &?any);
 }
-import "fail" tag javascript_exception(&?extern);
 import "stdlib" let link_info: &block;
 
 type block = [mut &eq];

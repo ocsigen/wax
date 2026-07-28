@@ -277,6 +277,10 @@ const answer = 42;              // i32
 A global's initializer must be a constant expression (a literal, another
 global, or a simple reference-building expression).
 
+A `let` global that nothing ever assigns is reported by the
+[`unnecessary-mut`](cli.md#warnings) warning, since it could be a `const`.
+Exported globals are exempt: the host may assign those.
+
 ### Names and Scope
 
 Functions, globals, memories, and tables share one module-level namespace: a

@@ -513,6 +513,10 @@ const answer = 42;              // i32
 A global's initializer must be a constant expression (a literal, another
 global, or a simple reference-building expression).
 
+A `let` global that nothing ever assigns is reported by the
+[`unnecessary-mut`](cli.md#warnings) warning, since it could be a `const`.
+Exported globals are exempt: the host may assign those.
+
 ### Names and Scope
 
 Functions, globals, memories, and tables share one module-level namespace: a
@@ -4588,18 +4592,31 @@ server](#language-server)).
         - `unused-local` (group `unused`): a local that is declared but never
           read. Produced while validating; shown by default. Carries a
           quick-fix `edit` that inserts a `_` at the name's start.
-        - `unused-field` (groups `unused`, `correctness`): a module field (a
-          function or global) that is defined but never referenced, exported, or
-          used as the start function. The module-level analog of `unused-local`;
-          prefix its name with `_` to silence one. Shown by default.
-        - `unused-import` (groups `unused`, `correctness`): an imported function
-          or global that is never referenced, exported, or used as the start
-          function. Like `unused-field`, but for imports; `_` silences one. Shown
-          by default.
+        - `unused-field` (groups `unused`, `correctness`): a module field that is
+          defined but never referenced, exported, or used as the start function —
+          a function, global, memory, table, tag, or a *passive* data or element
+          segment. An active segment (and a declarative one) runs at
+          instantiation, so it counts as used whether or not an instruction names
+          it; only a passive segment, reachable solely through
+          `memory.init`/`table.init` and `data.drop`/`elem.drop`, can be dead.
+          The module-level analog of `unused-local`; prefix its name with `_` to
+          silence one. Shown by default.
+        - `unused-import` (groups `unused`, `correctness`): an imported function,
+          global, memory, table, or tag that is never referenced, exported, or
+          used as the start function. Like `unused-field`, but for imports; `_`
+          silences one. Shown by default.
         - `unused-label` (groups `unused`, `correctness`): a block label that
           is declared but never branched to. Prefix its name with `_` to silence
           one. Shown by default. On the Wax side it carries a quick-fix `edit`
           that deletes the whole `'name:` prefix.
+        - `unnecessary-mut` (group `redundant`): a global declared mutable but
+          never assigned, so it could be immutable — Wax `const` instead of
+          `let`, Wasm without `mut`. Only a module-defined, non-exported global
+          is flagged: an import's mutability is part of the linking contract, and
+          an exported mutable global may be assigned by the host. A `_` prefix
+          silences one, and a global that is not used at all is reported as
+          `unused-field` instead, so a declaration never draws both. Shown by
+          default (unlike the rest of the `redundant` group).
         - `shift-count-overflow` (group `correctness`): a shift by a constant
           count at least the operand's bit width. Wasm masks the count modulo
           the width, so the shift is almost certainly not what was meant. Shown

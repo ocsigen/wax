@@ -3,6 +3,7 @@ type t =
   | Unused_field
   | Unused_import
   | Unused_label
+  | Unnecessary_mut
   | Shift_overflow
   | Constant_trap
   | Tautological_comparison
@@ -28,6 +29,7 @@ let all =
     Unused_field;
     Unused_import;
     Unused_label;
+    Unnecessary_mut;
     Shift_overflow;
     Constant_trap;
     Tautological_comparison;
@@ -53,6 +55,7 @@ let name = function
   | Unused_field -> "unused-field"
   | Unused_import -> "unused-import"
   | Unused_label -> "unused-label"
+  | Unnecessary_mut -> "unnecessary-mut"
   | Shift_overflow -> "shift-count-overflow"
   | Constant_trap -> "constant-trap"
   | Tautological_comparison -> "tautological-comparison"
@@ -75,8 +78,10 @@ let name = function
 let description = function
   | Unused_local -> "A local that is declared but never read."
   | Unused_field -> "A module field that is defined but never used."
-  | Unused_import -> "An imported function or global that is never used."
+  | Unused_import -> "An imported module field that is never used."
   | Unused_label -> "A block label that is declared but never branched to."
+  | Unnecessary_mut ->
+      "A mutable global that is never assigned, so it could be immutable."
   | Shift_overflow ->
       "A constant shift count is at least the operand's bit width (Wasm masks \
        it)."
@@ -132,7 +137,7 @@ let description = function
 let is_unnecessary = function
   | Unused_local | Unused_field | Unused_import | Unused_label | Dead_code ->
       true
-  | Shift_overflow | Constant_trap | Tautological_comparison
+  | Unnecessary_mut | Shift_overflow | Constant_trap | Tautological_comparison
   | Constant_condition | Unused_result | Cast_always_fails | Eager_select
   | Precedence | Redundant_operation | Truncated_coverage | Naming_conflict
   | Reserved_word_rename | Generated_name | Compound_assignment | Field_punning
@@ -160,7 +165,7 @@ let group_table =
         Unused_label;
         Confusable_unicode;
       ] );
-    ("redundant", [ Redundant_operation ]);
+    ("redundant", [ Redundant_operation; Unnecessary_mut ]);
     ("naming", [ Naming_conflict; Reserved_word_rename; Generated_name ]);
     ("suggestion", [ Compound_assignment; Field_punning; Redundant_annotation ]);
   ]
@@ -182,10 +187,10 @@ let default_policy = function
   | Redundant_operation | Compound_assignment | Field_punning
   | Redundant_annotation ->
       Hidden
-  | Unused_local | Unused_field | Unused_import | Unused_label | Shift_overflow
-  | Constant_trap | Tautological_comparison | Constant_condition | Unused_result
-  | Dead_code | Cast_always_fails | Eager_select | Precedence
-  | Truncated_coverage | Confusable_unicode ->
+  | Unused_local | Unused_field | Unused_import | Unused_label | Unnecessary_mut
+  | Shift_overflow | Constant_trap | Tautological_comparison
+  | Constant_condition | Unused_result | Dead_code | Cast_always_fails
+  | Eager_select | Precedence | Truncated_coverage | Confusable_unicode ->
       Displayed
 
 let resolve (policy : policy) w = policy w

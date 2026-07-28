@@ -148,6 +148,7 @@ type module_context = {
   functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;
   globals : (bool * Infer.inferred_valtype option) Tbl.t;
   import_globals : (bool * Infer.inferred_valtype option) Tbl.t;
+  assigned_globals : (string, unit) Hashtbl.t;
   tags : Ast.functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;

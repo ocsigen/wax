@@ -1,0 +1,16 @@
+(module
+  (import "env" "i" (global $imported (mut i32)))
+  (global $never_set (mut i32) (i32.const 0))
+  (global $set_somewhere (mut i32) (i32.const 0))
+  (global $_ignored (mut i32) (i32.const 0))
+  (global $inline_exported (export "e") (mut i32) (i32.const 0))
+  (global $late_exported (mut i32) (i32.const 0))
+  (export "l" (global $late_exported))
+  (func (export "f") (result i32)
+    (global.set $set_somewhere (i32.const 1))
+    (i32.add
+      (i32.add (global.get $never_set) (global.get $set_somewhere))
+      (i32.add (global.get $_ignored)
+        (i32.add (global.get $imported)
+          (i32.add (global.get $inline_exported)
+                   (global.get $late_exported)))))))

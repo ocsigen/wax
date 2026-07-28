@@ -1,0 +1,25 @@
+import "env" {
+  memory imported_mem: i32 [1];
+  table imported_tab: &?func [1];
+  tag imported_tag(i32);
+}
+
+memory used_mem: i32 [1];
+memory unused_mem: i32 [1];
+memory _ignored_mem: i32 [1];
+table used_tab: &?func [1];
+table unused_tab: &?func [1];
+tag used_tag(i32);
+tag unused_tag(i32);
+data used_data = "ab";
+data unused_data = "cd";
+data active_data @ used_mem [0] = "active";
+elem used_elem: &?func = [f];
+elem unused_elem: &?func = [];
+
+#[export = "f"]
+fn f() {
+  used_mem.init(used_data, 0, 0, 1);
+  used_tab.init(used_elem, 0, 0, 1);
+  throw used_tag(0);
+}

@@ -10,3 +10,12 @@ first type `(ref none)`, which the validator rejected against the recovered sour
 so a chained cast recovers a matching source and it round-trips:
 
   $ wax -i wasm m.wasm -f wax -o t.wax && wax -i wax t.wax -f wasm -o /dev/null --validate -W unused=hidden
+  Warning [unnecessary-mut]: The global 'g' is mutable but is never assigned.
+     ──➤  t.wax:612:5
+  610 │ }
+  611 │ table t: i64 &?func [3514];
+  612 │ let g = -0x1.9c9e1fa96abdbp+361;
+      ·     ^
+  613 │ #[export]
+  614 │ let wν = v128::i8x16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  Hint: Declare it with 'const' instead of 'let'.

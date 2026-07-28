@@ -226,6 +226,13 @@ type module_context = {
          A table is typed before the module's own globals are registered, so its
          initializer can reference only imports (unlike a global initializer,
          which sees the globals declared before it). *)
+  assigned_globals : (string, unit) Hashtbl.t;
+      (* Names of the globals assigned somewhere in the module (a [Set] whose
+         target resolves to a global). A mutable global missing from this table
+         could be declared [const] — the [unnecessary-mut] warning. Keyed by name
+         like [Tbl]'s own use marks, and (like them) per configuration: the table
+         belongs to the context [type_configuration] builds for one choice of
+         conditional branches. *)
   tags : functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;

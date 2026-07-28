@@ -839,9 +839,9 @@ module Error = struct
           text "The local variable" ++ ident id ++ text "is never used."
       | None -> text "This local is never used.")
 
-  (* A module field (a function or global) defined but never referenced,
-     exported, or used as the start function. Prefix its name with [_] to
-     silence the warning. *)
+  (* A module field (a function, global, memory, table, tag, or a passive
+     data/element segment) defined but never referenced, exported, or used as the
+     start function. Prefix its name with [_] to silence the warning. *)
   let unused_field context ~location kind name =
     report context ~location ~severity:Warning ~warning:Warning.Unused_field
       ~universal:true
@@ -849,8 +849,8 @@ module Error = struct
       | Some id -> text "The" ++ text kind ++ ident id ++ text "is never used."
       | None -> text "This" ++ text kind ++ text "is never used.")
 
-  (* An imported function or global never referenced, exported, or used as the
-     start function. Prefix its name with [_] to silence the warning. *)
+  (* An imported field never referenced, exported, or used as the start function.
+     Prefix its name with [_] to silence the warning. *)
   let unused_import context ~location kind name =
     report context ~location ~severity:Warning ~warning:Warning.Unused_import
       ~universal:true
@@ -865,6 +865,20 @@ module Error = struct
     report context ~location ~severity:Warning ~warning:Warning.Unused_label
       ~universal:true
       (text "The label" ++ ident name ++ text "is never used.")
+
+  (* A module-defined global declared [mut] but never the target of a
+     [global.set]. An import (whose mutability is part of the linking contract)
+     and an exported global (which the host may assign) are exempt, as is a name
+     starting with [_]. *)
+  let unnecessary_mut context ~location name =
+    report context ~location ~severity:Warning ~warning:Warning.Unnecessary_mut
+      ~universal:true
+      ~hint:(text "Drop the 'mut' to declare it immutable.")
+      (match name with
+      | Some id ->
+          text "The global" ++ ident id
+          ++ text "is mutable but is never assigned."
+      | None -> text "This global is mutable but is never assigned.")
 
   (* --- The correctness lint tier (shared with the Wax typer; same warnings and
      wording). Emitted while validating a WAT/WASM function body. --- *)
@@ -1693,20 +1707,42 @@ type module_context = {
   elem : (reftype * source_type) Sequence.t;
   exports : (string, Ast.location) Hashtbl.t;
   refs : (int, unit) Hashtbl.t;
-  (* Function / global indices referenced anywhere (a call, [ref.func], a
-     [global.get]/[global.set], an export, or the start function) — the marks the
-     [unused-field] warning checks against. *)
+  (* Indices referenced anywhere, per index space (a call, [ref.func], a
+     [global.get]/[global.set], a memory/table access, a [throw]/[catch], a
+     [memory.init]/[elem.drop], an export, or the start function) — the marks the
+     [unused-field] warning checks against. An active data/element segment (and a
+     declarative one) is marked at its definition: it runs at instantiation, so it
+     is used whether or not an instruction names it. *)
   used_functions : (int, unit) Hashtbl.t;
   used_globals : (int, unit) Hashtbl.t;
-  (* Each module-defined (non-import) function / global, as (index, source name,
-     report location): the candidates the [unused-field] warning ranges over. *)
+  used_memories : (int, unit) Hashtbl.t;
+  used_tables : (int, unit) Hashtbl.t;
+  used_tags : (int, unit) Hashtbl.t;
+  used_data : (int, unit) Hashtbl.t;
+  used_elem : (int, unit) Hashtbl.t;
+  (* Global indices that are the target of a [global.set] — the marks the
+     [unnecessary-mut] warning checks against. *)
+  assigned_globals : (int, unit) Hashtbl.t;
+  (* Each module-defined (non-import) field, as (index, source name, report
+     location): the candidates the [unused-field] warning ranges over. *)
   mutable defined_functions : (int * Ast.Text.name option * Ast.location) list;
   mutable defined_globals : (int * Ast.Text.name option * Ast.location) list;
-  (* Likewise for imported functions / globals — the [unused-import] candidates.
-     They share the index space (and so the [used_*] marks) with the defined
-     ones, but are reported with a distinct wording. *)
+  mutable defined_memories : (int * Ast.Text.name option * Ast.location) list;
+  mutable defined_tables : (int * Ast.Text.name option * Ast.location) list;
+  mutable defined_tags : (int * Ast.Text.name option * Ast.location) list;
+  mutable defined_data : (int * Ast.Text.name option * Ast.location) list;
+  mutable defined_elem : (int * Ast.Text.name option * Ast.location) list;
+  (* The module-defined globals declared [mut], in the same shape: the
+     [unnecessary-mut] candidates. *)
+  mutable mutable_globals : (int * Ast.Text.name option * Ast.location) list;
+  (* Likewise for imports — the [unused-import] candidates. They share the index
+     space (and so the [used_*] marks) with the defined ones, but are reported
+     with a distinct wording. *)
   mutable imported_functions : (int * Ast.Text.name option * Ast.location) list;
   mutable imported_globals : (int * Ast.Text.name option * Ast.location) list;
+  mutable imported_memories : (int * Ast.Text.name option * Ast.location) list;
+  mutable imported_tables : (int * Ast.Text.name option * Ast.location) list;
+  mutable imported_tags : (int * Ast.Text.name option * Ast.location) list;
   (* Whether the extra "unused" analyses run (tied to [-v]/[check], like
      [unused-local]); consulted by lints emitted during stack validation. *)
   warn_unused : bool;
@@ -1819,10 +1855,19 @@ let descriptor_operand_type ctx ~location (target : heaptype) =
       Error.invalid_cast_type ctx.modul.diagnostics ~location;
       None
 
+(* Note the index [idx] resolves to as used, for the [unused-field] warning. *)
+let mark_used used seq idx =
+  Option.iter
+    (fun i -> Hashtbl.replace used i ())
+    (Sequence.get_index_opt seq idx)
+
 (* The parameter types of an exception [tag] and, when known, their source
-   types for naming a thrown payload. *)
+   types for naming a thrown payload. [lookup_tag_type]/[lookup_tag_signature]
+   are the two resolution points for every tag reference (a [throw], a [catch]
+   clause, a [suspend]/[resume] handler), so they record the tag as used. *)
 let lookup_tag_type ctx tag =
   let ctx = ctx.modul in
+  mark_used ctx.used_tags ctx.tags tag;
   let*@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Struct _ | Array _ | Cont _ ->
@@ -1837,6 +1882,7 @@ let lookup_tag_type ctx tag =
    results may be non-empty (unlike exception tags). *)
 let lookup_tag_signature ctx tag =
   let ctx = ctx.modul in
+  mark_used ctx.used_tags ctx.tags tag;
   let*@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Func ft -> Some (ft, sign)
@@ -2632,28 +2678,34 @@ let check_resume_table ctx loc ts2 clauses =
     clauses
 
 (* Look up an entry in a module-level index space, reporting an unbound-index
-   error (via {!Sequence.get}) when the reference does not resolve. *)
-let get_memory ctx = Sequence.get ctx.modul.diagnostics ctx.modul.memories
-let get_table ctx = Sequence.get ctx.modul.diagnostics ctx.modul.tables
+   error (via {!Sequence.get}) when the reference does not resolve. Each [get_*]
+   is the single resolution point for every reference to that space — a
+   [global.get]/[global.set], a [call]/[return_call]/[ref.func], a memory/table
+   access, a segment operand — whether in a body or a constant expression, so
+   noting the resolved index here records the field as used. *)
+let get_memory ctx idx =
+  mark_used ctx.modul.used_memories ctx.modul.memories idx;
+  Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
 
-(* [get_global]/[get_function] are the single resolution points for every
-   [global.get]/[global.set] and [call]/[return_call]/[ref.func] (in a body or a
-   constant expression), so noting the resolved index here records the field as
-   used for the [unused-field] warning. *)
+let get_table ctx idx =
+  mark_used ctx.modul.used_tables ctx.modul.tables idx;
+  Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+
 let get_global ctx idx =
-  Option.iter
-    (fun i -> Hashtbl.replace ctx.modul.used_globals i ())
-    (Sequence.get_index_opt ctx.modul.globals idx);
+  mark_used ctx.modul.used_globals ctx.modul.globals idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.globals idx
 
 let get_function ctx idx =
-  Option.iter
-    (fun i -> Hashtbl.replace ctx.modul.used_functions i ())
-    (Sequence.get_index_opt ctx.modul.functions idx);
+  mark_used ctx.modul.used_functions ctx.modul.functions idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.functions idx
 
-let get_data ctx = Sequence.get ctx.modul.diagnostics ctx.modul.data
-let get_elem ctx = Sequence.get ctx.modul.diagnostics ctx.modul.elem
+let get_data ctx idx =
+  mark_used ctx.modul.used_data ctx.modul.data idx;
+  Sequence.get ctx.modul.diagnostics ctx.modul.data idx
+
+let get_elem ctx idx =
+  mark_used ctx.modul.used_elem ctx.modul.elem idx;
+  Sequence.get ctx.modul.diagnostics ctx.modul.elem idx
 
 (* Pop a memory/table address operand, whose width follows the address type. *)
 let pop_address ctx loc limits =
@@ -3377,6 +3429,9 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       push ~source (Some loc) ty.typ
   | GlobalSet idx ->
       let*! ty, source = get_global ctx idx in
+      (* The single [global.set] site, so it is also where a mutable global is
+         recorded as actually assigned (for [unnecessary-mut]). *)
+      mark_used ctx.modul.assigned_globals ctx.modul.globals idx;
       record (Some idx.info) (Pushed source);
       if not ty.mut then
         Error.immutable_global ctx.modul.diagnostics ~location:loc idx;
@@ -4508,10 +4563,13 @@ let build_initial_env ctx fields =
       match field.desc with
       | Import { id; desc; exports; module_ = _; name = _ } -> (
           register_exports ctx exports;
-          (* Record a func/global import as an [unused-import] candidate; an
-             inline export re-exports it, so mark it used. *)
+          (* Record the import as an [unused-import] candidate; an inline export
+             re-exports it, so mark it used. *)
           let location =
             match id with Some id -> id.Ast.info | None -> field.info
+          in
+          let mark used idx =
+            if exports <> [] then Hashtbl.replace used idx ()
           in
           match desc with
           | Func { exact; typ = tu } -> (
@@ -4527,17 +4585,25 @@ let build_initial_env ctx fields =
                     (ty, fst tu, typeuse_functype ctx.types tu, exact);
                   ctx.imported_functions <-
                     (idx, id, location) :: ctx.imported_functions;
-                  if exports <> [] then
-                    Hashtbl.replace ctx.used_functions idx ())
+                  mark ctx.used_functions idx)
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
-              Sequence.register ctx.memories id lim.desc
+              let idx = Sequence.next_index ctx.memories in
+              Sequence.register ctx.memories id lim.desc;
+              ctx.imported_memories <-
+                (idx, id, location) :: ctx.imported_memories;
+              mark ctx.used_memories idx
           | Table typ -> (
               limits ctx "table" typ.limits max_table_size;
+              let idx = Sequence.next_index ctx.tables in
               let src = Plain (Ast.Text.Ref typ.reftype) in
               match tabletype ctx.diagnostics ctx.types typ with
               | None -> Sequence.register_failed ctx.tables id
-              | Some typ -> Sequence.register ctx.tables id (typ, src))
+              | Some typ ->
+                  Sequence.register ctx.tables id (typ, src);
+                  ctx.imported_tables <-
+                    (idx, id, location) :: ctx.imported_tables;
+                  mark ctx.used_tables idx)
           | Global ty -> (
               let idx = Sequence.next_index ctx.globals in
               let src = Plain ty.typ in
@@ -4547,8 +4613,9 @@ let build_initial_env ctx fields =
                   Sequence.register ctx.globals id (ty, src);
                   ctx.imported_globals <-
                     (idx, id, location) :: ctx.imported_globals;
-                  if exports <> [] then Hashtbl.replace ctx.used_globals idx ())
+                  mark ctx.used_globals idx)
           | Tag tu -> (
+              let idx = Sequence.next_index ctx.tags in
               match typeuse ctx.diagnostics ctx.types tu with
               | None -> Sequence.register_failed ctx.tags id
               | Some ty ->
@@ -4558,7 +4625,9 @@ let build_initial_env ctx fields =
                      result types (for [suspend] / [resume]), so the
                      exception-handling restriction to no results is not
                      enforced. *)
-                  Sequence.register ctx.tags id (ty, sign)))
+                  Sequence.register ctx.tags id (ty, sign);
+                  ctx.imported_tags <- (idx, id, location) :: ctx.imported_tags;
+                  mark ctx.used_tags idx))
       | Func { id; typ; exports; instrs = _; locals = _ } -> (
           (* Resolved with muted diagnostics: the [functions] pass resolves
              this typeuse again and owns its errors. *)
@@ -4581,6 +4650,7 @@ let build_initial_env ctx fields =
                 (idx, id, location) :: ctx.defined_functions;
               if exports <> [] then Hashtbl.replace ctx.used_functions idx ())
       | Tag { id; typ; exports } -> (
+          let idx = Sequence.next_index ctx.tags in
           match typeuse ctx.diagnostics ctx.types typ with
           | None -> Sequence.register_failed ctx.tags id
           | Some ty ->
@@ -4590,7 +4660,12 @@ let build_initial_env ctx fields =
                  types (for [suspend] / [resume]), so the exception-handling
                  restriction to no results is not enforced. *)
               register_exports ctx exports;
-              Sequence.register ctx.tags id (ty, sign))
+              Sequence.register ctx.tags id (ty, sign);
+              let location =
+                match id with Some id -> id.Ast.info | None -> field.info
+              in
+              ctx.defined_tags <- (idx, id, location) :: ctx.defined_tags;
+              if exports <> [] then Hashtbl.replace ctx.used_tags idx ())
       | _ -> ())
     (List.concat_map Ast_utils.expand_import_group fields)
 
@@ -4688,13 +4763,23 @@ let check_type_definitions ctx =
 let tables_and_memories ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      (* As for a function or global, record the definition as an [unused-field]
+         candidate, with an inline export marking it externally reachable. *)
+      let report_location id =
+        match id with Some id -> id.Ast.info | None -> field.info
+      in
       match field.desc with
       | Memory { id; limits = lim; init = _; exports } ->
           limits ctx "memory" lim max_memory_size;
+          let idx = Sequence.next_index ctx.memories in
           Sequence.register ctx.memories id lim.desc;
+          ctx.defined_memories <-
+            (idx, id, report_location id) :: ctx.defined_memories;
+          if exports <> [] then Hashtbl.replace ctx.used_memories idx ();
           register_exports ctx exports
       | Table { id; typ; init; exports } -> (
           limits ctx "table" typ.limits max_table_size;
+          let idx = Sequence.next_index ctx.tables in
           let src = Plain (Ast.Text.Ref typ.reftype) in
           match tabletype ctx.diagnostics ctx.types typ with
           | None -> Sequence.register_failed ctx.tables id
@@ -4709,6 +4794,9 @@ let tables_and_memories ctx fields =
                     ~expected_source:src (Ref typ.reftype) e
               | Init_segment _ -> ());
               Sequence.register ctx.tables id (typ, src);
+              ctx.defined_tables <-
+                (idx, id, report_location id) :: ctx.defined_tables;
+              if exports <> [] then Hashtbl.replace ctx.used_tables idx ();
               register_exports ctx exports)
       | _ -> ())
     fields
@@ -4732,7 +4820,16 @@ let globals ctx fields =
                 match id with Some id -> id.Ast.info | None -> field.info
               in
               ctx.defined_globals <- (idx, id, location) :: ctx.defined_globals;
-              if exports <> [] then Hashtbl.replace ctx.used_globals idx ();
+              (* A [mut] global is also an [unnecessary-mut] candidate. *)
+              if typ.mut then
+                ctx.mutable_globals <-
+                  (idx, id, location) :: ctx.mutable_globals;
+              if exports <> [] then begin
+                Hashtbl.replace ctx.used_globals idx ();
+                (* An exported global is assignable by the host, so it counts as
+                   assigned for [unnecessary-mut]. *)
+                Hashtbl.replace ctx.assigned_globals idx ()
+              end;
               register_exports ctx exports)
       | String_global { id; typ; init } ->
           (* A named array type is honoured (and must be an i8/i16 array, like
@@ -4775,14 +4872,27 @@ let globals ctx fields =
 let segments ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      (* An active or declarative segment runs at instantiation, so it is used
+         whatever the bodies do; only a passive one is an [unused-field]
+         candidate, reachable solely through [memory.init]/[table.init] and
+         [data.drop]/[elem.drop]. *)
       match field.desc with
       | Memory { init; _ } ->
           let*? _ = init in
+          (* The implicit segment of a memory's inline data is active. *)
+          Hashtbl.replace ctx.used_data (Sequence.next_index ctx.data) ();
           Sequence.register ctx.data None ()
       | Data { id; init = _; mode } ->
+          let idx = Sequence.next_index ctx.data in
+          let location =
+            match id with Some id -> id.Ast.info | None -> field.info
+          in
           (match mode with
-          | Passive -> ()
+          | Passive ->
+              ctx.defined_data <- (idx, id, location) :: ctx.defined_data
           | Active (i, e) ->
+              Hashtbl.replace ctx.used_data idx ();
+              mark_used ctx.used_memories ctx.memories i;
               let*? limits = Sequence.get ctx.diagnostics ctx.memories i in
               let aty = address_type_to_valtype limits.address_type in
               constant_expression ctx ~location:field.info
@@ -4793,6 +4903,9 @@ let segments ctx fields =
           | Init_default | Init_expr _ -> ()
           | Init_segment lst -> (
               let src = Plain (Ast.Text.Ref typ.reftype) in
+              (* The implicit segment of a table's inline element list is
+                 active. *)
+              Hashtbl.replace ctx.used_elem (Sequence.next_index ctx.elem) ();
               match reftype ctx.diagnostics ctx.types typ.reftype with
               | None -> Sequence.register_failed ctx.elem None
               | Some typ ->
@@ -4804,12 +4917,20 @@ let segments ctx fields =
                   Sequence.register ctx.elem None (typ, src)))
       | Elem { id; typ; init; mode } -> (
           let elem_source = Plain (Ast.Text.Ref typ) in
+          let idx = Sequence.next_index ctx.elem in
+          let location =
+            match id with Some id -> id.Ast.info | None -> field.info
+          in
           match reftype ctx.diagnostics ctx.types typ with
           | None -> Sequence.register_failed ctx.elem id
           | Some typ ->
               (match mode with
-              | Passive | Declare -> ()
+              | Passive ->
+                  ctx.defined_elem <- (idx, id, location) :: ctx.defined_elem
+              | Declare -> Hashtbl.replace ctx.used_elem idx ()
               | Active (i, e) ->
+                  Hashtbl.replace ctx.used_elem idx ();
+                  mark_used ctx.used_tables ctx.tables i;
                   let*? tabletype, table_source =
                     Sequence.get ctx.diagnostics ctx.tables i
                   in
@@ -5520,12 +5641,20 @@ let exports ctx fields =
           | Func ->
               ignore (Sequence.get ctx.diagnostics ctx.functions index);
               mark ctx.used_functions ctx.functions
-          | Memory -> ignore (Sequence.get ctx.diagnostics ctx.memories index)
-          | Table -> ignore (Sequence.get ctx.diagnostics ctx.tables index)
-          | Tag -> ignore (Sequence.get ctx.diagnostics ctx.tags index)
+          | Memory ->
+              ignore (Sequence.get ctx.diagnostics ctx.memories index);
+              mark ctx.used_memories ctx.memories
+          | Table ->
+              ignore (Sequence.get ctx.diagnostics ctx.tables index);
+              mark ctx.used_tables ctx.tables
+          | Tag ->
+              ignore (Sequence.get ctx.diagnostics ctx.tags index);
+              mark ctx.used_tags ctx.tags
           | Global ->
               ignore (Sequence.get ctx.diagnostics ctx.globals index);
-              mark ctx.used_globals ctx.globals)
+              mark ctx.used_globals ctx.globals;
+              (* The host may assign an exported mutable global. *)
+              mark ctx.assigned_globals ctx.globals)
       | _ -> ())
     fields
 
@@ -5549,24 +5678,24 @@ let start ctx fields =
       | _ -> ())
     fields
 
-(* Report module-defined functions and globals that are never referenced,
-   exported, or used as the start function (the module-level analog of an unused
-   local), and likewise for imports. Uses are collected during validation into
-   [used_functions] / [used_globals]; a name starting with [_] is intentionally
-   unused. Runs after every other pass so all references have been seen. *)
+(* Report module-defined fields that are never referenced, exported, or used as
+   the start function (the module-level analog of an unused local), and likewise
+   for imports; then the mutable globals that are never assigned. Uses are
+   collected during validation into the [used_*] tables; a name starting with [_]
+   is intentionally unused. Runs after every other pass so all references have
+   been seen. *)
 let unused_fields ctx =
   if not ctx.warn_unused then ()
   else
+    let intentional (name : Ast.Text.name option) =
+      match name with
+      | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
+      | None -> false
+    in
     let report emit used kind decls =
       List.iter
         (fun (idx, (name : Ast.Text.name option), location) ->
-          if
-            (not (Hashtbl.mem used idx))
-            && not
-                 (match name with
-                 | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
-                 | None -> false)
-          then
+          if (not (Hashtbl.mem used idx)) && not (intentional name) then
             emit ctx.diagnostics ~location kind
               (Option.map (fun (n : Ast.Text.name) -> n.desc) name))
         (List.rev decls)
@@ -5574,9 +5703,30 @@ let unused_fields ctx =
     report Error.unused_field ctx.used_functions "function"
       ctx.defined_functions;
     report Error.unused_field ctx.used_globals "global" ctx.defined_globals;
+    report Error.unused_field ctx.used_memories "memory" ctx.defined_memories;
+    report Error.unused_field ctx.used_tables "table" ctx.defined_tables;
+    report Error.unused_field ctx.used_tags "tag" ctx.defined_tags;
+    report Error.unused_field ctx.used_data "data segment" ctx.defined_data;
+    report Error.unused_field ctx.used_elem "element segment" ctx.defined_elem;
     report Error.unused_import ctx.used_functions "function"
       ctx.imported_functions;
-    report Error.unused_import ctx.used_globals "global" ctx.imported_globals
+    report Error.unused_import ctx.used_globals "global" ctx.imported_globals;
+    report Error.unused_import ctx.used_memories "memory" ctx.imported_memories;
+    report Error.unused_import ctx.used_tables "table" ctx.imported_tables;
+    report Error.unused_import ctx.used_tags "tag" ctx.imported_tags;
+    (* A mutable global never assigned could be immutable. A global that is not
+       used at all is already reported as [unused-field], so do not pile a second
+       diagnostic on the same declaration. *)
+    List.iter
+      (fun (idx, (name : Ast.Text.name option), location) ->
+        if
+          Hashtbl.mem ctx.used_globals idx
+          && (not (Hashtbl.mem ctx.assigned_globals idx))
+          && not (intentional name)
+        then
+          Error.unnecessary_mut ctx.diagnostics ~location
+            (Option.map (fun (n : Ast.Text.name) -> n.desc) name))
+      (List.rev ctx.mutable_globals)
 
 (*** Whole-module validation ***)
 
@@ -5783,10 +5933,25 @@ let validate_configuration ?(warn_unused = true)
       refs = Hashtbl.create 16;
       used_functions = Hashtbl.create 16;
       used_globals = Hashtbl.create 16;
+      used_memories = Hashtbl.create 16;
+      used_tables = Hashtbl.create 16;
+      used_tags = Hashtbl.create 16;
+      used_data = Hashtbl.create 16;
+      used_elem = Hashtbl.create 16;
+      assigned_globals = Hashtbl.create 16;
       defined_functions = [];
       defined_globals = [];
+      defined_memories = [];
+      defined_tables = [];
+      defined_tags = [];
+      defined_data = [];
+      defined_elem = [];
+      mutable_globals = [];
       imported_functions = [];
       imported_globals = [];
+      imported_memories = [];
+      imported_tables = [];
+      imported_tags = [];
       warn_unused;
     }
   in

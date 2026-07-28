@@ -15,3 +15,12 @@ the (off-by-default) `redundant` group, so enable it explicitly:
     ·                  ^^^^^^^
   5 │   (func (export "f") (result i32) (global.get $g)))
   6 │ 
+  Warning [unnecessary-mut]: The global '$g' is mutable but is never assigned.
+   ──➤  offset.wat:3:11
+  1 │ (module
+  2 │   (memory 1)
+  3 │   (global $g (mut i32) (i32.const 0))
+    ·           ^^
+  4 │   (data (offset (i32.add (i32.const 0) (i32.const 42))) "x")
+  5 │   (func (export "f") (result i32) (global.get $g)))
+  Hint: Drop the 'mut' to declare it immutable.

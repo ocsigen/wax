@@ -1,0 +1,16 @@
+import "env" {
+  let imported: i32;
+}
+
+let never_set: i32 = 0;
+let set_somewhere: i32 = 0;
+let _ignored: i32 = 0;
+#[export = "e"]
+let exported: i32 = 0;
+const already_const: i32 = 0;
+
+#[export = "f"]
+fn f() -> i32 {
+  set_somewhere = 1;
+  never_set + set_somewhere + _ignored + imported + exported + already_const
+}

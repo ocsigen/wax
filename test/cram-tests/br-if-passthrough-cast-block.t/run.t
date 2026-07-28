@@ -37,6 +37,13 @@ regardless of what pins the pass-through downstream, and the module round-trips:
        }.to_bits() ^ g);
   }
   $ wax -i wat -f wax f.wat -o f.wax && wax -i wax -f wasm f.wax -o /dev/null --validate
+  Warning [unnecessary-mut]: The global 'g' is mutable but is never assigned.
+   ──➤  f.wax:1:5
+  1 │ let g: i64 = 0;
+    ·     ^
+  2 │ #[export]
+  3 │ fn f(c: i32) -> i64 {
+  Hint: Declare it with 'const' instead of 'let'.
 
 The pin need not be the immediate cast: a `select` (ternary) — or any other
 consumer — between the `br_if` and the cast pins the pass-through just the same.
@@ -59,3 +66,10 @@ Marking `needed` at the delivery site (not the cast site) catches it too:
   >       (global.get $g))))
   > WAT
   $ wax -i wat -f wax s.wat -o s.wax && wax -i wax -f wasm s.wax -o /dev/null --validate
+  Warning [unnecessary-mut]: The global 'g' is mutable but is never assigned.
+   ──➤  s.wax:1:5
+  1 │ let g: i64 = 0;
+    ·     ^
+  2 │ #[export]
+  3 │ fn f(c: i32) -> i64 {
+  Hint: Declare it with 'const' instead of 'let'.

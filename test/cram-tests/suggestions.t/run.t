@@ -206,6 +206,14 @@ for both a mutable `let` global and an immutable `const`:
   3 │ fn use() -> f64 { counter; PI; }
     ·                   ^^^^^^^
   4 │ 
+  Warning [unnecessary-mut]:
+    The global 'counter' is mutable but is never assigned.
+   ──➤  g.wax:1:5
+  1 │ let counter: i32 = 0;
+    ·     ^^^^^^^
+  2 │ const PI: f64 = 3.14159;
+  3 │ fn use() -> f64 { counter; PI; }
+  Hint: Declare it with 'const' instead of 'let'.
   [128]
 
 An `if` whose `=> t` result type the context already pins is redundant too; the
