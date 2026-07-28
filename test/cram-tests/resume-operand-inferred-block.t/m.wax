@@ -1,0 +1,12 @@
+type f = fn();
+type k = cont f;
+fn no_handler() { unreachable; }
+#[export]
+fn g() {
+    k::new(no_handler).resume_throw_ref(
+        'h: do {
+            try { throw e0(); } catch [ e0 & -> 'h]
+        },
+    );
+}
+tag e0: f ;

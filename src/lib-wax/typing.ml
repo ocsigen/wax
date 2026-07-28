@@ -5268,6 +5268,74 @@ and cont_operand_type ctx e' =
       Error.expected_cont_type ctx.diagnostics ~location:(snd e'.info);
       None
 
+(* The source types of a stack-switching call's value operands — everything
+   preceding the receiver. Used to fill in an omitted result of a block-construct
+   operand (see [annotate_omitted_block]) so it types exactly like the annotated
+   form: [resume_throw_ref]'s single operand is always [exnref]; [resume_throw]'s
+   come from the invoked tag; [resume]/[switch]'s from the receiver's continuation
+   signature ([ct], from [cont_operand_type]). [None] (an unresolved receiver /
+   tag, or a form that takes no anchoring operand) leaves the operands as written.
+   Silent — [finish_*] re-derives and checks the internalized types and remains
+   the sole reporter — so it uses the non-reporting [_opt] lookups. *)
+and cont_operand_source_types ctx ~meth ~tag ct : Ast.valtype array option =
+  let cont_params () =
+    let*@ ct = ct in
+    let*@ _, sub = Tbl.find_opt ctx.type_context.types ct in
+    match sub.typ with
+    | Cont ft -> (
+        match Tbl.find_opt ctx.type_context.types ft with
+        | Some (_, { typ = Func f; _ }) -> Some f.params
+        | _ -> None)
+    | _ -> None
+  in
+  match meth with
+  | "resume_throw_ref" -> Some [| Ref { nullable = true; typ = Exn } |]
+  | "resume_throw" ->
+      let*@ tag = tag in
+      let+@ { params; _ } = Tbl.find_opt ctx.tags tag in
+      Array.map (fun p -> snd p.desc) params
+  | "resume" ->
+      let+@ params = cont_params () in
+      Array.map (fun p -> snd p.desc) params
+  | "switch" ->
+      let+@ params = cont_params () in
+      let np = Array.length params in
+      Array.map (fun p -> snd p.desc) (Array.sub params 0 (max 0 (np - 1)))
+  | _ -> None
+
+(* Fill in an omitted result type of a block-construct operand from the type its
+   consumer expects, so it types through the annotated block path (a concrete
+   result flowing into the body — [type_block_construct]'s non-inference branch)
+   rather than the checking / synthesis paths, which route a trailing nested
+   block through an inferring cell and so never materialize the result its
+   consumer needs. This is what makes an unannotated stack-switching operand
+   ['h: do { … }] lower identically to the explicitly annotated ['h: do &?t { … }]
+   (see the repros in the resume-family typers). Non-block operands and blocks
+   whose result is already written are returned unchanged. *)
+and annotate_omitted_block src (operand : location instr) : location instr =
+  let fill typ =
+    if typ.results = [||] then { typ with results = [| src |] } else typ
+  in
+  let desc =
+    match operand.desc with
+    | Block b -> Ast.Block { b with typ = fill b.typ }
+    | Loop b -> Loop { b with typ = fill b.typ }
+    | TryTable b -> TryTable { b with typ = fill b.typ }
+    | Try b -> Try { b with typ = fill b.typ }
+    | TryCatch b -> TryCatch { b with typ = fill b.typ }
+    | If b -> If { b with typ = fill b.typ }
+    | d -> d
+  in
+  { operand with desc }
+
+(* Fill in each omitted block-construct operand's result from the expected
+   operand types, when they are known and their count matches (a mismatched
+   count is left for [finish_*] to report as an arity error). *)
+and annotate_omitted_blocks args = function
+  | Some srcs when Array.length srcs = List.length args ->
+      List.mapi (fun k a -> annotate_omitted_block srcs.(k) a) args
+  | _ -> args
+
 (* A stack-switching method call [c.resume(x)], [c.resume_throw(exc(p))],
    [c.resume_throw_ref(e)], [c.switch(x, tag: t)], with [handlers] from a
    wrapping [on] clause. The receiver compiles last (Wasm stack order, as for
@@ -5316,20 +5384,50 @@ and type_cont_method_call ctx i ~handlers recv meth args =
     | _ -> (None, args)
   in
   (* Emission order: the payload arguments, then the continuation receiver (on
-     top), then the resume/switch. *)
-  let* args' = instructions ctx args in
-  let* recv' = typed ctx recv in
-  let l' = args' @ [ recv' ] in
-  let*! ct = cont_operand_type ctx recv' in
-  match meth.desc with
-  | "resume" -> finish_resume ctx i ct handlers l'
-  | "resume_throw" ->
-      let*! tag = tag in
-      finish_resume_throw ctx i ct tag handlers l'
-  | "resume_throw_ref" -> finish_resume_throw_ref ctx i ct handlers l'
-  | _ ->
-      let*! tag = tag in
-      finish_switch ctx i ct tag l'
+     top), then the resume/switch. The receiver is TYPED first (out of emission
+     order, made sound for the stack by the explicit hole slices and for the
+     initialized-local analysis by [type_trailing_operand]) so its continuation
+     signature supplies the value operands' expected types; an omitted result of
+     a block-construct operand is then filled from that type so it lowers exactly
+     like the annotated form ([annotate_omitted_blocks]). The operands are still
+     typed in emission order over the front hole slice and the receiver is folded
+     in last, exactly as [type_indirect_call] handles a callee. *)
+  fun st ->
+    let front_holes =
+      List.fold_left (fun acc a -> acc + count_holes a) 0 args
+    in
+    let front_pending, tail_pending = list_split front_holes st.pending in
+    let recv', replay =
+      type_trailing_operand ctx (fun () ->
+          let _, recv' =
+            instruction ctx recv
+              { pending = tail_pending; value_loc = None; reported = false }
+          in
+          recv')
+    in
+    let ct = cont_operand_type ctx recv' in
+    let args =
+      annotate_omitted_blocks args
+        (cont_operand_source_types ctx ~meth:meth.desc ~tag ct)
+    in
+    let type_body =
+      let* args' = instructions ctx args in
+      let l' = args' @ [ recv' ] in
+      let*! ct = ct in
+      match meth.desc with
+      | "resume" -> finish_resume ctx i ct handlers l'
+      | "resume_throw" ->
+          let*! tag = tag in
+          finish_resume_throw ctx i ct tag handlers l'
+      | "resume_throw_ref" -> finish_resume_throw_ref ctx i ct handlers l'
+      | _ ->
+          let*! tag = tag in
+          finish_switch ctx i ct tag l'
+    in
+    let st1, node = type_body { st with pending = front_pending } in
+    let st2 = fold_operand ctx recv' recv' { st1 with pending = [] } in
+    replay ();
+    (st2, node)
 
 (* The postfix handler clause [e on [t -> 'l, …]]: fold the handlers into the
    resume-family call it wraps; any other wrapped expression is an error (the
