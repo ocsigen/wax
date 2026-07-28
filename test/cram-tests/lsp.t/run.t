@@ -197,8 +197,10 @@ same module without it reports the gated construct.
   > import subprocess, json
   > def frame(o):
   >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
-  > wax_types="rec {\n  type obj = descriptor obj_desc { x: i32 };\n  type obj_desc = describes obj { };\n}\n"
-  > wat_mod="(module (@feature \"custom-descriptors\")\n(rec\n  (type $obj (descriptor $obj_desc) (struct (field $x i32)))\n  (type $obj_desc (describes $obj) (struct))))\n"
+  > # The exported global keeps the pair reachable: on its own the rec group is a
+  > # dead cycle, which unused-field reports — noise unrelated to feature gating.
+  > wax_types="rec {\n  type obj = descriptor obj_desc { x: i32 };\n  type obj_desc = describes obj { };\n}\n#[export = \"g\"]\nconst g: &?obj = null;\n"
+  > wat_mod="(module (@feature \"custom-descriptors\")\n(rec\n  (type $obj (descriptor $obj_desc) (struct (field $x i32)))\n  (type $obj_desc (describes $obj) (struct)))\n(global (export \"g\") (ref null $obj) (ref.null $obj)))\n"
   > bufs=[("declared.wax","wax","#![feature = \"custom-descriptors\"]\n"+wax_types),
   >       ("plain.wax","wax",wax_types),
   >       ("declared.wat","wat",wat_mod)]

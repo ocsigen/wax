@@ -109,13 +109,21 @@ end
 (** A name-keyed table layered over a {!Namespace}, tracking references (for the
     unused lints) and an optional hover summary. Only the type is exposed here;
     the operations live in {!Typing}'s [Tbl]. *)
+type origin =
+  | Root  (** a module-level context: an initializer, a segment, an import *)
+  | From_function of string
+  | From_type of string  (** a type definition's own components *)
+  | Ignored  (** not a source reference; do not record *)
+(** Where a name resolution is made from, for the reachability analysis behind
+    the [unused-field] warning. *)
+
 module Tbl : sig
   type 'a t = {
     kind : string;
     namespace : Namespace.t;
     tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
-    used : (string, string option) Hashtbl.t;
-    current : string option ref;
+    used : (string, origin) Hashtbl.t;
+    current : origin ref;
     hover : 'a -> hover_target option;
   }
 end
@@ -150,7 +158,7 @@ type module_context = {
   globals : (bool * Infer.inferred_valtype option) Tbl.t;
   import_globals : (bool * Infer.inferred_valtype option) Tbl.t;
   assigned_globals : (string, unit) Hashtbl.t;
-  current_function : string option ref;
+  origin : origin ref;
   tags : Ast.functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;

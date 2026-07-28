@@ -1227,6 +1227,29 @@ end
 
 (*** Types and the type context ***)
 
+(* Where the reference currently being resolved is made from, for the reachability
+   analysis behind [unused-field]. Lives on the type context (which every
+   resolution point can reach) and is read for every index space, not just types.
+
+   [Root] is a module-level context — an export, the start function, an import
+   declaration, a global or table initializer, a segment — which runs, or is
+   callable, whatever the bodies do. [Ignored] suppresses recording, for a
+   resolution that is not a source reference at all: [check_type_definitions]
+   sweeps every type index to check its own well-formedness, and marking those
+   would make every type look used. *)
+type origin =
+  | Root
+  | From_function of int
+  | From_type of int  (** a type definition's own components *)
+  | Ignored
+
+(* A source type reference, as written. Kept unresolved (rather than as a
+   canonical index) because deduplication makes canonical indices non-injective:
+   two structurally equal named types share one, so a reference to either would
+   mark both used. [unused_fields] maps these back to definition indices through
+   [type_defs]. *)
+type type_ref = By_index of int | By_name of string
+
 type type_context = {
   types : Types.t;
   mutable last_index : int;
@@ -1282,6 +1305,25 @@ type type_context = {
   descriptor_source : (Types.Id.t, Ast.Text.idx) Hashtbl.t;
   (* The enabled optional features / proposals, and which are used. *)
   features : Wax_utils.Feature.set;
+  (* Where references are currently being made from (see {!origin}), and every
+     type reference seen so far. Both feed the [unused-field] reachability
+     analysis; nothing is recorded when the lint is off. A type reference is
+     recorded here rather than in a [used_*] table because a type's liveness
+     depends on the liveness of whatever names it, type definitions included. *)
+  mutable origin : origin;
+  mutable type_references : (origin * type_ref) list;
+  (* References to a type by its *canonical* index rather than by a source name,
+     which is how the implicit Wax string type is reached: [@string] interns
+     [(array (mut i8))] structurally, so a module that also defines that type by
+     name is deduplicated onto it and uses the definition without ever naming it.
+     Resolved against every source definition sharing the canonical index — all
+     of them, since deduplication makes that ambiguous and over-keeping is the
+     safe direction. *)
+  mutable canonical_type_references : (origin * Types.Id.t) list;
+  (* Whether the [unused-field] analysis runs, so the recording above can be
+     skipped entirely otherwise. Mirrors the module context's [warn_unused],
+     which is not reachable from every resolution point. *)
+  record_references : bool;
 }
 
 (* The source composite type a reference resolves to, named as the source wrote
@@ -1350,6 +1392,18 @@ let get_type_info d ctx (idx : Ast.Text.idx) =
         Error.unbound_index d ~location:idx.info "type" idx lst;
         None
   in
+  (* The single resolution point for every type reference — a typeuse, a named
+     reference type wherever one may appear, a supertype or descriptor clause, an
+     instruction's type immediate — so this is where one is recorded for the
+     [unused-field] analysis. Resolution failures are recorded too, harmlessly:
+     they name no definition. *)
+  if ctx.record_references && ctx.origin <> Ignored then
+    ctx.type_references <-
+      ( ctx.origin,
+        match idx.desc with
+        | Num x -> By_index (Uint32.to_int x)
+        | Id id -> By_name id )
+      :: ctx.type_references;
   (* Record the referenced type's source definition, so hover over the type
      identifier shows its subtype. Guarded on the sink, so an ordinary
      validation pays nothing. *)
@@ -1635,8 +1689,23 @@ let subtype d ctx current
   let+@ describes = resolve_opt describes in
   { Nz.typ; supertype; final; descriptor; describes }
 
+(* Each member's components (its supertype, field and element reference types, a
+   [cont]'s wrapped type, a descriptor clause) are references made *by that
+   member*, so they only keep their targets alive if the member itself is: a rec
+   group nothing else names is dead as a whole, cycle and all. [ctx.last_index] is
+   still the group's base here — [add_type] advances it once the group resolves. *)
 let rectype d ctx ty =
-  array_mapi_opt (fun i e -> subtype d ctx i (snd e.Ast.desc)) ty
+  let base = ctx.last_index in
+  let outer = ctx.origin in
+  let r =
+    array_mapi_opt
+      (fun i e ->
+        if ctx.origin <> Ignored then ctx.origin <- From_type (base + i);
+        subtype d ctx i (snd e.Ast.desc))
+      ty
+  in
+  ctx.origin <- outer;
+  r
 
 let typeuse d ctx (idx, sign) =
   match (idx, sign) with
@@ -1665,7 +1734,10 @@ let typeuse d ctx (idx, sign) =
   | None, None -> assert false (* Should not happen *)
 
 (* Intern the internal representation type of Wax strings — a mutable array of
-   [i8] — and return its canonical index. *)
+   [i8] — and return its canonical index. [string_type_reference] is the form to
+   use where a [@string] in the source actually *uses* that type, so that a
+   like-typed named definition it deduplicates onto is not reported unused; plain
+   [string_type] is for the up-front registration, which is not a use. *)
 let string_type ctx =
   Types.add_rectype ctx.types
     [|
@@ -1677,6 +1749,13 @@ let string_type ctx =
         describes = None;
       };
     |]
+
+let string_type_reference ctx =
+  let id = string_type ctx in
+  if ctx.record_references && ctx.origin <> Ignored then
+    ctx.canonical_type_references <-
+      (ctx.origin, id) :: ctx.canonical_type_references;
+  id
 
 (*** The module context ***)
 
@@ -1734,13 +1813,12 @@ type module_context = {
   used_tags : (int, unit) Hashtbl.t;
   used_data : (int, unit) Hashtbl.t;
   used_elem : (int, unit) Hashtbl.t;
-  (* The index of the function whose body is being validated, [None] in a
-     module-level context. Set by the [functions] pass around each body so a
-     reference can be attributed to its enclosing function. *)
-  mutable current_function : int option;
   (* Every reference made from inside a body, as (enclosing function, target).
      [unused_fields] walks these to find what each *live* function reaches; a
-     reference from a dead function keeps nothing alive. *)
+     reference from a dead function keeps nothing alive. Where the reference is
+     made from is [types.origin] (shared with the type references, which are
+     recorded on the type context because every type-resolution point can reach
+     it). *)
   mutable body_references : (int * reference) list;
   (* Global indices that are the target of a [global.set] anywhere — the marks
      the [unnecessary-mut] warning checks against. Deliberately NOT filtered by
@@ -1897,10 +1975,13 @@ let mark_reference mctx wrap used seq idx =
   if mctx.warn_unused then
     Option.iter
       (fun i ->
-        match mctx.current_function with
-        | Some caller ->
+        match mctx.types.origin with
+        | From_function caller ->
             mctx.body_references <- (caller, wrap i) :: mctx.body_references
-        | None -> Hashtbl.replace used i ())
+        | Ignored -> ()
+        (* Only types reference types, so [From_type] never reaches an index
+           space; treat it as a root rather than losing the reference. *)
+        | Root | From_type _ -> Hashtbl.replace used i ())
       (Sequence.get_index_opt seq idx)
 
 (* The parameter types of an exception [tag] and, when known, their source
@@ -4199,7 +4280,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | String (None, _) ->
-      let i = string_type ctx.modul.types in
+      let i = string_type_reference ctx.modul.types in
       let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
       push ~source:(Inline_ref comptype) (Some loc)
         (Ref { nullable = false; typ = Exact i })
@@ -4597,8 +4678,19 @@ let collect_implicit_types d ctx fields =
   (* The canonical walk descends into every nesting instruction, branch hints
      included, so inline types buried there are interned like any other. *)
   let collect_instrs l = List.iter (Ast_utils.iter_instr collect_instr) l in
+  (* A defined function's own signature and the inline block types in its body are
+     references *it* makes, so attribute them to it — otherwise interning them here
+     would make a dead function's types look externally referenced, and the Wax
+     typer (which resolves them per function) would disagree. The counter mirrors
+     the function-index allocation of [build_initial_env] over this same expanded
+     list. An import's or tag's signature stays a root: neither is reached through
+     a function. *)
+  let index = ref 0 in
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      (match field.desc with
+      | Func _ -> ctx.origin <- From_function !index
+      | _ -> ());
       (match field.desc with
       | Import { desc = Func { typ = None, Some sign; _ }; _ }
       | Import { desc = Tag (None, Some sign); _ }
@@ -4606,8 +4698,12 @@ let collect_implicit_types d ctx fields =
       | Tag { typ = None, Some sign; _ } ->
           collect sign
       | _ -> ());
-      match field.desc with
+      (match field.desc with
       | Func { instrs; _ } -> collect_instrs instrs
+      | _ -> ());
+      ctx.origin <- Root;
+      match field.desc with
+      | Import { desc = Func _; _ } | Func _ -> incr index
       | _ -> ())
     (List.concat_map Ast_utils.expand_import_group fields)
 
@@ -4683,9 +4779,15 @@ let build_initial_env ctx fields =
                   ctx.imported_tags <- (idx, id, location) :: ctx.imported_tags;
                   mark ctx.used_tags idx))
       | Func { id; typ; exports; instrs = _; locals = _ } -> (
+          (* A function's own signature is a reference *it* makes, so attribute it
+             to the index this definition is about to claim rather than letting a
+             dead function's type look externally referenced. *)
+          ctx.types.origin <- From_function (Sequence.next_index ctx.functions);
           (* Resolved with muted diagnostics: the [functions] pass resolves
              this typeuse again and owns its errors. *)
-          match typeuse (muted ctx.diagnostics) ctx.types typ with
+          let resolved = typeuse (muted ctx.diagnostics) ctx.types typ in
+          ctx.types.origin <- Root;
+          match resolved with
           | None ->
               (* The typeuse did not resolve. Claim the index (later functions
                  stay aligned) but do not record an [unused-field] candidate. *)
@@ -4724,6 +4826,10 @@ let build_initial_env ctx fields =
     (List.concat_map Ast_utils.expand_import_group fields)
 
 let check_type_definitions ctx =
+  (* This sweeps every type index to check the definition's own well-formedness,
+     re-resolving each one; those resolutions are not source references, so
+     recording them would make every type look used. *)
+  ctx.types.origin <- Ignored;
   for i = 0 to ctx.types.last_index - 1 do
     let def_idx, cont_ref =
       Option.value
@@ -4810,7 +4916,8 @@ let check_type_definitions ctx =
           then invalid ()
       | Some _, None | None, Some _ -> invalid ()
     end
-  done
+  done;
+  ctx.types.origin <- Root
 
 (*** Module-field validation passes ***)
 
@@ -4892,12 +4999,12 @@ let globals ctx fields =
           let ty, src =
             match typ with
             | None ->
-                ( string_type ctx.types,
+                ( string_type_reference ctx.types,
                   Inline_ref (Ast.Text.Array { mut = true; typ = Packed I8 }) )
             | Some idx -> (
                 match resolve_type_index ctx.diagnostics ctx.types idx with
                 | None ->
-                    ( string_type ctx.types,
+                    ( string_type_reference ctx.types,
                       Inline_ref
                         (Ast.Text.Array { mut = true; typ = Packed I8 }) )
                 | Some ty ->
@@ -5485,6 +5592,12 @@ let functions ?(warn_unused = true) ctx fields =
              does not resolve still advances the counter, as it does there. *)
           let self = !index in
           incr index;
+          (* Attribute everything this definition resolves — its signature and
+             local types as much as its body — to the function itself, so nothing
+             a dead function names looks externally referenced. Reset once the
+             whole pass is done (an early return below would skip a per-field
+             reset, and the next [Func] sets it again anyway). *)
+          ctx.types.origin <- From_function self;
           let>@ func_typ =
             let*@ typ = typeuse ctx.diagnostics ctx.types typ in
             match (Types.get_subtype ctx.subtyping_info typ).typ with
@@ -5577,15 +5690,10 @@ let functions ?(warn_unused = true) ctx fields =
               label_decls = ref [];
             }
           in
-          (* Attribute every reference the body makes to this function, so
-             [unused_fields] can tell what a *live* function reaches from what
-             only dead code mentions. *)
-          ctx.modul.current_function <- Some self;
           with_empty_stack ctx.modul field.info
             (let* () = instructions ctx instrs in
              pop_args ctx ~kind:`Output field.info ~source:return_source
                return_types);
-          ctx.modul.current_function <- None;
           (* A named local whose name starts with [_] is intentionally unused;
              unnamed locals are always reported. *)
           if warn_unused then
@@ -5614,7 +5722,8 @@ let functions ?(warn_unused = true) ctx fields =
           if warn_unused then lint_body ctx instrs;
           register_exports ctx.modul exports
       | _ -> ())
-    (List.concat_map Ast_utils.expand_import_group fields)
+    (List.concat_map Ast_utils.expand_import_group fields);
+  ctx.types.origin <- Root
 
 (* Report a "Trojan Source" bidirectional control character in any string the
    module carries — an export/import name, a data segment, a string literal, a
@@ -5782,6 +5891,67 @@ let reachable_functions ctx =
   Hashtbl.iter (fun f () -> visit f) ctx.used_functions;
   live
 
+(* The type definitions that anything reachable names. Seeded by the type
+   references made from a module-level context or from a function that can run,
+   then closed over the references a type definition makes through its own
+   components — so a rec group nothing outside it names is dead as a whole, its
+   mutual references notwithstanding.
+
+   A reference was recorded as written, so map it back to the definition it names:
+   a numeric one is that index, a symbolic one goes through the name the
+   definition was declared with. Deduplication is why references are not
+   canonicalised earlier — two structurally equal named types share one canonical
+   index, and a reference to either would otherwise mark both. *)
+let reachable_types ctx ~live_functions =
+  let index_of_name = Hashtbl.create 16 in
+  Hashtbl.iter
+    (fun i ((def_idx : Ast.Text.idx), _) ->
+      match def_idx.desc with
+      | Id name -> Hashtbl.replace index_of_name name i
+      | Num _ -> ())
+    ctx.types.type_defs;
+  let target = function
+    | By_index i -> Some i
+    | By_name n -> Hashtbl.find_opt index_of_name n
+  in
+  (* Every source definition sharing a canonical index, for the by-canonical
+     references (see [canonical_type_references]). *)
+  let indices_of_canonical = Hashtbl.create 16 in
+  Hashtbl.iter
+    (fun i _ ->
+      match Hashtbl.find_opt ctx.types.index_mapping (Uint32.of_int i) with
+      | Some (Types.Def id, _, _, _) -> Hashtbl.add indices_of_canonical id i
+      | Some (Types.Rec _, _, _, _) | None -> ())
+    ctx.types.type_defs;
+  let components = Hashtbl.create 16 in
+  let seeds = ref [] in
+  (* A reference made by a type definition is an edge from it; one made from a
+     module-level context, or from a function that can run, is a seed. *)
+  let record origin targets =
+    match origin with
+    | From_type src -> List.iter (Hashtbl.add components src) targets
+    | Root -> seeds := targets @ !seeds
+    | From_function f ->
+        if Hashtbl.mem live_functions f then seeds := targets @ !seeds
+    | Ignored -> ()
+  in
+  List.iter
+    (fun (origin, r) -> record origin (Option.to_list (target r)))
+    ctx.types.type_references;
+  List.iter
+    (fun (origin, id) ->
+      record origin (Hashtbl.find_all indices_of_canonical id))
+    ctx.types.canonical_type_references;
+  let live = Hashtbl.create 16 in
+  let rec visit t =
+    if not (Hashtbl.mem live t) then begin
+      Hashtbl.replace live t ();
+      List.iter visit (Hashtbl.find_all components t)
+    end
+  in
+  List.iter visit !seeds;
+  live
+
 (* Report module-defined fields that nothing reachable references, exported, or
    used as the start function (the module-level analog of an unused local), and
    likewise for imports; then the mutable globals that are never assigned.
@@ -5817,10 +5987,12 @@ let unused_fields ctx =
     and used_elem =
       used_in ctx.used_elem (function Ref_elem i -> Some i | _ -> None)
     in
-    let intentional (name : Ast.Text.name option) =
-      match name with
-      | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
+    let intentional_name = function
+      | Some n -> String.length n > 0 && n.[0] = '_'
       | None -> false
+    in
+    let intentional (name : Ast.Text.name option) =
+      intentional_name (Option.map (fun (n : Ast.Text.name) -> n.desc) name)
     in
     let report emit used kind decls =
       List.iter
@@ -5842,6 +6014,21 @@ let unused_fields ctx =
     report Error.unused_import used_memories "memory" ctx.imported_memories;
     report Error.unused_import used_tables "table" ctx.imported_tables;
     report Error.unused_import used_tags "tag" ctx.imported_tags;
+    (* A type definition nothing reachable names, reported at the definition and
+       in source (index) order like the rest. Only source definitions are
+       candidates: the implicit function types interned for an inline block
+       signature have no [type_defs] entry, so they are never reported. *)
+    let live_types = reachable_types ctx ~live_functions in
+    List.iter
+      (fun (i, (def_idx : Ast.Text.idx)) ->
+        let name = match def_idx.desc with Id n -> Some n | Num _ -> None in
+        if (not (Hashtbl.mem live_types i)) && not (intentional_name name) then
+          Error.unused_field ctx.diagnostics ~location:def_idx.info "type" name)
+      (List.sort
+         (fun (a, _) (b, _) -> compare a b)
+         (Hashtbl.fold
+            (fun i (def_idx, _) acc -> (i, def_idx) :: acc)
+            ctx.types.type_defs []));
     (* A mutable global never assigned could be immutable. A global that is not
        used at all is already reported as [unused-field], so do not pile a second
        diagnostic on the same declaration. *)
@@ -6028,6 +6215,10 @@ let validate_configuration ?(warn_unused = true)
       type_defs = Hashtbl.create 16;
       descriptor_source = Hashtbl.create 16;
       features;
+      origin = Root;
+      type_references = [];
+      canonical_type_references = [];
+      record_references = warn_unused;
     }
   in
   List.iter
@@ -6066,7 +6257,6 @@ let validate_configuration ?(warn_unused = true)
       used_tags = Hashtbl.create 16;
       used_data = Hashtbl.create 16;
       used_elem = Hashtbl.create 16;
-      current_function = None;
       body_references = [];
       assigned_globals = Hashtbl.create 16;
       defined_functions = [];

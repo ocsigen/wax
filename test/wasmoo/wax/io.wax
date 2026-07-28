@@ -223,7 +223,6 @@ import "bigarray" fn caml_ba_get_data(&eq) -> &extern;
 
 type block = [mut &eq];
 type bytes = [mut i8];
-type offset_array = [mut i64];
 
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;

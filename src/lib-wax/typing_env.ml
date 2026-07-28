@@ -143,25 +143,34 @@ module Namespace = struct
   }
 end
 
+(* Where the name resolution being performed is made from, for the reachability
+   analysis behind [unused-field]. [Root] is a module-level context — an
+   initializer, a segment, an import declaration — which runs whatever the bodies
+   do; [Ignored] suppresses recording, for a resolution that is not a source
+   reference at all (the pass that re-checks every type definition). *)
+type origin =
+  | Root
+  | From_function of string
+  | From_type of string  (** a type definition's own components *)
+  | Ignored
+
 module Tbl = struct
   type 'a t = {
     kind : string;
     namespace : Namespace.t;
     tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
-    (* Names referenced (looked up) through this table, each paired with the
-       function whose body made the reference — [None] for a reference from a
-       module-level context (a global or table initializer, a segment), which is a
-       root. So the unused-field lint can ask not merely whether a declaration is
-       referenced, but whether anything that can actually run references it: two
-       functions that only call each other reference one another, yet neither ever
-       runs. Populated by [resolve] (one entry per reference, via [Hashtbl.add]);
-       queried by [referrers] / [iter_references]. *)
-    used : (string, string option) Hashtbl.t;
-    (* The function whose body is being type-checked, [None] in a module-level
-       context. Shared by every table of the module context (like [cond]), so
-       [resolve] can attribute a reference without the context being threaded into
-       [Tbl]; set by the [functions] pass around each body. *)
-    current : string option ref;
+    (* Names referenced (looked up) through this table, each paired with where the
+       reference was made from (see {!origin}). So the unused-field lint can ask
+       not merely whether a declaration is referenced, but whether anything that
+       can actually run references it: two functions that only call each other
+       reference one another, yet neither ever runs, and the same holds for two
+       types that only name each other. Populated by [resolve] (one entry per
+       distinct name/origin pair); queried by [referrers] / [iter_references]. *)
+    used : (string, origin) Hashtbl.t;
+    (* Where references are currently being made from. Shared by every table of
+       the module context (like [cond]), so [resolve] can attribute a reference
+       without the context being threaded into [Tbl]. *)
+    current : origin ref;
     hover : 'a -> hover_target option;
         (* A summary of a resolved value (its type / definition), attached to
            the reference [resolve] records, for editor hover on a name that is
@@ -245,11 +254,12 @@ type module_context = {
          conditional branches. Deliberately not filtered by reachability:
          rewriting a [let] that only a dead function assigns into a [const] would
          not type-check, so a textual assignment is enough to keep the [mut]. *)
-  current_function : string option ref;
-      (* The function whose body is being type-checked, [None] between them. The
-         same ref every {!Tbl} of this context holds (see [Tbl.current]), so
-         setting it here attributes each name resolution to its enclosing
-         function for the unused-field reachability analysis. *)
+  origin : origin ref;
+      (* Where references are currently being made from. The same ref every
+         {!Tbl} of this context holds (see [Tbl.current]), so setting it here
+         attributes each name resolution — to the enclosing function, or to the
+         type definition whose components are being resolved — for the
+         unused-field reachability analysis. *)
   tags : functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;

@@ -29,7 +29,6 @@ import "bindings" {
 import "stdlib" let link_info: &block;
 
 type block = [mut &eq];
-type bytes = [mut i8];
 
 #[if(not(wasi))]
 {

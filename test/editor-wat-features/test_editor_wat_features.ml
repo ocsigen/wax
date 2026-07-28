@@ -502,10 +502,14 @@ let () =
      proposal for the buffer, with no editor configuration: a descriptor-using
      module carrying it validates clean, without it the gated construct is
      flagged, and an unknown feature name is an error. *)
+  (* The exported global keeps the pair reachable: on its own the rec group is a
+     dead cycle (the two types only reference each other), which [unused-field]
+     now reports — noise that would bury what this case is about. *)
   let desc_types =
     "(rec\n\
     \  (type $obj (descriptor $obj_desc) (struct (field $x i32)))\n\
-    \  (type $obj_desc (describes $obj) (struct)))\n"
+    \  (type $obj_desc (describes $obj) (struct)))\n\
+     (global (export \"g\") (ref null $obj) (ref.null $obj))\n"
   in
   Printf.printf "=== feature annotation ===\n";
   diags "descriptors with (@feature)"

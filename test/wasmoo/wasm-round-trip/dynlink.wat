@@ -33,7 +33,6 @@
 (import "stdlib" "link_info" (global $link_info (mut (ref $block))))
 
 (type $block (array (mut (ref eq))))
-(type $bytes (array (mut i8)))
 
 (@if (not $wasi)
   (@then

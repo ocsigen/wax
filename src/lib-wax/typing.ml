@@ -1028,12 +1028,14 @@ module Tbl = struct
     let r = select env x in
     (match r with
     | Some v ->
-        (* One entry per (name, referrer) pair, not per reference: a helper called
+        (* One entry per (name, origin) pair, not per reference: a helper called
            a thousand times from one function is one edge. Keeps [used] bounded by
            the reference graph rather than by the instruction count. *)
         let referrer = !(env.current) in
-        if not (List.mem referrer (Hashtbl.find_all env.used x.desc)) then
-          Hashtbl.add env.used x.desc referrer;
+        if
+          referrer <> Ignored
+          && not (List.mem referrer (Hashtbl.find_all env.used x.desc))
+        then Hashtbl.add env.used x.desc referrer;
         (* Link this use to every definition of the name (several only across
            conditional branches); [resolve] handles only references, so [x.info]
            is a use site. The resolved value's summary rides along for hover. *)
@@ -1308,8 +1310,22 @@ let subtype d (ctx : type_context) current
   let+@ describes = resolve_opt describes in
   { Nz.typ; supertype; final; descriptor; describes }
 
+(* Each member's components (its supertype, field and element types, a descriptor
+   clause) are references made *by that member*, so they only keep their targets
+   alive if the member itself is: a rec group nothing else names is dead as a
+   whole, cycle and all. *)
 let rectype d (ctx : type_context) ty =
-  array_mapi_opt (fun i elt -> subtype d ctx i (snd elt.desc)) ty
+  let outer = !(ctx.types.current) in
+  let r =
+    array_mapi_opt
+      (fun i elt ->
+        if outer <> Ignored then
+          ctx.types.current := From_type (fst elt.desc).desc;
+        subtype d ctx i (snd elt.desc))
+      ty
+  in
+  ctx.types.current := outer;
+  r
 
 (* Replace a leading [..] splice sentinel in each struct of the rec group with
    the supertype's fields. Called after the group's names are temporarily
@@ -10600,6 +10616,10 @@ let rec functions ctx fields =
              desc = Func { name; sign; body = label, body; typ; attributes };
              info = location;
            } as f) ->
+          (* Attribute everything this definition resolves — its declared type as
+             much as its body — to the function itself, so nothing a dead function
+             names looks externally referenced. Reset after the body below. *)
+          ctx.origin := From_function name.desc;
           let func_typ =
             let*@ ty =
               (* Resolve the function's own declared type without marking the
@@ -10714,17 +10734,13 @@ let rec functions ctx fields =
           (* The syntactic lints (constant conditions, dropped pure values) read
              the source body, before typing shadows [body] with the typed one. *)
           if ctx.warn_unused then List.iter (Typing_lint.lint_source ctx) body;
-          (* Attribute every name the body resolves to this function, so the
-             unused-field lint can tell what a function that can actually run
-             reaches from what only dead code mentions. *)
-          ctx.current_function := Some name.desc;
           let body =
             with_empty_stack ctx ~location ~kind:Function
               (let* body, _ = block_contents ctx return_types body in
                let* () = pop_args ctx `Output ~location return_types in
                return body)
           in
-          ctx.current_function := None;
+          ctx.origin := Root;
           (* The body is fully typed, so the deferred lints (shift-count widths)
              can now read their pinned cells; run them here, in this function, so
              they stay in source order among the other diagnostics. *)
@@ -10876,9 +10892,18 @@ let fundecl_typ ctx name typ sign =
    of the validator's poisoned index entries. A duplicate name registers
    nothing (the first entry stands; [Tbl.exists] reports the clash). *)
 let register_function ctx d name typ sign ~exact =
-  if not (Tbl.exists d ctx.functions name) then
-    Tbl.add d ctx.functions name
-      (Option.map (fun (i, n) -> (i, n, exact)) (fundecl_typ ctx name typ sign))
+  if not (Tbl.exists d ctx.functions name) then begin
+    (* A function's signature is a reference *it* makes, so attribute the types it
+       names to the function rather than letting a dead function's type look
+       externally referenced. *)
+    let outer = !(ctx.origin) in
+    if outer <> Ignored then ctx.origin := From_function name.desc;
+    let entry =
+      Option.map (fun (i, n) -> (i, n, exact)) (fundecl_typ ctx name typ sign)
+    in
+    ctx.origin := outer;
+    Tbl.add d ctx.functions name entry
+  end
 
 let field_attributes (field : _ modulefield) =
   match field with
@@ -10992,7 +11017,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   let links = resolve_links in
   (* Shared by every table below, so a name resolution is attributed to the
      function whose body made it (see [Tbl.current]). *)
-  let current = ref None in
+  let current = ref Root in
   let type_context =
     {
       internal_types = Wax_wasm.Types.create ();
@@ -11063,7 +11088,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       import_globals =
         Tbl.make ~hover:hover_of_global ~current namespace "global";
       assigned_globals = Hashtbl.create 16;
-      current_function = current;
+      origin = current;
       memories = Tbl.make ~current namespace "memory";
       datas = Tbl.make ~current (Namespace.make ~links cond) "data segment";
       tables = Tbl.make ~current namespace "table";
@@ -11372,10 +11397,23 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     let intentional (name : ident) =
       String.length name.desc > 0 && name.desc.[0] = '_'
     in
+    (* Close a name-keyed reference graph: [live] is everything reachable from
+       [seeds] through the edges [edges_of] yields for each node. *)
+    let closure ~edges_of seeds =
+      let live = Hashtbl.create 16 in
+      let rec visit n =
+        if not (Hashtbl.mem live n) then begin
+          Hashtbl.replace live n ();
+          List.iter visit (edges_of n)
+        end
+      in
+      List.iter visit seeds;
+      live
+    in
     (* The functions that can actually run: those reachable from outside
        (exported, or the start function) or referenced from a module-level context
-       (a global or table initializer, a segment — recorded with [None] as the
-       referrer), plus everything those transitively call or take a [&f] of.
+       (a global or table initializer, a segment — recorded as [Root]), plus
+       everything those transitively call or take a [&f] of.
 
        Reachability, not the mere presence of a reference, is what lets the lint
        see a dead *cycle*: two functions that only call each other reference one
@@ -11385,33 +11423,48 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
        is not tracked, so the analysis never reports a function that might run. *)
     let live_functions =
       let calls = Hashtbl.create 16 in
+      let seeds = ref [] in
       Tbl.iter_references ctx.functions (fun referrer callee ->
           match referrer with
-          | Some caller -> Hashtbl.add calls caller callee
-          | None -> ());
-      let live = Hashtbl.create 16 in
-      let rec visit f =
-        if not (Hashtbl.mem live f) then begin
-          Hashtbl.replace live f ();
-          List.iter visit (Hashtbl.find_all calls f)
-        end
-      in
-      Tbl.iter_references ctx.functions (fun referrer callee ->
-          if referrer = None then visit callee);
+          | From_function caller -> Hashtbl.add calls caller callee
+          | Root -> seeds := callee :: !seeds
+          (* Only types reference types, so a type definition never names a
+             function; treat it as a root rather than losing the reference. *)
+          | From_type _ -> seeds := callee :: !seeds
+          | Ignored -> ());
       walk_fields
         (fun field ->
           match field.desc with
-          | Func { name; _ } when exempt field.desc -> visit name.desc
+          | Func { name; _ } when exempt field.desc ->
+              seeds := name.desc :: !seeds
           | _ -> ())
         fields;
-      live
+      closure ~edges_of:(Hashtbl.find_all calls) !seeds
     in
-    (* Referenced by a module-level context, or by a function that can run. A
+    (* Referenced by a module-level context, or by something that can run. A
        reference from dead code keeps nothing alive. *)
+    let live_origin = function
+      | Root -> true
+      | From_function f -> Hashtbl.mem live_functions f
+      | From_type _ | Ignored -> false
+    in
     let used tbl (name : ident) =
-      List.exists
-        (function None -> true | Some f -> Hashtbl.mem live_functions f)
-        (Tbl.referrers tbl name.desc)
+      List.exists live_origin (Tbl.referrers tbl name.desc)
+    in
+    (* The types anything reachable names, closed over the references a type
+       definition makes through its own components (its supertype, field and
+       element types, a descriptor clause) — so a rec group nothing outside it
+       names is dead as a whole, its mutual references notwithstanding. *)
+    let live_types =
+      let components = Hashtbl.create 16 in
+      let seeds = ref [] in
+      Tbl.iter_references ctx.types (fun referrer target ->
+          match referrer with
+          | From_type src -> Hashtbl.add components src target
+          | Root | From_function _ ->
+              if live_origin referrer then seeds := target :: !seeds
+          | Ignored -> ());
+      closure ~edges_of:(Hashtbl.find_all components) !seeds
     in
     let unused tbl (name : ident) =
       (not (intentional name)) && not (used tbl name)
@@ -11472,7 +11525,20 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
             check_unused field.desc ctx.elems "element segment" name
         | Import { decl; _ } -> check_unused_import decl
         | Import_group { decls; _ } -> List.iter check_unused_import decls
-        | Data _ | Elem _ | Type _ | Module_annotation _ | Conditional _ -> ())
+        (* Each member of a rec group is reported on its own; the group as a whole
+           is dead only when nothing outside it names any member. *)
+        | Type rectype ->
+            Array.iter
+              (fun elt ->
+                let name = fst elt.desc in
+                if
+                  (not (intentional name))
+                  && not (Hashtbl.mem live_types name.desc)
+                then
+                  Error.unused_field ctx.diagnostics ~location:name.info "type"
+                    name)
+              rectype
+        | Data _ | Elem _ | Module_annotation _ | Conditional _ -> ())
       fields
   end;
   ( ctx.type_context.types,

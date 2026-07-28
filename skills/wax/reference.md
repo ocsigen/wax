@@ -4594,7 +4594,7 @@ server](#language-server)).
           quick-fix `edit` that inserts a `_` at the name's start.
         - `unused-field` (groups `unused`, `correctness`): a module field that
           nothing reachable references — a function, global, memory, table, tag,
-          or a *passive* data or element segment. An active segment (and a
+          type, or a *passive* data or element segment. An active segment (and a
           declarative one) runs at instantiation, so it counts as used whether or
           not an instruction names it; only a passive segment, reachable solely
           through `memory.init`/`table.init` and `data.drop`/`elem.drop`, can be
@@ -4614,6 +4614,16 @@ server](#language-server)).
           unreachable function is reported. One consequence worth knowing: in a
           module that exports nothing and has no start function, nothing can run,
           so every field is reported.
+
+          Types take part in the same analysis, with one extra kind of edge: a
+          type definition's own components reference types (its supertype, a field
+          or element type, a `descriptor` clause), and those only count if the
+          definition itself is live. So a `rec` group nothing outside it names is
+          dead as a whole, however much its members name each other, and a type
+          named only by an unreachable function's signature or body is dead too.
+          Only definitions written in the source are candidates: the implicit
+          function types interned for an inline block or `call_indirect` signature
+          are not reported.
         - `unused-import` (groups `unused`, `correctness`): an imported function,
           global, memory, table, or tag that nothing reachable references. Like
           `unused-field` — same reachability analysis — but for imports; `_`

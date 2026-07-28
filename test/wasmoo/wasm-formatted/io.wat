@@ -285,7 +285,6 @@
 
 (type $block (array (mut (ref eq))))
 (type $bytes (array (mut i8)))
-(type $offset_array (array (mut i64)))
 
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
