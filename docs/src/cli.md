@@ -328,11 +328,9 @@ server](#language-server)).
       output is a usage error.
     - Fails (exit `128`) if a conditional-compilation directive `(@if …)`
       remains unresolved; resolve them first with `-D`/`--define`.
-    - The `metadata.code.*` annotations of the
-      [branch-hinting](./features.md) and compilation-hints proposals are
-      *kept*. They are not Wax-specific sugar but real WebAssembly text that
-      other tools read, and dropping them would silently lose the hints. So
-      `--desugar` removes the Wax-only annotations, not every annotation.
+    - Only Wax-specific annotations go. The `metadata.code.*` hints of the
+      branch-hinting and compilation-hints proposals are real WebAssembly text,
+      so they stay.
     - A `(@feature "…")` declaration is stripped, so none remains in the
       output. Feature resolution has already run by then, so the declaration
       still gates during processing; re-ingesting the desugared text needs
