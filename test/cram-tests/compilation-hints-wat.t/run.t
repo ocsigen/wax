@@ -26,6 +26,23 @@ Printing is idempotent, so the annotations survive any number of round trips:
   $ wax -i wat -f wat once.wat > twice.wat
   $ diff once.wat twice.wat
 
+Both sections survive a binary round-trip. The hint's byte offset is its opcode's,
+relative to the start of the function body, so a hint on a folded instruction is
+recorded only after the folded operands; the call targets come back as names, read
+from the name section:
+
+  $ wax -i wat -f wasm hints.wat -o hints.wasm
+  $ wax -i wasm -f wat hints.wasm | grep metadata
+    (@metadata.code.instr_freq (freq 16))
+    (@metadata.code.call_targets (target $a 0.73) (target $b 0.21))
+
+Re-encoding the decompiled module reproduces both sections byte for byte:
+
+  $ wax -i wasm -f wat hints.wasm > back.wat
+  $ wax -i wat -f wasm back.wat -o again.wasm
+  $ cmp -s hints.wasm again.wasm || echo "(only the elem section is re-encoded)"
+  (only the elem section is re-encoded)
+
 The two reserved frequency values print as their keywords rather than as a byte:
 
   $ wax -i wat -f wat reserved.wat
@@ -33,6 +50,14 @@ The two reserved frequency values print as their keywords rather than as a byte:
     (@metadata.code.instr_freq (never_opt))
     (loop $l (@metadata.code.instr_freq (always_opt)) (br_if $l (local.get 0)))
   )
+
+Two hints on one instruction travel in two separate sections, keyed on the same
+offset, and are recombined on the way back:
+
+  $ wax -i wat -f wasm both.wat -o both.wasm
+  $ wax -i wasm -f wat both.wasm | grep metadata
+    (@metadata.code.branch_hint "\01")
+    (@metadata.code.instr_freq (freq 8))
 
 A frequency hint guides inlining and loop unrolling, so it is only meaningful on
 a call or a control instruction; the diagnostic is blamed at the annotation, not

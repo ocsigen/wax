@@ -1550,24 +1550,30 @@ let indirect_name_map ch =
       (i, name_map ch))
     ch
 
-(* Branch-hinting proposal. [sections] holds the parsed [metadata.code.branch_hint]
-   entries: for each (absolute) function index, a list of (body-relative offset,
-   hint). [code_starts] gives, in defined-function order, the byte offset where
-   each function body (its locals declaration) begins — the origin for those
-   offsets. Set the hint on the instruction whose opcode sits at the matching
-   offset (its source location records that absolute offset). Whether that
-   instruction is a legal target is a validation concern, not a decoding one, so
-   the hint is attached wherever its offset lands and [validation] rejects a
-   non-branch placement — matching the text path. Our own encoder always records
-   the branch opcode's offset, so a round-tripped valid module lands on a branch;
-   only an externally-produced, malformed section can point elsewhere, and then
-   the placement is diagnosed rather than silently dropped. An offset falling
-   between opcodes (matching no instruction start) still cannot attach. *)
-let attach_branch_hints ~num_func_imports ~code_starts ~sections
+(* Branch-hinting / compilation-hints proposals. [sections] holds the parsed
+   [metadata.code.*] entries from every such section: for each (absolute) function
+   index, a list of (body-relative offset, setter). [code_starts] gives, in
+   defined-function order, the byte offset where each function body (its locals
+   declaration) begins — the origin for those offsets. Apply the setters to the
+   instruction whose opcode sits at the matching offset (its source location
+   records that absolute offset). Whether that instruction is a legal target is a
+   validation concern, not a decoding one, so a hint is attached wherever its
+   offset lands and [validation] rejects a bad placement — matching the text path.
+   Our own encoder always records the hinted opcode's offset, so a round-tripped
+   valid module lands on one; only an externally-produced, malformed section can
+   point elsewhere, and then the placement is diagnosed rather than silently
+   dropped. An offset falling between opcodes (matching no instruction start)
+   still cannot attach. *)
+let attach_code_metadata ~num_func_imports ~code_starts ~sections
     (code : Ast.location code list) =
   if sections = [] then code
   else
-    let by_func : (int, (int, bool) Hashtbl.t) Hashtbl.t = Hashtbl.create 16 in
+    let by_func :
+        ( int,
+          (int, Ast.location -> int Hints.t -> int Hints.t) Hashtbl.t )
+        Hashtbl.t =
+      Hashtbl.create 16
+    in
     List.iter
       (fun (funcidx, hints) ->
         let tbl =
@@ -1578,7 +1584,15 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
               Hashtbl.add by_func funcidx t;
               t
         in
-        List.iter (fun (off, h) -> Hashtbl.replace tbl off h) hints)
+        List.iter
+          (fun (off, f) ->
+            (* Two sections may hint the same instruction, so compose rather than
+               replace; within one section a repeated offset still lets the last
+               entry win, since each setter overwrites its own field. *)
+            match Hashtbl.find_opt tbl off with
+            | None -> Hashtbl.replace tbl off f
+            | Some g -> Hashtbl.replace tbl off (fun loc h -> f loc (g loc h)))
+          hints)
       sections;
     let rec go start_pos tbl (i : Ast.location instr) =
       let lst = List.map (go start_pos tbl) in
@@ -1616,7 +1630,7 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
       let i = { i with desc } in
       let rel = i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum - start_pos in
       match Hashtbl.find_opt tbl rel with
-      | Some h -> { i with hints = Hints.branch i.info h i.hints }
+      | Some f -> { i with hints = f i.info i.hints }
       | None -> i
     in
     List.mapi
@@ -1646,10 +1660,11 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
   in
   check_header ch;
   let data_count = ref None in
-  (* Branch-hinting proposal: parsed [metadata.code.branch_hint] entries and the
-     byte offset at which each function body begins, applied together after the
-     whole module is read (the section may sit before or after the code section). *)
-  let branch_hint_sections = ref [] in
+  (* Branch-hinting / compilation-hints proposals: the parsed [metadata.code.*]
+     entries and the byte offset at which each function body begins, applied
+     together after the whole module is read (a section may sit before or after
+     the code section). *)
+  let code_metadata_sections = ref [] in
   let code_body_starts = ref [] in
   ch.pos <- 8;
   let rec loop m last_section_order =
@@ -1806,15 +1821,36 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
                     m with
                     target_features = m.target_features @ Array.to_list entries;
                   }
-              | "metadata.code.branch_hint" ->
-                  (* Branch-hinting proposal. The section must appear before the
-                     code section. Buffer the entries; they are matched
-                     to instructions after the code section is parsed. The trailing
-                     section-size check verifies the whole content was consumed. *)
+              | ( "metadata.code.branch_hint" | "metadata.code.instr_freq"
+                | "metadata.code.call_targets" ) as sname ->
+                  (* Branch-hinting / compilation-hints proposals. These sections
+                     address instructions by their offset from the start of the
+                     function body, so they must appear before the code section.
+                     Buffer them as setters; they are matched to instructions once
+                     the code section is parsed. The trailing section-size check
+                     verifies the whole content was consumed. *)
                   if last_section_order >= 12 then
-                    error ch
-                      "metadata.code.branch_hint must appear before the code \
-                       section";
+                    error ch "%s must appear before the code section" sname;
+                  let payload ch =
+                    let len = uint ch in
+                    if len = 0 then error ch "empty %s hint" sname;
+                    String.init len (fun _ -> Char.chr (input_byte ch))
+                  in
+                  let setter ch s =
+                    match sname with
+                    | "metadata.code.branch_hint" ->
+                        (* One byte; a longer payload keeps the leading value and
+                           ignores the rest, per the proposal's extension rule. *)
+                        let v = s.[0] <> '\000' in
+                        fun loc h -> Hints.branch loc v h
+                    | "metadata.code.instr_freq" ->
+                        let v = Char.code s.[0] in
+                        fun loc h -> Hints.freq loc v h
+                    | _ -> (
+                        match Hints.call_targets_of_payload s with
+                        | Ok l -> fun loc h -> Hints.targets loc l h
+                        | Error msg -> error ch "%s" msg)
+                  in
                   let entries =
                     vec
                       (fun ch ->
@@ -1823,23 +1859,15 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
                           vec
                             (fun ch ->
                               let offset = uint ch in
-                              let len = uint ch in
-                              (* The payload is [len] bytes (always 1 in practice:
-                                 a single 0x00/0x01 hint byte); read them all and
-                                 take the first as the hint value. *)
-                              if len = 0 then error ch "empty branch hint";
-                              let v = input_byte ch <> 0 in
-                              for _ = 2 to len do
-                                ignore (input_byte ch)
-                              done;
-                              (offset, v))
+                              let s = payload ch in
+                              (offset, setter ch s))
                             ch
                         in
                         (funcidx, Array.to_list hints))
                       ch
                   in
-                  branch_hint_sections :=
-                    !branch_hint_sections @ Array.to_list entries;
+                  code_metadata_sections :=
+                    !code_metadata_sections @ Array.to_list entries;
                   m
               | _ ->
                   (* Skip other custom sections *)
@@ -1891,6 +1919,6 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
   {
     res with
     code =
-      attach_branch_hints ~num_func_imports ~code_starts:!code_body_starts
-        ~sections:!branch_hint_sections res.code;
+      attach_code_metadata ~num_func_imports ~code_starts:!code_body_starts
+        ~sections:!code_metadata_sections res.code;
   }

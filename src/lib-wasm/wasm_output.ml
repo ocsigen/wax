@@ -237,10 +237,8 @@ module Encoder = struct
      byte position of the branch opcode relative to the start of the body buffer
      (which begins with the locals declaration) — exactly the offset the
      [metadata.code.branch_hint] section stores. Reset to a no-op outside code
-     encoding. See [output_branch_hint_section] / the code-section encoder. *)
-  (* NOTE: kept as [offset -> likely] while branch hints are the only hint kind
-     encoded; the compilation-hints sections widen it to the whole hint record. *)
-  let branch_hint_sink = ref (fun (_ : int) (_ : bool) -> ())
+     encoding. See [output_code_metadata_section] / the code-section encoder. *)
+  let hint_sink = ref (fun (_ : int) (_ : int Hints.t) -> ())
 
   (* A source position is real when it names a file and carries a line/column; a
      synthesized node instead has [""]/[-1] sentinels. *)
@@ -270,14 +268,12 @@ module Encoder = struct
        offset (the wrapper shares its start offset with its first operand), so a
        byte would carry several identical mappings instead of one. *)
     let generated_offset = Buffer.length b in
-    (* Branch-hinting proposal: the hint is recorded at this instruction's own
-       opcode offset. A folded branch carries its hint on the head, which is
-       encoded only after the operands (see the [Folded] arm), so
-       [generated_offset] is the opcode's position in the folded and the unfolded
-       shape alike. *)
-    (match i.hints.Hints.branch with
-    | Some h -> !branch_hint_sink generated_offset h.Hints.value
-    | None -> ());
+    (* Branch-hinting / compilation-hints proposals: the hints are recorded at
+       this instruction's own opcode offset. A folded instruction carries them on
+       its head, which is encoded only after the operands (see the [Folded] arm),
+       so [generated_offset] is the opcode's position in the folded and the
+       unfolded shape alike. *)
+    if not (Hints.is_empty i.hints) then !hint_sink generated_offset i.hints;
     (match i.desc with
     | Folded _ -> ()
     | _ ->
@@ -1353,26 +1349,26 @@ let output_import_section ~features ~coalesce_imports out_channel imports =
   output_section out_channel 2 (Encoder.vec write_entry)
     (if compact then coalesce_singles imports else imports)
 
-(* Branch-hinting proposal: emit the [metadata.code.branch_hint] custom section.
-   [func_hints] maps a (absolute) function index to its hints, each a byte offset
-   (of the branch opcode, relative to the start of the function body) paired with
-   the hint ([true] = likely, [false] = unlikely). Both the function entries and
-   each function's hints are already in increasing-offset order (functions are
-   encoded in order; a body's opcodes are emitted at strictly increasing
-   offsets), as the section requires. *)
-let output_branch_hint_section out_channel
-    (func_hints : (int * (int * bool) list) list) =
+(* Branch-hinting / compilation-hints proposals: emit one [metadata.code.*] custom
+   section. They all share a shape — per (absolute) function index, a vector of
+   (byte offset of the hinted opcode relative to the start of the function body,
+   payload length, payload) — so only the section name and the payload bytes
+   differ. Both the function entries and each function's hints are already in
+   increasing-offset order (functions are encoded in order; a body's opcodes are
+   emitted at strictly increasing offsets), as the sections require. *)
+let output_code_metadata_section out_channel name
+    (func_hints : (int * (int * string) list) list) =
   output_section out_channel 0
     (fun b () ->
-      Encoder.name b "metadata.code.branch_hint";
+      Encoder.name b ("metadata.code." ^ name);
       Encoder.vec
         (fun b (funcidx, hints) ->
           Encoder.uint b funcidx;
           Encoder.vec
-            (fun b (offset, hint) ->
+            (fun b (offset, payload) ->
               Encoder.uint b offset;
-              Encoder.uint b 1 (* reserved: length of the hint payload *);
-              Encoder.byte b (if hint then 1 else 0))
+              Encoder.uint b (String.length payload);
+              String.iter (fun c -> Encoder.byte b (Char.code c)) payload)
             b hints)
         b func_hints)
     ()
@@ -1549,11 +1545,11 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   if m.data <> [] then section 12 Encoder.uint (List.length m.data);
 
   (* 11. Code Section *)
-  (* Branch-hinting proposal: collect each function's hints while encoding its
-     body (the [branch_hint_sink] fires per hinted [if]/[br_if]) and emit the
-     [metadata.code.branch_hint] section afterwards. Function indices are absolute
-     (defined functions follow the imported ones). *)
-  let branch_hints = ref [] in
+  (* Branch-hinting / compilation-hints proposals: collect each function's hints
+     while encoding its body (the [hint_sink] fires per hinted instruction) and
+     emit one [metadata.code.*] section per kind afterwards. Function indices are
+     absolute (defined functions follow the imported ones). *)
+  let branch_hints = ref [] and freq_hints = ref [] and target_hints = ref [] in
   if m.code <> [] then (
     let num_func_imports =
       List.fold_left
@@ -1567,8 +1563,8 @@ let module_ ~out_channel ?output_file ?(source_map = false)
     Encoder.vec
       (fun b (c : Ast.location code) ->
         let this = ref [] in
-        (Encoder.branch_hint_sink :=
-           fun offset hint -> this := (offset, hint) :: !this);
+        (Encoder.hint_sink :=
+           fun offset hints -> this := (offset, hints) :: !this);
         let b_code = Buffer.create 128 in
         let coalesce_locals l =
           let rec loop acc n t l =
@@ -1600,16 +1596,47 @@ let module_ ~out_channel ?output_file ?(source_map = false)
         (match List.rev !this with
         | [] -> ()
         | hs ->
+            (* Split this function's hints across the sections that carry them,
+               each keeping the offsets in increasing order. *)
+            let funcidx = num_func_imports + !code_index in
+            let collect acc payload_of =
+              match List.filter_map payload_of hs with
+              | [] -> acc
+              | l -> (funcidx, l) :: acc
+            in
             branch_hints :=
-              (num_func_imports + !code_index, hs) :: !branch_hints);
+              collect !branch_hints (fun (o, (h : int Hints.t)) ->
+                  Option.map
+                    (fun (b : bool Hints.hint) ->
+                      (o, String.make 1 (if b.value then '\001' else '\000')))
+                    h.Hints.branch);
+            freq_hints :=
+              collect !freq_hints (fun (o, (h : int Hints.t)) ->
+                  Option.map
+                    (fun (f : Hints.freq Hints.hint) ->
+                      (o, Hints.freq_payload f.value))
+                    h.Hints.freq);
+            target_hints :=
+              collect !target_hints (fun (o, (h : int Hints.t)) ->
+                  Option.map
+                    (fun (l : (int * int) list Hints.hint) ->
+                      (o, Hints.call_targets_payload l.value))
+                    h.Hints.targets));
         incr code_index)
       code_content m.code;
 
-    (* metadata.code.branch_hint custom section (after the Function section,
-       before the Code section). *)
-    (match List.rev !branch_hints with
-    | [] -> ()
-    | fhs -> bump (output_branch_hint_section out_channel fhs));
+    (* The metadata.code.* custom sections, after the Function section and before
+       the Code section, as they all require. *)
+    List.iter
+      (fun (name, hints) ->
+        match List.rev !hints with
+        | [] -> ()
+        | fhs -> bump (output_code_metadata_section out_channel name fhs))
+      [
+        ("branch_hint", branch_hints);
+        ("instr_freq", freq_hints);
+        ("call_targets", target_hints);
+      ];
 
     let len = Buffer.length code_content in
     let content_start = !file_pos + 1 in
@@ -1625,7 +1652,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       ~delta:(content_start + leb_size len);
     Buffer.output_buffer out_channel code_content;
     bump len;
-    Encoder.branch_hint_sink := fun _ _ -> ());
+    Encoder.hint_sink := fun _ _ -> ());
 
   (* 12. Data Section *)
   if m.data <> [] then
