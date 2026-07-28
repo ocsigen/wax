@@ -117,17 +117,26 @@ let drop_in_ranges ctx ranges =
       in
       ctx.comments <- List.rev (sweep ranges comments)
 
-let associate ?only ctx =
-  (* Only consider locations the caller will actually look up while printing
-     (when [only] is given). A comment otherwise risks being attached to a node
-     that the printer never emits trivia for — e.g. a struct-field label printed
-     via its [.desc] only — and would then be silently dropped. Restricting to
-     emitted locations makes every comment bubble up to a location that prints. *)
-  let locations =
-    match only with
-    | None -> ctx.locations
-    | Some set -> List.filter (fun l -> Tbl.mem set l) ctx.locations
-  in
+let associate ~only ctx =
+  (* Associate over the spans that are both a parse node ([ctx.locations], from
+     {!with_pos}) and looked up by the printer ([only]); the two sets clip each
+     other in opposite directions, so neither alone will do.
+
+     Dropping a parse node the printer skips — e.g. a struct-field label printed
+     via its [.desc] only — keeps its comments from being silently dropped: they
+     bubble up to an enclosing node that does print.
+
+     Dropping a looked-up span that no parse node owns keeps a comment from
+     landing somewhere that is not a source construct. [only] is not a subset of
+     [ctx.locations]: a conversion stamps output nodes with spans of mere
+     *tokens* (an import's module-name string, which no [with_pos] node covers)
+     or with [Ast.dummy_loc] (a synthesized node). Such a span joins the nesting
+     tree as a leaf that can outrank the real nodes: lowering
+     [import "m" { … }] to separate [(import …)] fields never prints the block's
+     own span, so its module-name string would become the earliest location and
+     take the file's leading comments — printing the header inside the first
+     [(import], after the opening keyword. *)
+  let locations = List.filter (fun l -> Tbl.mem only l) ctx.locations in
   let tbl = Tbl.create (List.length locations) in
   let comments = List.rev ctx.comments in
   let locs =

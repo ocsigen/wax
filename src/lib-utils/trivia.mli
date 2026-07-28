@@ -34,15 +34,18 @@ val mark : locations -> Ast.location -> unit
     walking the document it is about to print, instead of driving a discarded
     dry print pass whose only effect is the same {!val:get}-time [collect]. *)
 
-val associate : ?only:locations -> context -> t * entry list
-(** [associate ctx] associates trivia to locations. The second component holds
-    the leftover comments that no location owns (trailing comments, or every
-    comment when there are no locations); the caller prints them as tail trivia.
+val associate : only:locations -> context -> t * entry list
+(** [associate ~only ctx] associates trivia to locations. The second component
+    holds the leftover comments that no location owns (trailing comments, or
+    every comment when there are no locations); the caller prints them as tail
+    trivia.
 
-    [only] restricts the association to the given set of locations — those the
-    printer will actually look up (see {!val:get}). Comments that would
-    otherwise attach to a non-emitted node bubble up to an emitted one instead
-    of being lost. Collect the set with a dry printing pass. *)
+    [only] is the set of locations the printer will actually look up (see
+    {!val:get}), collected with a dry printing pass or with {!mark}. The
+    association covers the spans in it that are also parse nodes: a comment
+    would otherwise either attach to a node the printer skips (and be lost) or
+    to a looked-up span that is no source construct at all — a conversion also
+    stamps output nodes with token spans and with {!Ast.dummy_loc}. *)
 
 val make : unit -> context
 (** Create a new trivia context. *)
