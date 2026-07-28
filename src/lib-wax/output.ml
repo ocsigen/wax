@@ -82,6 +82,22 @@ let freq_attr pp (b : Wax_wasm.Hints.freq) =
     | Some r -> emit (Printf.sprintf "freq = %.17g" r)
     | None -> ()
 
+(* Compilation-hints proposal: the call-target attribute. Each frequency is a whole
+   percent on the wire and prints back as the fraction of 1 it was written as, so
+   the round trip is exact ([%g] suffices: a percent never needs more digits). A
+   target's name is printed as the plain identifier it is, not styled as one, since
+   it is part of the attribute rather than a reference the reader can navigate. *)
+let targets_attr pp l =
+  attribute pp "#[targets(";
+  List.iteri
+    (fun n (f, pct) ->
+      if n > 0 then attribute pp ", ";
+      attribute pp
+        (Printf.sprintf "%s: %g" f.Ast.Annot.desc (float_of_int pct /. 100.)))
+    l;
+  attribute pp ")]";
+  space pp ()
+
 (* Branch-hinting / compilation-hints proposals: the attributes an instruction's
    hints print as, before the instruction itself, in section order.
 
@@ -97,7 +113,11 @@ let hint_attrs pp (i : _ Ast.instr) =
     h.Wax_wasm.Hints.branch;
   Option.iter
     (fun (f : Wax_wasm.Hints.freq Wax_wasm.Hints.hint) -> freq_attr pp f.value)
-    h.Wax_wasm.Hints.freq
+    h.Wax_wasm.Hints.freq;
+  Option.iter
+    (fun (l : (Ast.ident * int) list Wax_wasm.Hints.hint) ->
+      targets_attr pp l.value)
+    h.Wax_wasm.Hints.targets
 
 (* Comment preservation: emit the trivia (comments, blank lines) the lexer
    collected, looked up by AST-node location. The rendering logic is shared with

@@ -1,21 +1,20 @@
-entries: 542
-with an expected list: 507
+entries: 551
+with an expected list: 516
 using the spurious-reduction template: 52
 entries with cascade depth >= 4: 8
 max cascade depth: 6
 overridden: 35
 generic fallback (empty expected list, not overridden): 0
 generic fallback (expected list over 5, not overridden): 0
-delimiter hints: 106
+delimiter hints: 109
 missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
-state/automaton item-set match: 542/542
+state/automaton item-set match: 551/551
 unsound claims: 0
 entries with uncovered actions: 0
 uncovered action tokens (total): 0
 class "an operator": collapsed in 34 entries
 class "a comparison operator": collapsed in 34 entries
-names configured: 16, unused: 3
+names configured: 16, unused: 2
   CHAR (expecting: unused, assuming: unused)
   EOF (expecting: unused, assuming: unused)
-  FLOAT (expecting: unused, assuming: unused)

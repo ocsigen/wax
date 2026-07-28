@@ -771,6 +771,51 @@ to and from WebAssembly, so no compiler flag is needed. See
 [Instructions → Branch Hints](correspondence/instructions.md#branch-hints) for
 the WebAssembly encoding.
 
+### Compilation Hints
+
+The [compilation-hints proposal](https://github.com/WebAssembly/compilation-hints)
+extends the same mechanism to profile data an engine can use to decide what to
+optimize. Two attributes carry it, and they prefix an expression rather than only a
+branch:
+
+```wax
+#[freq = 16] 'l: loop {          // runs about 16 times per call
+    #[never_opt] slow_path();    // never worth optimizing
+}
+
+#[targets(draw_rect: 0.73, draw_circle: 0.21)]
+shape.draw();                    // the indirect call's likely callees
+```
+
+- `#[freq = n]` is how often the instruction runs per call of its function.
+  `#[never_opt]` and `#[always_opt]` are the two reserved values. It is meaningful
+  on a call or a control instruction.
+- `#[targets(f: 0.73, …)]` lists the likely callees of an *indirect* call, each with
+  how often it is taken as a fraction of 1. The fractions must total at most 1; a
+  shortfall says other, unlisted callees take the remainder. Naming a function here
+  is not a *use* of it, so one reachable only through a target list is still
+  reported by the `unused-field` lint.
+
+A hint attribute takes the **whole** expression that follows it. That makes the
+extent unambiguous, at the price of rejecting a placement where a reader could not
+tell what was meant:
+
+```wax
+#[freq = 4] f(x);            // fine: the hint is on the call
+let y = #[freq = 4] f(x);    // fine: the initialiser is delimited
+(#[freq = 4] f(x)) + 1       // fine: parentheses say which operand
+#[freq = 4] f(x) + 1         // error: the hint lands on the `+`
+```
+
+This is the rule Rust's experimental `stmt_expr_attributes` uses. Several hints may
+stack on one instruction, and a hint on a block statement needs no trailing `;`, as
+a plain block statement does not.
+
+Like branch hints, these are advisory and preserved across every conversion, so no
+compiler flag is needed. See
+[Instructions → Branch Hints](correspondence/instructions.md#branch-hints) for the
+WebAssembly encoding.
+
 ### Dispatch
 
 A `dispatch` is a multi-way branch, the readable form of a `br_table` jump

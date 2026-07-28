@@ -57,7 +57,7 @@
             },
             {
               "name": "entity.other.attribute-name.wax",
-              "match": "\\b(if|else|module|export|import|start|likely|unlikely)\\b"
+              "match": "\\b(if|else|module|export|import|start|likely|unlikely|freq|never_opt|always_opt|targets)\\b"
             },
             { "include": "#numbers" },
             { "include": "#operators" },

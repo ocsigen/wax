@@ -1,0 +1,10 @@
+type ft = fn(i32) -> i32;
+#[export]
+fn a(x: i32) -> i32 { x }
+#[export]
+fn b(x: i32) -> i32 { 0 }
+#[export]
+fn go(p: &?ft, x: i32) -> i32 {
+    #[targets(a: 0.8, b: 0.5)]
+    p(x)
+}

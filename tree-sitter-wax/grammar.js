@@ -1068,9 +1068,23 @@ module.exports = grammar({
     attribute: $ => seq(
       '#', '[',
       field('name', $._attribute_name),
-      optional(seq('=', field('value', $._expression))),
+      choice(
+        optional(seq('=', field('value', $._expression))),
+        // The compilation-hints call-target list `#[targets(f: 0.73, …)]`. Its
+        // payload is a list, which neither other attribute shape can carry, so
+        // it is its own alternative here as it is its own production in
+        // parser.mly; the `(` after the name selects it. That the name must be
+        // `targets` is the wax parser's semantic check, not the grammar's.
+        seq('(', sepByTrailing(',', $.hint_target), ')'),
+      ),
       optional(seq(',', 'if', '(', field('guard', $._condition), ')')),
       ']',
+    ),
+
+    hint_target: $ => seq(
+      field('function', $.identifier),
+      ':',
+      field('frequency', choice($.float_literal, $.integer_literal)),
     ),
 
     _attribute_name: $ => choice($.identifier, 'import'),

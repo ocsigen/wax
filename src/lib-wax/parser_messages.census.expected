@@ -90,10 +90,12 @@
     1x Expecting ''', or an identifier.
    11x Expecting '''.
     1x Expecting '(', ')', ',', or a comparison operator.
+    1x Expecting '(', '=', ']', or an attribute guard.
+       <_>This '[' opens the enclosing construct.
     1x Expecting '(', or a simple pattern.
     9x Expecting '('.
     2x Expecting ')', ',', or ':'.
-    2x Expecting ')', or ','.
+    3x Expecting ')', or ','.
     1x Expecting ')', or a condition.
     1x Expecting ')', or a condition.
        <_>This '(' opens the enclosing construct.
@@ -101,6 +103,9 @@
     1x Expecting ')', or a data number.
        <_>This '(' opens the enclosing construct.
     3x Expecting ')', or a function parameter.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a hint target.
+    1x Expecting ')', or a hint target.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a let pattern.
        <_>This '(' opens the enclosing construct.
@@ -136,7 +141,7 @@
        <_>This '{' opens the enclosing construct.
     2x Expecting ':', ';', or an optional function type.
     2x Expecting ':', or '='.
-   14x Expecting ':'.
+   15x Expecting ':'.
     1x Expecting ';', '=', or '@'.
     2x Expecting ';', '=', or memory limits.
     2x Expecting ';', '_', '}', or a catch arm.
@@ -178,7 +183,7 @@
     2x Expecting '?', a descriptor operand, or a reference type.
     1x Expecting '@'.
     2x Expecting '[', or '{'.
-    9x Expecting '['.
+   10x Expecting '['.
     1x Expecting ']', an array body, or an identifier.
        <_>This '[' opens the enclosing construct.
     1x Expecting ']', or a catch.
@@ -194,7 +199,7 @@
     1x Expecting ']', or an on clause.
     1x Expecting ']', or an on clause.
        <_>This '[' opens the enclosing construct.
-   12x Expecting ']'.
+   13x Expecting ']'.
        <_>This '[' opens the enclosing construct.
     4x Expecting 'catch'.
     1x Expecting 'describes', 'descriptor', 'open', or a composite type.
@@ -203,7 +208,7 @@
     1x Expecting 'descriptor', or an identifier.
     2x Expecting 'else', 'if', 'import', or an identifier.
     1x Expecting 'if'.
-    1x Expecting 'import', or an identifier.
+    2x Expecting 'import', or an identifier.
     6x Expecting '{'.
     1x Expecting '|'.
     1x Expecting '}', or a data item.
@@ -231,6 +236,7 @@
     3x Expecting a descriptor operand.
     1x Expecting a dummy ctx.
     2x Expecting a field type.
+    1x Expecting a float, or an integer.
     2x Expecting a function name.
     2x Expecting a function type.
     1x Expecting a heap type.

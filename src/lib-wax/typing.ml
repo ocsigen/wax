@@ -608,6 +608,23 @@ module Error = struct
       ++ kw (ns ^ "::" ^ name)
       ++ text "can only be used as a function call.")
 
+  (* Compilation-hints proposal, mirroring [Validation]'s checks on the same hint:
+     a call-target list only means something for a call whose callee is not already
+     known, and the listed frequencies must leave room for the unlisted ones. *)
+  let call_targets_direct_call context ~location =
+    report context ~location
+      (text
+         "A call-target hint may only prefix an indirect call. This callee is \
+          a function, so the call is direct and its target is already known.")
+
+  let call_targets_over_100 context ~location ~total =
+    report context ~location
+      (((text "The call-target frequencies add up to" ++ Message.int total)
+       ^^ text "%, more than 100%.")
+      ++ text
+           "A shortfall is how the hint says other, unlisted targets take the \
+            remainder.")
+
   let before_hole context ~location =
     report context ~location
       ((text "This expression occurs before a hole " ++ kw "_") ^^ text ".")
@@ -9098,11 +9115,49 @@ and type_indirect_call ctx i i' l =
   replay ();
   (st2, node)
 
+(* Compilation-hints proposal: what a [#[targets(f: 0.73, …)]] hint on this call
+   needs beyond the parser's check that it prefixes a call at all. The mirror of
+   [Validation.check_hints]' [call_targets] arm, which the Wax typer owes because
+   [wax check] never converts, so a problem only the lowering would hit would
+   otherwise pass. Each target is resolved but NOT marked used: naming a function
+   in advisory metadata is not a use, so it must not keep an otherwise-dead
+   function out of the unused-field lint. *)
+and check_call_targets_hint ctx (i : location instr) =
+  match i.hints.Wax_wasm.Hints.targets with
+  | None -> ()
+  | Some h ->
+      (match i.desc with
+      (* Direct-call test, mirroring [To_wasm]: a bare name that denotes a module
+         function and is not shadowed by a local lowers to [call], whose target is
+         already known, so a target list says nothing. *)
+      | (Call ({ desc = Get name; _ }, _) | TailCall ({ desc = Get name; _ }, _))
+        when (not (StringMap.mem name.Annot.desc ctx.locals))
+             && Tbl.find_no_mark ctx.functions name <> None ->
+          Error.call_targets_direct_call ctx.diagnostics
+            ~location:h.Wax_wasm.Hints.loc
+      | _ -> ());
+      List.iter
+        (fun ((f : Ast.ident), _) ->
+          if
+            StringMap.mem f.Annot.desc ctx.locals
+            || Tbl.find_no_mark ctx.functions f = None
+          then
+            Error.unbound_name ctx.diagnostics ~location:f.Annot.info "function"
+              f)
+        h.Wax_wasm.Hints.value;
+      let total =
+        List.fold_left (fun acc (_, pct) -> acc + pct) 0 h.Wax_wasm.Hints.value
+      in
+      if total > 100 then
+        Error.call_targets_over_100 ctx.diagnostics
+          ~location:h.Wax_wasm.Hints.loc ~total
+
 and call_instruction ctx i =
   (* Dispatches a [Call]: first the intrinsic method/free-function
      forms (memory, table, segment, array, numeric, and SIMD
      operations written as [recv.meth(..)] or [name(..)]), then an
      ordinary call through a function reference. *)
+  check_call_targets_hint ctx i;
   match i.desc with
   | Call
       ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as

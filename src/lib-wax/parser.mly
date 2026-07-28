@@ -310,6 +310,29 @@ let hint_of_attr loc (name, value, _guard) =
   | "freq", Some {desc = Float n; _} -> `Freq (Wax_wasm.Hints.freq_of_ratio (float_of_string n))
   | _ -> bad ()
 
+(* [#[targets(f: 0.73, …)]] takes a *list*, which neither attribute shape
+   ([#[name]], [#[name = expr]]) can carry, so it has its own production. The name
+   is an ordinary [IDENT] rather than a keyword — the [(] after it is what selects
+   this production — so it is checked here instead of by the lexer. *)
+let targets_of_attr loc name l =
+  if name <> "targets" then
+    raise
+      (Wax_utils.Parsing.syntax_error_pair
+         (loc,
+           Wax_utils.Message.text ("Expected a hint attribute: the only one \
+           taking a list is '#[targets(f: 0.73, ...)]'.\n") ));
+  `Targets l
+
+(* A call-target frequency is written as a fraction of 1, and stored as a whole
+   percent — what the section holds. Mirrors [target_percent] in the WAT grammar. *)
+let target_percent loc n =
+  let f = float_of_string n in
+  if f < 0. || f > 1. then
+    raise (Wax_utils.Parsing.syntax_error_pair
+             (loc, Wax_utils.Message.text
+                     "A call-target frequency must be between 0 and 1.\n"));
+  int_of_float (Float.round (f *. 100.))
+
 
 (* Statement-level conditional annotations. The parser cannot pair [#[if]] with a
    following [#[else]] itself: with [#[else]] no longer a single token, that
@@ -795,6 +818,17 @@ attribute:
    points at it. *)
 hint_attr:
 | a = attribute { ($loc(a), hint_of_attr $loc(a) a) }
+| "#" "[" name = IDENT "(" l = separated_list_trailing(",", hint_target) ")" "]"
+  { ($sloc, targets_of_attr $sloc name l) }
+
+(* One likely callee of an indirect call, with how often it is taken as a fraction
+   of 1. *)
+hint_target:
+| f = ident ":" n = target_fraction { (f, n) }
+
+%inline target_fraction:
+| n = FLOAT { target_percent $loc(n) n }
+| n = INT { target_percent $loc(n) n }
 
 
 (* The conditional branches that carry an operand ([if] is a [blockinstr], handled

@@ -38,7 +38,7 @@ has, stacked hints included; a hint on anything else takes the statement's `;`:
       #[freq = 4]
       side(x);
       let y = #[never_opt] a(x);
-      (#[freq = 2] p(y)) + a(#[always_opt] a(x));
+      (#[freq = 2] #[targets(a: 0.73)] p(y)) + a(#[always_opt] a(x));
   }
 
 Each lowers to its own `metadata.code.*` annotation, on the instruction it
@@ -69,12 +69,13 @@ inside the group:
       (@metadata.code.instr_freq (never_opt)) (call $a (local.get $x)))
     (i32.add
       (@metadata.code.instr_freq (freq 2))
+      (@metadata.code.call_targets (target $a 0.73))
       (call_ref $ft (local.get $y) (local.get $p))
       (call $a
         (@metadata.code.instr_freq (always_opt)) (call $a (local.get $x))))
   )
 
-All six survive a binary round trip, back into the same six placements:
+All seven survive a binary round trip, back into the same seven placements:
 
   $ wax -i wax -f wasm hints.wax -o hints.wasm
   $ wax -i wasm -f wax hints.wasm | grep 'freq\|likely\|opt'
@@ -84,7 +85,7 @@ All six survive a binary round trip, back into the same six placements:
       #[freq = 16]
       #[freq = 4]
       let y = #[never_opt] a(x);
-      (#[freq = 2] p(y)) + a(#[always_opt] a(x));
+      (#[freq = 2] #[targets(a: 0.73)] p(y)) + a(#[always_opt] a(x));
 
 Printing is idempotent, so the attributes survive any number of round trips:
 
@@ -182,9 +183,11 @@ hint lands on the `+`, and parentheses say which operand was meant:
     meant.
   [128]
 
-`metadata.code.call_targets` has no Wax spelling yet, so decompiling a binary that
-carries one keeps the frequency and drops the target list. The WAT surface keeps
-both, so nothing is lost at the format level:
+`metadata.code.call_targets` is spelled `#[targets(f: 0.73, …)]`. It takes a list,
+which neither attribute shape (`#[name]`, `#[name = expr]`) can carry, so it has its
+own production; the name is an ordinary identifier and the `(` after it is what
+selects that production. Each frequency is a fraction of 1, stored as a whole
+percent, so a decompiled binary reads back as the fraction it was written as:
 
   $ wax -i wat -f wax callhint.wat
   type ft = fn(i32) -> i32;
@@ -194,5 +197,56 @@ both, so nothing is lost at the format level:
   #[export]
   fn go(f: &?ft, x: i32) -> i32 {
       #[freq = 8]
+      #[targets(a: 1)]
       f(x);
   }
+
+Three things a target list needs beyond prefixing a call, each mirroring the same
+check on the Wasm side (`wax check` never converts, so a problem only the lowering
+would hit has to be caught here). The listed frequencies must total at most 100% — a
+shortfall is how the hint says other, unlisted targets take the remainder, so
+exceeding it is meaningless rather than merely imprecise:
+
+  $ wax check over.wax
+  Error:
+    The call-target frequencies add up to 130%, more than 100%. A shortfall is
+    how the hint says other, unlisted targets take the remainder.
+    ──➤  over.wax:8:5
+   6 │ #[export]
+   7 │ fn go(p: &?ft, x: i32) -> i32 {
+   8 │     #[targets(a: 0.8, b: 0.5)]
+     ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 │     p(x)
+  10 │ }
+  [128]
+
+The call must be indirect. A bare name that denotes a module function lowers to a
+direct `call`, whose target is already known:
+
+  $ wax check direct.wax
+  Error:
+    A call-target hint may only prefix an indirect call. This callee is a
+    function, so the call is direct and its target is already known.
+   ──➤  direct.wax:6:5
+  4 │ #[export]
+  5 │ fn go(x: i32) -> i32 {
+  6 │     #[targets(a: 0.5)]
+    ·     ^^^^^^^^^^^^^^^^^^
+  7 │     a(x)
+  8 │ }
+  [128]
+
+And each target must name a function. Naming one is not a *use* of it, though, so a
+function reachable only through a target list still trips the `unused-field` lint —
+the same rule the Wasm validator follows:
+
+  $ wax check unbound.wax
+  Error: The function 'nope' is not bound.
+   ──➤  unbound.wax:5:15
+  3 │ #[export]
+  4 │ fn go(p: &?ft, x: i32) -> i32 {
+  5 │     #[targets(nope: 0.5)]
+    ·               ^^^^
+  6 │     p(x)
+  7 │ }
+  [128]

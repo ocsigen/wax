@@ -20,5 +20,5 @@ fn hot(c: i32) -> i32 {
 fn calls(p: &?ft, x: i32) -> i32 {
     #[freq = 4] side(x);
     let y = #[never_opt] a(x);
-    (#[freq = 2] p(y)) + a(#[always_opt] a(x))
+    (#[freq = 2] #[targets(a: 0.73)] p(y)) + a(#[always_opt] a(x))
 }

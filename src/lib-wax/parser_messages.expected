@@ -342,6 +342,14 @@ parse: CONST IDENT EQUAL SHARP LBRACKET IMPORT RBRACKET UNREACHABLE
 
 Expecting an expression.
 
+parse: CONST IDENT EQUAL SHARP LBRACKET WHILE
+
+Expecting 'import', or an identifier.
+
+parse: CONST IDENT EQUAL SHARP WHILE
+
+Expecting '['.
+
 parse: CONST IDENT EQUAL UNREACHABLE
 
 Expecting a constant expression.
@@ -1241,6 +1249,37 @@ Expecting a block.
 parse: FN IDENT LBRACE SHARP LBRACKET ELSE WHILE
 
 Expecting ']'.
+<2>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN IDENT COLON FLOAT COMMA WHILE
+
+Expecting ')', or a hint target.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN IDENT COLON FLOAT WHILE
+
+Expecting ')', or ','.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN IDENT COLON WHILE
+
+Expecting a float, or an integer.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN IDENT WHILE
+
+Expecting ':'.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN RPAREN WHILE
+
+Expecting ']'.
+<5>This '[' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN WHILE
+
+Expecting ')', or a hint target.
+<1>This '(' opens the enclosing construct.
+
+parse: FN IDENT LBRACE SHARP LBRACKET IDENT WHILE
+
+Expecting '(', '=', ']', or an attribute guard.
 <2>This '[' opens the enclosing construct.
 
 parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN IDENT COMMA

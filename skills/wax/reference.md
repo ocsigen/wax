@@ -204,6 +204,7 @@ On top of that, it enables these further proposals by default:
 | Threads / atomics | shared memory, atomic loads/stores/RMW, `atomic::fence()` |
 | Wide arithmetic | 128-bit integer ops (e.g. `i64::add128`) |
 | Branch hinting | `#[likely]` / `#[unlikely]` |
+| [Compilation hints](https://github.com/WebAssembly/compilation-hints) | `#[freq = n]` / `#[never_opt]` / `#[always_opt]`, `#[targets(f: 0.73)]` |
 | Custom page sizes | `pagesize` |
 | [Extended name section](https://github.com/WebAssembly/extended-name-section) | `$`-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip |
 | [WAT numeric values](https://github.com/WebAssembly/wat-numeric-values) | typed numeric runs in [data segments](./language.md#data-segments) (`data d = [i16: -1, 2] ++ [f32: 0.5, nan] ++ [v128: i32x4(1,2,3,4)];`); runs survive the wax↔wat round-trip |
@@ -1006,6 +1007,51 @@ advisory (it does not change behaviour) and is preserved across every conversion
 to and from WebAssembly, so no compiler flag is needed. See
 [Instructions → Branch Hints](correspondence/instructions.md#branch-hints) for
 the WebAssembly encoding.
+
+### Compilation Hints
+
+The [compilation-hints proposal](https://github.com/WebAssembly/compilation-hints)
+extends the same mechanism to profile data an engine can use to decide what to
+optimize. Two attributes carry it, and they prefix an expression rather than only a
+branch:
+
+```wax
+#[freq = 16] 'l: loop {          // runs about 16 times per call
+    #[never_opt] slow_path();    // never worth optimizing
+}
+
+#[targets(draw_rect: 0.73, draw_circle: 0.21)]
+shape.draw();                    // the indirect call's likely callees
+```
+
+- `#[freq = n]` is how often the instruction runs per call of its function.
+  `#[never_opt]` and `#[always_opt]` are the two reserved values. It is meaningful
+  on a call or a control instruction.
+- `#[targets(f: 0.73, …)]` lists the likely callees of an *indirect* call, each with
+  how often it is taken as a fraction of 1. The fractions must total at most 1; a
+  shortfall says other, unlisted callees take the remainder. Naming a function here
+  is not a *use* of it, so one reachable only through a target list is still
+  reported by the `unused-field` lint.
+
+A hint attribute takes the **whole** expression that follows it. That makes the
+extent unambiguous, at the price of rejecting a placement where a reader could not
+tell what was meant:
+
+```wax
+#[freq = 4] f(x);            // fine: the hint is on the call
+let y = #[freq = 4] f(x);    // fine: the initialiser is delimited
+(#[freq = 4] f(x)) + 1       // fine: parentheses say which operand
+#[freq = 4] f(x) + 1         // error: the hint lands on the `+`
+```
+
+This is the rule Rust's experimental `stmt_expr_attributes` uses. Several hints may
+stack on one instruction, and a hint on a block statement needs no trailing `;`, as
+a plain block statement does not.
+
+Like branch hints, these are advisory and preserved across every conversion, so no
+compiler flag is needed. See
+[Instructions → Branch Hints](correspondence/instructions.md#branch-hints) for the
+WebAssembly encoding.
 
 ### Dispatch
 
@@ -3146,6 +3192,40 @@ fn drain(n: i32) {
 }
 ```
 
+## Compilation hints
+
+The [compilation-hints proposal](correspondence/instructions.md#branch-hints)
+carries profile data: how often an instruction runs, and which callees an indirect
+call usually reaches. These attributes prefix an *expression*, and take the whole of
+it, so a call can be hinted too.
+
+### Wax
+
+```wax
+type shape_fn = fn(i32) -> i32;
+
+fn draw_rect(x: i32) -> i32 { x }
+
+fn draw_circle(x: i32) -> i32 { 0 - x }
+
+#[export = "render"]
+fn render(shape: &?shape_fn, n: i32) -> i32 {
+    let total = 0;
+    #[freq = 64]
+    'l: loop {
+        total = total + (#[targets(draw_rect: 0.73, draw_circle: 0.21)] shape(n));
+        n = n - 1;
+        #[likely] br_if 'l n;
+    }
+    total
+}
+
+#[export = "cold"]
+fn cold(x: i32) -> i32 {
+    #[never_opt] draw_rect(x)
+}
+```
+
 ## SIMD
 
 `v128` vector operations are method intrinsics with the lane shape baked into the
@@ -3619,6 +3699,35 @@ Any conditional branch may be hinted: `if`, `br_if`, `br_on_null`,
 `br_on_non_null`, `br_on_cast`, and `br_on_cast_fail`. In WAT the same hint is
 the `(@metadata.code.branch_hint "\00"|"\01")` annotation preceding the branch
 (`"\01"` = likely, `"\00"` = unlikely).
+
+The [compilation-hints proposal](https://github.com/WebAssembly/compilation-hints)
+adds two more sections of the same family, addressed the same way — by the
+instruction's byte offset from the start of the function body — and likewise
+preserved with no feature flag:
+
+| Wax | WAT | Section |
+|-----|-----|---------|
+| `#[freq = n]` | `(@metadata.code.instr_freq (freq n))` | `metadata.code.instr_freq` |
+| `#[never_opt]` | `(@metadata.code.instr_freq (never_opt))` | " |
+| `#[always_opt]` | `(@metadata.code.instr_freq (always_opt))` | " |
+| `#[targets(f: 0.73)]` | `(@metadata.code.call_targets (target $f 0.73))` | `metadata.code.call_targets` |
+
+`instr_freq` is one byte: an offset base-2 logarithm of the executions-per-call
+ratio, `max 1 (min 64 (floor (log2 r) + 32))`, so `32` means once. `0` is
+`never_opt` and `127` is `always_opt`. A byte outside `{0, 127} ∪ [1, 64]` — only
+reachable from a hand-written binary — stands for no ratio, so WAT prints it in the
+raw-byte form `(@metadata.code.instr_freq "\NN")`, which Wax has no spelling for.
+Both text forms are accepted on input, per the proposal.
+
+`call_targets` holds LEB128 `(function index, percentage)` pairs. Both text surfaces
+write the frequency as a fraction of 1 and store the whole percent, so the round-trip
+is exact. Only the structured `(target …)` form can *name* a target; the raw-byte
+form's indices are numeric.
+
+Each section is emitted before the code section, since its offsets are only known
+once the bodies are encoded. A hint belongs to the operation itself, never to a
+folded group around it: the opcode is emitted after the folded operands, so that is
+where the offset is taken and where a decoder puts the hint back.
 
 ### Dispatch and Match
 

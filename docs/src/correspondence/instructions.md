@@ -234,6 +234,35 @@ Any conditional branch may be hinted: `if`, `br_if`, `br_on_null`,
 the `(@metadata.code.branch_hint "\00"|"\01")` annotation preceding the branch
 (`"\01"` = likely, `"\00"` = unlikely).
 
+The [compilation-hints proposal](https://github.com/WebAssembly/compilation-hints)
+adds two more sections of the same family, addressed the same way — by the
+instruction's byte offset from the start of the function body — and likewise
+preserved with no feature flag:
+
+| Wax | WAT | Section |
+|-----|-----|---------|
+| `#[freq = n]` | `(@metadata.code.instr_freq (freq n))` | `metadata.code.instr_freq` |
+| `#[never_opt]` | `(@metadata.code.instr_freq (never_opt))` | " |
+| `#[always_opt]` | `(@metadata.code.instr_freq (always_opt))` | " |
+| `#[targets(f: 0.73)]` | `(@metadata.code.call_targets (target $f 0.73))` | `metadata.code.call_targets` |
+
+`instr_freq` is one byte: an offset base-2 logarithm of the executions-per-call
+ratio, `max 1 (min 64 (floor (log2 r) + 32))`, so `32` means once. `0` is
+`never_opt` and `127` is `always_opt`. A byte outside `{0, 127} ∪ [1, 64]` — only
+reachable from a hand-written binary — stands for no ratio, so WAT prints it in the
+raw-byte form `(@metadata.code.instr_freq "\NN")`, which Wax has no spelling for.
+Both text forms are accepted on input, per the proposal.
+
+`call_targets` holds LEB128 `(function index, percentage)` pairs. Both text surfaces
+write the frequency as a fraction of 1 and store the whole percent, so the round-trip
+is exact. Only the structured `(target …)` form can *name* a target; the raw-byte
+form's indices are numeric.
+
+Each section is emitted before the code section, since its offsets are only known
+once the bodies are encoded. A hint belongs to the operation itself, never to a
+folded group around it: the opcode is emitted after the folded operands, so that is
+where the offset is taken and where a decoder puts the hint back.
+
 ### Dispatch and Match
 
 Two Wax control constructs have no instruction of their own: they are readable

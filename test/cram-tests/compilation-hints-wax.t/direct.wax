@@ -1,0 +1,8 @@
+#[export]
+fn a(x: i32) -> i32 { x }
+
+#[export]
+fn go(x: i32) -> i32 {
+    #[targets(a: 0.5)]
+    a(x)
+}

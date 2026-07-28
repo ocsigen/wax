@@ -817,6 +817,40 @@ fn drain(n: i32) {
 }
 ```
 
+## Compilation hints
+
+The [compilation-hints proposal](correspondence/instructions.md#branch-hints)
+carries profile data: how often an instruction runs, and which callees an indirect
+call usually reaches. These attributes prefix an *expression*, and take the whole of
+it, so a call can be hinted too.
+
+### Wax
+
+```wax
+type shape_fn = fn(i32) -> i32;
+
+fn draw_rect(x: i32) -> i32 { x }
+
+fn draw_circle(x: i32) -> i32 { 0 - x }
+
+#[export = "render"]
+fn render(shape: &?shape_fn, n: i32) -> i32 {
+    let total = 0;
+    #[freq = 64]
+    'l: loop {
+        total = total + (#[targets(draw_rect: 0.73, draw_circle: 0.21)] shape(n));
+        n = n - 1;
+        #[likely] br_if 'l n;
+    }
+    total
+}
+
+#[export = "cold"]
+fn cold(x: i32) -> i32 {
+    #[never_opt] draw_rect(x)
+}
+```
+
 ## SIMD
 
 `v128` vector operations are method intrinsics with the lane shape baked into the

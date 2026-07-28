@@ -677,19 +677,35 @@ let tail_dispatch res : Ast.location Ast.instr =
            List.map (fun l -> (l, Ast.no_loc [ ret () ])) (cases @ [ default ]);
        })
 
-(* Branch-hinting proposal: hint a conditional branch [#[likely]] (true) or
-   [#[unlikely]] (false) roughly a third of the time, so generated modules
-   exercise hints end to end — the type checker carrying them, the wasm
-   branch-hint section codec, and (via the round-trip oracle) that a hinted binary
-   decompiles and recompiles to a reference-valid module. Only a
-   statement-position [if] is hinted: a value-producing [if] carries the hint
-   as a [blockinstr] (statement) only, not inside an operand, so hinting one there
-   would print Wax that does not re-parse. *)
+(* Branch-hinting and compilation-hints proposals: hint a conditional branch
+   [#[likely]]/[#[unlikely]], and independently give it an instruction frequency,
+   each roughly a third of the time — so generated modules exercise hints end to
+   end: the type checker carrying them, both custom-section codecs, and (via the
+   round-trip oracle) that a hinted binary decompiles and recompiles to a
+   reference-valid module. Drawing the two independently is the point: when both
+   land, the instruction's one offset is keyed in two sections at once, which is
+   the case the decoder has to merge rather than let the second hint displace the
+   first.
+
+   [#[targets]] is not generated here — it needs an indirect call whose listed
+   callees are real functions of the right type, which this generator has no way
+   to pick; the cram tests cover it instead. *)
 let maybe_hint (i : Ast.location Ast.instr) =
-  let hinted likely =
-    { i with Ast.hints = Wax_wasm.Hints.branch i.Ast.info likely i.Ast.hints }
+  let i =
+    match rnd 3 with
+    | (0 | 1) as n ->
+        {
+          i with
+          Ast.hints = Wax_wasm.Hints.branch i.Ast.info (n = 0) i.Ast.hints;
+        }
+    | _ -> i
   in
-  match rnd 3 with 0 -> hinted true | 1 -> hinted false | _ -> i
+  match rnd 3 with
+  | 0 ->
+      (* Spread over the encodable range, the two reserved values included. *)
+      let f = pick [| 0; 1; 32; 64; 127; 33 + rnd 20 |] in
+      { i with Ast.hints = Wax_wasm.Hints.freq i.Ast.info f i.Ast.hints }
+  | _ -> i
 
 (* A statement (no value escapes): assign a param (fully type-constrained),
    mutate a struct field / array element, or a nested control statement. *)

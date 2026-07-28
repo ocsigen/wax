@@ -611,6 +611,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "hint_target",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -2202,6 +2212,36 @@
         "types": [
           {
             "type": "_expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "hint_target",
+    "named": true,
+    "fields": {
+      "frequency": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "float_literal",
+            "named": true
+          },
+          {
+            "type": "integer_literal",
+            "named": true
+          }
+        ]
+      },
+      "function": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]

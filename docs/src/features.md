@@ -19,6 +19,7 @@ On top of that, it enables these further proposals by default:
 | Threads / atomics | shared memory, atomic loads/stores/RMW, `atomic::fence()` |
 | Wide arithmetic | 128-bit integer ops (e.g. `i64::add128`) |
 | Branch hinting | `#[likely]` / `#[unlikely]` |
+| [Compilation hints](https://github.com/WebAssembly/compilation-hints) | `#[freq = n]` / `#[never_opt]` / `#[always_opt]`, `#[targets(f: 0.73)]` |
 | Custom page sizes | `pagesize` |
 | [Extended name section](https://github.com/WebAssembly/extended-name-section) | `$`-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip |
 | [WAT numeric values](https://github.com/WebAssembly/wat-numeric-values) | typed numeric runs in [data segments](./language.md#data-segments) (`data d = [i16: -1, 2] ++ [f32: 0.5, nan] ++ [v128: i32x4(1,2,3,4)];`); runs survive the wax↔wat round-trip |
