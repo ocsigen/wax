@@ -114,7 +114,8 @@ module Tbl : sig
     kind : string;
     namespace : Namespace.t;
     tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
-    used : (string, unit) Hashtbl.t;
+    used : (string, string option) Hashtbl.t;
+    current : string option ref;
     hover : 'a -> hover_target option;
   }
 end
@@ -149,6 +150,7 @@ type module_context = {
   globals : (bool * Infer.inferred_valtype option) Tbl.t;
   import_globals : (bool * Infer.inferred_valtype option) Tbl.t;
   assigned_globals : (string, unit) Hashtbl.t;
+  current_function : string option ref;
   tags : Ast.functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;

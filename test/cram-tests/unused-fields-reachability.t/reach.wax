@@ -1,0 +1,24 @@
+memory dead_mem: i32 [1];
+let dead_g: i32 = 0;
+tag dead_tag(i32);
+table t: &?func [1];
+elem roots: &?func @ t[0] = [rooted_by_elem];
+
+// dead cycle, plus a helper only the cycle reaches
+fn a() -> i32 { b() }
+fn b() -> i32 { helper_of_dead() }
+fn helper_of_dead() -> i32 {
+  dead_g = dead_mem.size();
+  a()
+}
+
+// self-recursive and dead
+fn selfrec() -> i32 { selfrec() }
+
+// live chain from an export
+fn live_leaf() -> i32 { 1 }
+#[export = "live"]
+fn live() -> i32 { live_leaf() }
+
+// reachable only through the element segment
+fn rooted_by_elem() -> i32 { 2 }

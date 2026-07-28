@@ -13,11 +13,3 @@ residual then failed the module's own validation. The residual is now typed as
 `diff(source, ty)`, mirroring wasm validation, so it round-trips:
 
   $ wax -i wasm m.wasm -f wax -o t.wax && wax -i wax t.wax -f wasm -o /dev/null --validate -W unused=hidden
-  Warning [unnecessary-mut]: The global 'g_6' is mutable but is never assigned.
-     ──➤  t.wax:221:5
-  219 │ let g_4 = 0;
-  220 │ let g_5 = 0;
-  221 │ let g_6 = 100;
-      ·     ^^^
-  222 │ 
-  Hint: Declare it with 'const' instead of 'let'.

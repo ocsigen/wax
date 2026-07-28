@@ -486,7 +486,7 @@ module and drive one request of each kind:
   > print("completion:", ", ".join(c["label"] for c in by[10]))
   > print("stderr:", p.stderr.decode().strip() or "(empty)")
   > PY
-  diagnostics: 1
+  diagnostics: 2
   hover: ```wax | i32 | ```
   definition: (1,8)-(1,12)
   references: (1,8)-(1,12), (4,10)-(4,14)

@@ -103,18 +103,31 @@ server](#language-server)).
         - `unused-local` (group `unused`): a local that is declared but never
           read. Produced while validating; shown by default. Carries a
           quick-fix `edit` that inserts a `_` at the name's start.
-        - `unused-field` (groups `unused`, `correctness`): a module field that is
-          defined but never referenced, exported, or used as the start function —
-          a function, global, memory, table, tag, or a *passive* data or element
-          segment. An active segment (and a declarative one) runs at
-          instantiation, so it counts as used whether or not an instruction names
-          it; only a passive segment, reachable solely through
-          `memory.init`/`table.init` and `data.drop`/`elem.drop`, can be dead.
-          The module-level analog of `unused-local`; prefix its name with `_` to
-          silence one. Shown by default.
+        - `unused-field` (groups `unused`, `correctness`): a module field that
+          nothing reachable references — a function, global, memory, table, tag,
+          or a *passive* data or element segment. An active segment (and a
+          declarative one) runs at instantiation, so it counts as used whether or
+          not an instruction names it; only a passive segment, reachable solely
+          through `memory.init`/`table.init` and `data.drop`/`elem.drop`, can be
+          dead. The module-level analog of `unused-local`; prefix its name with
+          `_` to silence one. Shown by default.
+
+          Liveness is *reachability from the roots*, not the mere presence of a
+          reference, so a dead cycle is caught: two functions that only call each
+          other reference one another, yet neither can ever run. The roots are the
+          functions reachable from outside — exported, or the start function — and
+          every reference made from a module-level context, which runs at
+          instantiation: a global or table initializer, an element or data
+          segment. Liveness then follows calls, and taking a function *reference*
+          counts as calling it, since where the reference ends up is not tracked
+          — so the analysis never reports a function that might run. A field that
+          only dead code references is dead in turn: a global read solely from an
+          unreachable function is reported. One consequence worth knowing: in a
+          module that exports nothing and has no start function, nothing can run,
+          so every field is reported.
         - `unused-import` (groups `unused`, `correctness`): an imported function,
-          global, memory, table, or tag that is never referenced, exported, or
-          used as the start function. Like `unused-field`, but for imports; `_`
+          global, memory, table, or tag that nothing reachable references. Like
+          `unused-field` — same reachability analysis — but for imports; `_`
           silences one. Shown by default.
         - `unused-label` (groups `unused`, `correctness`): a block label that
           is declared but never branched to. Prefix its name with `_` to silence

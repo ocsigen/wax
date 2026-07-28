@@ -148,10 +148,20 @@ module Tbl = struct
     kind : string;
     namespace : Namespace.t;
     tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
-    (* Names referenced (looked up) through this table, so a declaration that is
-       never referenced can be reported as unused. Populated by [resolve];
-       queried by [is_used]. *)
-    used : (string, unit) Hashtbl.t;
+    (* Names referenced (looked up) through this table, each paired with the
+       function whose body made the reference — [None] for a reference from a
+       module-level context (a global or table initializer, a segment), which is a
+       root. So the unused-field lint can ask not merely whether a declaration is
+       referenced, but whether anything that can actually run references it: two
+       functions that only call each other reference one another, yet neither ever
+       runs. Populated by [resolve] (one entry per reference, via [Hashtbl.add]);
+       queried by [referrers] / [iter_references]. *)
+    used : (string, string option) Hashtbl.t;
+    (* The function whose body is being type-checked, [None] in a module-level
+       context. Shared by every table of the module context (like [cond]), so
+       [resolve] can attribute a reference without the context being threaded into
+       [Tbl]; set by the [functions] pass around each body. *)
+    current : string option ref;
     hover : 'a -> hover_target option;
         (* A summary of a resolved value (its type / definition), attached to
            the reference [resolve] records, for editor hover on a name that is
@@ -232,7 +242,14 @@ type module_context = {
          could be declared [const] — the [unnecessary-mut] warning. Keyed by name
          like [Tbl]'s own use marks, and (like them) per configuration: the table
          belongs to the context [type_configuration] builds for one choice of
-         conditional branches. *)
+         conditional branches. Deliberately not filtered by reachability:
+         rewriting a [let] that only a dead function assigns into a [const] would
+         not type-check, so a textual assignment is enough to keep the [mut]. *)
+  current_function : string option ref;
+      (* The function whose body is being type-checked, [None] between them. The
+         same ref every {!Tbl} of this context holds (see [Tbl.current]), so
+         setting it here attributes each name resolution to its enclosing
+         function for the unused-field reachability analysis. *)
   tags : functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;

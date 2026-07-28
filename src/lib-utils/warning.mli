@@ -10,11 +10,14 @@ type t =
   | Unused_local  (** A local that is declared but never read. *)
   | Unused_field
       (** A module field — a function, global, memory, table, tag, or a passive
-          data/element segment — that is defined but never referenced, exported,
-          or used as the start function. *)
+          data/element segment — that nothing reachable references. Liveness is
+          reachability from the roots (the exported and start functions, and
+          every reference from a module-level context: an initializer, a
+          segment), so a dead cycle of mutually recursive functions is reported,
+          as is anything only dead code references. *)
   | Unused_import
-      (** An imported function, global, memory, table, or tag that is never
-          referenced, exported, or used as the start function. *)
+      (** An imported function, global, memory, table, or tag that nothing
+          reachable references — the same analysis as {!Unused_field}. *)
   | Unused_label  (** A block label that is declared but never branched to. *)
   | Unnecessary_mut
       (** A global declared mutable but never assigned, so it could be declared

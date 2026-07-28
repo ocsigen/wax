@@ -1680,6 +1680,21 @@ let string_type ctx =
 
 (*** The module context ***)
 
+(* A reference made from inside a function body, for the reachability analysis
+   behind [unused-field]: which index space it targets, and which index in it. A
+   reference made from a module-level context instead — an export, the start
+   function, a global or table initializer, an element or data segment — is a
+   *root*, recorded directly in the matching [used_*] table, because it runs (or
+   becomes callable) whatever the bodies do. *)
+type reference =
+  | Ref_function of int
+  | Ref_global of int
+  | Ref_memory of int
+  | Ref_table of int
+  | Ref_tag of int
+  | Ref_data of int
+  | Ref_elem of int
+
 type module_context = {
   diagnostics : Wax_utils.Diagnostic.context;
   types : type_context;
@@ -1707,12 +1722,11 @@ type module_context = {
   elem : (reftype * source_type) Sequence.t;
   exports : (string, Ast.location) Hashtbl.t;
   refs : (int, unit) Hashtbl.t;
-  (* Indices referenced anywhere, per index space (a call, [ref.func], a
-     [global.get]/[global.set], a memory/table access, a [throw]/[catch], a
-     [memory.init]/[elem.drop], an export, or the start function) — the marks the
-     [unused-field] warning checks against. An active data/element segment (and a
-     declarative one) is marked at its definition: it runs at instantiation, so it
-     is used whether or not an instruction names it. *)
+  (* Indices referenced from a *root* context, per index space: an export, the
+     start function, a global or table initializer, an element or data segment.
+     These seed the [unused-field] reachability analysis. An active data/element
+     segment (and a declarative one) is marked at its own definition: it runs at
+     instantiation, so it is a root whether or not an instruction names it. *)
   used_functions : (int, unit) Hashtbl.t;
   used_globals : (int, unit) Hashtbl.t;
   used_memories : (int, unit) Hashtbl.t;
@@ -1720,8 +1734,19 @@ type module_context = {
   used_tags : (int, unit) Hashtbl.t;
   used_data : (int, unit) Hashtbl.t;
   used_elem : (int, unit) Hashtbl.t;
-  (* Global indices that are the target of a [global.set] — the marks the
-     [unnecessary-mut] warning checks against. *)
+  (* The index of the function whose body is being validated, [None] in a
+     module-level context. Set by the [functions] pass around each body so a
+     reference can be attributed to its enclosing function. *)
+  mutable current_function : int option;
+  (* Every reference made from inside a body, as (enclosing function, target).
+     [unused_fields] walks these to find what each *live* function reaches; a
+     reference from a dead function keeps nothing alive. *)
+  mutable body_references : (int * reference) list;
+  (* Global indices that are the target of a [global.set] anywhere — the marks
+     the [unnecessary-mut] warning checks against. Deliberately NOT filtered by
+     reachability: dropping the [mut] from a global that a dead function assigns
+     would not validate, so a textual assignment, live or not, is enough to keep
+     the mutability. *)
   assigned_globals : (int, unit) Hashtbl.t;
   (* Each module-defined (non-import) field, as (index, source name, report
      location): the candidates the [unused-field] warning ranges over. *)
@@ -1855,11 +1880,28 @@ let descriptor_operand_type ctx ~location (target : heaptype) =
       Error.invalid_cast_type ctx.modul.diagnostics ~location;
       None
 
-(* Note the index [idx] resolves to as used, for the [unused-field] warning. *)
-let mark_used used seq idx =
+(* Mark the index [idx] resolves to in [seq], whatever the enclosing context. *)
+let mark_index used seq idx =
   Option.iter
     (fun i -> Hashtbl.replace used i ())
     (Sequence.get_index_opt seq idx)
+
+(* Record the reference [idx] makes to the index space [seq], for the
+   [unused-field] warning. Inside a function body it becomes an edge from that
+   function; from a module-level context it is a root, marked in [used]. [mctx] is
+   the module context. *)
+let mark_reference mctx wrap used seq idx =
+  (* Only the [unused-field] analysis consumes any of this, and [body_references]
+     grows with every reference in the module, so record nothing when the lint is
+     off. *)
+  if mctx.warn_unused then
+    Option.iter
+      (fun i ->
+        match mctx.current_function with
+        | Some caller ->
+            mctx.body_references <- (caller, wrap i) :: mctx.body_references
+        | None -> Hashtbl.replace used i ())
+      (Sequence.get_index_opt seq idx)
 
 (* The parameter types of an exception [tag] and, when known, their source
    types for naming a thrown payload. [lookup_tag_type]/[lookup_tag_signature]
@@ -1867,7 +1909,7 @@ let mark_used used seq idx =
    clause, a [suspend]/[resume] handler), so they record the tag as used. *)
 let lookup_tag_type ctx tag =
   let ctx = ctx.modul in
-  mark_used ctx.used_tags ctx.tags tag;
+  mark_reference ctx (fun i -> Ref_tag i) ctx.used_tags ctx.tags tag;
   let*@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Struct _ | Array _ | Cont _ ->
@@ -1882,7 +1924,7 @@ let lookup_tag_type ctx tag =
    results may be non-empty (unlike exception tags). *)
 let lookup_tag_signature ctx tag =
   let ctx = ctx.modul in
-  mark_used ctx.used_tags ctx.tags tag;
+  mark_reference ctx (fun i -> Ref_tag i) ctx.used_tags ctx.tags tag;
   let*@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Func ft -> Some (ft, sign)
@@ -2684,27 +2726,39 @@ let check_resume_table ctx loc ts2 clauses =
    access, a segment operand — whether in a body or a constant expression, so
    noting the resolved index here records the field as used. *)
 let get_memory ctx idx =
-  mark_used ctx.modul.used_memories ctx.modul.memories idx;
+  mark_reference ctx.modul
+    (fun i -> Ref_memory i)
+    ctx.modul.used_memories ctx.modul.memories idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
 
 let get_table ctx idx =
-  mark_used ctx.modul.used_tables ctx.modul.tables idx;
+  mark_reference ctx.modul
+    (fun i -> Ref_table i)
+    ctx.modul.used_tables ctx.modul.tables idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
 
 let get_global ctx idx =
-  mark_used ctx.modul.used_globals ctx.modul.globals idx;
+  mark_reference ctx.modul
+    (fun i -> Ref_global i)
+    ctx.modul.used_globals ctx.modul.globals idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.globals idx
 
 let get_function ctx idx =
-  mark_used ctx.modul.used_functions ctx.modul.functions idx;
+  mark_reference ctx.modul
+    (fun i -> Ref_function i)
+    ctx.modul.used_functions ctx.modul.functions idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.functions idx
 
 let get_data ctx idx =
-  mark_used ctx.modul.used_data ctx.modul.data idx;
+  mark_reference ctx.modul
+    (fun i -> Ref_data i)
+    ctx.modul.used_data ctx.modul.data idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.data idx
 
 let get_elem ctx idx =
-  mark_used ctx.modul.used_elem ctx.modul.elem idx;
+  mark_reference ctx.modul
+    (fun i -> Ref_elem i)
+    ctx.modul.used_elem ctx.modul.elem idx;
   Sequence.get ctx.modul.diagnostics ctx.modul.elem idx
 
 (* Pop a memory/table address operand, whose width follows the address type. *)
@@ -3431,7 +3485,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let*! ty, source = get_global ctx idx in
       (* The single [global.set] site, so it is also where a mutable global is
          recorded as actually assigned (for [unnecessary-mut]). *)
-      mark_used ctx.modul.assigned_globals ctx.modul.globals idx;
+      mark_index ctx.modul.assigned_globals ctx.modul.globals idx;
       record (Some idx.info) (Pushed source);
       if not ty.mut then
         Error.immutable_global ctx.modul.diagnostics ~location:loc idx;
@@ -4892,7 +4946,9 @@ let segments ctx fields =
               ctx.defined_data <- (idx, id, location) :: ctx.defined_data
           | Active (i, e) ->
               Hashtbl.replace ctx.used_data idx ();
-              mark_used ctx.used_memories ctx.memories i;
+              mark_reference ctx
+                (fun i -> Ref_memory i)
+                ctx.used_memories ctx.memories i;
               let*? limits = Sequence.get ctx.diagnostics ctx.memories i in
               let aty = address_type_to_valtype limits.address_type in
               constant_expression ctx ~location:field.info
@@ -4930,7 +4986,9 @@ let segments ctx fields =
               | Declare -> Hashtbl.replace ctx.used_elem idx ()
               | Active (i, e) ->
                   Hashtbl.replace ctx.used_elem idx ();
-                  mark_used ctx.used_tables ctx.tables i;
+                  mark_reference ctx
+                    (fun i -> Ref_table i)
+                    ctx.used_tables ctx.tables i;
                   let*? tabletype, table_source =
                     Sequence.get ctx.diagnostics ctx.tables i
                   in
@@ -5413,10 +5471,20 @@ let lint_body ctx instrs =
 let () = lint_constant_expr := lint_body
 
 let functions ?(warn_unused = true) ctx fields =
+  (* The index of the function about to be validated. [build_initial_env] hands
+     out one function index per import-of-a-function and per [Func] field, in the
+     order of this same expanded field list (a failed definition still claims its
+     index), so counting them here stays aligned with it. *)
+  let index = ref 0 in
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
+      | Import { desc = Func _; _ } -> incr index
       | Func { id = _; typ; locals = locs; instrs; exports } ->
+          (* Claimed before anything can fail below, so a definition whose type
+             does not resolve still advances the counter, as it does there. *)
+          let self = !index in
+          incr index;
           let>@ func_typ =
             let*@ typ = typeuse ctx.diagnostics ctx.types typ in
             match (Types.get_subtype ctx.subtyping_info typ).typ with
@@ -5509,10 +5577,15 @@ let functions ?(warn_unused = true) ctx fields =
               label_decls = ref [];
             }
           in
+          (* Attribute every reference the body makes to this function, so
+             [unused_fields] can tell what a *live* function reaches from what
+             only dead code mentions. *)
+          ctx.modul.current_function <- Some self;
           with_empty_stack ctx.modul field.info
             (let* () = instructions ctx instrs in
              pop_args ctx ~kind:`Output field.info ~source:return_source
                return_types);
+          ctx.modul.current_function <- None;
           (* A named local whose name starts with [_] is intentionally unused;
              unnamed locals are always reported. *)
           if warn_unused then
@@ -5541,7 +5614,7 @@ let functions ?(warn_unused = true) ctx fields =
           if warn_unused then lint_body ctx instrs;
           register_exports ctx.modul exports
       | _ -> ())
-    fields
+    (List.concat_map Ast_utils.expand_import_group fields)
 
 (* Report a "Trojan Source" bidirectional control character in any string the
    module carries — an export/import name, a data segment, a string literal, a
@@ -5678,15 +5751,72 @@ let start ctx fields =
       | _ -> ())
     fields
 
-(* Report module-defined fields that are never referenced, exported, or used as
-   the start function (the module-level analog of an unused local), and likewise
-   for imports; then the mutable globals that are never assigned. Uses are
-   collected during validation into the [used_*] tables; a name starting with [_]
-   is intentionally unused. Runs after every other pass so all references have
-   been seen. *)
+(* The functions that can actually run: those referenced from a root context
+   (recorded in [used_functions] — an export, the start function, a global or
+   table initializer, an element segment), plus everything they transitively
+   call or take a [ref.func] of.
+
+   Reachability, rather than "is referenced somewhere", is what makes the lint
+   see a dead *cycle*: two functions that only call each other reference one
+   another, so a presence check finds both used, yet neither can ever run. The
+   same goes for anything only such a cycle reaches. An escaping [ref.func] is
+   treated as a call, since where the reference ends up is not tracked — so the
+   analysis stays conservative: it never reports a function that might run. *)
+let reachable_functions ctx =
+  let calls = Hashtbl.create 16 in
+  List.iter
+    (fun (caller, target) ->
+      match target with
+      | Ref_function callee -> Hashtbl.add calls caller callee
+      | Ref_global _ | Ref_memory _ | Ref_table _ | Ref_tag _ | Ref_data _
+      | Ref_elem _ ->
+          ())
+    ctx.body_references;
+  let live = Hashtbl.create 16 in
+  let rec visit f =
+    if not (Hashtbl.mem live f) then begin
+      Hashtbl.replace live f ();
+      List.iter visit (Hashtbl.find_all calls f)
+    end
+  in
+  Hashtbl.iter (fun f () -> visit f) ctx.used_functions;
+  live
+
+(* Report module-defined fields that nothing reachable references, exported, or
+   used as the start function (the module-level analog of an unused local), and
+   likewise for imports; then the mutable globals that are never assigned.
+   References are collected during validation — roots into the [used_*] tables,
+   body references into [body_references] — and a name starting with [_] is
+   intentionally unused. Runs after every other pass so all references have been
+   seen. *)
 let unused_fields ctx =
   if not ctx.warn_unused then ()
   else
+    let live_functions = reachable_functions ctx in
+    (* A field is used if a root context references it, or if a function that can
+       actually run does. A reference from dead code keeps nothing alive. *)
+    let used_in roots select =
+      let t = Hashtbl.copy roots in
+      List.iter
+        (fun (caller, target) ->
+          if Hashtbl.mem live_functions caller then
+            Option.iter (fun i -> Hashtbl.replace t i ()) (select target))
+        ctx.body_references;
+      t
+    in
+    let used_globals =
+      used_in ctx.used_globals (function Ref_global i -> Some i | _ -> None)
+    and used_memories =
+      used_in ctx.used_memories (function Ref_memory i -> Some i | _ -> None)
+    and used_tables =
+      used_in ctx.used_tables (function Ref_table i -> Some i | _ -> None)
+    and used_tags =
+      used_in ctx.used_tags (function Ref_tag i -> Some i | _ -> None)
+    and used_data =
+      used_in ctx.used_data (function Ref_data i -> Some i | _ -> None)
+    and used_elem =
+      used_in ctx.used_elem (function Ref_elem i -> Some i | _ -> None)
+    in
     let intentional (name : Ast.Text.name option) =
       match name with
       | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
@@ -5700,27 +5830,25 @@ let unused_fields ctx =
               (Option.map (fun (n : Ast.Text.name) -> n.desc) name))
         (List.rev decls)
     in
-    report Error.unused_field ctx.used_functions "function"
-      ctx.defined_functions;
-    report Error.unused_field ctx.used_globals "global" ctx.defined_globals;
-    report Error.unused_field ctx.used_memories "memory" ctx.defined_memories;
-    report Error.unused_field ctx.used_tables "table" ctx.defined_tables;
-    report Error.unused_field ctx.used_tags "tag" ctx.defined_tags;
-    report Error.unused_field ctx.used_data "data segment" ctx.defined_data;
-    report Error.unused_field ctx.used_elem "element segment" ctx.defined_elem;
-    report Error.unused_import ctx.used_functions "function"
-      ctx.imported_functions;
-    report Error.unused_import ctx.used_globals "global" ctx.imported_globals;
-    report Error.unused_import ctx.used_memories "memory" ctx.imported_memories;
-    report Error.unused_import ctx.used_tables "table" ctx.imported_tables;
-    report Error.unused_import ctx.used_tags "tag" ctx.imported_tags;
+    report Error.unused_field live_functions "function" ctx.defined_functions;
+    report Error.unused_field used_globals "global" ctx.defined_globals;
+    report Error.unused_field used_memories "memory" ctx.defined_memories;
+    report Error.unused_field used_tables "table" ctx.defined_tables;
+    report Error.unused_field used_tags "tag" ctx.defined_tags;
+    report Error.unused_field used_data "data segment" ctx.defined_data;
+    report Error.unused_field used_elem "element segment" ctx.defined_elem;
+    report Error.unused_import live_functions "function" ctx.imported_functions;
+    report Error.unused_import used_globals "global" ctx.imported_globals;
+    report Error.unused_import used_memories "memory" ctx.imported_memories;
+    report Error.unused_import used_tables "table" ctx.imported_tables;
+    report Error.unused_import used_tags "tag" ctx.imported_tags;
     (* A mutable global never assigned could be immutable. A global that is not
        used at all is already reported as [unused-field], so do not pile a second
        diagnostic on the same declaration. *)
     List.iter
       (fun (idx, (name : Ast.Text.name option), location) ->
         if
-          Hashtbl.mem ctx.used_globals idx
+          Hashtbl.mem used_globals idx
           && (not (Hashtbl.mem ctx.assigned_globals idx))
           && not (intentional name)
         then
@@ -5938,6 +6066,8 @@ let validate_configuration ?(warn_unused = true)
       used_tags = Hashtbl.create 16;
       used_data = Hashtbl.create 16;
       used_elem = Hashtbl.create 16;
+      current_function = None;
+      body_references = [];
       assigned_globals = Hashtbl.create 16;
       defined_functions = [];
       defined_globals = [];

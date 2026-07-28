@@ -966,17 +966,26 @@ end
 module Tbl = struct
   include Typing_env.Tbl
 
-  let make ?(hover = fun _ -> None) namespace kind =
+  let make ?(hover = fun _ -> None) ~current namespace kind =
     {
       kind;
       namespace;
       tbl = Hashtbl.create 16;
       used = Hashtbl.create 16;
+      current;
       hover;
     }
 
-  (* Whether a name declared in this table has been referenced. *)
-  let is_used env name = Hashtbl.mem env.used name
+  (* Every context that referenced [name]: [None] for a module-level one (a
+     root), [Some f] for the body of function [f]. One entry per reference. The
+     unused-field lint asks this rather than a plain "is it referenced", so a
+     reference made from dead code can be discounted. *)
+  let referrers env name = Hashtbl.find_all env.used name
+
+  (* [f referrer name] for every reference recorded in this table. *)
+  let iter_references env f =
+    Hashtbl.iter (fun name referrer -> f referrer name) env.used
+
   let cur env = !(env.namespace.cond)
   let entries env x = try Hashtbl.find env.tbl x.desc with Not_found -> []
 
@@ -1019,7 +1028,12 @@ module Tbl = struct
     let r = select env x in
     (match r with
     | Some v ->
-        Hashtbl.replace env.used x.desc ();
+        (* One entry per (name, referrer) pair, not per reference: a helper called
+           a thousand times from one function is one edge. Keeps [used] bounded by
+           the reference graph rather than by the instruction count. *)
+        let referrer = !(env.current) in
+        if not (List.mem referrer (Hashtbl.find_all env.used x.desc)) then
+          Hashtbl.add env.used x.desc referrer;
         (* Link this use to every definition of the name (several only across
            conditional branches); [resolve] handles only references, so [x.info]
            is a use site. The resolved value's summary rides along for hover. *)
@@ -10700,12 +10714,17 @@ let rec functions ctx fields =
           (* The syntactic lints (constant conditions, dropped pure values) read
              the source body, before typing shadows [body] with the typed one. *)
           if ctx.warn_unused then List.iter (Typing_lint.lint_source ctx) body;
+          (* Attribute every name the body resolves to this function, so the
+             unused-field lint can tell what a function that can actually run
+             reaches from what only dead code mentions. *)
+          ctx.current_function := Some name.desc;
           let body =
             with_empty_stack ctx ~location ~kind:Function
               (let* body, _ = block_contents ctx return_types body in
                let* () = pop_args ctx `Output ~location return_types in
                return body)
           in
+          ctx.current_function := None;
           (* The body is fully typed, so the deferred lints (shift-count widths)
              can now read their pinned cells; run them here, in this function, so
              they stay in source order among the other diagnostics. *)
@@ -10971,10 +10990,16 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
   let links = resolve_links in
+  (* Shared by every table below, so a name resolution is attributed to the
+     function whose body made it (see [Tbl.current]). *)
+  let current = ref None in
   let type_context =
     {
       internal_types = Wax_wasm.Types.create ();
-      types = Tbl.make ~hover:hover_of_type (Namespace.make ~links cond) "type";
+      types =
+        Tbl.make ~hover:hover_of_type ~current
+          (Namespace.make ~links cond)
+          "type";
       features;
       subtyping_info_cache = None;
     }
@@ -11033,15 +11058,17 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       types = type_context.types;
       structs_by_fields;
       not_expression_reported = Hashtbl.create 16;
-      functions = Tbl.make namespace "function";
-      globals = Tbl.make ~hover:hover_of_global namespace "global";
-      import_globals = Tbl.make ~hover:hover_of_global namespace "global";
+      functions = Tbl.make ~current namespace "function";
+      globals = Tbl.make ~hover:hover_of_global ~current namespace "global";
+      import_globals =
+        Tbl.make ~hover:hover_of_global ~current namespace "global";
       assigned_globals = Hashtbl.create 16;
-      memories = Tbl.make namespace "memory";
-      datas = Tbl.make (Namespace.make ~links cond) "data segment";
-      tables = Tbl.make namespace "table";
-      elems = Tbl.make (Namespace.make ~links cond) "element segment";
-      tags = Tbl.make (Namespace.make ~links cond) "tag";
+      current_function = current;
+      memories = Tbl.make ~current namespace "memory";
+      datas = Tbl.make ~current (Namespace.make ~links cond) "data segment";
+      tables = Tbl.make ~current namespace "table";
+      elems = Tbl.make ~current (Namespace.make ~links cond) "element segment";
+      tags = Tbl.make ~current (Namespace.make ~links cond) "tag";
       locals = StringMap.empty;
       warn_unused;
       missing_holes = ref [];
@@ -11345,8 +11372,49 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     let intentional (name : ident) =
       String.length name.desc > 0 && name.desc.[0] = '_'
     in
+    (* The functions that can actually run: those reachable from outside
+       (exported, or the start function) or referenced from a module-level context
+       (a global or table initializer, a segment — recorded with [None] as the
+       referrer), plus everything those transitively call or take a [&f] of.
+
+       Reachability, not the mere presence of a reference, is what lets the lint
+       see a dead *cycle*: two functions that only call each other reference one
+       another, so a presence check finds both used, yet neither can ever run —
+       and the same goes for anything only such a cycle reaches. Taking a
+       function reference counts as calling it, since where the reference ends up
+       is not tracked, so the analysis never reports a function that might run. *)
+    let live_functions =
+      let calls = Hashtbl.create 16 in
+      Tbl.iter_references ctx.functions (fun referrer callee ->
+          match referrer with
+          | Some caller -> Hashtbl.add calls caller callee
+          | None -> ());
+      let live = Hashtbl.create 16 in
+      let rec visit f =
+        if not (Hashtbl.mem live f) then begin
+          Hashtbl.replace live f ();
+          List.iter visit (Hashtbl.find_all calls f)
+        end
+      in
+      Tbl.iter_references ctx.functions (fun referrer callee ->
+          if referrer = None then visit callee);
+      walk_fields
+        (fun field ->
+          match field.desc with
+          | Func { name; _ } when exempt field.desc -> visit name.desc
+          | _ -> ())
+        fields;
+      live
+    in
+    (* Referenced by a module-level context, or by a function that can run. A
+       reference from dead code keeps nothing alive. *)
+    let used tbl (name : ident) =
+      List.exists
+        (function None -> true | Some f -> Hashtbl.mem live_functions f)
+        (Tbl.referrers tbl name.desc)
+    in
     let unused tbl (name : ident) =
-      (not (intentional name)) && not (Tbl.is_used tbl name.desc)
+      (not (intentional name)) && not (used tbl name)
     in
     (* A defined field of any kind: report it at its name unless exempt. *)
     let check_unused field tbl kind (name : ident) =
@@ -11388,7 +11456,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
               mut
               && (not (intentional name))
               && (not (exempt field.desc))
-              && Tbl.is_used ctx.globals name.desc
+              && used ctx.globals name
               && not (Hashtbl.mem ctx.assigned_globals name.desc)
             then Error.unnecessary_mut ctx.diagnostics ~location:name.info name
         | Memory { name; _ } ->
