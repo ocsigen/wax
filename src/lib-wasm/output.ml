@@ -543,28 +543,82 @@ let rec cond_doc (c : Ast.cond) =
   | Cond_cmp (op, a, b) ->
       list [ atom ~style:Annotation (cmp_op_string op); cond_doc a; cond_doc b ]
 
+(* A [metadata.code.*] annotation's raw-byte payload, escaped as a string
+   literal. *)
+let hint_payload s =
+  let i, s = escape_string s in
+  Atom
+    { loc = None; style = Annotation; len = Some (i + 2); s = "\"" ^ s ^ "\"" }
+
+let hint_annot name payload =
+  list (atom ~style:Annotation ("@metadata.code." ^ name) :: payload)
+
 (* Branch-hinting proposal: the [(@metadata.code.branch_hint "\00"|"\01")]
    annotation that prefixes a hinted conditional branch. *)
 let branch_hint_annotation (likely : bool) =
-  let i, s = escape_string (if likely then "\001" else "\000") in
-  list
-    [
-      atom ~style:Annotation "@metadata.code.branch_hint";
-      Atom
-        {
-          loc = None;
-          style = Annotation;
-          len = Some (i + 2);
-          s = "\"" ^ s ^ "\"";
-        };
-    ]
+  hint_annot "branch_hint" [ hint_payload (if likely then "\001" else "\000") ]
+
+(* Compilation-hints proposal: [(@metadata.code.instr_freq …)]. The reserved
+   values print as their keywords. Otherwise the byte stands for an
+   executions-per-call ratio, printed as [(freq n)] when that ratio is a whole
+   number — the common case, a hot instruction — and as the raw byte otherwise,
+   because a fractional ratio's shortest decimal need not re-encode to the same
+   byte and the hint must round-trip exactly. *)
+let instr_freq_annotation (b : Hints.freq) =
+  let payload =
+    if b = Hints.never_opt then [ list [ atom ~style:Annotation "never_opt" ] ]
+    else if b = Hints.always_opt then
+      [ list [ atom ~style:Annotation "always_opt" ] ]
+    else
+      match Hints.ratio_of_freq b with
+      | Some r when Float.is_integer r && r >= 1. ->
+          [
+            list
+              [
+                atom ~style:Annotation "freq";
+                atom ~style:Constant (Printf.sprintf "%.0f" r);
+              ];
+          ]
+      | _ -> [ hint_payload (Hints.freq_payload b) ]
+  in
+  hint_annot "instr_freq" payload
+
+(* Compilation-hints proposal: [(@metadata.code.call_targets (target $f 0.73) …)].
+   Always the structured form: the raw-byte spelling can only carry a numeric
+   index, so it could not print a target the source named. *)
+let call_targets_annotation targets =
+  hint_annot "call_targets"
+    (List.map
+       (fun (idx, pct) ->
+         list
+           [
+             atom ~style:Annotation "target";
+             (* Printed without its source span: an annotation payload must not
+                be a trivia anchor, or a comment sitting before the annotation
+                would attach inside this group and split it across lines. *)
+             (match idx.Ast.desc with
+             | Num i -> u32 ~style:Identifier i
+             | Id s -> id ~style:Identifier s);
+             atom ~style:Constant
+               (Printf.sprintf "%g" (float_of_int pct /. 100.));
+           ])
+       targets)
 
 (* Branch-hinting / compilation-hints proposals: the [(@metadata.code.…)]
    annotations an instruction's hints print as, in section order. *)
 let hint_annotations (h : _ Hints.t) =
-  match h.Hints.branch with
-  | None -> []
-  | Some likely -> [ branch_hint_annotation likely.Hints.value ]
+  Option.to_list
+    (Option.map
+       (fun (b : bool Hints.hint) -> branch_hint_annotation b.value)
+       h.Hints.branch)
+  @ Option.to_list
+      (Option.map
+         (fun (f : Hints.freq Hints.hint) -> instr_freq_annotation f.value)
+         h.Hints.freq)
+  @ Option.to_list
+      (Option.map
+         (fun (l : _ Hints.hint) -> call_targets_annotation l.value)
+         h.Hints.targets)
 
 (*** The instruction printer ***)
 

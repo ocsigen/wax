@@ -76,7 +76,7 @@
     1x Assuming that the plain instruction is complete, expecting ')', or a folded instruction.
        <^_>this plain instruction
        <_>This '(' opens the enclosing construct.
-    2x Assuming that the plain instruction is complete, expecting instructions.
+    1x Assuming that the plain instruction is complete, expecting instructions.
        <^_>this plain instruction
     1x Assuming that the result patterns are complete, expecting ')'.
        <^_>these result patterns
@@ -89,6 +89,8 @@
     7x Assuming that the type use is complete, expecting ')'.
        <^_>this type use
        <_>This '(' opens the enclosing construct.
+    1x Assuming that the unfolded instruction is complete, expecting instructions.
+       <^_>this unfolded instruction
     1x Expecting '(', ')', a data element, an identifier ('$...'), or an offset.
        <_>This '(' opens the enclosing construct.
     1x Expecting '(', ')', a data element, or an offset.
@@ -137,6 +139,9 @@
     1x Expecting ')', an element list, or an index.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', an identifier ('$...'), or an unnamed parameter.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', or a call target.
+    1x Expecting ')', or a call targets payload.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a cond else.
        <_>This '(' opens the enclosing construct.
@@ -201,8 +206,9 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or parameters and results.
        <_>This '(' opens the enclosing construct.
-  102x Expecting ')'.
+  108x Expecting ')'.
        <_>This '(' opens the enclosing construct.
+    1x Expecting 'always_opt', 'freq', or 'never_opt'.
     1x Expecting 'and', 'not', 'or', a comparison operator, or an integer.
     1x Expecting 'array', 'cont', 'func', 'struct', or 'sub'.
     1x Expecting 'array', 'cont', 'func', or 'struct'.
@@ -241,6 +247,7 @@
     1x Expecting 'ref'.
     1x Expecting 'switch', or an index.
     1x Expecting 'table', 'offset', 'ref', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+    1x Expecting 'target'.
    16x Expecting a 16-bit signed integer.
    10x Expecting a 32-bit float.
    11x Expecting a 32-bit signed integer.
@@ -253,7 +260,6 @@
     1x Expecting a block type, a folded instruction, or a folded then.
     1x Expecting a block type, a label, instructions, or legacy catches.
     1x Expecting a block type, instructions, or legacy catches.
-    1x Expecting a block, a folded instruction, or a plain instruction.
     1x Expecting a composite type, an index, or descriptor clauses.
     1x Expecting a composite type, or descriptor clauses.
     2x Expecting a composite type.
@@ -264,6 +270,7 @@
     1x Expecting a dummy ctx.
     2x Expecting a field type.
     1x Expecting a float or NaN.
+    2x Expecting a folded instruction, or an unfolded instruction.
     1x Expecting a folded instruction.
     1x Expecting a global type, an identifier ('$...'), an inline export, or an inline import.
     1x Expecting a global type, or an identifier ('$...').
@@ -282,6 +289,7 @@
     1x Expecting a name, or an identifier ('$...').
     1x Expecting a name, or an import group item.
     6x Expecting a name.
+    2x Expecting a number.
     1x Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
     2x Expecting a parameter group.
    11x Expecting a reference type.
@@ -314,7 +322,8 @@
     3x Expecting an identifier ('$...'), or an inline export.
     2x Expecting an identifier ('$...').
     1x Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
-   84x Expecting an index.
+   85x Expecting an index.
+    1x Expecting an instr freq payload.
     1x Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     5x Expecting an integer.
     2x Expecting an offset.
@@ -322,5 +331,5 @@
     1x Expecting cond then fields.
     1x Expecting end of file.
     1x Expecting instructions, or legacy catches.
-    4x Expecting instructions.
+    3x Expecting instructions.
     2x Expecting parameters and results.

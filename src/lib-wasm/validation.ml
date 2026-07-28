@@ -743,6 +743,27 @@ module Error = struct
          "A branch hint may only prefix a conditional branch (if, br_if, or \
           br_on_*).")
 
+  let instr_freq_invalid_target context ~location =
+    report context ~location ~severity:Error
+      (text
+         "An instruction-frequency hint may only prefix a call or a control \
+          instruction.")
+
+  let call_targets_invalid_target context ~location =
+    report context ~location ~severity:Error
+      (text
+         "A call-target hint may only prefix an indirect call (call_ref or \
+          call_indirect).")
+
+  let call_targets_over_100 context ~location ~total =
+    report context ~location ~severity:Error
+      ((text "The call-target frequencies add up to"
+        ++ num (string_of_int total)
+       ^^ text "%, more than 100%.")
+      ++ text
+           "A shortfall is how the hint says other, unlisted targets take the \
+            remainder.")
+
   let shared_memory_without_max context ~location =
     report context ~location ~severity:Error
       (text "A shared memory must have a maximum size.")
@@ -2872,12 +2893,56 @@ let rec is_branch_hint_target (d : _ Ast.Text.instr_desc) =
   | Folded (b, _) -> is_branch_hint_target b.desc
   | _ -> false
 
+(* Compilation-hints proposal: an instruction frequency guides inlining, loop
+   unrolling and block deferral, so the proposal expects it on a call or a control
+   instruction. Anything else it defines as ignored; reject it instead, so a
+   toolchain emitting a useless hint hears about it. *)
+let rec is_instr_freq_target (d : _ Ast.Text.instr_desc) =
+  match d with
+  | Call _ | CallRef _ | CallIndirect _ | ReturnCall _ | ReturnCallRef _
+  | ReturnCallIndirect _ | Block _ | Loop _ | If _ | TryTable _ | Try _ ->
+      true
+  | _ -> is_branch_hint_target d
+
+(* A call target only means anything where the callee is not already known. *)
+and is_call_targets_target (d : _ Ast.Text.instr_desc) =
+  match d with
+  | CallRef _ | CallIndirect _ | ReturnCallRef _ | ReturnCallIndirect _ -> true
+  | Folded (b, _) -> is_call_targets_target b.desc
+  | _ -> false
+
 let check_hints ctx (i : _ Ast.Text.instr) =
-  match i.hints.Hints.branch with
+  let hints = i.hints in
+  (match hints.Hints.branch with
   | Some h when not (is_branch_hint_target i.desc) ->
       Error.branch_hint_invalid_target ctx.modul.diagnostics
         ~location:h.Hints.loc
-  | _ -> ()
+  | _ -> ());
+  (match hints.Hints.freq with
+  | Some h when not (is_instr_freq_target i.desc) ->
+      Error.instr_freq_invalid_target ctx.modul.diagnostics
+        ~location:h.Hints.loc
+  | _ -> ());
+  match hints.Hints.targets with
+  | None -> ()
+  | Some h ->
+      if not (is_call_targets_target i.desc) then
+        Error.call_targets_invalid_target ctx.modul.diagnostics
+          ~location:h.Hints.loc;
+      (* Resolve each target so an unbound name is reported, but *without* marking
+         the function used: naming one in advisory metadata is not a use, so it
+         must not keep an otherwise-dead function out of the unused-field lint. *)
+      List.iter
+        (fun (idx, _) ->
+          ignore (Sequence.get ctx.modul.diagnostics ctx.modul.functions idx))
+        h.Hints.value;
+      (* The proposal requires the listed frequencies to total at most 100%. *)
+      let total =
+        List.fold_left (fun acc (_, pct) -> acc + pct) 0 h.Hints.value
+      in
+      if total > 100 then
+        Error.call_targets_over_100 ctx.modul.diagnostics ~location:h.Hints.loc
+          ~total
 
 let rec instruction_core ctx (i : _ Ast.Text.instr) =
   if false then print_instr i;

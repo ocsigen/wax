@@ -55,6 +55,47 @@ val is_empty : 'idx t -> bool
 val branch : Wax_utils.Ast.location -> bool -> 'idx t -> 'idx t
 (** [branch loc likely t] sets [t]'s branch hint, written at [loc]. *)
 
+val freq : Wax_utils.Ast.location -> freq -> 'idx t -> 'idx t
+(** [freq loc f t] sets [t]'s instruction-frequency hint, written at [loc]. *)
+
+val targets : Wax_utils.Ast.location -> ('idx * int) list -> 'idx t -> 'idx t
+(** [targets loc l t] sets [t]'s call-target hint, written at [loc]. *)
+
 val map_targets : ('a -> 'b) -> 'a t -> 'b t
 (** [map_targets f t] rewrites the function references of [t]'s call targets,
     for the conversions that change how an index is spelled. *)
+
+(** {1 Instruction frequency}
+
+    The wire byte is an offset base-2 logarithm of the executions-per-call
+    ratio: [max 1 (min 64 (floor (log2 r) + 32))], so [32] means once. The
+    endpoints saturate. *)
+
+val never_opt : freq
+(** [0]: never optimize this instruction, whatever the engine's own heuristics.
+*)
+
+val always_opt : freq
+(** [127]: always optimize it. *)
+
+val freq_of_ratio : float -> freq
+(** The byte standing for a given executions-per-call ratio. *)
+
+val ratio_of_freq : freq -> float option
+(** The ratio a byte stands for, or [None] for the two special values and for a
+    byte a hand-written binary put outside the formula's range — those have no
+    ratio and must round-trip through the raw payload. *)
+
+(** {1 Wire payloads}
+
+    The byte strings the [(@metadata.code.…)] annotations spell, and the binary
+    sections store. *)
+
+val freq_of_payload : string -> (freq, string) result
+val freq_payload : freq -> string
+
+val call_targets_of_payload : string -> ((int * int) list, string) result
+(** Decode a run of LEB128 [(function index, percentage)] pairs. The indices are
+    numeric: only the structured text form can name a target. *)
+
+val call_targets_payload : (int * int) list -> string

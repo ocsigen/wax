@@ -175,6 +175,12 @@
 %token CHAR_ANNOT "(@char"
 %token FEATURE_ANNOT "(@feature"
 %token BRANCH_HINT_ANNOT "(@metadata.code.branch_hint"
+%token INSTR_FREQ_ANNOT "(@metadata.code.instr_freq"
+%token CALL_TARGETS_ANNOT "(@metadata.code.call_targets"
+%token FREQ "freq"
+%token NEVER_OPT "never_opt"
+%token ALWAYS_OPT "always_opt"
+%token TARGET "target"
 %token IF_ANNOT "(@if"
 %token THEN_ANNOT "(@then"
 %token ELSE_ANNOT "(@else"
@@ -409,16 +415,47 @@ let branch_hint_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
    [loc] spans the annotation and the instruction; the instruction keeps its own
    location, since the hint is no longer a node of its own. The wider span is
    still recorded, so trivia attaches exactly as it did when it was. *)
-let hinted loc h (i : _ instr) =
-  let set i =
-    {i with hints = Hints.branch {loc_start = fst loc; loc_end = snd loc} h i.hints}
+let hinted loc setters (i : _ instr) =
+  let span : Wax_utils.Ast.location =
+    {loc_start = fst loc; loc_end = snd loc}
   in
-  (* The hint belongs on the operation itself, never on a [Folded] wrapper: the
-     branch opcode is emitted only after the folded operands, so that is where the
+  let set i =
+    {i with hints = List.fold_left (fun h f -> f span h) i.hints setters}
+  in
+  (* A hint belongs on the operation itself, never on a [Folded] wrapper: the
+     opcode is emitted only after the folded operands, so that is where the
      encoder must take the offset, and where the decoder puts it back. *)
   match i.desc with
   | Folded (head, args) -> {i with desc = Folded (set head, args)}
   | _ -> set i
+
+(* Compilation-hints proposal: decode a [(@metadata.code.instr_freq "…")] payload.
+   Reported at the annotation, whose own span the caller has. *)
+let freq_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
+  match Hints.freq_of_payload s.Ast.desc with
+  | Ok b -> b
+  | Error msg ->
+      raise (Wax_utils.Parsing.syntax_error_pair
+               (loc, Wax_utils.Message.text (msg ^ "\n")))
+
+(* A call-target percentage is written as a fraction of 1 and stored as a whole
+   percent, which is what the section holds. *)
+let target_percent loc n =
+  let f = float_of_string n in
+  if f < 0. || f > 1. then
+    raise (Wax_utils.Parsing.syntax_error_pair
+             (loc, Wax_utils.Message.text
+                     "A call-target frequency must be between 0 and 1.\n"));
+  int_of_float (Float.round (f *. 100.))
+
+(* The raw-byte spelling of [(@metadata.code.call_targets …)]. Its indices are
+   numeric: only the [(target …)] form can name a target. *)
+let call_targets_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
+  match Hints.call_targets_of_payload s.Ast.desc with
+  | Ok l -> List.map (fun (i, pct) -> (annot loc (Num (Uint32.of_int i)), pct)) l
+  | Error msg ->
+      raise (Wax_utils.Parsing.syntax_error_pair
+               (loc, Wax_utils.Message.text (msg ^ "\n")))
 
 
 %}
@@ -672,8 +709,52 @@ table_type:
 (* Instructions *)
 
 (* Branch-hinting proposal: the annotation prefixing a hinted [if]/[br_if]. *)
-branch_hint_annot:
-| BRANCH_HINT_ANNOT s = STRING ")" { branch_hint_of_annotation $loc(s) s }
+(* One [(@metadata.code.…)] annotation, as the setter it applies to the hints of
+   the instruction that follows. Each is given the span of the whole prefix, so a
+   diagnostic about a misplaced or malformed hint is blamed at the annotation. *)
+(* An unfolded instruction with any number of leading [(@metadata.code.…)]
+   annotations. Right-recursive rather than a list prefix: a folded instruction
+   carries its own hint prefix (see [folded_instruction]), so a list here would
+   leave it ambiguous whether the next annotation continues this prefix or begins
+   a nested one — menhir reports that as a shift/reduce conflict. The two bodies
+   stay disjoint (a folded instruction opens with a parenthesis, these do not), so
+   one token of lookahead still decides. *)
+hinted_unfolded:
+| i = plain_instruction { i }
+| i = blockinstr { i }
+| h = hint_annot i = hinted_unfolded { hinted $sloc [h] i }
+
+hint_annot:
+| BRANCH_HINT_ANNOT s = STRING ")"
+  { let h = branch_hint_of_annotation $loc(s) s in
+    fun span hints -> Hints.branch span h hints }
+| INSTR_FREQ_ANNOT f = instr_freq_payload ")"
+  { fun span hints -> Hints.freq span f hints }
+| CALL_TARGETS_ANNOT l = call_targets_payload ")"
+  { fun span hints -> Hints.targets span l hints }
+
+(* [(freq r)] gives the executions-per-call ratio, which the section stores as an
+   offset base-2 logarithm; [(never_opt)]/[(always_opt)] are its reserved values.
+   The raw byte is accepted too, and is what an out-of-range value round-trips as. *)
+instr_freq_payload:
+| "(" FREQ n = number ")" { Hints.freq_of_ratio (float_of_string n) }
+| "(" NEVER_OPT ")" { Hints.never_opt }
+| "(" ALWAYS_OPT ")" { Hints.always_opt }
+| s = STRING { freq_of_annotation $loc(s) s }
+
+(* [(target $f 0.73)] names a likely callee and how often it is taken. The raw-byte
+   spelling cannot name one, so its indices come out numeric. *)
+call_targets_payload:
+| l = call_target * { l }
+| s = STRING { call_targets_of_annotation $loc(s) s }
+
+call_target:
+| "(" TARGET i = index n = number ")" { (i, target_percent $loc(n) n) }
+
+number:
+| n = NAT { n }
+| n = INT { n }
+| n = FLOAT { n }
 
 blockinstr:
 | BLOCK label = label typ = block_type block =instructions END label2 = label
@@ -936,10 +1017,8 @@ instructions:
 (* Branch-hinting proposal: the [(@metadata.code.branch_hint …)] annotation wraps
    the conditional branch that follows it (unfolded [if]/[br_if]/[br_on_*] or the
    folded form). [hinted] rejects the annotation on any other instruction. *)
-| h = branch_hint_annot i = plain_instruction r = instructions
-  { hinted $sloc h i :: r }
-| h = branch_hint_annot i = blockinstr r = instructions
-  { hinted $sloc h i :: r }
+| h = hint_annot i = hinted_unfolded r = instructions
+  { hinted $sloc [h] i :: r }
 (* A hinted folded instruction ([(@…) (if …)]) is handled by [folded_instruction]
    itself (see its first production), reached here via the [folded_instruction]
    case above; a dedicated statement-level rule would duplicate that derivation
@@ -991,7 +1070,7 @@ folded_instruction:
    binaryen both emit (the annotation binds to the wrapped branch's opcode); wax's
    printer produces it, so the parser must accept it here as well as at statement
    position. [hinted] rejects the annotation on anything but a conditional branch. *)
-| h = branch_hint_annot i = folded_instruction { hinted $sloc h i }
+| h = hint_annot i = folded_instruction { hinted $sloc [h] i }
 | "(" i = plain_instruction l = folded_instruction * ")"
   { with_loc $sloc (Folded (i, l)) }
 (* The inner block-family node is given a span ending at the body

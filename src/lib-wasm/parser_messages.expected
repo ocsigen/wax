@@ -180,7 +180,7 @@ parse: LPAREN DATA LPAREN TRY ID RPAREN
 
 Expecting '(', or a block type.
 
-parse: LPAREN DATA LPAREN TRY LPAREN DO CALL_INDIRECT CATCH_ALL
+parse: LPAREN DATA LPAREN TRY LPAREN DO CALL_INDIRECT END
 
 Assuming that the instructions are complete, expecting ')'.
 <^1>these instructions
@@ -461,7 +461,7 @@ Assuming that the element list is complete, expecting ')'.
 <^1>this element list
 <4>This '(' opens the enclosing construct.
 
-parse: LPAREN ELEM BRANCH_HINT_ANNOT STRING RPAREN WAIT
+parse: LPAREN ELEM CALL_TARGETS_ANNOT RPAREN WAIT
 
 Expecting a folded instruction.
 
@@ -640,19 +640,6 @@ parse: LPAREN FUNC BR WAIT
 
 Expecting an index.
 
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN SELECT MEM_ALIGN
-
-Assuming that the plain instruction is complete, expecting instructions.
-<^1>this plain instruction
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN TRY_TABLE END ID LPAREN_THEN
-
-Expecting instructions.
-
-parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING RPAREN WAIT
-
-Expecting a block, a folded instruction, or a plain instruction.
-
 parse: LPAREN FUNC BRANCH_HINT_ANNOT STRING WAIT
 
 Expecting ')'.
@@ -747,6 +734,50 @@ Expecting a type use, or an index.
 parse: LPAREN FUNC CALL_REF WAIT
 
 Expecting an index.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT LPAREN TARGET NAT FLOAT RPAREN WAIT
+
+Expecting ')', or a call target.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT LPAREN TARGET NAT MEM_OFFSET
+
+Expecting a number.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT LPAREN TARGET NAT NAT WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT LPAREN TARGET WAIT
+
+Expecting an index.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT LPAREN WAIT
+
+Expecting 'target'.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT RPAREN CALL_TARGETS_ANNOT RPAREN WAIT
+
+Expecting a folded instruction, or an unfolded instruction.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT RPAREN SELECT LPAREN_THEN
+
+Assuming that the unfolded instruction is complete, expecting instructions.
+<^1>this unfolded instruction
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT RPAREN WAIT
+
+Expecting a folded instruction, or an unfolded instruction.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT STRING WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC CALL_TARGETS_ANNOT WAIT
+
+Expecting ')', or a call targets payload.
+<1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC CHAR_ANNOT STRING WAIT
 
@@ -889,6 +920,38 @@ Expecting a cond then.
 parse: LPAREN FUNC IF_ANNOT WAIT
 
 Expecting a condition.
+
+parse: LPAREN FUNC INSTR_FREQ_ANNOT LPAREN ALWAYS_OPT WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC INSTR_FREQ_ANNOT LPAREN FREQ FLOAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC INSTR_FREQ_ANNOT LPAREN FREQ WAIT
+
+Expecting a number.
+
+parse: LPAREN FUNC INSTR_FREQ_ANNOT LPAREN NEVER_OPT WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC INSTR_FREQ_ANNOT LPAREN WAIT
+
+Expecting 'always_opt', 'freq', or 'never_opt'.
+
+parse: LPAREN FUNC INSTR_FREQ_ANNOT STRING WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse: LPAREN FUNC INSTR_FREQ_ANNOT WAIT
+
+Expecting an instr freq payload.
 
 parse: LPAREN FUNC LOCAL_GET WAIT
 

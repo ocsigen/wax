@@ -246,6 +246,11 @@ let keyword_table : (string, token) Hashtbl.t =
       ("elem", ELEM);
       ("declare", DECLARE);
       ("item", ITEM);
+      (* Compilation-hints proposal: the words its annotation payloads use. *)
+      ("freq", FREQ);
+      ("never_opt", NEVER_OPT);
+      ("always_opt", ALWAYS_OPT);
+      ("target", TARGET);
       ("memory", MEMORY);
       ("pagesize", PAGESIZE);
       ("shared", SHARED);
@@ -668,6 +673,9 @@ let rec token_rec ctx lexbuf =
   | "(@feature" -> FEATURE_ANNOT
   (* Branch-hinting proposal: [(@metadata.code.branch_hint "\00"|"\01")]. *)
   | "(@metadata.code.branch_hint" -> BRANCH_HINT_ANNOT
+  (* Compilation-hints proposal, the instruction-level sections. *)
+  | "(@metadata.code.instr_freq" -> INSTR_FREQ_ANNOT
+  | "(@metadata.code.call_targets" -> CALL_TARGETS_ANNOT
   | "(@", Plus idchar ->
       skip_annotation 1 lexbuf;
       Wax_utils.Trivia.report_item ctx Annotation "";
@@ -680,6 +688,9 @@ let rec token_rec ctx lexbuf =
       else if s = "then" then THEN_ANNOT
       else if s = "else" then ELSE_ANNOT
       else if s = "feature" then FEATURE_ANNOT
+      else if s = "metadata.code.branch_hint" then BRANCH_HINT_ANNOT
+      else if s = "metadata.code.instr_freq" then INSTR_FREQ_ANNOT
+      else if s = "metadata.code.call_targets" then CALL_TARGETS_ANNOT
       else (
         if not (String.is_valid_utf_8 s) then
           raise
