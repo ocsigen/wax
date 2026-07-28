@@ -988,8 +988,16 @@ let field name mut t : (Ast.ident * Ast.fieldtype, Ast.location) Ast.annotated =
    unused-import). Both are exercised roughly a third of the time each. *)
 let import_attrs base : Ast.attributes =
   let str s = Some (nl (Ast.String (None, s))) in
-  (if rnd 3 = 0 then [ ("import", str (base ^ "_ext"), None) ] else [])
-  @ if rnd 3 = 0 then [ ("export", str (base ^ "_x"), None) ] else []
+  let attr attr_name attr_value : Ast.attribute =
+    {
+      attr_name;
+      attr_value;
+      attr_guard = None;
+      attr_span = Wax_utils.Ast.dummy_loc;
+    }
+  in
+  (if rnd 3 = 0 then [ attr "import" (str (base ^ "_ext")) ] else [])
+  @ if rnd 3 = 0 then [ attr "export" (str (base ^ "_x")) ] else []
 
 (* One imported function [g<k>]: the uniform parameter signature (anonymous
    params, since an import has no body) and a result drawn from [gtys]. *)

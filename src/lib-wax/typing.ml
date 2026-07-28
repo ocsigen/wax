@@ -626,11 +626,15 @@ module Error = struct
        ++ text "attribute needs a" ++ kw "#[priority = n]"
       ^^ text ".")
 
-  (* Blamed at the [#[optimization = n]] value: an attribute carries no span of
-     its own, and [#[run_once]] has no value to fall back on, so pointing at the
-     one span that exists beats a related label spanning the whole function. *)
-  let conflicting_optimization context ~location =
+  let conflicting_optimization context ~location ~prev_loc =
     report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "the other one here";
+          };
+        ]
       (text "A function states at most one optimization priority:"
        ++ kw "#[optimization = n]" ++ text "or" ++ kw "#[run_once]"
       ^^ text ", not both.")
@@ -10929,7 +10933,7 @@ let rec functions ctx fields =
           (match func_typ with
           | Some func_typ ->
               if
-                List.exists (fun (k, _, _) -> k = "start") attributes
+                List.exists (fun a -> a.Ast.attr_name = "start") attributes
                 && not
                      (Array.length func_typ.params = 0
                      && Array.length func_typ.results = 0)
@@ -11200,14 +11204,19 @@ let field_attributes (field : _ modulefield) =
    inside an [import "module" { ... }] block, where a name-only
    [#[import = "name"]] overrides the imported name. *)
 let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
-    ?(priority_ok = false) ~default_location (attributes : Ast.attributes) =
+    ?(priority_ok = false) (attributes : Ast.attributes) =
   List.iter
-    (fun ( name,
-           value,
-           (guard : (Wax_wasm.Ast.cond, location) Ast.annotated option) ) ->
-      let location =
-        match value with Some v -> v.info | None -> default_location
-      in
+    (fun ({
+            attr_name = name;
+            attr_value = value;
+            attr_guard = guard;
+            attr_span;
+          } :
+           Ast.attribute) ->
+      (* The whole [#[...]]. A valueless attribute ([#[start]], [#[run_once]]) has
+         no value span to fall back on, and the field's span would underline the
+         entire definition. A synthesized attribute carries the entity's span. *)
+      let location = attr_span in
       (* A per-attribute [if <cond>] guard is only meaningful on [export] and
          [start]; blame its own [if] keyword. *)
       (match guard with
@@ -11284,12 +11293,10 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
      either without [#[priority]] would have nowhere to go. Reject rather than
      invent a compilation priority the author did not choose. *)
   if priority_ok then begin
-    let find k = List.find_opt (fun (k', _, _) -> k' = k) attributes in
-    let locate (_, v, _) =
-      match v with
-      | Some (x : location instr) -> x.info
-      | None -> default_location
+    let find k =
+      List.find_opt (fun (a : Ast.attribute) -> a.attr_name = k) attributes
     in
+    let locate (a : Ast.attribute) = a.attr_span in
     if find "priority" = None then
       List.iter
         (fun k ->
@@ -11299,8 +11306,9 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
             (find k))
         [ "optimization"; "run_once" ];
     match (find "optimization", find "run_once") with
-    | Some a, Some _ ->
+    | Some a, Some b ->
         Error.conflicting_optimization diagnostics ~location:(locate a)
+          ~prev_loc:(locate b)
     | _ -> ()
   end
 
@@ -11319,7 +11327,7 @@ let check_attributes diagnostics
   in
   let priority_ok = match field.desc with Func _ -> true | _ -> false in
   check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok
-    ~import_ok:false ~priority_ok ~default_location:field.info
+    ~import_ok:false ~priority_ok
     (field_attributes field.desc)
 
 (*** Type-checking a configuration ***)
@@ -11541,8 +11549,8 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      [location] blames the entity when an attribute carries no value. *)
   let process_attrs ~default_name ~location attributes =
     List.iter
-      (fun (key, v, (guard : (Wax_wasm.Ast.cond, location) Ast.annotated option))
-         ->
+      (fun ({ attr_name = key; attr_value = v; attr_guard = guard; _ } :
+             Ast.attribute) ->
         (* The condition under which this attribute is actually present: the
            field's own branch assumption ([!cond]) narrowed by an optional
            per-attribute [if <cond>] guard (only [export]/[start] carry one). *)
@@ -11616,13 +11624,13 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       match decl.desc.kind with Import_func _ -> true | _ -> false
     in
     check_attribute_list diagnostics ~export_ok:true ~start_ok ~module_ok:false
-      ~import_ok:true ~default_location:decl.info decl.desc.attributes;
+      ~import_ok:true decl.desc.attributes;
     (* A [#[start]] import, like a defined start function, must have no
        parameters and no results (the import was registered above, so its type
        is resolvable). *)
     if
       start_ok
-      && List.exists (fun (k, _, _) -> k = "start") decl.desc.attributes
+      && List.exists (fun a -> a.Ast.attr_name = "start") decl.desc.attributes
     then begin
       let name = decl.desc.id in
       let func_typ =
@@ -11642,13 +11650,12 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
           Error.start_function_signature ctx.diagnostics ~location:name.info
       | None -> ()
     end;
-    (match List.filter (fun (k, _, _) -> k = "import") decl.desc.attributes with
-    | (_, first_value, _) :: (_, value, _) :: _ ->
-        let attr_location value =
-          match value with Some (v : _ instr) -> v.info | None -> decl.info
-        in
-        Error.multiple_import diagnostics ~location:(attr_location value)
-          ~prev_loc:(attr_location first_value)
+    (match
+       List.filter (fun a -> a.Ast.attr_name = "import") decl.desc.attributes
+     with
+    | first :: (a : Ast.attribute) :: _ ->
+        Error.multiple_import diagnostics ~location:a.attr_span
+          ~prev_loc:first.attr_span
     | _ -> ());
     (* An imported memory/table still has size limits to validate, the same as
        a defined one. *)
@@ -11715,7 +11722,8 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   if warn_unused then begin
     let exempt field =
       List.exists
-        (fun (k, _, _) -> k = "export" || k = "start")
+        (fun (a : Ast.attribute) ->
+          a.attr_name = "export" || a.attr_name = "start")
         (field_attributes field)
     in
     (* A leading [_] marks a declaration as deliberately unused (and, for a
@@ -11805,7 +11813,8 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     let check_unused_import (decl : (Ast.import_decl, location) annotated) =
       let exempt =
         List.exists
-          (fun (k, _, _) -> k = "export" || k = "start")
+          (fun (a : Ast.attribute) ->
+            a.attr_name = "export" || a.attr_name = "start")
           decl.desc.attributes
       in
       let report tbl kind =
@@ -12217,13 +12226,13 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
      unconditionally present or absent. *)
   let sattrs asm (attrs : attributes) : attributes * S.t =
     List.fold_left
-      (fun (acc, asm) (k, v, guard) ->
-        match guard with
-        | None -> (acc @ [ (k, v, None) ], asm)
+      (fun (acc, asm) (a : Ast.attribute) ->
+        match a.attr_guard with
+        | None -> (acc @ [ a ], asm)
         | Some g ->
             let kept, asm =
               choose asm g.Annot.desc ~location:g.info
-                ~then_branch:(fun _ -> [ (k, v, None) ])
+                ~then_branch:(fun _ -> [ { a with attr_guard = None } ])
                 ~else_branch:(fun _ -> [])
             in
             (acc @ kept, asm))
@@ -12336,8 +12345,8 @@ let apply_declared_features diagnostics features fields =
       match field.desc with
       | Module_annotation attrs ->
           List.iter
-            (fun (key, value, _) ->
-              match (key, value) with
+            (fun (a : Ast.attribute) ->
+              match (a.attr_name, a.attr_value) with
               | "feature", Some { desc = String (_, name); info = location; _ }
                 -> (
                   match Wax_utils.Feature.of_name name with
@@ -12365,12 +12374,8 @@ let apply_declared_features diagnostics features fields =
                 match field.desc with
                 | Module_annotation attrs ->
                     List.iter
-                      (fun (key, value, _) ->
-                        let location =
-                          match value with
-                          | Some v -> v.info
-                          | None -> field.info
-                        in
+                      (fun (a : Ast.attribute) ->
+                        let key = a.attr_name and location = a.attr_span in
                         if key = "feature" then
                           Error.feature_declaration_in_conditional diagnostics
                             ~location
@@ -12470,12 +12475,12 @@ let lint_confusable diagnostics fields =
   let check_body instrs = List.iter (Ast_utils.iter_instr check_instr) instrs in
   let check_attrs (attrs : attributes) =
     List.iter
-      (fun (_, value, guard) ->
-        Option.iter (Ast_utils.iter_instr check_instr) value;
+      (fun (a : Ast.attribute) ->
+        Option.iter (Ast_utils.iter_instr check_instr) a.attr_value;
         Option.iter
           (fun (g : (Wax_wasm.Ast.cond, location) annotated) ->
             check_cond g.desc)
-          guard)
+          a.attr_guard)
       attrs
   in
   let check_data ~location init =

@@ -293,7 +293,7 @@ let hinted aloc setters (i : _ instr) =
    tokens); recover which hint each stands for, rejecting anything else in a hint
    position. [#[freq = r]] gives an executions-per-call ratio, which the section
    stores as an offset base-2 logarithm. *)
-let hint_of_attr loc (name, value, _guard) =
+let hint_of_attr loc ({attr_name = name; attr_value = value; _} : attribute) =
   let bad () =
     raise
       (Wax_utils.Parsing.syntax_error_pair
@@ -806,8 +806,12 @@ attribute_guard:
   { Some {desc = c; info = location_of $loc(_kw)} }
 
 attribute:
-| "#" "[" name = attribute_name "=" i = attribute_expression g = attribute_guard "]" { (name, Some i, g) }
-| "#" "[" name = attribute_name g = attribute_guard "]" { (name, None, g) }
+| "#" "[" name = attribute_name "=" i = attribute_expression g = attribute_guard "]"
+  { {attr_name = name; attr_value = Some i; attr_guard = g;
+     attr_span = location_of $sloc} }
+| "#" "[" name = attribute_name g = attribute_guard "]"
+  { {attr_name = name; attr_value = None; attr_guard = g;
+     attr_span = location_of $sloc} }
 
 (* Branch-hinting and compilation-hints proposals: [#[likely]]/[#[unlikely]],
    [#[freq = n]]/[#[never_opt]]/[#[always_opt]] prefixing an expression. Parsed as
@@ -844,8 +848,12 @@ branch_expr:
 
 (* A module-level inner attribute, [#![module = "name"]]. *)
 inner_attribute:
-| "#" "!" "[" name = IDENT "=" i = attribute_expression "]" { (name, Some i, None) }
-| "#" "!" "[" name = IDENT "]" { (name, None, None) }
+| "#" "!" "[" name = IDENT "=" i = attribute_expression "]"
+  { {attr_name = name; attr_value = Some i; attr_guard = None;
+     attr_span = location_of $sloc} }
+| "#" "!" "[" name = IDENT "]"
+  { {attr_name = name; attr_value = None; attr_guard = None;
+     attr_span = location_of $sloc} }
 
 simple_pattern:
 | x = ident { Some x }

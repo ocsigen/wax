@@ -891,10 +891,10 @@ let confusing_precedence (outer : binop_kind) (inner : binop_kind) =
 let import_name (decl : import_decl) =
   let override =
     List.find_map
-      (fun (k, v, _) ->
-        if k <> "import" then None
+      (fun (a : attribute) ->
+        if a.attr_name <> "import" then None
         else
-          match v with
+          match a.attr_value with
           | Some { desc = String (_, s); info; _ } -> Some { desc = s; info }
           | _ -> None)
       decl.attributes

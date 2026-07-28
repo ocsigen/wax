@@ -281,12 +281,21 @@ let no_loc_instr desc : location instr =
    does not, and [#[export = "f", if not(portable)]] carries a guard that makes
    just this export conditional (independent of the field's own reachability).
    Only [export] may be guarded. The guard is located at its [if] keyword, to
-   anchor a diagnostic. *)
-type attributes =
-  (string
-  * location instr option
-  * (Wax_wasm.Ast.cond, location) annotated option)
-  list
+   anchor a diagnostic.
+
+   Each carries the span of the whole [#[...]], so a diagnostic about the
+   attribute names it rather than falling back to its value (which a valueless one
+   like [#[start]] does not have) or to the whole field it sits on. A synthesized
+   attribute — one the Wasm-to-Wax conversion invents rather than reads — has no
+   real span and takes the entity's. *)
+type attribute = {
+  attr_name : string;
+  attr_value : location instr option;
+  attr_guard : (Wax_wasm.Ast.cond, location) annotated option;
+  attr_span : location;
+}
+
+type attributes = attribute list
 
 (* What an [import "module" { ... }] entry brings in. Imports have no body, so
    these carry only type-level information (no ['info]-annotated instructions):

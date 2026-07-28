@@ -3472,6 +3472,11 @@ let simplify_guard ctx ~location (syn : Wax_wasm.Ast.cond) :
    otherwise guard it with the branch condition simplified against the position.
    [make guard nm] builds the attribute for one entry, [guard] being [None] for
    a plain attribute. *)
+(* A synthesized attribute: one the conversion invents rather than reads, so it
+   has no source span of its own and takes the entity's. *)
+let synth_attr ~location attr_name attr_value attr_guard : Ast.attribute =
+  { attr_name; attr_value; attr_guard; attr_span = location }
+
 let folded_attrs ctx ~location entries make =
   List.filter_map
     (fun (c, syn, nm) ->
@@ -3489,7 +3494,7 @@ let exports ctx kind name e : Ast.attributes =
       if nm.Wax_utils.Ast.desc = (name : Src.name).Wax_utils.Ast.desc then None
       else Some (string_of_name nm)
     in
-    ("export", value, guard)
+    synth_attr ~location:name.Ast.info "export" value guard
   in
   (* [e] are the inline exports declared on this field (already in the right
      branch), so they inherit the field's reachability unconditionally. *)
@@ -3505,7 +3510,9 @@ let exports ctx kind name e : Ast.attributes =
      reusing the field's own Wax name) first; [partition] is stable, so the rest
      keep their order. *)
   let unnamed, named =
-    List.partition (fun (_, v, _) -> Option.is_none v) (inline @ standalone)
+    List.partition
+      (fun (a : Ast.attribute) -> Option.is_none a.attr_value)
+      (inline @ standalone)
   in
   unnamed @ named
 
@@ -3517,23 +3524,26 @@ let start_attribute ctx name : Ast.attributes =
   | Some entries ->
       folded_attrs ctx ~location:name.Ast.info
         (List.map (fun (c, syn) -> (c, syn, ())) entries)
-        (fun guard () -> ("start", None, guard))
+        (fun guard () ->
+          synth_attr ~location:name.Wax_utils.Ast.info "start" None guard)
 
 (* Compilation-hints proposal: the function's [metadata.code.compilation_priority]
    entry, back as the attributes it is written with. [#[priority]] always comes
    first, since it is what makes the entry exist; the reserved optimization value
    prints as [#[run_once]] rather than the number. *)
-let priority_attributes (p : Wax_wasm.Hints.priority option) : Ast.attributes =
+let priority_attributes ~location (p : Wax_wasm.Hints.priority option) :
+    Ast.attributes =
   match p with
   | None -> []
   | Some { compilation; optimization } ->
       let num n = Some (Ast.no_loc_instr (Ast.Int (string_of_int n))) in
-      let int_attr k n = (k, num n, None) in
+      let int_attr k n = synth_attr ~location k (num n) None in
       int_attr "priority" compilation
       :: Option.to_list
            (Option.map
               (fun o ->
-                if o = Wax_wasm.Hints.run_once then ("run_once", None, None)
+                if o = Wax_wasm.Hints.run_once then
+                  synth_attr ~location "run_once" None None
                 else int_attr "optimization" o)
               optimization)
 
@@ -3692,7 +3702,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                sign = Some sign;
                body = (label (), locals @ Stack.run (instructions ctx instrs));
                attributes =
-                 priority_attributes priority
+                 priority_attributes ~location:name.Ast.info priority
                  @ start_attribute ctx name @ exports ctx Func name e;
              })
     | Import { module_; name = nm; desc; exports = e; _ } -> (
@@ -3704,7 +3714,12 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
           let attributes =
             start
             @ (if nm.Ast.desc = id.Wax_utils.Ast.desc then []
-               else [ ("import", Some (string_of_name nm), None) ])
+               else
+                 [
+                   synth_attr ~location:id.Wax_utils.Ast.info "import"
+                     (Some (string_of_name nm))
+                     None;
+                 ])
             @ exports ctx export_kind id e
           in
           Some
@@ -3910,7 +3925,12 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
        attribute. *)
     | Feature_annotation name ->
         Some
-          (Module_annotation [ ("feature", Some (string_of_name name), None) ])
+          (Module_annotation
+             [
+               synth_attr ~location:name.Wax_utils.Ast.info "feature"
+                 (Some (string_of_name name))
+                 None;
+             ])
     | String_global { typ; init; _ } ->
         let name = Sequence.get_current ctx.globals in
         Some
@@ -4545,7 +4565,11 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
           [
             Ast.no_loc
               (Ast.Module_annotation
-                 [ ("module", Some (string_of_name nm), None) ]);
+                 [
+                   synth_attr ~location:nm.Wax_utils.Ast.info "module"
+                     (Some (string_of_name nm))
+                     None;
+                 ]);
           ]
       | None -> []
     in
@@ -4574,12 +4598,12 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
                   (Ast.no_loc
                      (Ast.Module_annotation
                         [
-                          ( "feature",
-                            Some
-                              (Ast.no_loc_instr
-                                 (Ast.String
-                                    (None, Wax_utils.Feature.name feature))),
-                            None );
+                          synth_attr ~location:Wax_utils.Ast.dummy_loc "feature"
+                            (Some
+                               (Ast.no_loc_instr
+                                  (Ast.String
+                                     (None, Wax_utils.Feature.name feature))))
+                            None;
                         ])))
             (Wax_utils.Feature.used features)
     in

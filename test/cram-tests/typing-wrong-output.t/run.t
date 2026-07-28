@@ -123,10 +123,10 @@ placement error:
   Error:
     A '#![feature = "…"]' declaration states a fact about the whole module and
     must appear at the top level, not inside a conditional.
-   ──➤  feature-in-if.wax:2:16
+   ──➤  feature-in-if.wax:2:3
   1 │ #[if(x)] {
   2 │   #![feature = "custom-descriptors"]
-    ·                ^^^^^^^^^^^^^^^^^^^^
+    ·   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   3 │ }
   4 │ 
   [128]

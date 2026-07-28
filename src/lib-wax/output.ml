@@ -1617,7 +1617,9 @@ let fundecl ?(exact = false) ~tag pp (name, typ, sign) =
             typ);
       Option.iter (fun ty -> raw_functype pp ty) sign)
 
-let print_attribute_gen open_ pp (name, i, guard) =
+let print_attribute_gen open_ pp
+    ({ attr_name = name; attr_value = i; attr_guard = guard; _ } :
+      Ast.attribute) =
   box pp ~indent:indent_level (fun () ->
       attribute pp open_;
       attribute pp name;

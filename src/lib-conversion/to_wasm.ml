@@ -1987,7 +1987,8 @@ let export_name ~name v =
    separately by [guarded_export_fields] as a conditional standalone export. *)
 let exports ~name attributes =
   List.filter_map
-    (fun (k, v, guard) ->
+    (fun ({ attr_name = k; attr_value = v; attr_guard = guard; _ } :
+           Wax_lang.Ast.attribute) ->
       match (k, guard) with
       | "export", None -> Some (export_name ~name v)
       | _ -> None)
@@ -2006,15 +2007,18 @@ let compilation_priority attributes =
     | _ -> None
   in
   let find k =
-    List.find_opt (fun (k', _, g) -> k' = k && g = None) attributes
+    List.find_opt
+      (fun (a : Wax_lang.Ast.attribute) ->
+        a.attr_name = k && a.attr_guard = None)
+      attributes
   in
   match find "priority" with
   | None -> None
-  | Some (_, v, _) ->
-      let compilation = Option.value ~default:0 (num v) in
+  | Some a ->
+      let compilation = Option.value ~default:0 (num a.attr_value) in
       let optimization =
         match find "optimization" with
-        | Some (_, v, _) -> num v
+        | Some a -> num a.attr_value
         | None ->
             if find "run_once" <> None then Some Wax_wasm.Hints.run_once
             else None
@@ -2028,7 +2032,8 @@ let compilation_priority attributes =
    sort. *)
 let guarded_export_fields ~loc ~kind ~field_name attributes =
   List.filter_map
-    (fun (k, v, guard) ->
+    (fun ({ attr_name = k; attr_value = v; attr_guard = guard; _ } :
+           Wax_lang.Ast.attribute) ->
       match (k, guard) with
       | "export", Some cond ->
           let export : _ Text.modulefield =
@@ -2065,7 +2070,7 @@ let inline_export_fields ~loc ~kind ~field_name attributes =
    unguarded, wrapped in [(@if <cond> …)] when guarded, like a guarded export. *)
 let start_fields ~loc ~field_name attributes =
   List.filter_map
-    (fun (k, _, guard) ->
+    (fun ({ attr_name = k; attr_guard = guard; _ } : Wax_lang.Ast.attribute) ->
       match (k, guard) with
       | "start", None -> Some (annot loc (Text.Start (index field_name)))
       | "start", Some cond ->
@@ -2128,8 +2133,8 @@ let norm_importdesc (d : Text.importdesc) : Text.importdesc =
    not into a module field. *)
 let module_name attributes =
   List.find_map
-    (fun (k, v, _) ->
-      match (k, v) with
+    (fun (a : Wax_lang.Ast.attribute) ->
+      match (a.attr_name, a.attr_value) with
       | "module", Some { desc = String (_, n); info; _ } ->
           Some { Ast.desc = n; info }
       | _ -> None)
@@ -2144,8 +2149,8 @@ let feature_annotations fields =
       match field.desc with
       | Module_annotation attrs ->
           List.filter_map
-            (fun (k, v, _) ->
-              match (k, v) with
+            (fun (a : Wax_lang.Ast.attribute) ->
+              match (a.attr_name, a.attr_value) with
               | "feature", Some { desc = String (_, n); info; _ } ->
                   Some
                     {

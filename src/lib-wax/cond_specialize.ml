@@ -227,14 +227,15 @@ let module_ ctx env (fields : location Ast.module_) :
      attribute, and an undetermined one is kept with its condition simplified. *)
   let sattrs (attrs : attributes) : attributes =
     List.filter_map
-      (fun (k, v, guard) ->
-        match guard with
-        | None -> Some (k, v, None)
+      (fun (a : Ast.attribute) ->
+        match a.attr_guard with
+        | None -> Some a
         | Some g -> (
             match eval g.Annot.desc with
-            | True -> Some (k, v, None)
+            | True -> Some { a with attr_guard = None }
             | False -> None
-            | Residual c -> Some (k, v, Some { g with desc = c })))
+            | Residual c ->
+                Some { a with attr_guard = Some { g with desc = c } }))
       attrs
   in
   let sdecl (decl : (import_decl, location) annotated) =

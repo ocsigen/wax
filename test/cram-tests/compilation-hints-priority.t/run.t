@@ -68,10 +68,10 @@ compilation priority the author did not choose:
 
   $ wax check noprio.wax
   Error: The '#[optimization]' attribute needs a '#[priority = n]'.
-   ──➤  noprio.wax:2:18
+   ──➤  noprio.wax:2:1
   1 │ #[export]
   2 │ #[optimization = 3]
-    ·                  ^
+    · ^^^^^^^^^^^^^^^^^^^
   3 │ fn f() { nop; }
   4 │ 
   [128]
@@ -84,13 +84,15 @@ the `#[optimization]` value: an attribute carries no span of its own and
   Error:
     A function states at most one optimization priority: '#[optimization = n]'
     or '#[run_once]', not both.
-   ──➤  conflict.wax:3:18
+   ──➤  conflict.wax:3:1
   1 │ #[export]
   2 │ #[priority = 1]
   3 │ #[optimization = 3]
-    ·                  ^
+    · ^^^^^^^^^^^^^^^^^^^
   4 │ #[run_once]
+    · ^^^^^^^^^^^ the other one here
   5 │ fn f() { nop; }
+  6 │ 
   [128]
 
 A priority needs a body to attach to, so it is allowed on a defined function only:
@@ -98,10 +100,10 @@ an imported one has no code-section entry to key an offset-0 hint in.
 
   $ wax check onimport.wax
   Error: The priority annotation is not allowed here.
-   ──➤  onimport.wax:2:18
+   ──➤  onimport.wax:2:5
   1 │ import "m" {
   2 │     #[priority = 1]
-    ·                  ^
+    ·     ^^^^^^^^^^^^^^^
   3 │     fn ext();
   4 │ }
   [128]

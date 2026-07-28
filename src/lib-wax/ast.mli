@@ -277,11 +277,23 @@ val no_loc_instr : location instr_desc -> location instr
     counterpart of {!no_loc}, which builds an {!annotated} and so cannot serve a
     record that carries hints as well. *)
 
-type attributes =
-  (string
-  * location instr option
-  * (Wax_wasm.Ast.cond, location) annotated option)
-  list
+type attribute = {
+  attr_name : string;
+  attr_value : location instr option;
+      (** [#[export = "f"]] carries one, [#[start]] does not. *)
+  attr_guard : (Wax_wasm.Ast.cond, location) annotated option;
+      (** A conditional-compilation guard, [#[export = "f", if not(portable)]],
+          making just this attribute conditional (independent of the field's own
+          reachability). Only [export] may be guarded; located at its [if]. *)
+  attr_span : location;
+      (** The whole [#[...]], so a diagnostic about the attribute names it
+          rather than falling back to {!attr_value} (absent on a valueless
+          attribute) or to the whole field. A synthesized attribute — one the
+          Wasm-to-Wax conversion invents rather than reads — takes the entity's
+          span. *)
+}
+
+type attributes = attribute list
 
 (* What an [import "module" { ... }] entry brings in. Imports have no body, so
    these carry only type-level information (no ['info]-annotated instructions):

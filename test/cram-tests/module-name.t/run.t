@@ -62,9 +62,9 @@ The `module` annotation must be a string:
   $ printf '#![module = 42]\nfn f() {}\n' > bad-value.wax
   $ wax -i wax -f wat bad-value.wax --validate
   Error: The module annotation expects a string.
-   ──➤  bad-value.wax:1:13
+   ──➤  bad-value.wax:1:1
   1 │ #![module = 42]
-    ·             ^^
+    · ^^^^^^^^^^^^^^^
   2 │ fn f() {}
   3 │ 
   [128]
@@ -88,9 +88,9 @@ A module may carry at most one name:
   $ printf '#[module = "x"]\nfn f() {}\n' > outer.wax
   $ wax -i wax -f wat outer.wax --validate
   Error: The module annotation is not allowed here.
-   ──➤  outer.wax:1:12
+   ──➤  outer.wax:1:1
   1 │ #[module = "x"]
-    ·            ^^^
+    · ^^^^^^^^^^^^^^^
   2 │ fn f() {}
   3 │ 
   [128]
@@ -100,9 +100,9 @@ Conversely, the field-level attributes are rejected as inner attributes:
   $ printf '#![export = "x"]\nfn f() {}\n' > inner-export.wax
   $ wax -i wax -f wat inner-export.wax --validate
   Error: The export annotation is not allowed here.
-   ──➤  inner-export.wax:1:13
+   ──➤  inner-export.wax:1:1
   1 │ #![export = "x"]
-    ·             ^^^
+    · ^^^^^^^^^^^^^^^^
   2 │ fn f() {}
   3 │ 
   [128]
@@ -116,10 +116,10 @@ way as a misplaced `#![feature]`:
   Error:
     A '#![module = "…"]' name annotation applies to the whole module and must
     appear at the top level, not inside a conditional.
-   ──➤  cond.wax:2:15
+   ──➤  cond.wax:2:3
   1 │ #[if(FOO)] {
   2 │   #![module = "m"]
-    ·               ^^^
+    ·   ^^^^^^^^^^^^^^^^
   3 │ }
   4 │ fn f() {}
   [128]
