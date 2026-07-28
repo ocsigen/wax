@@ -5118,6 +5118,14 @@ and finish_cont_bind ctx i src dst l' =
 and type_stack_switching_ops ctx i =
   match i.desc with
   | Suspend (tag, l) ->
+      (* Fill an omitted result of a block-construct operand from the tag's
+         parameter types so it lowers like the annotated form — the resume-family
+         materialization (see [type_cont_method_call]) applied to [suspend], whose
+         tag is an immediate so no operand reordering is needed. *)
+      let l =
+        annotate_omitted_blocks l
+          (cont_operand_source_types ctx ~meth:"suspend" ~tag:(Some tag) None)
+      in
       let* l' = instructions ctx l in
       let*! { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
       (let>@ ptypes =
@@ -5277,20 +5285,26 @@ and cont_operand_type ctx e' =
    tag, or a form that takes no anchoring operand) leaves the operands as written.
    Silent — [finish_*] re-derives and checks the internalized types and remains
    the sole reporter — so it uses the non-reporting [_opt] lookups. *)
+and cont_func_params ctx ct =
+  (* The parameters of continuation type [ct]'s underlying function type, looked
+     up silently ([None] if [ct] is unresolved or not a continuation). *)
+  let*@ _, sub = Tbl.find_opt ctx.type_context.types ct in
+  match sub.typ with
+  | Cont ft -> (
+      match Tbl.find_opt ctx.type_context.types ft with
+      | Some (_, { typ = Func f; _ }) -> Some f.params
+      | _ -> None)
+  | _ -> None
+
 and cont_operand_source_types ctx ~meth ~tag ct : Ast.valtype array option =
   let cont_params () =
     let*@ ct = ct in
-    let*@ _, sub = Tbl.find_opt ctx.type_context.types ct in
-    match sub.typ with
-    | Cont ft -> (
-        match Tbl.find_opt ctx.type_context.types ft with
-        | Some (_, { typ = Func f; _ }) -> Some f.params
-        | _ -> None)
-    | _ -> None
+    cont_func_params ctx ct
   in
   match meth with
   | "resume_throw_ref" -> Some [| Ref { nullable = true; typ = Exn } |]
-  | "resume_throw" ->
+  | "resume_throw" | "suspend" ->
+      (* Both take the invoked tag's parameters as their value operands. *)
       let*@ tag = tag in
       let+@ { params; _ } = Tbl.find_opt ctx.tags tag in
       Array.map (fun p -> snd p.desc) params
@@ -5302,6 +5316,19 @@ and cont_operand_source_types ctx ~meth ~tag ct : Ast.valtype array option =
       let np = Array.length params in
       Array.map (fun p -> snd p.desc) (Array.sub params 0 (max 0 (np - 1)))
   | _ -> None
+
+(* The types of the bound (leading) operands of a [cont.bind] from source
+   continuation [src] to result [dst]: the first [|src| - |dst|] parameters of
+   [src] (the ones bound away). Non-reporting — [finish_cont_bind] re-derives and
+   checks these and stays the sole reporter — so a still-unresolved type, or a
+   negative difference (a malformed bind [finish_cont_bind] will reject), yields
+   [None] and leaves the operands as written. *)
+and bind_bound_types ctx ~src ~dst =
+  let*@ sp = cont_func_params ctx src in
+  let*@ dp = cont_func_params ctx dst in
+  let np = Array.length sp - Array.length dp in
+  if np < 0 then None
+  else Some (Array.map (fun p -> snd p.desc) (Array.sub sp 0 np))
 
 (* Fill in an omitted result type of a block-construct operand from the type its
    consumer expects, so it types through the annotated block path (a concrete
@@ -5456,33 +5483,69 @@ and type_on_clause ctx i inner handlers =
    immediate — is inferred from its continuation operand (the last argument),
    as the method receivers' types are. *)
 and type_cont_construct_call ctx i func ns name args =
-  let* args' = instructions ctx args in
-  let recover () =
-    return_statement i
-      (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
-      [| Cell.make Error |]
-  in
-  match name.desc with
-  | "new" -> (
-      match args' with
-      | [ f' ] -> finish_cont_new ctx i ns f'
-      | _ ->
-          Error.operand_count_mismatch ctx.diagnostics ~location:func.info
-            ~expected:1 ~provided:(List.length args');
-          recover ())
-  | "bind" -> (
-      match List.rev args' with
-      | c' :: _ ->
-          let*! src = cont_operand_type ctx c' in
-          finish_cont_bind ctx i src ns args'
-      | [] ->
+  match (name.desc, List.rev args) with
+  | "bind", cont_arg :: rev_bound ->
+      (* [cont.bind]'s bound (leading) operands take their types from the SOURCE
+         continuation, which is the last operand. Type it first (out of emission
+         order, via the same hole-slice / [type_trailing_operand] / [fold_operand]
+         machinery as [type_cont_method_call] / [type_indirect_call] — the
+         emission order stays bound-operands then continuation) so its signature
+         lets [annotate_omitted_blocks] fill an omitted block-operand result,
+         exactly as for the resume family. *)
+      let bound = List.rev rev_bound in
+      fun st ->
+        let front_holes =
+          List.fold_left (fun acc a -> acc + count_holes a) 0 bound
+        in
+        let front_pending, tail_pending = list_split front_holes st.pending in
+        let c', replay =
+          type_trailing_operand ctx (fun () ->
+              let _, c' =
+                instruction ctx cont_arg
+                  { pending = tail_pending; value_loc = None; reported = false }
+              in
+              c')
+        in
+        let src = cont_operand_type ctx c' in
+        let bound =
+          annotate_omitted_blocks bound
+            (let*@ src = src in
+             bind_bound_types ctx ~src ~dst:ns)
+        in
+        let type_body =
+          let* bound' = instructions ctx bound in
+          let*! src = src in
+          finish_cont_bind ctx i src ns (bound' @ [ c' ])
+        in
+        let st1, node = type_body { st with pending = front_pending } in
+        let st2 = fold_operand ctx c' c' { st1 with pending = [] } in
+        replay ();
+        (st2, node)
+  | _ -> (
+      let* args' = instructions ctx args in
+      let recover () =
+        return_statement i
+          (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+          [| Cell.make Error |]
+      in
+      match name.desc with
+      | "new" -> (
+          match args' with
+          | [ f' ] -> finish_cont_new ctx i ns f'
+          | _ ->
+              Error.operand_count_mismatch ctx.diagnostics ~location:func.info
+                ~expected:1 ~provided:(List.length args');
+              recover ())
+      | "bind" ->
+          (* Reached only with no operands — the with-operands case is handled
+             above; [cont.bind] needs at least the continuation. *)
           Error.operand_count_mismatch ctx.diagnostics ~location:func.info
             ~expected:1 ~provided:0;
+          recover ()
+      | _ ->
+          Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
+            name.desc;
           recover ())
-  | _ ->
-      Error.unknown_intrinsic ctx.diagnostics ~location:func.info ns.desc
-        name.desc;
-      recover ()
 
 and type_arith ctx i =
   (* Arithmetic, comparison and conversion operators in binary ([a + b]) and

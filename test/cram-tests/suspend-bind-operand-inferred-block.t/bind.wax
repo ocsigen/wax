@@ -1,0 +1,10 @@
+type ff = fn();
+type inner = fn(&?exn);
+type ki = cont inner;
+type outer = fn();
+type ko = cont outer;
+#[export]
+fn h(c: &ki) -> &ko {
+    ko::bind('h: do { try { throw e0(); } catch [ e0 & -> 'h] }, c);
+}
+tag e0: ff ;

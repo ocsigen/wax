@@ -1,0 +1,8 @@
+type ff = fn();
+type yt = fn(&?exn);
+tag yield: yt;
+#[export]
+fn h() {
+    suspend yield('h: do { try { throw e0(); } catch [ e0 & -> 'h] });
+}
+tag e0: ff ;
