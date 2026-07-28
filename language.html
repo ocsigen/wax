@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-98dc7141.js";
+            window.path_to_searchindex_js = "searchindex-d4b44fda.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -379,6 +379,9 @@ initializer (an unconstrained integer literal defaults to <code>i32</code>):</p>
 
 <p>A global’s initializer must be a constant expression (a literal, another
 global, or a simple reference-building expression).</p>
+<p>A <code>let</code> global that nothing ever assigns is reported by the
+<a href="cli.html#warnings"><code>unnecessary-mut</code></a> warning, since it could be a <code>const</code>.
+Exported globals are exempt: the host may assign those.</p>
 <h3 id="names-and-scope"><a class="header" href="#names-and-scope">Names and Scope</a></h3>
 <p>Functions, globals, memories, and tables share one module-level namespace: a
 name must be distinct across all four: you cannot, say, declare both a memory
