@@ -7,7 +7,7 @@ errors: 2
 === broken body, resync at } then clean re-entry ===
 AST: recovered (2 defs)
 errors: 1
-  1:20-1:21: Expecting '(', or a simple pattern.
+  1:20-1:21: Expecting '(', or a binding name.
 
 === well-formed input has no errors ===
 AST: recovered (1 defs)
@@ -16,7 +16,7 @@ errors: 0
 === error at end of input ===
 AST: recovered (0 defs)
 errors: 1
-  1:20-1:21: Expecting '(', or a simple pattern.
+  1:20-1:21: Expecting '(', or a binding name.
 
 === resync on leading 'fn' when no delimiter survives ===
 AST: recovered (1 defs)

@@ -35,7 +35,7 @@ An error confined to one branch is reported once, with the assumption under
 which it is reachable.
 
   $ wax --validate bad.wax -o checked_bad.wax
-  Error: Expecting braced fields.
+  Error: Expecting a field group.
    ──➤  bad.wax:2:1
   1 │ #[if(debug)]
   2 │ const x: i32 = 1;

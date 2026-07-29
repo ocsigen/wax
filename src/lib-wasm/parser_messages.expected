@@ -59,11 +59,11 @@ Expecting ')', or an integer literal.
 
 parse: LPAREN DATA LPAREN IF ID CATCH_ALL
 
-Expecting a block type, a folded instruction, or a folded then.
+Expecting a block type, a folded instruction, or a then-branch.
 
 parse: LPAREN DATA LPAREN IF LPAREN_RESULT RPAREN RPAREN
 
-Assuming that the block type is complete, expecting a folded instruction, or a folded then.
+Assuming that the block type is complete, expecting a folded instruction, or a then-branch.
 <^1>this block type
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN CALL_INDIRECT END
@@ -94,7 +94,7 @@ Expecting 'else'.
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN RPAREN WAIT
 
-Expecting ')', or a folded else.
+Expecting ')', or an else-branch.
 <6>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN IF LPAREN_THEN WAIT
@@ -108,7 +108,7 @@ Expecting '(then', or a folded instruction.
 
 parse: LPAREN DATA LPAREN IF WAIT
 
-Expecting a block type, a folded instruction, a folded then, or a label.
+Expecting a block type, a folded instruction, a label, or a then-branch.
 
 parse: LPAREN DATA LPAREN LOOP CALL_INDIRECT END
 
@@ -199,7 +199,7 @@ Expecting ')', or instructions.
 
 parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH NAT RPAREN WAIT
 
-Expecting ')', or folded catches.
+Expecting ')', or catch clauses.
 
 parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN LPAREN_CATCH WAIT
 
@@ -223,7 +223,7 @@ Expecting ')', or instructions.
 
 parse: LPAREN DATA LPAREN TRY LPAREN DO RPAREN WAIT
 
-Expecting ')', or folded catches.
+Expecting ')', or catch clauses.
 <8>This '(' opens the enclosing construct.
 
 parse: LPAREN DATA LPAREN TRY LPAREN DO WAIT
@@ -284,7 +284,7 @@ Expecting a 32-bit float.
 
 parse: LPAREN DATA LPAREN V128 F64X2 FLOAT FLOAT WAIT
 
-Expecting ')', or a v128 const body.
+Expecting ')', or a vector shape and its lanes.
 
 parse: LPAREN DATA LPAREN V128 F64X2 FLOAT WAIT
 
@@ -416,7 +416,7 @@ Expecting an 8-bit signed integer.
 
 parse: LPAREN DATA LPAREN V128 WAIT
 
-Expecting a v128 const body.
+Expecting a vector shape and its lanes.
 
 parse: LPAREN DATA LPAREN WAIT
 
@@ -1381,7 +1381,7 @@ Expecting a parameter group.
 
 parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM WAIT
 
-Expecting ')', or an unnamed parameter.
+Expecting ')', or a value type.
 <1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC TRY_TABLE LPAREN_RESULT RPAREN RPAREN
@@ -2029,7 +2029,7 @@ Expecting a name.
 
 parse: LPAREN TAG LPAREN_PARAM ANYREF WAIT
 
-Expecting ')', or an unnamed parameter.
+Expecting ')', or a value type.
 
 parse: LPAREN TAG LPAREN_PARAM ID ANYREF WAIT
 
@@ -2046,7 +2046,7 @@ Expecting a parameter group.
 
 parse: LPAREN TAG LPAREN_PARAM WAIT
 
-Expecting ')', an identifier ('$...'), or an unnamed parameter.
+Expecting ')', a value type, or an identifier ('$...').
 <1>This '(' opens the enclosing construct.
 
 parse: LPAREN TAG LPAREN_RESULT ANYREF WAIT

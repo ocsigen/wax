@@ -238,7 +238,7 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT ARROW IDENT COMMA WHILE
 
-Expecting ']', or an on clause.
+Expecting ']', or an on-clause.
 
 parse: CONST IDENT EQUAL CHAR ON LBRACKET IDENT ARROW IDENT WHILE
 
@@ -258,7 +258,7 @@ Expecting '->'.
 
 parse: CONST IDENT EQUAL CHAR ON LBRACKET WHILE
 
-Expecting ']', or an on clause.
+Expecting ']', or an on-clause.
 <1>This '[' opens the enclosing construct.
 
 parse: CONST IDENT EQUAL CHAR ON WHILE
@@ -287,12 +287,12 @@ Expecting an expression.
 
 parse: CONST IDENT EQUAL CHAR QUESTIONMARK CHAR EQUAL
 
-Assuming that the then branch is complete, expecting ':'.
-<^1>this then branch
+Assuming that the then-branch is complete, expecting ':'.
+<^1>this then-branch
 
 parse: CONST IDENT EQUAL CHAR QUESTIONMARK UNREACHABLE
 
-Expecting a then branch.
+Expecting a then-branch.
 
 parse: CONST IDENT EQUAL CHAR SHL UNREACHABLE
 
@@ -390,7 +390,7 @@ Expecting an identifier.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON FLOAT COMMA WHILE
 
-Expecting ']', or a data run item.
+Expecting ']', or a data value.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON FLOAT WHILE
 
@@ -398,7 +398,7 @@ Expecting ',', or ']'.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN FLOAT COMMA WHILE
 
-Expecting ')', or a data number.
+Expecting ')', or a number.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN FLOAT WHILE
 
@@ -406,7 +406,7 @@ Expecting ')', or ','.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT LPAREN WHILE
 
-Expecting ')', or a data number.
+Expecting ')', or a number.
 <1>This '(' opens the enclosing construct.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON IDENT WHILE
@@ -415,11 +415,11 @@ Expecting '('.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON MINUS WHILE
 
-Expecting a raw number.
+Expecting a number.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT COLON WHILE
 
-Expecting ']', or a data run item.
+Expecting ']', or a data value.
 <3>This '[' opens the enclosing construct.
 
 parse: DATA IDENT EQUAL LBRACKET IDENT WHILE
@@ -528,7 +528,7 @@ Expecting an identifier.
 
 parse: FN IDENT BANG WHILE
 
-Expecting ''', ':', '{', or an optional function type.
+Expecting ''', ':', '{', or a function type.
 
 parse: FN IDENT COLON BANG WHILE
 
@@ -542,8 +542,8 @@ Assuming that the statement list is complete, expecting '}'.
 
 parse: FN IDENT COLON IDENT LPAREN RPAREN SEMI
 
-Assuming that the optional function type is complete, expecting ''', or '{'.
-<^1>this optional function type
+Assuming that the function type is complete, expecting ''', or '{'.
+<^1>this function type
 
 parse: FN IDENT COLON IDENT QUOTE AS COLON LBRACE ELSE
 
@@ -565,7 +565,7 @@ Expecting a label name.
 
 parse: FN IDENT COLON IDENT WHILE
 
-Expecting ''', '{', or an optional function type.
+Expecting ''', '{', or a function type.
 
 parse: FN IDENT COLON WHILE
 
@@ -1025,7 +1025,7 @@ Expecting ')', or a let pattern.
 
 parse: FN IDENT LBRACE LET WHILE
 
-Expecting '(', or a simple pattern.
+Expecting '(', or a binding name.
 
 parse: FN IDENT LBRACE LOOP IDENT WHILE
 
@@ -1099,7 +1099,7 @@ Expecting '=>'.
 
 parse: FN IDENT LBRACE MATCH CHAR LBRACE WHILE
 
-Expecting ';', a match arm, or a match default.
+Expecting ';', a default arm, or a match arm.
 
 parse: FN IDENT LBRACE MATCH UNREACHABLE
 
@@ -1209,8 +1209,8 @@ Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN CHAR SHARP
 
-Assuming that the hinted statement is complete, expecting ')'.
-<^1>this hinted statement
+Assuming that the statement is complete, expecting ')'.
+<^1>this statement
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN IDENT RPAREN WHILE
@@ -1219,7 +1219,7 @@ Expecting a block.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON LPAREN TYPE
 
-Expecting a hinted statement.
+Expecting a statement.
 
 parse: FN IDENT LBRACE QUOTE AS COLON WHILE CHAR COLON WHILE
 
@@ -1253,7 +1253,7 @@ Expecting ']'.
 
 parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN IDENT COLON FLOAT COMMA WHILE
 
-Expecting ')', or a hint target.
+Expecting ')', or a call target.
 
 parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN IDENT COLON FLOAT WHILE
 
@@ -1274,7 +1274,7 @@ Expecting ']'.
 
 parse: FN IDENT LBRACE SHARP LBRACKET IDENT LPAREN WHILE
 
-Expecting ')', or a hint target.
+Expecting ')', or a call target.
 <1>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE SHARP LBRACKET IDENT WHILE
@@ -1575,8 +1575,8 @@ Expecting an expression.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN CHAR SHARP
 
-Assuming that the hinted statement is complete, expecting ')'.
-<^1>this hinted statement
+Assuming that the statement is complete, expecting ')'.
+<^1>this statement
 <2>This '(' opens the enclosing construct.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN DO LBRACE RBRACE ELSE
@@ -1589,11 +1589,11 @@ Expecting a block.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN SHARP LBRACKET IMPORT RBRACKET TYPE
 
-Expecting a hinted statement, or an expression.
+Expecting a statement, or an expression.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON LPAREN TYPE
 
-Expecting a hinted statement.
+Expecting a statement.
 
 parse: FN IDENT LBRACE WHILE CHAR COLON WHILE
 
@@ -1639,8 +1639,8 @@ Expecting a result type.
 
 parse: FN IDENT LPAREN RPAREN SEMI
 
-Assuming that the optional function type is complete, expecting ''', or '{'.
-<^1>this optional function type
+Assuming that the function type is complete, expecting ''', or '{'.
+<^1>this function type
 
 parse: FN IDENT LPAREN RPAREN WHILE
 
@@ -1671,7 +1671,7 @@ Expecting a label name.
 
 parse: FN IDENT WHILE
 
-Expecting '!', ''', ':', '{', or an optional function type.
+Expecting '!', ''', ':', '{', or a function type.
 
 parse: FN WHILE
 
@@ -1695,7 +1695,7 @@ Expecting an identifier.
 
 parse: IMPORT STRING FN IDENT BANG WHILE
 
-Expecting ':', ';', or an optional function type.
+Expecting ':', ';', or a function type.
 
 parse: IMPORT STRING FN IDENT COLON BANG WHILE
 
@@ -1703,7 +1703,7 @@ Expecting a type name.
 
 parse: IMPORT STRING FN IDENT COLON IDENT WHILE
 
-Expecting ';', or an optional function type.
+Expecting ';', or a function type.
 
 parse: IMPORT STRING FN IDENT COLON WHILE
 
@@ -1711,7 +1711,7 @@ Expecting '!', or a type name.
 
 parse: IMPORT STRING FN IDENT WHILE
 
-Expecting '!', ':', ';', or an optional function type.
+Expecting '!', ':', ';', or a function type.
 
 parse: IMPORT STRING FN WHILE
 
@@ -1970,7 +1970,7 @@ Expecting ';', '}', or a module field.
 
 parse: SHARP LBRACKET ELSE RBRACKET WHILE
 
-Expecting braced fields.
+Expecting a field group.
 
 parse: SHARP LBRACKET ELSE WHILE
 
@@ -2052,7 +2052,7 @@ Expecting ')', or a condition.
 
 parse: SHARP LBRACKET IF LPAREN IDENT RPAREN RBRACKET WHILE
 
-Expecting braced fields.
+Expecting a field group.
 
 parse: SHARP LBRACKET IF LPAREN IDENT RPAREN WHILE
 
@@ -2200,7 +2200,7 @@ Expecting an identifier.
 
 parse: TAG IDENT COLON IDENT WHILE
 
-Expecting ';', or an optional function type.
+Expecting ';', or a function type.
 
 parse: TAG IDENT COLON WHILE
 
@@ -2213,7 +2213,7 @@ Assuming that the tag signature is complete, expecting ';'.
 
 parse: TAG IDENT WHILE
 
-Expecting ':', ';', or an optional function type.
+Expecting ':', ';', or a function type.
 
 parse: TAG WHILE
 

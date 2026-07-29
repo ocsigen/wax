@@ -10,7 +10,7 @@
        <^_>this block type
     2x Assuming that the block type is complete, expecting 'end', or instructions.
        <^_>this block type
-    1x Assuming that the block type is complete, expecting a folded instruction, or a folded then.
+    1x Assuming that the block type is complete, expecting a folded instruction, or a then-branch.
        <^_>this block type
     1x Assuming that the block type is complete, expecting instructions, or legacy catches.
        <^_>this block type
@@ -136,11 +136,9 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', a type use, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', a value type, or an identifier ('$...').
+    2x Expecting ')', a value type, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', an element list, or an index.
-       <_>This '(' opens the enclosing construct.
-    1x Expecting ')', an identifier ('$...'), or an unnamed parameter.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a call target.
     1x Expecting ')', or a call-target list.
@@ -159,8 +157,6 @@
     1x Expecting ')', or a float literal.
     2x Expecting ')', or a float literal.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a folded else.
-       <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a folded instruction.
     1x Expecting ')', or a heap type.
        <_>This '(' opens the enclosing construct.
@@ -176,11 +172,11 @@
        <_>This '(' opens the enclosing construct.
     4x Expecting ')', or a type use.
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a v128 const body.
-    2x Expecting ')', or a value type.
-    2x Expecting ')', or a value type.
+    3x Expecting ')', or a value type.
+    3x Expecting ')', or a value type.
        <_>This '(' opens the enclosing construct.
-    2x Expecting ')', or an else-branch.
+    1x Expecting ')', or a vector shape and its lanes.
+    3x Expecting ')', or an else-branch.
        <_>This '(' opens the enclosing construct.
     4x Expecting ')', or an expression.
        <_>This '(' opens the enclosing construct.
@@ -197,11 +193,8 @@
     1x Expecting ')', or an integer.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or an optimization priority.
-    1x Expecting ')', or an unnamed parameter.
-    1x Expecting ')', or an unnamed parameter.
-       <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or folded catches.
-    1x Expecting ')', or folded catches.
+    1x Expecting ')', or catch clauses.
+    1x Expecting ')', or catch clauses.
        <_>This '(' opens the enclosing construct.
     7x Expecting ')', or instructions.
        <_>This '(' opens the enclosing construct.
@@ -259,8 +252,8 @@
     7x Expecting a 64-bit signed integer.
     1x Expecting a 64-bit unsigned integer, or a reference type.
     1x Expecting a 64-bit unsigned integer.
-    1x Expecting a block type, a folded instruction, a folded then, or a label.
-    1x Expecting a block type, a folded instruction, or a folded then.
+    1x Expecting a block type, a folded instruction, a label, or a then-branch.
+    1x Expecting a block type, a folded instruction, or a then-branch.
     1x Expecting a block type, a label, instructions, or legacy catches.
     1x Expecting a block type, instructions, or legacy catches.
     1x Expecting a compilation priority.
@@ -312,9 +305,9 @@
     2x Expecting a then-branch.
     2x Expecting a type use, or an index.
     2x Expecting a type use.
-    1x Expecting a v128 const body.
     1x Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
     3x Expecting a value type.
+    1x Expecting a vector shape and its lanes.
     2x Expecting a vector shape.
    32x Expecting an 8-bit signed integer.
    26x Expecting an 8-bit unsigned integer.
