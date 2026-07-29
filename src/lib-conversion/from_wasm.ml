@@ -1103,7 +1103,15 @@ module Stack = struct
      op un-pinned (the pre-existing best-effort). *)
   let rec effective_backing stop = function
     | (0, _, i) :: rem when not (stop i) -> effective_backing stop rem
-    | (a, Some _, _) :: rem when a >= 1 -> effective_backing stop rem
+    (* Numeric by its width TAG, or by the type its producer RECORDED on it
+       ([Ast.instr]'s [expected], which only ever holds a numeric scalar): either
+       way it cannot be the reference operand, so keep scanning. The record is what
+       catches a residual the tag cannot: a method-form op inherits its receiver's
+       flexibility, so [f32.sqrt] of a hole is UNTAGGED while still being an f32 —
+       read as a reference backing, it left a dead [ref.eq] unpinned and it
+       re-parsed as an [i32.eq] (a bottom-fuzz finding). *)
+    | (a, w, i) :: rem when a >= 1 && (w <> None || i.Ast.expected <> None) ->
+        effective_backing stop rem
     | (a, None, i) :: _ when a >= 1 -> Some i
     | _ -> None
 
@@ -3042,7 +3050,17 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | NumF32 -> ("loadf32", 4)
         | NumF64 -> ("loadf64", 8)
       in
-      Stack.push 1 (mem_call m meth (addr :: mem_extra with_loc memarg nat))
+      (* Record the type the method name states ([m.load64] is an i64), so a dead
+         load residual is recognised as numeric by [Stack.effective_backing] rather
+         than mistaken for a reference backing. *)
+      Stack.push 1
+        (expect
+           (match nt with
+           | NumI32 -> I32
+           | NumI64 -> I64
+           | NumF32 -> F32
+           | NumF64 -> F64)
+           (mem_call m meth (addr :: mem_extra with_loc memarg nat)))
   | LoadS (m, memarg, result_ty, size, signage) ->
       let* addr = Stack.pop in
       let meth, nat =
@@ -3068,7 +3086,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
            the pair's two casts to the single-cast spelling via [simplify]. *)
         | (`I8 | `I16 | `I32), `I64 -> cast `I64 call
       in
-      Stack.push 1 result
+      (* As for the plain load: the cast states the result type, so record it. *)
+      Stack.push 1
+        (expect (match result_ty with `I32 -> I32 | `I64 -> I64) result)
   | Store (m, memarg, nt) ->
       let* value = Stack.pop in
       let* addr = Stack.pop in

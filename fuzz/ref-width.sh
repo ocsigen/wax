@@ -110,6 +110,20 @@ ctx "nonnull"    "unreachable ref.as_non_null @OP@ @CONS@"
 ctx "brif-stmt"  "(block unreachable i32.const 1 br_if 0 @OP@ @CONS@)"
 # The same with an [atomic.fence], the other zero-value statement shape.
 ctx "fence-stmt" "unreachable atomic.fence @OP@ @CONS@"
+# A NUMERIC residual between the op's holes and the polymorphic bottom, behind
+# statements: [Stack.effective_backing] must see THROUGH it (it cannot be the
+# reference the hole reconnects to) and still reach the bottom, so the hole is
+# pinned. The residual here is UNTAGGED — a method-form op inherits its receiver's
+# flexibility, and the receiver is itself a hole — which is what made this shape a
+# bottom-fuzz finding: read as a reference backing, it left the op unpinned and a
+# dead [ref.eq] re-parsed as an [i32.eq].
+ctx "num-resid-method" "unreachable f32.sqrt atomic.fence drop @OP@ @CONS@"
+# The same with a tagged residual (a const) and with a load, whose result the
+# method name states.
+ctx "num-resid-const" "unreachable f32.const 1 atomic.fence drop @OP@ @CONS@"
+ctx "num-resid-load" "unreachable f64.load atomic.fence drop @OP@ @CONS@"
+# The residual behind the statement a DROP emits, with no fence.
+ctx "num-resid-drop" "unreachable f32.sqrt drop @OP@ @CONS@"
 # The op's own result stranded past a statement, so no consumer pops it
 # ([Stack.run]'s leftover path rather than a direct pop).
 ctx "strand"     "unreachable @OP@ nop @CONS@"
@@ -150,6 +164,17 @@ cell "ref.eq/hole" "" "unreachable ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/select" "" "unreachable i32.const 1 select ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/brif-stmt" "" \
   "(block unreachable i32.const 1 br_if 0 ref.eq drop)" "ref.eq" "i32.eq"
+# [ref.eq] with a NUMERIC residual between its holes and the polymorphic bottom —
+# the bottom-fuzz finding itself (`f32.sqrt` is untagged, so the residual read as a
+# reference backing and the op went unpinned, re-parsing as an [i32.eq]).
+cell "ref.eq/num-resid-method" "" \
+  "unreachable f32.sqrt atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
+cell "ref.eq/num-resid-const" "" \
+  "unreachable f32.const 1 atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
+cell "ref.eq/num-resid-load" "" \
+  "unreachable f64.load atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
+cell "ref.eq/num-resid-drop" "" \
+  "unreachable f32.sqrt drop ref.eq drop" "ref.eq" "i32.eq"
 
 # The typed-[select] REFERENCE immediate: its arms carry no type on the Wax [?:]
 # surface, so an arm must be pinned or the select re-parses as the numeric one and
