@@ -227,7 +227,7 @@
     2x Expecting 'func', 'global', 'memory', 'table', or 'tag'.
     2x Expecting 'get', 'invoke', or 'module'.
     2x Expecting 'get', or 'invoke'.
-    1x Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
+    2x Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'item', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     1x Expecting 'memory', a data element type ('i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'), or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
@@ -256,6 +256,7 @@
     1x Expecting a block type, a folded instruction, or a then-branch.
     1x Expecting a block type, a label, instructions, or legacy catches.
     1x Expecting a block type, instructions, or legacy catches.
+    1x Expecting a command, or end of file.
     1x Expecting a compilation priority.
     1x Expecting a composite type, an index, or descriptor clauses.
     1x Expecting a composite type, or descriptor clauses.
@@ -272,10 +273,6 @@
     2x Expecting a global type.
     3x Expecting a heap type.
     6x Expecting a label.
-    1x Expecting a link action, or a link script instance.
-    5x Expecting a link action.
-    1x Expecting a link cmd, or end of file.
-    1x Expecting a link script instance.
     2x Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an index.
     2x Expecting a memory alignment, a memory offset, or an 8-bit unsigned integer.
     4x Expecting a memory alignment, or an 8-bit unsigned integer.
@@ -291,15 +288,15 @@
     2x Expecting a number.
     1x Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
     2x Expecting a parameter group.
-    1x Expecting a parse link script.
    11x Expecting a reference type.
     1x Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
     1x Expecting a result pattern.
-    1x Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+    1x Expecting a script command or module field ('('), or end of file.
+    2x Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
     1x Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
-    1x Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
-    1x Expecting a script instance, or an action.
-    1x Expecting a script instance.
+    2x Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+    2x Expecting a script instance, or an action.
+    2x Expecting a script instance.
     1x Expecting a storage type.
     5x Expecting a string, or an identifier ('$...').
    28x Expecting a string.
@@ -316,7 +313,7 @@
     2x Expecting a vector shape.
    32x Expecting an 8-bit signed integer.
    26x Expecting an 8-bit unsigned integer.
-    5x Expecting an action.
+   10x Expecting an action.
     2x Expecting an element list.
     1x Expecting an extern index.
     1x Expecting an external type.
@@ -333,6 +330,3 @@
     1x Expecting instructions, or legacy catches.
     3x Expecting instructions.
     2x Expecting parameters and results.
-    2x Syntax error
-    1x Syntax error
-       <_>This '(' opens the enclosing construct.
