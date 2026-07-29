@@ -23,10 +23,7 @@ let report_ast name source =
   | None -> print_string "none\n"
   | Some m ->
       let used = Wax_utils.Trivia.create_locations () in
-      Wax_utils.Printer.run_discard (fun p ->
-          Wax_lang.Output.module_ p
-            ~trivia:(Wax_utils.Trivia.empty ())
-            ~collect:used m);
+      Wax_lang.Output.collect m used;
       let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
       print_string
         (Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->

@@ -2110,7 +2110,9 @@ let rec modulefield pp (field : (_ modulefield, location) Ast.annotated) =
 
 (*** Entry points ***)
 
-let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
+(* The one traversal, shared by the real render ({!module_}) and the dry
+   trivia-collection pass ({!collect}, which sets [collect]). *)
+let render ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (l : location module_) =
   (* [collect] marks the dry trivia-collection traversal; time the real emit
      only, so a single "output" timing is reported. *)
@@ -2128,6 +2130,19 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
      does not end with spurious blank lines. *)
   let tail = Wax_utils.Trivia.drop_trailing_blank_lines tail in
   print_trivia pp tail
+
+let module_ ?color ?out_channel ?tail printer ~trivia l =
+  render ?color ?out_channel ?tail printer ~trivia l
+
+(* Dry pass: record the looked-up locations without emitting anything. The Wax
+   printer streams straight from the AST — there is no intermediate document to
+   walk, as {!Wax_wasm.Output.collect} does — so this is {!render} driven by the
+   discarding printer, whose only effect is the [collect] side table
+   {!Wax_utils.Trivia.get} fills. Width is irrelevant: the traversal looks up the
+   same locations however the lines break. *)
+let collect l set =
+  Wax_utils.Printer.run_discard (fun p ->
+      render p ~trivia:(Wax_utils.Trivia.empty ()) ~collect:set l)
 
 (* Context for printing AST fragments in diagnostics: no trivia, no location
    lookup, colour decided from [stderr]. *)

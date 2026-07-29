@@ -14,13 +14,13 @@ let () = Wax_wasm.Validation.validate_refs := false
    source locations the printer looks up (as in bin/main.ml). *)
 
 (* Comments and blank-line trivia keyed by source location, restricted to the
-   locations [print] (the caller's module printer, [collect]ing the visited
-   locations) actually visits. Language-agnostic — the caller supplies the Wax or
-   Wasm-text printer — so this stays free of either language's [Output]. Same
-   logic as [wax_trivia] / [wat_trivia] in bin/main.ml. *)
-let collect_trivia ~print ctx =
+   locations the printer will look up: [collect] records them into the table it
+   is handed (the language's [Output.collect]). Language-agnostic — the caller
+   picks the Wax or Wasm-text one — so this stays free of either language's
+   [Output]. Same logic as [wax_trivia] / [wat_trivia] in bin/main.ml. *)
+let collect_trivia ~collect ctx =
   let used = Wax_utils.Trivia.create_locations () in
-  Wax_utils.Printer.run_discard (fun p -> print p ~collect:used);
+  collect used;
   Wax_utils.Trivia.associate ~only:used ctx
 
 type diag = {

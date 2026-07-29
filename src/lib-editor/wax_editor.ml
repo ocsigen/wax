@@ -93,10 +93,7 @@ let format_string src =
       Error (String.trim (Wax_utils.Message.to_plain_string message))
   | Ok (ast, ctx) ->
       let trivia, tail =
-        collect_trivia ctx ~print:(fun p ~collect ->
-            Wax_lang.Output.module_ p
-              ~trivia:(Wax_utils.Trivia.empty ())
-              ~collect ast)
+        collect_trivia ctx ~collect:(Wax_lang.Output.collect ast)
       in
       let printed =
         Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
@@ -726,18 +723,14 @@ let to_wat_string src =
           let wasm_ast = Wax_conversion.To_wasm.module_ d types ast in
           Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wax_syntax
             ~dst:Wax_utils.Trivia.wat_syntax ctx;
+          let doc = Wax_wasm.Output.prepare wasm_ast in
           let trivia, tail =
-            collect_trivia
-              ~print:(fun p ~collect ->
-                Wax_wasm.Output.module_ p
-                  ~trivia:(Wax_utils.Trivia.empty ())
-                  ~collect wasm_ast)
-              ctx
+            collect_trivia ~collect:(Wax_wasm.Output.collect doc) ctx
           in
           let printed =
             Wax_utils.Printer.run_string (fun p ->
-                Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p ~trivia
-                  ~tail wasm_ast)
+                Wax_wasm.Output.emit ~color:Wax_utils.Colors.Never p ~trivia
+                  ~tail doc)
           in
           Ok (printed ^ "\n")
       with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))

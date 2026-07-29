@@ -24,16 +24,16 @@ let format_string src =
   | Error { message; _ } ->
       Error (String.trim (Wax_utils.Message.to_plain_string message))
   | Ok (ast, ctx) ->
+      (* Lay the module out once and drive both the dry collection pass and the
+         real emit off it (as bin/main.ml does). *)
+      let doc = Wax_wasm.Output.prepare ast in
       let trivia, tail =
-        collect_trivia ctx ~print:(fun p ~collect ->
-            Wax_wasm.Output.module_ p
-              ~trivia:(Wax_utils.Trivia.empty ())
-              ~collect ast)
+        collect_trivia ctx ~collect:(Wax_wasm.Output.collect doc)
       in
       let printed =
         Wax_utils.Printer.run_string (fun p ->
-            Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p ~trivia
-              ~tail ast)
+            Wax_wasm.Output.emit ~color:Wax_utils.Colors.Never p ~trivia ~tail
+              doc)
       in
       Ok (printed ^ "\n")
 
@@ -588,12 +588,7 @@ let to_wax_string src =
           Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wat_syntax
             ~dst:Wax_utils.Trivia.wax_syntax ctx;
           let trivia, tail =
-            collect_trivia
-              ~print:(fun p ~collect ->
-                Wax_lang.Output.module_ p
-                  ~trivia:(Wax_utils.Trivia.empty ())
-                  ~collect wax_ast)
-              ctx
+            collect_trivia ~collect:(Wax_lang.Output.collect wax_ast) ctx
           in
           let printed =
             Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->

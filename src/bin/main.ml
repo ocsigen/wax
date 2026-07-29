@@ -161,17 +161,13 @@ let wat_trivia ctx doc =
   Wax_wasm.Output.collect doc used;
   Wax_utils.Trivia.associate ~only:used ctx
 
-(* The Wax printer streams straight from the AST (no intermediate tree to
-   share), so its dry pass is a discarded print traversal — no double tree-build
-   to eliminate, unlike the Wat path's {!wat_trivia}. Width is irrelevant to the
-   dry pass: it only records which locations the printer looks up, and the
-   traversal is the same at any width. *)
+(* The same for a Wax module. The Wax printer streams straight from the AST (no
+   intermediate tree to share), so [Output.collect] is a discarded print
+   traversal — no double tree-build to eliminate, unlike the Wat path's
+   {!wat_trivia}. *)
 let wax_trivia ctx ast =
   let used = Wax_utils.Trivia.create_locations () in
-  Wax_utils.Printer.run_discard (fun p ->
-      Wax_lang.Output.module_ p
-        ~trivia:(Wax_utils.Trivia.empty ())
-        ~collect:used ast);
+  Wax_lang.Output.collect ast used;
   Wax_utils.Trivia.associate ~only:used ctx
 
 (* Process exit codes (see docs/src/cli.md, "Exit status"):

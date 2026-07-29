@@ -28,11 +28,15 @@ val module_ :
   ?color:Wax_utils.Colors.flag ->
   ?out_channel:out_channel ->
   ?tail:Wax_utils.Trivia.entry list ->
-  ?collect:Wax_utils.Trivia.locations ->
   Wax_utils.Printer.t ->
   trivia:Wax_utils.Trivia.t ->
   Ast.location Ast.module_ ->
   unit
-(** [collect], when given, runs as a dry pass that records every looked-up
-    location into the table (pass an empty [trivia]); use it to drive
-    {!Wax_utils.Trivia.associate}'s [only] argument. *)
+(** Render a module. *)
+
+val collect : Ast.location Ast.module_ -> Wax_utils.Trivia.locations -> unit
+(** [collect m set] records every location {!module_} would look up into [set] —
+    the dry pass that drives {!Wax_utils.Trivia.associate}'s [only] argument, as
+    {!Wax_wasm.Output.collect} does for Wasm text. It needs no printer: the Wax
+    printer streams straight from the AST, so the pass is a discarded render
+    (there is no laid-out document to walk). *)
