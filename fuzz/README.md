@@ -712,18 +712,31 @@ developer tool for locating a repair (and what
 
 After the pin heuristics were replaced by that reconciliation (including the
 values the typer leaves *unresolved*, which the lowering would otherwise read at
-its positional default), the silent-drift classes left are exactly two, and the
-second is why the round-trip legs above are not redundant:
+its positional default), exactly one SILENT class is left — and it is why the
+round-trip legs above are not redundant:
 
-1. **Reference and v128 types**, which the expectation channel does not carry at
-   all — `From_wasm` still places those pins itself (a `ref.null` hierarchy pin, a
-   typed-`select` reference arm, the descriptor pins).
-2. **A recording gap** — a width-sensitive value `From_wasm` emits without
-   recording what its opcode stated. Reconciliation can only check what was
-   recorded, so such a value is invisible to it in either mode; only the
-   end-to-end opcode comparisons (`WIDTHDRIFT`, `FAITHDRIFT`, `drop-width.sh`) can
-   see it. Adding a `From_wasm` path therefore means adding the *recording*, and
-   these legs are what catch a forgotten one.
+**A recording gap** — a width-sensitive value `From_wasm` emits without recording
+what its opcode stated. Reconciliation can only check what was recorded, so such a
+value is invisible to it in either mode; only the end-to-end opcode comparisons
+(`WIDTHDRIFT`, `FAITHDRIFT`, `drop-width.sh`) can see it. Adding a `From_wasm` path
+therefore means adding the *recording*, and these legs are what catch a forgotten
+one.
+
+The two types the expectation channel does not carry are not a third class:
+
+* **v128** has no member in the typer's flexible-literal lattice, so it has no
+  re-parse default to drift *to*; it is outside the channel only because
+  `scalar_expectation` returns nothing for it. A v128 value can still be lost
+  through a recording gap, which is the class above.
+* **Reference types** are still pinned by `From_wasm` itself (a `ref.null`
+  hierarchy pin, a typed-`select` reference arm, the descriptor pins), and a
+  missing one fails LOUD rather than silently: an unpinned bottom-typed reference
+  either re-parses into another hierarchy and drops the operation — a changed
+  opcode stream (`FAITHDRIFT`) — or produces a module the reference rejects
+  (`ROUNDTRIP`). That is how every one of those pins was found in the first place.
+  A reference pin is also not free to place: outside a hole or a bare `null` a
+  `_ as &t` cast IS a `ref.cast` opcode, so a repair there could not be inert the
+  way a width pin is.
 
 ### Deliberately *not* an oracle
 
