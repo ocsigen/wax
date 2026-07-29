@@ -141,11 +141,23 @@ let rec string lexbuf =
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text (Printf.sprintf "Malformed string.\n") ))
 
+(* An annotation the tokenizer does not know is not turned into tokens, but its
+   source text is kept verbatim (in [annotation_buffer]) and travels as trivia,
+   so that printing a module back out preserves it instead of dropping it. *)
+let annotation_buffer = Buffer.create 256
+
+let keep_lexeme lexbuf =
+  Buffer.add_string annotation_buffer (Sedlexing.Utf8.lexeme lexbuf)
+
 let rec scan_string lexbuf =
   match%sedlex lexbuf with
-  | '"' -> ()
-  | '\\', any -> scan_string lexbuf
-  | any -> scan_string lexbuf
+  | '"' -> keep_lexeme lexbuf
+  | '\\', any ->
+      keep_lexeme lexbuf;
+      scan_string lexbuf
+  | any ->
+      keep_lexeme lexbuf;
+      scan_string lexbuf
   | _ ->
       raise
         (Wax_utils.Parsing.syntax_error_pair
@@ -153,31 +165,55 @@ let rec scan_string lexbuf =
              Wax_utils.Message.text
                (Printf.sprintf "Unclosed string in annotation.\n") ))
 
-let rec skip_annotation depth lexbuf =
+let rec scan_annotation depth lexbuf =
   match%sedlex lexbuf with
-  | '(' -> skip_annotation (depth + 1) lexbuf
-  | ')' -> if depth > 1 then skip_annotation (depth - 1) lexbuf
+  | '(' ->
+      keep_lexeme lexbuf;
+      scan_annotation (depth + 1) lexbuf
+  | ')' ->
+      keep_lexeme lexbuf;
+      if depth > 1 then scan_annotation (depth - 1) lexbuf
   | '"' ->
+      keep_lexeme lexbuf;
       scan_string lexbuf;
-      skip_annotation depth lexbuf
+      scan_annotation depth lexbuf
   | "(;" ->
-      comment_rec lexbuf;
-      skip_annotation depth lexbuf
-  | linecomment -> skip_annotation depth lexbuf
-  | Plus (' ' | '\t' | '\n' | '\r') -> skip_annotation depth lexbuf
-  | reserved | ';' -> skip_annotation depth lexbuf
+      (* [comment] rather than [comment_rec]: it spells the opener back and
+         hands over the comment text, leaving [string_buffer] empty. *)
+      Buffer.add_string annotation_buffer (comment lexbuf);
+      scan_annotation depth lexbuf
+  | linecomment ->
+      keep_lexeme lexbuf;
+      scan_annotation depth lexbuf
+  | Plus (' ' | '\t' | '\n' | '\r') ->
+      keep_lexeme lexbuf;
+      scan_annotation depth lexbuf
+  | reserved | ';' ->
+      keep_lexeme lexbuf;
+      scan_annotation depth lexbuf
   | _ ->
       raise
         (Wax_utils.Parsing.syntax_error_pair
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Wax_utils.Message.text (Printf.sprintf "Illegal character.\n") ))
 
-let with_loc ctx f lexbuf =
-  let loc_start = Sedlexing.lexing_bytes_position_start lexbuf in
+(* [annotation opener lexbuf] reads an annotation whose opening [(@id] has just
+   been consumed and returns its whole source text, [opener] included. *)
+let annotation opener lexbuf =
+  Buffer.add_string annotation_buffer opener;
+  scan_annotation 1 lexbuf;
+  let s = Buffer.contents annotation_buffer in
+  Buffer.clear annotation_buffer;
+  s
+
+let with_loc_from ctx loc_start f lexbuf =
   let desc = f lexbuf in
   Wax_utils.Trivia.with_pos ctx
     { loc_start; loc_end = Sedlexing.lexing_bytes_position_curr lexbuf }
     desc
+
+let with_loc ctx f lexbuf =
+  with_loc_from ctx (Sedlexing.lexing_bytes_position_start lexbuf) f lexbuf
 
 open Tokens
 
@@ -684,10 +720,14 @@ let rec token_rec ctx lexbuf =
   (* … and the function-level one. *)
   | "(@metadata.code.compilation_priority" -> COMPILATION_PRIORITY_ANNOT
   | "(@", Plus idchar ->
-      let l = with_loc ctx (fun lexbuf -> skip_annotation 1 lexbuf) lexbuf in
-      Wax_utils.Trivia.report_item ctx Annotation l.info "";
+      let opener = Sedlexing.Utf8.lexeme lexbuf in
+      let l = with_loc ctx (fun lexbuf -> annotation opener lexbuf) lexbuf in
+      Wax_utils.Trivia.report_item ctx Annotation l.info l.desc;
       token_rec ctx lexbuf
   | "(@\"" ->
+      (* The id is consumed before the annotation is known to be unrecognized,
+         so remember where it started. *)
+      let loc_start = Sedlexing.lexing_bytes_position_start lexbuf in
       let s = string lexbuf in
       if s = "string" then STRING_ANNOT
       else if s = "char" then CHAR_ANNOT
@@ -714,8 +754,14 @@ let rec token_rec ctx lexbuf =
                ( Sedlexing.lexing_bytes_positions lexbuf,
                  Wax_utils.Message.text
                    "An annotation id cannot be the empty string." ));
-        let l = with_loc ctx (fun lexbuf -> skip_annotation 1 lexbuf) lexbuf in
-        Wax_utils.Trivia.report_item ctx Annotation l.info "";
+        (* [string] decoded the id's escapes, so spell it back out escaped. *)
+        let opener = "(@\"" ^ snd (Wax_utils.Unicode.escape_string s) ^ "\"" in
+        let l =
+          with_loc_from ctx loc_start
+            (fun lexbuf -> annotation opener lexbuf)
+            lexbuf
+        in
+        Wax_utils.Trivia.report_item ctx Annotation l.info l.desc;
         token_rec ctx lexbuf)
   | id ->
       let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in

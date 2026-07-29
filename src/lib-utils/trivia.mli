@@ -127,9 +127,12 @@ val wat_syntax : comment_syntax
 val retarget : src:comment_syntax -> dst:comment_syntax -> context -> unit
 (** [retarget ~src ~dst ctx] rewrites the delimiters of every comment collected
     in [ctx] from the [src] syntax to the [dst] syntax (line-comment prefix and
-    block-comment delimiters), leaving blank lines and annotations untouched.
-    Block delimiters are balanced in stored content, so a global swap preserves
-    nesting.
+    block-comment delimiters), leaving blank lines untouched. Block delimiters
+    are balanced in stored content, so a global swap preserves nesting.
+
+    An annotation is dropped: it is kept as verbatim source text, which only the
+    WebAssembly text format can spell, so a conversion to Wax loses it rather
+    than pasting [(@…)] into a Wax file.
 
     Called by a cross-format conversion, on the context whose trivia will be
     replayed onto the converted AST — the rewrite belongs to the translation,

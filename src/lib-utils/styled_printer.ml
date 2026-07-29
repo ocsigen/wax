@@ -53,7 +53,13 @@ let print_trivia t lst =
             Printer.newline t.printer ();
             comment t (String.trim content);
             Printer.newline t.printer ()
-        | Item { kind = Annotation; _ }, _ -> ()
+        | Item { kind = Annotation; content; _ }, _ ->
+            (* An annotation the parser does not interpret, kept verbatim: it is
+               delimited like a block comment, so lay it out as one — but in the
+               annotation colour, matching the ones the printer builds itself. *)
+            Printer.space t.printer ();
+            print_styled t Annotation content;
+            Printer.space t.printer ()
         | Blank_line, _ -> Printer.blank_line t.printer ())
       lst
 

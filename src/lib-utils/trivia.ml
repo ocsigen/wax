@@ -372,34 +372,33 @@ let replace_all ~sub ~by s =
     in
     aux 0
 
+(* [None] for trivia the destination syntax cannot spell. *)
 let retarget_content ~src ~dst kind content =
   match kind with
   | Line_comment ->
-      if String.starts_with ~prefix:src.line content then
-        dst.line
-        ^ String.sub content (String.length src.line)
-            (String.length content - String.length src.line)
-      else content
+      Some
+        (if String.starts_with ~prefix:src.line content then
+           dst.line
+           ^ String.sub content (String.length src.line)
+               (String.length content - String.length src.line)
+         else content)
   | Block_comment ->
-      content
-      |> replace_all ~sub:src.block_open ~by:dst.block_open
-      |> replace_all ~sub:src.block_close ~by:dst.block_close
-  | Annotation -> content
+      Some
+        (content
+        |> replace_all ~sub:src.block_open ~by:dst.block_open
+        |> replace_all ~sub:src.block_close ~by:dst.block_close)
+  (* An annotation is stored as verbatim source text, and only the WebAssembly
+     text format has a syntax for one: dropped rather than retargeted, so a
+     conversion to Wax does not paste [(@…)] into a Wax file. *)
+  | Annotation -> None
 
 let retarget_entry ~src ~dst e =
   match e.trivia with
   | Item { content; kind; location } ->
-      {
-        e with
-        trivia =
-          Item
-            {
-              content = retarget_content ~src ~dst kind content;
-              kind;
-              location;
-            };
-      }
-  | Blank_line -> e
+      Option.map
+        (fun content -> { e with trivia = Item { content; kind; location } })
+        (retarget_content ~src ~dst kind content)
+  | Blank_line -> Some e
 
 let retarget ~src ~dst ctx =
-  ctx.comments <- List.map (retarget_entry ~src ~dst) ctx.comments
+  ctx.comments <- List.filter_map (retarget_entry ~src ~dst) ctx.comments
