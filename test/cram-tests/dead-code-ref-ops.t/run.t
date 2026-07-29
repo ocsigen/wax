@@ -10,6 +10,14 @@ hole to the target and drops the op: `ref.i31` (source `i32`) becomes
 `(_ as &?any) as &?extern`, and `any.convert_extern` (source `&?extern`) becomes
 `(_ as &?extern) as &?any`.
 
+A `ref.cast` into the EXTERN hierarchy needs the same pin, for the opposite
+reason: `as &extern` is also the surface of `extern.convert_any`, so a hole left
+unpinned types in the ANY hierarchy and the cast re-lowers to that convert — an
+opcode-family change. Pinned with `(_ as &?extern)`, it re-lowers to the
+`ref.cast` (and the pin has to sit on the hole itself: around an interposed `!`
+it would BE the convert). This is the one `ref.cast` shape worth pinning; a cast
+into the any or func hierarchy already recovers itself.
+
 The two cross-hierarchy converts also arise from a null (`ref.null any` /
 `ref.null extern`); the inner any/extern cast is kept (it would otherwise collapse
 to `null as &?extern` = `ref.null extern`, dropping the convert). And two ops that
@@ -24,6 +32,8 @@ carries no result type) with `as f32`.
   >   (func $i31_get_s unreachable i31.get_s drop)
   >   (func $extern_of_any unreachable extern.convert_any drop)
   >   (func $any_of_extern unreachable any.convert_extern drop)
+  >   (func $cast_extern unreachable ref.cast (ref extern) drop)
+  >   (func $cast_noextern unreachable ref.as_non_null ref.cast (ref noextern) drop)
   >   (func $extern_of_null unreachable ref.null any extern.convert_any drop)
   >   (func $any_of_null unreachable ref.null extern any.convert_extern drop)
   >   (func $isnull_sel (result i32) unreachable i32.const 1 select ref.is_null)
@@ -45,6 +55,14 @@ carries no result type) with `as f32`.
   fn any_of_extern() {
       unreachable;
       _ = _ as &?extern as &?any;
+  }
+  fn cast_extern() {
+      unreachable;
+      _ = _ as &?extern as &extern;
+  }
+  fn cast_noextern() {
+      unreachable;
+      _ = (_ as &?extern)! as &noextern;
   }
   fn extern_of_null() {
       unreachable;
@@ -71,6 +89,11 @@ Round-tripping back to Wasm recovers every operation (and the select arm's width
   (func $i31_get_s (unreachable) (drop (i31.get_s)))
   (func $extern_of_any (unreachable) (drop (extern.convert_any)))
   (func $any_of_extern (unreachable) (drop (any.convert_extern)))
+  (func $cast_extern (unreachable) (drop (ref.cast (ref extern))))
+  (func $cast_noextern
+    (unreachable)
+    (drop (ref.cast (ref noextern) (ref.as_non_null)))
+  )
   (func $extern_of_null
     (unreachable)
     (drop (extern.convert_any (ref.null any)))

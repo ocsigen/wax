@@ -2021,6 +2021,31 @@ let is_poly_terminator (i : _ Ast.instr) =
       true
   | _ -> false
 
+(* Pin the reference HIERARCHY of an operand that leaves it open: a hole is
+   polymorphic, and [!e] ([ref.as_non_null]) only forwards its operand's type. The
+   pin is pushed down to the hole ITSELF rather than wrapped around the [!] —
+   around it the pin would be a cross-hierarchy cast of an any-typed operand, i.e.
+   an [extern.convert_any], the very instruction being avoided, whereas on a bare
+   hole it merely types the hole and lowers to nothing. [None] when the operand
+   pins a hierarchy of its own (a named value, a construction, an expression
+   already cast) and so needs no pin.
+
+   An unannotated [select] of holes is deliberately NOT descended into, unlike in
+   [RefIsNull]: an unannotated select's value operands must be numeric (or, in
+   dead code, bottom), so one feeding a cast into the extern hierarchy always has
+   two bottom arms — the expected type then flows into them and the cast is
+   dropped as redundant rather than turning into a convert. That is the
+   documented best-effort cast fidelity, and pinning an arm would trade it for a
+   typed-[select] immediate, itself a documented residual. *)
+let rec pin_hierarchy pin (e : _ Ast.instr) =
+  match e.Ast.desc with
+  | Ast.Hole -> Some { e with Ast.desc = Ast.Cast (e, pin) }
+  | Ast.NonNull inner ->
+      Option.map
+        (fun inner -> { e with Ast.desc = Ast.NonNull inner })
+        (pin_hierarchy pin inner)
+  | _ -> None
+
 (* Branch-hinting / compilation-hints proposals: carry a Wasm instruction's hints
    onto the Wax instruction it decompiles to. A Wasm instruction contributes one
    entry to the stack of Wax expressions being built, so the hints go on whatever
@@ -2651,7 +2676,27 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         (with_loc (Call (with_loc (StructGet (e, Ast.no_loc "length")), [])))
   | RefCast t ->
       let* e = Stack.pop_width_preserved in
-      Stack.push 1 (with_loc (Cast (e, Valtype (Ref (reftype ctx t)))))
+      (* A cast into the EXTERN hierarchy shares the Wax [as &extern] surface
+         with the cross-hierarchy conversion [extern.convert_any]. An operand that
+         fixes no hierarchy of its own — a dead-code hole, or one forwarded
+         through [!] ([ref.as_non_null]) — types in the ANY hierarchy on a
+         re-parse, so the cast re-lowers to [extern.convert_any]: an
+         opcode-family change, not a width drift. Pin such an operand with
+         [(_ as &?extern)], the reference analogue of the numeric width pins (and
+         of [ref.is_null]'s [(_ as &?any)]). Only this direction needs it: a hole
+         cast to the any/func hierarchy already re-lowers to [ref.cast], and a
+         real extern operand fixes the hierarchy itself and is left bare. *)
+      let target = reftype ctx t in
+      let e =
+        match target.typ with
+        | Extern | NoExtern ->
+            Option.value ~default:e
+              (pin_hierarchy
+                 (Ast.Valtype (Ast.Ref { nullable = true; typ = Extern }))
+                 e)
+        | _ -> e
+      in
+      Stack.push 1 (with_loc (Cast (e, Valtype (Ref target))))
   | RefCastDescEq t ->
       (* The descriptor operand is on top of the value. The target type and its
          exactness are recovered from the descriptor, so only [t]'s result
