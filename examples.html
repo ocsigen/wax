@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d4b44fda.js";
+            window.path_to_searchindex_js = "searchindex-fbe00be1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -843,10 +843,39 @@ feature flag required).</p>
     }
 }</span></pre>
 
+<h2 id="compilation-hints"><a class="header" href="#compilation-hints">Compilation hints</a></h2>
+<p>The <a href="correspondence/instructions.html#branch-hints">compilation-hints proposal</a>
+carries profile data: how often an instruction runs, and which callees an indirect
+call usually reaches. These attributes prefix an <em>expression</em>, and take the whole of
+it, so a call can be hinted too.</p>
+<h3 id="wax-26"><a class="header" href="#wax-26">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">shape_fn</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;
+
+<span class="hljs-keyword">fn</span> <span class="hljs-title">draw_rect</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> { x }
+
+<span class="hljs-keyword">fn</span> <span class="hljs-title">draw_circle</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> { <span class="hljs-number">0</span> - x }
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"render"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">render</span>(shape: &amp;?<span class="hljs-type">shape_fn</span>, n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-keyword">let</span> total = <span class="hljs-number">0</span>;
+    <span class="hljs-meta">#[freq = </span><span class="hljs-number">64</span><span class="hljs-meta">]</span>
+    <span class="hljs-symbol">'l</span>: <span class="hljs-keyword">loop</span> {
+        total = total + (<span class="hljs-meta">#[targets(draw_rect: </span><span class="hljs-number">0.73</span><span class="hljs-meta">, draw_circle: </span><span class="hljs-number">0.21</span><span class="hljs-meta">)]</span> <span class="hljs-title">shape</span>(n));
+        n = n - <span class="hljs-number">1</span>;
+        <span class="hljs-meta">#[likely]</span> <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'l</span> n;
+    }
+    total
+}
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"cold"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">cold</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-meta">#[never_opt]</span> <span class="hljs-title">draw_rect</span>(x)
+}</span></pre>
+
 <h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
 <p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
 name (<code>mul_i32x4</code>, <code>add_i32x4</code>, <code>extract_lane_i32x4</code>).</p>
-<h3 id="wax-26"><a class="header" href="#wax-26">Wax</a></h3>
+<h3 id="wax-27"><a class="header" href="#wax-27">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"madd_i32x4"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">madd_i32x4</span>(a: <span class="hljs-type">v128</span>, b: <span class="hljs-type">v128</span>, c: <span class="hljs-type">v128</span>) -&gt; <span class="hljs-type">v128</span> {
     a.<span class="hljs-title">mul_i32x4</span>(b).<span class="hljs-title">add_i32x4</span>(c);          <span class="hljs-comment">// a * b + c, four i32 lanes at once</span>
@@ -864,7 +893,7 @@ with a value; a driver <code>resume</code>s it, routing the suspended tag to a h
 label that receives the payload and the paused continuation. Note that the
 continuation’s type changes after a suspend, since resuming it now needs the
 reply value.</p>
-<h3 id="wax-27"><a class="header" href="#wax-27">Wax</a></h3>
+<h3 id="wax-28"><a class="header" href="#wax-28">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">task</span> = <span class="hljs-keyword">fn</span>() -&gt; <span class="hljs-type">i32</span>;
 <span class="hljs-keyword">type</span> <span class="hljs-type">k</span> = <span class="hljs-keyword">cont</span> task;
 <span class="hljs-keyword">type</span> <span class="hljs-type">resumed</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;   <span class="hljs-comment">// the continuation's type after a suspend</span>

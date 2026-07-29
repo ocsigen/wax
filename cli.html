@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d4b44fda.js";
+            window.path_to_searchindex_js = "searchindex-fbe00be1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -339,6 +339,17 @@ named only by an unreachable function’s signature or body is dead too.
 Only definitions written in the source are candidates: the implicit
 function types interned for an inline block or <code>call_indirect</code> signature
 are not reported.</p>
+<p>A type is used wherever the source names it, including the positions
+whose reference the compiled module carries implicitly: a table’s
+element type, an imported function’s signature, and the array type a
+string literal builds (a bare string names no type, so a like-typed
+definition it is compiled onto counts as used). The converse also
+holds, and is why a Wax module can report a type its compiled form
+references: <code>type t = fn(); #[export] const g = f;</code> names <code>t</code> nowhere,
+so it is reported, even though the global’s lowered type <code>(ref $t)</code>
+points at the definition (a reference type can only name a type).
+Deleting it recompiles: the lowering then interns an anonymous function
+type in its place.</p>
 </li>
 <li>
 <p><code>unused-import</code> (groups <code>unused</code>, <code>correctness</code>): an imported function,
@@ -401,7 +412,10 @@ reached, following an unconditional branch, <code>return</code>, or
 <p><code>cast-always-fails</code> (group <code>correctness</code>): a reference cast or test
 whose operand can never have the target type (the two are unrelated in
 the type hierarchy), so the cast always traps and the test is always
-false. Shown by default.</p>
+false. Shown by default. In a chain only the innermost such cast is
+reported: an outer cast or test over a value that can never be produced
+says nothing the inner verdict does not already, and the fix belongs at
+the inner cast.</p>
 </li>
 <li>
 <p><code>eager-select</code> (group <code>correctness</code>): a trapping or effectful
@@ -593,7 +607,10 @@ segment is already present (as on the wax-to-wat and binary-to-wat paths).</li>
 output is a usage error.</li>
 <li>Fails (exit <code>128</code>) if a conditional-compilation directive <code>(@if …)</code>
 remains unresolved; resolve them first with <code>-D</code>/<code>--define</code>.</li>
-<li>A <code>(@feature "…")</code> declaration is stripped: no annotation remains in the
+<li>Only Wax-specific annotations go. The <code>metadata.code.*</code> hints of the
+branch-hinting and compilation-hints proposals are real WebAssembly text,
+so they stay.</li>
+<li>A <code>(@feature "…")</code> declaration is stripped, so none remains in the
 output. Feature resolution has already run by then, so the declaration
 still gates during processing; re-ingesting the desugared text needs
 <code>-X</code> again, exactly as desugared strings do not come back as literals.

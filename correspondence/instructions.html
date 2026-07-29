@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d4b44fda.js";
+            window.path_to_searchindex_js = "../searchindex-fbe00be1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-15e75985.js"></script>
@@ -430,6 +430,47 @@ in the <code>metadata.code.branch_hint</code> custom section; no feature flag is
 <code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. In WAT the same hint is
 the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding the branch
 (<code>"\01"</code> = likely, <code>"\00"</code> = unlikely).</p>
+<p>The <a href="https://github.com/WebAssembly/compilation-hints">compilation-hints proposal</a>
+adds two more sections of the same family, addressed the same way — by the
+instruction’s byte offset from the start of the function body — and likewise
+preserved with no feature flag:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wax</th><th>WAT</th><th>Section</th></tr>
+</thead>
+<tbody>
+<tr><td><code>#[freq = n]</code></td><td><code>(@metadata.code.instr_freq (freq n))</code></td><td><code>metadata.code.instr_freq</code></td></tr>
+<tr><td><code>#[never_opt]</code></td><td><code>(@metadata.code.instr_freq (never_opt))</code></td><td>“</td></tr>
+<tr><td><code>#[always_opt]</code></td><td><code>(@metadata.code.instr_freq (always_opt))</code></td><td>“</td></tr>
+<tr><td><code>#[targets(f: 0.73)]</code></td><td><code>(@metadata.code.call_targets (target $f 0.73))</code></td><td><code>metadata.code.call_targets</code></td></tr>
+<tr><td><code>#[priority = n]</code></td><td><code>(@metadata.code.compilation_priority (priority n))</code></td><td><code>metadata.code.compilation_priority</code></td></tr>
+<tr><td><code>#[optimization = n]</code></td><td><code>… (optimization n)</code></td><td>“</td></tr>
+<tr><td><code>#[run_once]</code></td><td><code>… (run_once)</code></td><td>“</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>instr_freq</code> is one byte: an offset base-2 logarithm of the executions-per-call
+ratio, <code>max 1 (min 64 (floor (log2 r) + 32))</code>, so <code>32</code> means once. <code>0</code> is
+<code>never_opt</code> and <code>127</code> is <code>always_opt</code>. A byte outside <code>{0, 127} ∪ [1, 64]</code> — only
+reachable from a hand-written binary — stands for no ratio, so WAT prints it in the
+raw-byte form <code>(@metadata.code.instr_freq "\NN")</code>, which Wax has no spelling for.
+Both text forms are accepted on input, per the proposal.</p>
+<p><code>call_targets</code> holds LEB128 <code>(function index, percentage)</code> pairs. Both text surfaces
+write the frequency as a fraction of 1 and store the whole percent, so the round-trip
+is exact. Only the structured <code>(target …)</code> form can <em>name</em> a target; the raw-byte
+form’s indices are numeric.</p>
+<p><code>compilation_priority</code> is the one section of the family that addresses a <em>function</em>
+rather than an instruction, so its entries are keyed at offset <code>0</code>. Its payload is a
+compilation priority, optionally followed by an optimization priority; <code>127</code> is the
+“runs once” value that prints as <code>(run_once)</code>. (The proposal’s prose gives 127; its
+own worked example renders the value as 31. We follow the prose, and a binary
+carrying 31 round-trips as the plain number it is.) A trailing byte beyond what is
+required is read past and ignored, per the proposal’s forward-compatibility rule.</p>
+<p>Each section is emitted before the code section, since its offsets are only known
+once the bodies are encoded. A hint belongs to the operation itself, never to a
+folded group around it: the opcode is emitted after the folded operands, so that is
+where the offset is taken and where a decoder puts the hint back.</p>
 <h3 id="dispatch-and-match"><a class="header" href="#dispatch-and-match">Dispatch and Match</a></h3>
 <p>Two Wax control constructs have no instruction of their own: they are readable
 spellings of a lower-level <em>shape</em>, so they lower to that shape and are

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d4b44fda.js";
+            window.path_to_searchindex_js = "searchindex-fbe00be1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -760,6 +760,57 @@ advisory (it does not change behaviour) and is preserved across every conversion
 to and from WebAssembly, so no compiler flag is needed. See
 <a href="correspondence/instructions.html#branch-hints">Instructions → Branch Hints</a> for
 the WebAssembly encoding.</p>
+<h3 id="compilation-hints"><a class="header" href="#compilation-hints">Compilation Hints</a></h3>
+<p>The <a href="https://github.com/WebAssembly/compilation-hints">compilation-hints proposal</a>
+extends the same mechanism to profile data an engine can use to decide what to
+optimize. Two attributes carry it, and they prefix an expression rather than only a
+branch:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[freq = </span><span class="hljs-number">16</span><span class="hljs-meta">]</span> <span class="hljs-symbol">'l</span>: <span class="hljs-keyword">loop</span> {          <span class="hljs-comment">// runs about 16 times per call</span>
+    <span class="hljs-meta">#[never_opt]</span> <span class="hljs-title">slow_path</span>();    <span class="hljs-comment">// never worth optimizing</span>
+}
+
+<span class="hljs-meta">#[targets(draw_rect: </span><span class="hljs-number">0.73</span><span class="hljs-meta">, draw_circle: </span><span class="hljs-number">0.21</span><span class="hljs-meta">)]</span>
+shape.<span class="hljs-title">draw</span>();                    <span class="hljs-comment">// the indirect call's likely callees</span></span></pre>
+
+<ul>
+<li><code>#[freq = n]</code> is how often the instruction runs per call of its function.
+<code>#[never_opt]</code> and <code>#[always_opt]</code> are the two reserved values. It is meaningful
+on a call or a control instruction.</li>
+<li><code>#[targets(f: 0.73, …)]</code> lists the likely callees of an <em>indirect</em> call, each with
+how often it is taken as a fraction of 1. The fractions must total at most 1; a
+shortfall says other, unlisted callees take the remainder. Naming a function here
+is not a <em>use</em> of it, so one reachable only through a target list is still
+reported by the <code>unused-field</code> lint.</li>
+</ul>
+<p>A hint attribute takes the <strong>whole</strong> expression that follows it. That makes the
+extent unambiguous, at the price of rejecting a placement where a reader could not
+tell what was meant:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[freq = </span><span class="hljs-number">4</span><span class="hljs-meta">]</span> <span class="hljs-title">f</span>(x);            <span class="hljs-comment">// fine: the hint is on the call</span>
+<span class="hljs-keyword">let</span> y = <span class="hljs-meta">#[freq = </span><span class="hljs-number">4</span><span class="hljs-meta">]</span> <span class="hljs-title">f</span>(x);    <span class="hljs-comment">// fine: the initialiser is delimited</span>
+(<span class="hljs-meta">#[freq = </span><span class="hljs-number">4</span><span class="hljs-meta">]</span> <span class="hljs-title">f</span>(x)) + <span class="hljs-number">1</span>       <span class="hljs-comment">// fine: parentheses say which operand</span>
+<span class="hljs-meta">#[freq = </span><span class="hljs-number">4</span><span class="hljs-meta">]</span> <span class="hljs-title">f</span>(x) + <span class="hljs-number">1</span>         <span class="hljs-comment">// error: the hint lands on the `+`</span></span></pre>
+
+<p>This is the rule Rust’s experimental <code>stmt_expr_attributes</code> uses. Several hints may
+stack on one instruction, and a hint on a block statement needs no trailing <code>;</code>, as
+a plain block statement does not.</p>
+<p>The proposal’s third section is per-<em>function</em>, so it is an ordinary field
+attribute rather than an expression prefix:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[priority = </span><span class="hljs-number">1</span><span class="hljs-meta">]</span> <span class="hljs-meta">#[run_once]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">init</span>() { <span class="hljs-comment">/* compiled early, never optimized */</span> }
+
+<span class="hljs-meta">#[priority = </span><span class="hljs-number">5</span><span class="hljs-meta">]</span> <span class="hljs-meta">#[optimization = </span><span class="hljs-number">10</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">hot</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> { x }</span></pre>
+
+<p><code>#[priority = n]</code> says how soon to compile the function relative to the others, and
+is what makes the entry exist at all. The optimization priority is optional:
+<code>#[optimization = n]</code>, or <code>#[run_once]</code> for the reserved value saying the function
+is expected to run once, so optimizing it is wasted work. A function states at most
+one of those two, and neither without <code>#[priority]</code>. It needs a body to attach to,
+so it is allowed on a defined function, not an imported one.</p>
+<p>Like branch hints, these are advisory and preserved across every conversion, so no
+compiler flag is needed. See
+<a href="correspondence/instructions.html#branch-hints">Instructions → Branch Hints</a> for the
+WebAssembly encoding.</p>
 <h3 id="dispatch"><a class="header" href="#dispatch">Dispatch</a></h3>
 <p>A <code>dispatch</code> is a multi-way branch, the readable form of a <code>br_table</code> jump
 table. A bracket maps an index to a case label (with an <code>else</code> default for an

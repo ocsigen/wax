@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d4b44fda.js";
+            window.path_to_searchindex_js = "searchindex-fbe00be1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -198,6 +198,7 @@ relaxed SIMD).</p>
 <tr><td>Threads / atomics</td><td>shared memory, atomic loads/stores/RMW, <code>atomic::fence()</code></td></tr>
 <tr><td>Wide arithmetic</td><td>128-bit integer ops (e.g. <code>i64::add128</code>)</td></tr>
 <tr><td>Branch hinting</td><td><code>#[likely]</code> / <code>#[unlikely]</code></td></tr>
+<tr><td><a href="https://github.com/WebAssembly/compilation-hints">Compilation hints</a></td><td><code>#[freq = n]</code> / <code>#[never_opt]</code> / <code>#[always_opt]</code>, <code>#[targets(f: 0.73)]</code>, <code>#[priority = n]</code> / <code>#[optimization = n]</code> / <code>#[run_once]</code></td></tr>
 <tr><td>Custom page sizes</td><td><code>pagesize</code></td></tr>
 <tr><td><a href="https://github.com/WebAssembly/extended-name-section">Extended name section</a></td><td><code>$</code>-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip</td></tr>
 <tr><td><a href="https://github.com/WebAssembly/wat-numeric-values">WAT numeric values</a></td><td>typed numeric runs in <a href="./language.html#data-segments">data segments</a> (<code>data d = [i16: -1, 2] ++ [f32: 0.5, nan] ++ [v128: i32x4(1,2,3,4)];</code>); runs survive the wax↔wat round-trip</td></tr>
