@@ -35,5 +35,10 @@ val export_section : out_channel -> Ast.Binary.export list -> int
 val start_section : out_channel -> int -> int
 val datacount_section : out_channel -> int -> int
 
-val output_branch_hint_section :
-  out_channel -> (int * (int * bool) list) list -> int
+val output_code_metadata_section :
+  out_channel -> string -> (int * (int * string) list) list -> int
+(** [output_code_metadata_section ch name entries] writes the
+    [metadata.code.<name>] custom section holding [entries], each a function
+    index and its (byte offset, payload) pairs. Both levels must already be in
+    increasing order, as the branch-hinting and compilation-hints proposals
+    require. *)

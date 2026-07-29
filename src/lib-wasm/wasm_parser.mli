@@ -30,7 +30,12 @@ val start_section : ch -> int
 val datacount_section : ch -> int
 val namemap : ch -> (int * string) array
 val indirect_namemap : ch -> (int * (int * string) array) array
-val branch_hint_section : ch -> (int * (int * bool) list) array
+
+val code_metadata_section :
+  name:string -> ch -> (int * (int * string) list) array
+(** One [metadata.code.<name>] custom section: per function index, the (byte
+    offset, raw payload) pairs it states. The payloads are not decoded, so a
+    merge can carry a hint it does not understand. *)
 
 type section = { id : int; pos : int; size : int }
 

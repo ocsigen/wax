@@ -114,11 +114,14 @@ crafted pair already exercises every subsection the disassembler surfaces.
 
 ## 5. Phase 4 — Crafted `.wat` unit tests for cliff edges — **partial**
 
-`link.t` and `run_link_testsuite.ml` already cover: duplicate exports,
-incompatible import/export types, import loops, branch-hint merging, name-aware
-type coalescing (`--distinct-named-types`), and forward global references (both
-directions, table and global initializers). What is still missing are the
-LEB-width boundary cases and the finer subtyping/canonicalisation arms below.
+`link.t`, `link-compilation-hints.t` and `run_link_testsuite.ml` already cover:
+duplicate exports, incompatible import/export types, import loops,
+`metadata.code.*` hint merging (all four sections, including a call-target
+payload renumbered across modules and an offset moved by a widened LEB),
+name-aware type coalescing (`--distinct-named-types`), and forward global
+references (both directions, table and global initializers). What is still
+missing are the remaining LEB-width boundary cases and the finer
+subtyping/canonicalisation arms below.
 
 **LEB128 width boundaries** (the only thing that produces non-trivial
 `resize_data`, and the direct trigger for Phase-1/2 code):

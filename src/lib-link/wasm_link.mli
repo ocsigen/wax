@@ -5,8 +5,9 @@
     re-emitted as an import of the merged module. Types are deduplicated across
     modules and every index space (type, function, table, memory, global, tag,
     element, data) is renumbered into the single output module. The name
-    section, branch hints and per-module source maps are rewritten to follow the
-    new layout and byte offsets. *)
+    section, the [metadata.code.*] hint sections of the branch-hinting and
+    compilation-hints proposals, and per-module source maps are rewritten to
+    follow the new layout and byte offsets. *)
 
 type input = {
   module_name : string;
