@@ -20,7 +20,7 @@
 # drives diff-validate.sh, VALIDATE_FUZZ_COUNT drives validate-fuzz.sh,
 # CROSS_PROPOSAL_COUNT drives wat-cross-proposal.sh, UNREACHABLE_COUNT drives
 # unreachable-fuzz.sh, FAULT_LOCALITY_COUNT drives fault-locality.sh, and
-CONST_CONTEXT_COUNT drives const-context.sh, BOTTOM_COUNT drives bottom-fuzz.sh
+# CONST_CONTEXT_COUNT drives const-context.sh, BOTTOM_COUNT drives bottom-fuzz.sh
 # (its random tail; the core is exhaustive), and NULL_MUTATE_COUNT drives
 # null-mutate.sh (module count; PER mutations each).
 # COUNT and SMITH are still accepted as legacy coarse
