@@ -721,6 +721,7 @@ let rec struct_field_args ret ctx field_names fields =
               desc = Get name;
               info = ([||], name.Ast.info);
               hints = Wax_wasm.Hints.none;
+              expected = None;
             })
     field_names
 

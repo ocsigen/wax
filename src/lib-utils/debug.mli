@@ -1,10 +1,16 @@
 (** Developer-facing debug output, enabled per category with [--debug]. *)
 
-type category = Timing  (** Extend with future debug features. *)
+type category =
+  | Timing
+  | Width_check
+      (** [Width_check] turns on the Wasm-to-Wax differential width check (see
+          {!Wax_lang.Typing.f}'s [~width_check]): a decompiled expression whose
+          printed form Wax would re-infer at another width is reported instead
+          of being printed. Extend with future debug features. *)
 
 val categories : string list
 (** Known category names, for help text and error messages. Currently
-    [["timing"]]. *)
+    [["timing"; "width-check"]]. *)
 
 val parse : string -> (category, string) result
 (** Parse one category name; [Error msg] names the valid categories. *)

@@ -985,6 +985,28 @@ module Error = struct
           };
         ]
       ((text "This dispatch has several cases named" ++ name x) ^^ text ".")
+
+  (* Not a fault in the module being checked but in the tool: the Wasm-to-Wax
+     conversion recorded the type a node's value must have (see [Ast.instr]'s
+     [expected]) and this run inferred another one, so the Wax it is about to
+     print would recompile to a different opcode width — a silent miscompile.
+     Reported only under [~width_check] (the [--debug width-check] switch), and as
+     an error, so a drift stops the pipeline instead of being shipped. The
+     expression is spelled out because a synthesized dead-code node has no real
+     source span to point at. *)
+  let width_invariant_violated context ~location ~inferred ~required expr =
+    report context ~location
+      ~hint:
+        (text
+           "This is an internal invariant of the WebAssembly-to-Wax \
+            conversion, not a problem with the input.")
+      (text "Decompiler width invariant violated for"
+       ++ kw expr
+       ++ text "recompiling it would infer"
+       ++ kw (Infer.Output.valtype_string inferred)
+       ++ text "but the WebAssembly it came from requires"
+       ++ kw (Infer.Output.valtype_string required)
+      ^^ text ".")
 end
 
 (*** Symbol tables and namespaces ***)
@@ -1632,7 +1654,13 @@ let infer_struct_by_fields ctx fields =
    sees a pun. *)
 let field_value (name : ident) = function
   | Some i -> i
-  | None -> { desc = Get name; info = name.info; hints = Wax_wasm.Hints.none }
+  | None ->
+      {
+        desc = Get name;
+        info = name.info;
+        hints = Wax_wasm.Hints.none;
+        expected = None;
+      }
 
 let lookup_array_type ?location ctx name =
   let*@ ty = Tbl.find ctx.diagnostics ctx.type_context.types name in
@@ -2136,6 +2164,7 @@ let ( let*! ) e f =
           desc = Ast.Unreachable;
           info = ([| Cell.make Error |], (Ast.no_loc ()).info);
           hints = Wax_wasm.Hints.none;
+          expected = None;
         }
 
 (* Pop the top operand's type. An [Unreachable] (polymorphic) stack yields a
@@ -2564,11 +2593,19 @@ let field_has_default (ty : fieldtype) =
       | Ref { nullable; _ } -> nullable)
 
 (* The typed node for [i]: its hints ride along, being advisory metadata the
-   typer neither reads nor changes. *)
+   typer neither reads nor changes, and so does its [expected] type — the
+   decompiler's record of the type this node must have, which the width check
+   compares against the cells recorded here. *)
 let return_statement (i : location instr)
     (desc : (inferred_type Cell.t array * location) instr_desc) (ty : _ array)
     st =
-  (st, { desc; info = ((ty : _ array), i.info); hints = i.hints })
+  ( st,
+    {
+      desc;
+      info = ((ty : _ array), i.info);
+      hints = i.hints;
+      expected = i.expected;
+    } )
 
 let return_expression i desc ty = return_statement i desc [| ty |]
 
@@ -2930,7 +2967,14 @@ let merge_let_tuple ctx head rest =
     | Some (bindings, rest')
       when List.exists (fun (name, _) -> Option.is_some name) bindings ->
         let info = ([||], snd head.info) in
-        { desc = Let (List.rev bindings, Some head); info; hints = head.hints }
+        (* The [let] is a statement: it produces no value, so it carries no
+           [expected] type of its own (the bound [head] keeps its). *)
+        {
+          desc = Let (List.rev bindings, Some head);
+          info;
+          hints = head.hints;
+          expected = None;
+        }
         :: rest'
     | _ -> head :: rest
 
@@ -5699,6 +5743,7 @@ and type_cont_construct_call ctx i func ns (name : Ast.ident) args =
                  desc = Path (ns, name);
                  info = ([||], func.info);
                  hints = Wax_wasm.Hints.none;
+                 expected = None;
                },
                args' ))
           [| Cell.make Error |]
@@ -6556,6 +6601,7 @@ and type_aggregate_access ctx i =
                desc = Get tabname;
                info = ([||], recv.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              i2' ))
         typ
@@ -6604,6 +6650,7 @@ and type_aggregate_access ctx i =
                desc = Get tabname;
                info = ([||], recv.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              i2',
              i3' ))
@@ -6724,6 +6771,7 @@ and type_variable_access ctx i =
                       desc = Get idx;
                       info = idx.info;
                       hints = Wax_wasm.Hints.none;
+                      expected = None;
                     },
                     i' );
             }
@@ -7323,10 +7371,12 @@ and type_mem_method_call ctx i func recv memname (meth : Ast.ident) args =
                    desc = Get memname;
                    info = ([||], recv.info);
                    hints = Wax_wasm.Hints.none;
+                   expected = None;
                  },
                  meth );
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          args' ))
     result
@@ -7449,10 +7499,12 @@ and type_atomic_method_call ctx i func recv memname (meth : Ast.ident) family
                    desc = Get memname;
                    info = ([||], recv.info);
                    hints = Wax_wasm.Hints.none;
+                   expected = None;
                  },
                  meth );
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          args' ))
     result
@@ -7528,10 +7580,12 @@ and type_simd_mem_method_call ctx i func recv memname (meth : Ast.ident) args =
                    desc = Get memname;
                    info = ([||], recv.info);
                    hints = Wax_wasm.Hints.none;
+                   expected = None;
                  },
                  meth );
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          args' ))
     result
@@ -7541,7 +7595,12 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
   let addr () = address_cell at in
   let i32 () = i32_cell in
   let recv' =
-    { desc = Get name; info = ([||], recv.info); hints = Wax_wasm.Hints.none }
+    {
+      desc = Get name;
+      info = ([||], recv.info);
+      hints = Wax_wasm.Hints.none;
+      expected = None;
+    }
   in
   let mk args' =
     Ast.Call
@@ -7549,6 +7608,7 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = StructGet (recv', meth);
           info = ([||], func.info);
           hints = Wax_wasm.Hints.none;
+          expected = None;
         },
         args' )
   in
@@ -7594,7 +7654,12 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
       let src' =
-        { desc = Get src; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+        {
+          desc = Get src;
+          info = ([||], sinfo);
+          hints = Wax_wasm.Hints.none;
+          expected = None;
+        }
       in
       let* rest' = instructions ctx rest in
       (match rest' with
@@ -7607,7 +7672,12 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
   | "init", { desc = Get seg; info = sinfo; _ } :: ([ _; _; _ ] as rest) ->
       ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option);
       let seg' =
-        { desc = Get seg; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+        {
+          desc = Get seg;
+          info = ([||], sinfo);
+          hints = Wax_wasm.Hints.none;
+          expected = None;
+        }
       in
       let* rest' = instructions ctx rest in
       (match rest' with
@@ -7628,7 +7698,12 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
     check_type ctx e t
   in
   let recv' =
-    { desc = Get name; info = ([||], recv.info); hints = Wax_wasm.Hints.none }
+    {
+      desc = Get name;
+      info = ([||], recv.info);
+      hints = Wax_wasm.Hints.none;
+      expected = None;
+    }
   in
   let mk args' =
     Ast.Call
@@ -7636,6 +7711,7 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = StructGet (recv', meth);
           info = ([||], func.info);
           hints = Wax_wasm.Hints.none;
+          expected = None;
         },
         args' )
   in
@@ -7687,7 +7763,12 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
       let src' =
-        { desc = Get src; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+        {
+          desc = Get src;
+          info = ([||], sinfo);
+          hints = Wax_wasm.Hints.none;
+          expected = None;
+        }
       in
       let* rest' = instructions ctx rest in
       (match rest' with
@@ -7701,7 +7782,12 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
       (let>@ src_rt = Tbl.find ctx.diagnostics ctx.elems seg in
        check_elem_subtype ctx ~location:i.info ~src:src_rt ~dst:rt);
       let seg' =
-        { desc = Get seg; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+        {
+          desc = Get seg;
+          info = ([||], sinfo);
+          hints = Wax_wasm.Hints.none;
+          expected = None;
+        }
       in
       let* rest' = instructions ctx rest in
       (match rest' with
@@ -7744,6 +7830,7 @@ and type_array_fill_call ctx i func a (meth : Ast.ident) j v n =
            desc = StructGet (a', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          [ j'; v'; n' ] ))
     [||]
@@ -7785,6 +7872,7 @@ and type_array_copy_call ctx i func a1 (meth : Ast.ident) i1 a2 i2 n =
            desc = StructGet (a1', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          [ i1'; a2'; i2'; n' ] ))
     [||]
@@ -7822,7 +7910,12 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
           Error.unknown_operand_type ctx.diagnostics ~location:a.info
       | _ -> Error.expected_array ctx.diagnostics ~location:a.info);
       let seg' =
-        { desc = Get seg; info = ([||], sinfo); hints = Wax_wasm.Hints.none }
+        {
+          desc = Get seg;
+          info = ([||], sinfo);
+          hints = Wax_wasm.Hints.none;
+          expected = None;
+        }
       in
       return_statement i
         (Call
@@ -7830,6 +7923,7 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
                desc = StructGet (a', meth);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              seg' :: rest' ))
         [||]
@@ -7846,6 +7940,7 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
                desc = StructGet (a', meth);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              args' ))
         [||]
@@ -7869,6 +7964,7 @@ and type_array_method_recovery ctx i func recv (meth : Ast.ident) args =
            desc = StructGet (recv', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          args' ))
     [||]
@@ -7885,6 +7981,7 @@ and type_binary_intrinsic_call ctx i func i1 (meth : Ast.ident) op args =
           desc = StructGet (i1', meth);
           info = ([||], func.info);
           hints = Wax_wasm.Hints.none;
+          expected = None;
         },
         args'' )
   in
@@ -8003,6 +8100,7 @@ and type_unary_intrinsic_call ctx i func recv (meth : Ast.ident) =
            desc = StructGet (recv', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          [] ))
     ty
@@ -8081,6 +8179,7 @@ and type_simd_vector_op_call ctx i func recv (meth : Ast.ident) args =
            desc = StructGet (recv', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
+           expected = None;
          },
          args' ))
     result
@@ -8092,6 +8191,7 @@ and type_simd_free_intrinsic_call ctx i func ns (name : Ast.ident) args =
       desc = Path (ns, name);
       info = ([||], func.info);
       hints = Wax_wasm.Hints.none;
+      expected = None;
     }
   in
   let* args' = instructions ctx args in
@@ -9204,6 +9304,7 @@ and type_indirect_call ctx i i' l =
                 desc = Ast.Unreachable;
                 info = ([| Cell.make Error |], (Ast.no_loc ()).info);
                 hints = Wax_wasm.Hints.none;
+                expected = None;
               }
         | Some typ ->
             (match param_types with
@@ -9330,6 +9431,7 @@ and call_instruction ctx i =
           desc = Get name;
           info = ([||], recv.info);
           hints = Wax_wasm.Hints.none;
+          expected = None;
         }
       in
       return_statement i
@@ -9338,6 +9440,7 @@ and call_instruction ctx i =
                desc = StructGet (recv', meth);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              [] ))
         [||]
@@ -9444,6 +9547,7 @@ and type_path_intrinsic_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              args' ))
         [||]
@@ -9464,6 +9568,7 @@ and type_path_intrinsic_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              args' ))
         (Cell.make Error)
@@ -9492,6 +9597,7 @@ and type_wide_arith_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              args' ))
         [| Cell.make Error; Cell.make Error |]
@@ -9506,6 +9612,7 @@ and type_wide_arith_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              },
              args' ))
         [| valtype_cell i64_valtype; valtype_cell i64_valtype |]
@@ -9555,6 +9662,7 @@ and mem_call_arguments ctx l : _ -> _ * _ list =
                desc = Labelled (lbl, e');
                info = (fst e'.info, i.info);
                hints = Wax_wasm.Hints.none;
+               expected = None;
              }
             :: r')
       | _ ->
@@ -10702,6 +10810,7 @@ and constant_field ctx (name, i) =
           desc = Get name;
           info = ([||], name.info);
           hints = Wax_wasm.Hints.none;
+          expected = None;
         }
 
 (*** Globals, functions, and declarations ***)
@@ -12041,6 +12150,53 @@ let project_module (m : inferred_module_annotation Ast.module_) :
       })
     m
 
+(* The numeric width a type states, [None] for a reference or vector (the width
+   check covers the scalars only). A packed narrow read ([i8]/[i16] — a [load8], an
+   [i8] field) is an i32 value the typer tracks narrow, so it counts as [i32]:
+   the check is about the value's numeric width, and a narrow read has none of its
+   own. *)
+let numeric_width (ty : Ast.valtype) =
+  match ty with I32 | I64 | F32 | F64 -> Some ty | Ref _ | V128 -> None
+
+let inferred_width (ty : Ast.storagetype) =
+  match ty with
+  | Value ty -> numeric_width ty
+  | Packed (I8 | I16) -> Some Ast.I32
+
+(* Compare the type each node's producer recorded on it (see [Ast.instr]'s
+   [expected] — only {!Wax_conversion.From_wasm} records any) against the type
+   this run inferred for it, and report a disagreement.
+
+   Runs on the PROJECTED tree, so the comparison is against the type the node
+   finally takes: a flexible numeric literal is only pinned to a width at
+   projection time ([project_annotation] defaults [int]/[number] to i32,
+   [large number] to i64, [float] to f64), which is exactly the width a re-parse of
+   the printed form would settle on. Comparing the inference cells earlier would
+   read a flexible literal as "no type yet" and miss every drift.
+
+   A node with no resolved type ([Unknown]/[Error] — a hole in unreachable code
+   the typer left polymorphic) is skipped: nothing was inferred to disagree with.
+   So is a node that leaves no value or several. *)
+let check_widths diagnostics (m : typed_module_annotation Ast.module_) =
+  Ast_utils.iter_module_instr
+    (fun (i : _ instr) ->
+      match (i.expected, i.info) with
+      | Some required, ([| Some inferred |], location) -> (
+          match (numeric_width required, inferred_width inferred) with
+          | Some required, Some inferred when required <> inferred ->
+              (* The expression, elided past a line's worth: a mismatch is
+                 reported against a whole operand tree, which can be large. *)
+              let expr = Infer.Output.instr_string i in
+              let expr =
+                if String.length expr <= 40 then expr
+                else String.sub expr 0 40 ^ "..."
+              in
+              Error.width_invariant_violated diagnostics ~location ~inferred
+                ~required expr
+          | _ -> ())
+      | _ -> ())
+    m
+
 (* Conditional annotations denote mutually-exclusive branches, so they are
    type-checked by exploring every reachable configuration (as the WAT validator
    does), rather than checking both branches as if they coexisted. *)
@@ -12662,14 +12818,16 @@ let lint_confusable diagnostics fields =
   walk fields
 
 let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
-    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
-    fields =
+    ?(faithful = false) ?(width_check = false)
+    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   if warn_unused then lint_confusable diagnostics fields;
   let types, typed =
     f_infer ~simplify ~warn_unused ~suggest ~faithful ~features diagnostics
       fields
   in
-  (types, project_module typed)
+  let typed = project_module typed in
+  if width_check then check_widths diagnostics typed;
+  (types, typed)
 
 let check ?(warn_unused = false) ?(suggest = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =

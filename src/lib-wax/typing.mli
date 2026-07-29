@@ -19,6 +19,7 @@ val f :
   ?warn_unused:bool ->
   ?suggest:bool ->
   ?faithful:bool ->
+  ?width_check:bool ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -45,7 +46,16 @@ val f :
 
     When [suggest] is set (default [false]), machine-applicable simplifications
     are reported as [Suggestion] diagnostics (see {!check}); it is mutually
-    exclusive with [simplify]. *)
+    exclusive with [simplify].
+
+    When [width_check] is set (default [false], the [--debug width-check]
+    switch), every node on which the Wasm-to-Wax conversion recorded the type
+    its value must have ({!Ast.instr}'s [expected]) is checked against the type
+    inferred here, and a disagreement is reported as an error: the Wax about to
+    be printed would recompile to a different opcode width. It is a check on the
+    decompiler, not on the module, so it reports nothing for a module that
+    carries no recorded expectation (anything but {!Wax_conversion.From_wasm}
+    output). *)
 
 val reserved_type_names : string list
 (** The built-in type names a [type] declaration (or a [rec] member) may not

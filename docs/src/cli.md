@@ -386,6 +386,15 @@ server](#language-server)).
           (parse, specialize, validate, type-check, convert, output) to stderr,
           one line per pass as it finishes. The normal output on stdout is
           unchanged.
+        - `width-check`: on a wasm or wat to wax conversion, check the
+          decompiled Wax against the widths the WebAssembly states. The
+          conversion records the type of each value the source opcodes produce,
+          and the type checker — which already runs over the decompiled module —
+          compares its own inference against it, so a Wax expression that would
+          recompile at another width (an `i64` operation re-read as `i32`, say)
+          is reported as an error instead of being printed. A tool
+          self-check, not a check on the input: a mismatch is a bug in the
+          decompiler, and it reports nothing for any other conversion.
 
 - **`--version`**
     - Print the toolchain version and exit. In a released build this is the git

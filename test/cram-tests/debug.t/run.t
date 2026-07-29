@@ -14,8 +14,8 @@ checked.
 Categories are repeatable and may be comma-separated; an unknown category is
 rejected with the list of valid ones.
 
-  $ wax input.wax -f wat --debug bogus 2>&1 >/dev/null | tr '\n' ' ' | tr -s ' ' | grep -o 'Unknown debug category.*timing)'
-  Unknown debug category: bogus (expected one of: timing)
+  $ wax input.wax -f wat --debug bogus 2>&1 >/dev/null | tr '\n' ' ' | tr -s ' ' | grep -o 'Unknown debug category.*)'
+  Unknown debug category: bogus (expected one of: timing, width-check)
 
 The normal output on stdout is unchanged by --debug timing.
 

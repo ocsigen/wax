@@ -200,11 +200,12 @@ let location_of loc : location = {loc_start = fst loc; loc_end = snd loc}
 
 (* An instruction. Its record carries a [hints] field beside its location (the
    advisory [metadata.code] metadata, see [Ast.instr]); freshly parsed source has
-   none until a hint attribute fills it in. *)
+   none until a hint attribute fills it in. [expected] is a decompiler-only
+   channel (see [Ast.instr]), so parsed source never carries one. *)
 let with_loc loc desc =
   let info = location_of loc in
   Wax_utils.Trivia.record_pos Context.context info;
-  {desc; info; hints = Wax_wasm.Hints.none}
+  {desc; info; hints = Wax_wasm.Hints.none; expected = None}
 
 (* Any other located node: a module field, an identifier, an instruction *list*. *)
 let annot loc desc =

@@ -257,6 +257,18 @@ and 'info instr = {
           rather than a wrapper node, so that the matches on [desc] — which is
           nearly every match on an instruction — neither see it nor have to see
           through it. *)
+  expected : valtype option;
+      (** The type the value this node produces MUST have, when a producer knows
+          it independently of Wax inference: {!Wax_conversion.From_wasm} records
+          the type stated by the Wasm opcode this node was decompiled from.
+          Nothing in the source language sets it (a parsed module leaves it
+          [None]) and nothing user-visible reads it — unlike [hints] it is never
+          printed. The typer's width-check mode ({!Typing.f}'s [~width_check])
+          compares its own inferred type for the node against it, so a
+          decompiled expression whose printed form Wax would re-infer at another
+          width — silently changing the opcode on recompile — is reported
+          instead of shipped. A field rather than a location-keyed side table,
+          because a synthesized dead-code node carries no real span. *)
 }
 
 and 'info trycatch_arm = {

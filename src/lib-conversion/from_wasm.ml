@@ -895,6 +895,95 @@ Step 1: traverse types and find existing names
 Step 2: use this info to generate using names without reusing existing names
 *)
 
+(*** Recorded type expectations ***)
+
+(* A Wasm opcode states the type of every value it produces; the Wax surface form
+   this conversion prints only *re-infers* it, and the two silently disagreeing is
+   the "width drift" bug class the width pins below guard against (an unpinned
+   [i64] literal tree re-defaults to [i32] on re-parse, so [i64.div_u] recompiles
+   as [i32.div_u]). [expect] records the Wasm-stated type on the node itself
+   ([Ast.instr]'s [expected]), so the typer — which already runs over this
+   conversion's output — can compare its own inference against it and report a
+   drift instead of shipping it (see {!Wax_lang.Typing.f}'s [~width_check]).
+   Recording is annotation only: it never changes what is emitted.
+
+   Only a numeric scalar is recorded: the drift class is a flexible numeric
+   literal defaulting (to [i32]/[f64]). A reference or vector type is left
+   unrecorded, for a later phase to add. *)
+let scalar_expectation (ty : Ast.valtype) =
+  match ty with I32 | I64 | F32 | F64 -> Some ty | Ref _ | V128 -> None
+
+let expect (ty : Ast.valtype) (i : _ Ast.instr) : _ Ast.instr =
+  { i with Ast.expected = scalar_expectation ty }
+
+let valtype_of_width : [ `I32 | `I64 | `F32 | `F64 ] -> Ast.valtype = function
+  | `I32 -> I32
+  | `I64 -> I64
+  | `F32 -> F32
+  | `F64 -> F64
+
+(* The type a cast's *result* has, which is the new node's expectation — not the
+   operand's. *)
+let cast_result (ty : Ast.casttype) =
+  match ty with
+  | Ast.Valtype ty -> scalar_expectation ty
+  | Signedtype { typ; _ } -> Some (valtype_of_width typ)
+  | Functype _ -> None
+
+(* Wrap [e] in a cast to [ty]. The single constructor for every cast this
+   conversion inserts: the [{ e with … }] copy would otherwise carry [e]'s own
+   expectation onto a node of a different type. *)
+let cast_to (ty : Ast.casttype) (e : _ Ast.instr) : _ Ast.instr =
+  { e with Ast.desc = Ast.Cast (e, ty); expected = cast_result ty }
+
+(* The typed hole [(_ as ty)] the conversions give an absent operand — a pop from
+   the polymorphic stack of dead code. Both nodes record [ty]: the opcode's
+   signature states the operand type whether or not a value was there to take. *)
+let typed_hole (ty : Ast.valtype) =
+  cast_to (Valtype ty) (expect ty (Ast.no_loc_instr Ast.Hole))
+
+(* Drop the expectation recorded on [i] and on everything under it. Used where a
+   value's width comes from its CONTEXT rather than from its own printed form — a
+   block/function result, an initialiser, a branch delivery. The conversion leaves
+   such a value unpinned for exactly that reason, and the typer types it against
+   the context type instead of merging that type into the value's own cell, so the
+   type inferred for the node stays flexible and states nothing about the width the
+   value takes: a claim recorded there would be checked against a defaulted
+   flexible literal and misfire. It clears as far down as the context type
+   reaches, no further — a [do f32 { 3 + 4 }] exit is pinned by the block
+   annotation down to both literals, whereas a comparison's operands keep their
+   claim, their own printed form still having to carry their width. *)
+let rec forget_expected (i : _ Ast.instr) : _ Ast.instr =
+  let desc : _ Ast.instr_desc =
+    match i.Ast.desc with
+    (* An arithmetic operator's result type IS its operands' — a context type
+       reaching the sum reaches them too, exactly as a pin cast on the sum would
+       (a comparison's i32 result says nothing about its operands, so it stops
+       here, and so does a cast, a call or a narrow store, which fix their
+       operand's type themselves). *)
+    | Ast.BinOp
+        ( ({
+             Ast.desc =
+               Add | Sub | Mul | Div _ | Rem _ | And | Or | Xor | Shl | Shr _;
+             _;
+           } as op),
+          a,
+          b ) ->
+        Ast.BinOp (op, forget_expected a, forget_expected b)
+    | Ast.UnOp (({ Ast.desc = Neg | Pos; _ } as op), a) ->
+        Ast.UnOp (op, forget_expected a)
+    (* A [select]'s arms share its result type; its condition does not. *)
+    | Ast.Select (c, a, b) ->
+        Ast.Select (c, forget_expected a, forget_expected b)
+    (* A sequence's value is its last element. *)
+    | Ast.Sequence (_ :: _ as l) ->
+        let rev = List.rev l in
+        Ast.Sequence (List.rev (forget_expected (List.hd rev) :: List.tl rev))
+    (* A nested block's own exits were cleared by its own [run]. *)
+    | d -> d
+  in
+  { i with Ast.desc; expected = None }
+
 (*** The conversion stack ***)
 
 module Stack = struct
@@ -949,17 +1038,27 @@ module Stack = struct
   let grab n stack = grab_rec n stack []
   let push arity i stack = ((arity, None, i) :: stack, ())
 
+  (* Record the tagged width as the value's expected type (see {!expect}): the
+     tag IS the width the producing opcode states. An untagged value ([None])
+     keeps whatever its producer recorded — the tag says the value is width-
+     FLEXIBLE, not that its type is unknown (a grounded arithmetic result is
+     untagged yet has the opcode's width, recorded at the call site). *)
+  let expect_width w i =
+    match w with Some w -> expect (valtype_of_width w) i | None -> i
+
   (* Push a numeric value tagged with the width its opcode states. *)
-  let push_num width i stack = ((1, width, i) :: stack, ())
+  let push_num width i stack = ((1, width, expect_width width i) :: stack, ())
 
   (* Wrap [i] in an identity cast to its non-i32 opcode width (see the module
-     comment). [None]/[I32] are the re-parse default, so leave the tree as is. *)
+     comment). [None]/[I32] are the re-parse default, so leave the tree as is
+     (the [I32] tag is still recorded as an expectation). *)
   let pin_width w (i : _ Ast.instr) =
     match w with
-    | Some `I64 -> { i with Ast.desc = Ast.Cast (i, Valtype I64) }
-    | Some `F32 -> { i with Ast.desc = Ast.Cast (i, Valtype F32) }
-    | Some `F64 -> { i with Ast.desc = Ast.Cast (i, Valtype F64) }
-    | Some `I32 | None -> i
+    | Some `I64 -> cast_to (Valtype I64) i
+    | Some `F32 -> cast_to (Valtype F32) i
+    | Some `F64 -> cast_to (Valtype F64) i
+    | Some `I32 -> expect I32 i
+    | None -> i
 
   (* An unconditional control-flow instruction ([br]/[br_table]/[return]/[become]/
      [unreachable]/[throw]/…) leaves the values still on the stack — below the
@@ -1068,7 +1167,17 @@ module Stack = struct
              statement below it, marks everything deeper as below-statement. *)
           let present = arity = 1 in
           let is_result = present && (not below_stmt) && results_left > 0 in
-          let i = if present && not is_result then pin_width w i else i in
+          (* A leftover is pinned, which records its width (see {!expect}). A
+             RESULT is neither pinned nor recorded: its width comes from the
+             enclosing block/function/initialiser type, and the typer types such
+             a value against that context type rather than merging it into the
+             value's own cell, so the value's own inferred type stays flexible and
+             says nothing about the width it will take. *)
+          let i =
+            if present then
+              if is_result then forget_expected i else pin_width w i
+            else i
+          in
           let results_left =
             if is_result then results_left - 1 else results_left
           in
@@ -1122,7 +1231,7 @@ let op_loc (loc : Ast.location) op : (_, Ast.location) Ast.annotated =
 (* [loc] is the span of the instruction the literal was decoded from. *)
 let integer (loc : Ast.location) n : _ Ast.instr =
   let at desc : _ Ast.instr =
-    { desc; info = loc; hints = Wax_wasm.Hints.none }
+    { desc; info = loc; hints = Wax_wasm.Hints.none; expected = None }
   in
   let e = at (Int (remove_sign n)) in
   if is_negative n then at (UnOp (op_loc loc Ast.Neg, e)) else e
@@ -1140,6 +1249,7 @@ let float i n =
         desc = Float (remove_sign n);
         info = i.Src.info;
         hints = Wax_wasm.Hints.none;
+        expected = None;
       }
     in
     if is_negative n then
@@ -1147,6 +1257,7 @@ let float i n =
         Ast.desc = UnOp (op_loc i.Src.info Ast.Neg, e);
         info = i.Src.info;
         hints = Wax_wasm.Hints.none;
+        expected = None;
       }
     else e
 
@@ -1252,7 +1363,12 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
      with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
      their call-target hints, so one cannot be reinterpreted as the other. *)
   let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
-    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+    {
+      desc = i;
+      info = i0.Src.info;
+      hints = Wax_wasm.Hints.none;
+      expected = None;
+    }
   in
   (* A no-argument instruction method [recv.meth()]. *)
   let method_call recv meth =
@@ -1267,12 +1383,7 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
      the receiver. Ops that fix a concrete result width (a cast: [trunc], [eqz]'s
      i32) are grounded, [None]. *)
   let recv_w = match recv with Some (_, w) -> w | None -> None in
-  let e ty =
-    match e' with
-    | Some e -> e
-    | None ->
-        Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty))
-  in
+  let e ty = match e' with Some e -> e | None -> typed_hole ty in
   (* Materialise the operand with its scalar width [ty] pinned by a cast when
      [ty] is a non-default width (i64/f32/f64) and the operand is inlined —
      otherwise the surface form re-defaults it (a bare float literal to f64, a
@@ -1285,8 +1396,7 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
   let pin ty =
     let x = e ty in
     match (e', ty) with
-    | Some _, (Ast.I64 | F32 | F64) ->
-        { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+    | Some _, (Ast.I64 | F32 | F64) -> cast_to (Valtype ty) x
     | _ -> x
   in
   (* Width-preserving method-form ops carry the receiver's flexibility; the rest
@@ -1302,35 +1412,40 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
      already re-parses as [i32.clz], but [i64.clz] on an adaptive select-of-holes
      drifts to [i32.clz] without one. Mirrors [e_method_pinned] in
      [float_un_op]. *)
+  (* The type the opcode's result HAS, whatever the flexibility tag says: [eqz]
+     yields i32 whatever its operand's width, every other op here the integer
+     size the opcode names. Recorded so a re-inference at another width is
+     caught. *)
+  let result_ty = match op with Eqz -> Ast.I32 | _ -> inttype sz in
   let e_method_pinned ty =
     match ty with
     | Ast.I32 -> e ty
     | _ -> (
         let x = e ty in
         match e' with
-        | Some e when reparse_adaptive e ->
-            { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+        | Some e when reparse_adaptive e -> cast_to (Valtype ty) x
         | _ -> x)
   in
   Stack.push_num result_w
-    (match op with
-    | Clz -> method_call (e_method_pinned (inttype sz)) "clz"
-    | Ctz -> method_call (e_method_pinned (inttype sz)) "ctz"
-    | Popcnt -> method_call (e_method_pinned (inttype sz)) "popcnt"
-    | Eqz -> (
-        let operand = pin (inttype sz) in
-        match operand.Ast.desc with
-        (* [eqz] of an equality is exactly the negated comparison; recover
+  @@ expect result_ty
+       (match op with
+       | Clz -> method_call (e_method_pinned (inttype sz)) "clz"
+       | Ctz -> method_call (e_method_pinned (inttype sz)) "ctz"
+       | Popcnt -> method_call (e_method_pinned (inttype sz)) "popcnt"
+       | Eqz -> (
+           let operand = pin (inttype sz) in
+           match operand.Ast.desc with
+           (* [eqz] of an equality is exactly the negated comparison; recover
            [i32.eqz (ref.eq a b)] — how [a != b] on references lowers — as
            [a != b] rather than [!(a == b)]. ([sz] is [i32] here, so [pin] leaves
            the [BinOp] shape untouched.) Under [--faithful] this rewrite is off:
            it turns [t.eq; i32.eqz] into a single [t.ne], so keep the [!(...)]
            form, which re-lowers to the original [eq; eqz] pair. *)
-        | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) when not faithful ->
-            with_loc (BinOp (op_loc i0.info Ast.Ne, e1, e2))
-        | _ -> with_loc (UnOp (op_loc i0.info Ast.Not, operand)))
-    | Trunc (f, signage) ->
-        (* The operand is a float of [f]'s width, NOT [floattype sz] ([sz] is the
+           | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) when not faithful ->
+               with_loc (BinOp (op_loc i0.info Ast.Ne, e1, e2))
+           | _ -> with_loc (UnOp (op_loc i0.info Ast.Not, operand)))
+       | Trunc (f, signage) ->
+           (* The operand is a float of [f]'s width, NOT [floattype sz] ([sz] is the
            integer *result* size — wrong for e.g. [i32.trunc_f64], whose operand
            is f64 not f32). Unlike the trunc's own [as int] cast (which fixes the
            *result* width), nothing here pins the *source* float width, so an
@@ -1340,21 +1455,18 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
            an f64 source drifts) — both silently changing which inputs trap. Pin
            it with a cast, as [Reinterpret] does; [simplify] drops the pin again
            when the operand already settles on [fty] (a plain f64 literal). *)
-        let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
-        with_loc
-          (Cast (pin fty, Signedtype { typ = sz; signage; strict = true }))
-    | TruncSat (f, signage) ->
-        let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
-        with_loc
-          (Cast (pin fty, Signedtype { typ = sz; signage; strict = false }))
-    | Reinterpret ->
-        method_call
-          (let e = e (floattype sz) in
-           if e' = None then e
-           else { e with desc = Ast.Cast (e, Valtype (floattype sz)) })
-          "to_bits"
-    | ExtendS `_32 ->
-        (* i64.extend32_s, rendered [((operand as i64) as i32) as i64_s] so
+           let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
+           cast_to (Signedtype { typ = sz; signage; strict = true }) (pin fty)
+       | TruncSat (f, signage) ->
+           let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
+           cast_to (Signedtype { typ = sz; signage; strict = false }) (pin fty)
+       | Reinterpret ->
+           method_call
+             (let e = e (floattype sz) in
+              if e' = None then e else cast_to (Valtype (floattype sz)) e)
+             "to_bits"
+       | ExtendS `_32 ->
+           (* i64.extend32_s, rendered [((operand as i64) as i32) as i64_s] so
            [to_wasm] re-fuses it: the [as i32] wraps an i64 to i32 and the outer
            [as i64_s] sign-extends, and the fusion keys on the inner operand
            being typed i64. Pin the i64 source in every case — a bare [i64.const]
@@ -1364,13 +1476,11 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
            [extend32_s] rather than dropping the wrap to [extend_i32_s]. A
            non-constant i64 operand is already i64-typed, so [pin] is a no-op and
            [simplify] leaves the wrap. *)
-        with_loc
-          (Cast
-             ( (let src = pin (inttype `I64) in
-                { src with desc = Ast.Cast (src, Valtype (inttype `I32)) }),
-               Signedtype { typ = sz; signage = Signed; strict = false } ))
-    | ExtendS `_8 -> method_call (e_method_pinned (inttype sz)) "extend8_s"
-    | ExtendS `_16 -> method_call (e_method_pinned (inttype sz)) "extend16_s")
+           cast_to
+             (Signedtype { typ = sz; signage = Signed; strict = false })
+             (cast_to (Valtype (inttype `I32)) (pin (inttype `I64)))
+       | ExtendS `_8 -> method_call (e_method_pinned (inttype sz)) "extend8_s"
+       | ExtendS `_16 -> method_call (e_method_pinned (inttype sz)) "extend16_s")
 
 (* Pop an operand for a method-form intrinsic, ascribing it the operator's
    scalar type [ty]. A non-inlinable operand becomes a typed hole [(_ as ty)]
@@ -1381,11 +1491,7 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
    anchor-free hole with the opcode type too (see [int_bin_op]'s [symbol]). *)
 let pop_typed ty =
   let* o = Stack.try_pop in
-  return
-    (match o with
-    | Some e -> e
-    | None ->
-        Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty)))
+  return (match o with Some e -> e | None -> typed_hole ty)
 
 (* Give a conversion's absent operand — a hole on the polymorphic stack in dead
    code — the opcode's source type, [(_ as src)], so the conversion survives the
@@ -1410,7 +1516,7 @@ let pop_typed ty =
    numeric-operand pins in [int_bin_op]/[pop_typed]. *)
 let type_hole_src src e =
   match e.Ast.desc with
-  | Ast.Hole | Ast.Select _ -> { e with Ast.desc = Ast.Cast (e, Valtype src) }
+  | Ast.Hole | Ast.Select _ -> cast_to (Valtype src) e
   | _ -> e
 
 (* As [type_hole_src] for the cross-hierarchy converts ([extern.convert_any] /
@@ -1424,7 +1530,7 @@ let type_hole_src src e =
    prunes it for a concrete operand, so reachable non-adaptive code is untouched. *)
 let rec convert_src src e =
   match e.Ast.desc with
-  | Ast.Hole | Ast.Select _ -> { e with Ast.desc = Ast.Cast (e, Valtype src) }
+  | Ast.Hole | Ast.Select _ -> cast_to (Valtype src) e
   (* [br_on_null] forwards its operand's value on the fall-through (its non-null
      version), so the source cast must pin that operand INSIDE the branch, not wrap
      the branch result: wrapping would cast the branch's already-[any]-defaulted
@@ -1477,12 +1583,7 @@ let pin_forwarding_source src stack =
    grounded ([None]). *)
 let pop_typed_tagged ty =
   let* o = Stack.try_pop_tagged in
-  return
-    (match o with
-    | Some (e, w) -> (e, w)
-    | None ->
-        ( Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty)),
-          None ))
+  return (match o with Some (e, w) -> (e, w) | None -> (typed_hole ty, None))
 
 (* A popped operand is a width ANCHOR — its printed form fixes the operator's
    width on its own, so a width-erasing consumer (a comparison, the sibling of a
@@ -1503,7 +1604,12 @@ let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
      with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
      their call-target hints, so one cannot be reinterpreted as the other. *)
   let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
-    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+    {
+      desc = i;
+      info = i0.Src.info;
+      hints = Wax_wasm.Hints.none;
+      expected = None;
+    }
   in
   (* An operand popped off the stack is one of three kinds:
      - an *anchor*: a present entry with tag [None] (a local, a call result) —
@@ -1515,7 +1621,9 @@ let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
      [is_anchor] (top level) also excludes an adaptive select-of-holes, whose
      [None] tag would otherwise read as a grounded anchor. *)
   let is_hole = function None -> true | _ -> false in
-  let bare = Ast.no_loc_instr Ast.Hole in
+  (* The absent operand of an [iN] operator is an [iN] value, whether or not the
+     hole is pinned below, so it carries that expectation either way. *)
+  let bare = expect (inttype sz) (Ast.no_loc_instr Ast.Hole) in
   let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
   (* A pinned hole: [(_ as i64)] etc. [pin_width] leaves it bare for [i32] (the
      re-parse default needs no pin), so an [i32] op adds no noise. *)
@@ -1544,7 +1652,10 @@ let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
       | _ -> false
     in
     let width = if both_flexible then width else None in
-    Stack.push_num width (with_loc (BinOp (op_loc i0.info op, e1, e2)))
+    (* The sum's own type is the operand width whether or not the tag above keeps
+       it flexible. *)
+    Stack.push_num width
+      (expect (inttype sz) (with_loc (BinOp (op_loc i0.info op, e1, e2))))
   in
   (* A comparison yields i32 whatever its operands' width, so it *erases* it:
      [(4096 >>u 40) == 0] would re-default the shift to i32 and flip true->false.
@@ -1581,7 +1692,8 @@ let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
     let* e2 = pop_typed (inttype sz) in
     let* e1, w1 = pop_typed_tagged (inttype sz) in
     Stack.push_num w1
-      (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ])))
+      (expect (inttype sz)
+         (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ]))))
   in
   match op with
   | Add -> symbol arith Add
@@ -1608,7 +1720,12 @@ let float_un_op i0 sz (op : Src.float_un_op) =
      with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
      their call-target hints, so one cannot be reinterpreted as the other. *)
   let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
-    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+    {
+      desc = i;
+      info = i0.Src.info;
+      hints = Wax_wasm.Hints.none;
+      expected = None;
+    }
   in
   (* A no-argument instruction method [recv.meth()]. *)
   let method_call recv meth =
@@ -1617,12 +1734,7 @@ let float_un_op i0 sz (op : Src.float_un_op) =
   let* recv = Stack.try_pop_tagged in
   let e' = Option.map fst recv in
   let recv_w = match recv with Some (_, w) -> w | None -> None in
-  let e ty =
-    match e' with
-    | Some e -> e
-    | None ->
-        Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype ty))
-  in
+  let e ty = match e' with Some e -> e | None -> typed_hole ty in
   (* Pin an inlined convert SOURCE to its non-i32 opcode width, so
      [f32.convert_i64_s (i64.const 8)] does not decompile to a bare [8] that
      re-defaults to i32 and recompiles as [f32.convert_i32_s] — a value-inert
@@ -1632,8 +1744,7 @@ let float_un_op i0 sz (op : Src.float_un_op) =
      drifts). Mirrors [int_un_op]'s [pin] and [Reinterpret] below. *)
   let pin_src ty x =
     match (e', ty) with
-    | Some _, (Ast.I64 | F32 | F64) ->
-        { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+    | Some _, (Ast.I64 | F32 | F64) -> cast_to (Valtype ty) x
     | _ -> x
   in
   (* [neg]/[abs]/…/[sqrt] have result width = operand width, so they carry the
@@ -1660,46 +1771,52 @@ let float_un_op i0 sz (op : Src.float_un_op) =
   let e_pinned ty =
     let x = e ty in
     match e' with
-    | Some e when reparse_adaptive e ->
-        { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+    | Some e when reparse_adaptive e -> cast_to (Valtype ty) x
     | _ -> x
   in
   let e_method_pinned ty = match ty with Ast.F64 -> e ty | _ -> e_pinned ty in
+  (* Every float unary op's result has the float width the opcode names — the
+     conversions ([convert]/[reinterpret]) too, whose operand is an integer. *)
   Stack.push_num result_w
-    (match op with
-    | Neg -> with_loc (UnOp (op_loc i0.info Ast.Neg, e_pinned (floattype sz)))
-    | Abs -> method_call (e_method_pinned (floattype sz)) "abs"
-    | Ceil -> method_call (e_method_pinned (floattype sz)) "ceil"
-    | Floor -> method_call (e_method_pinned (floattype sz)) "floor"
-    | Trunc -> method_call (e_method_pinned (floattype sz)) "trunc"
-    | Nearest -> method_call (e_method_pinned (floattype sz)) "nearest"
-    | Sqrt -> method_call (e_method_pinned (floattype sz)) "sqrt"
-    | Convert (sz', signage) ->
-        let ity = inttype (sz' :> [ `I32 | `I64 | `F32 | `F64 ]) in
-        with_loc
-          (Cast
-             ( pin_src ity (e ity),
-               Signedtype { typ = sz; signage; strict = false } ))
-    | Reinterpret ->
-        method_call
-          (let e = e (inttype sz) in
-           if e' = None then e
-           else { e with desc = Ast.Cast (e, Valtype (inttype sz)) })
-          "from_bits")
+  @@ expect (floattype sz)
+       (match op with
+       | Neg ->
+           with_loc (UnOp (op_loc i0.info Ast.Neg, e_pinned (floattype sz)))
+       | Abs -> method_call (e_method_pinned (floattype sz)) "abs"
+       | Ceil -> method_call (e_method_pinned (floattype sz)) "ceil"
+       | Floor -> method_call (e_method_pinned (floattype sz)) "floor"
+       | Trunc -> method_call (e_method_pinned (floattype sz)) "trunc"
+       | Nearest -> method_call (e_method_pinned (floattype sz)) "nearest"
+       | Sqrt -> method_call (e_method_pinned (floattype sz)) "sqrt"
+       | Convert (sz', signage) ->
+           let ity = inttype (sz' :> [ `I32 | `I64 | `F32 | `F64 ]) in
+           cast_to
+             (Signedtype { typ = sz; signage; strict = false })
+             (pin_src ity (e ity))
+       | Reinterpret ->
+           method_call
+             (let e = e (inttype sz) in
+              if e' = None then e else cast_to (Valtype (inttype sz)) e)
+             "from_bits")
 
 let float_bin_op i0 sz (op : Src.float_bin_op) =
   (* A Wax instruction at the source instruction's span. Built fresh rather than
      with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
      their call-target hints, so one cannot be reinterpreted as the other. *)
   let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
-    { desc = i; info = i0.Src.info; hints = Wax_wasm.Hints.none }
+    {
+      desc = i;
+      info = i0.Src.info;
+      hints = Wax_wasm.Hints.none;
+      expected = None;
+    }
   in
   (* As for [int_bin_op] (see there for the anchor/flexible/hole terminology): an
      arithmetic operator preserves the operand width and its result is flexible
      only when both operands are (else grounded, no tag); with no anchor a hole is
      pinned so it does not re-default to i32. *)
   let is_hole = function None -> true | _ -> false in
-  let bare = Ast.no_loc_instr Ast.Hole in
+  let bare = expect (floattype sz) (Ast.no_loc_instr Ast.Hole) in
   let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
   let pinned = Stack.pin_width arith bare in
   let symbol width op =
@@ -1718,7 +1835,8 @@ let float_bin_op i0 sz (op : Src.float_bin_op) =
       | _ -> false
     in
     let width = if both_flexible then width else None in
-    Stack.push_num width (with_loc (BinOp (op_loc i0.info op, e1, e2)))
+    Stack.push_num width
+      (expect (floattype sz) (with_loc (BinOp (op_loc i0.info op, e1, e2))))
   in
   (* As for [int_bin_op]: pin exactly one operand whenever no operand is an
      anchor — a hole if there is one (cast on the hole), else the first flexible
@@ -1749,7 +1867,8 @@ let float_bin_op i0 sz (op : Src.float_bin_op) =
     let* e2 = pop_typed (floattype sz) in
     let* e1, w1 = pop_typed_tagged (floattype sz) in
     Stack.push_num w1
-      (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ])))
+      (expect (floattype sz)
+         (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ]))))
   in
   match op with
   | Add -> symbol arith Add
@@ -1968,9 +2087,15 @@ let pin_descriptor ctx ~exact x d =
         | _ -> false
       in
       match d.Ast.desc with
-      | Ast.Hole | Ast.Null -> { d with Ast.desc = Ast.Cast (d, pin) }
+      | Ast.Hole | Ast.Null -> cast_to pin d
       | Ast.Cast (inner, Ast.Valtype (Ast.Ref { typ; _ })) when is_bottom typ ->
-          { d with Ast.desc = Ast.Cast (inner, pin) }
+          (* Rebuilt on [d] to keep the outer node's span; its expectation is the
+             new cast's target, not the replaced cast's operand. *)
+          {
+            d with
+            Ast.desc = Ast.Cast (inner, pin);
+            expected = cast_result pin;
+          }
       | _ -> d)
 
 (* As [pin_descriptor], taking the target as the [reftype] the branch/cast
@@ -2039,7 +2164,7 @@ let is_poly_terminator (i : _ Ast.instr) =
    typed-[select] immediate, itself a documented residual. *)
 let rec pin_hierarchy pin (e : _ Ast.instr) =
   match e.Ast.desc with
-  | Ast.Hole -> Some { e with Ast.desc = Ast.Cast (e, pin) }
+  | Ast.Hole -> Some (cast_to pin e)
   | Ast.NonNull inner ->
       Option.map
         (fun inner -> { e with Ast.desc = Ast.NonNull inner })
@@ -2062,7 +2187,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
 
 and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) : _ Ast.instr =
-    { Ast.desc = i'; info = i.info; hints = Wax_wasm.Hints.none }
+    {
+      Ast.desc = i';
+      info = i.info;
+      hints = Wax_wasm.Hints.none;
+      expected = None;
+    }
   in
   let mem_call m meth args =
     with_loc
@@ -2731,9 +2861,13 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       in
       let arg =
         match arg.Ast.desc with
-        | Ast.Hole | Ast.Null -> { arg with desc = Ast.Cast (arg, exact_pin) }
+        | Ast.Hole | Ast.Null -> cast_to exact_pin arg
         | Ast.Cast (inner, Valtype (Ref { typ; _ })) when is_bottom typ ->
-            { arg with desc = Ast.Cast (inner, exact_pin) }
+            {
+              arg with
+              desc = Ast.Cast (inner, exact_pin);
+              expected = cast_result exact_pin;
+            }
         | _ -> arg
       in
       Stack.push 1 (with_loc (GetDescriptor arg))
@@ -2851,10 +2985,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
           let pin1_hole = is_hole o1 in
           let pin2_hole = is_hole o2 && not pin1_hole in
           let pin1_flex = (not pin1_hole) && not pin2_hole in
-          let pinned =
-            Ast.no_loc_instr (Ast.Cast (Ast.no_loc_instr Ast.Hole, Valtype t))
-          in
-          let cast e = { e with Ast.desc = Ast.Cast (e, Valtype t) } in
+          let pinned = typed_hole t in
+          let cast e = cast_to (Valtype t) e in
           let e1 =
             match o1 with
             | Some (e, _) -> if pin1_flex then cast e else e
@@ -2865,7 +2997,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             | Some (e, _) -> e
             | None -> if pin2_hole then pinned else Ast.no_loc_instr Ast.Hole
           in
-          Stack.push_num None (with_loc (Select (cond, e1, e2)))
+          Stack.push_num None (expect t (with_loc (Select (cond, e1, e2))))
       | _ ->
           (* Untyped/i32/reference select, or a typed select an arm anchors: the
              result width is that of the arms (both share the select's type),
@@ -3339,6 +3471,7 @@ let string_of_name (nm : Src.name) : Ast.location Ast.instr =
     desc = Ast.String (None, nm.Wax_utils.Ast.desc);
     info = nm.Wax_utils.Ast.info;
     hints = Wax_wasm.Hints.none;
+    expected = None;
   }
 
 (* Reserve, in a function's fresh local namespace, the Wax names of the
@@ -3992,6 +4125,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                          Wax_utils.Ast.concat_desc init );
                    info = f.Ast.info;
                    hints = Wax_wasm.Hints.none;
+                   expected = None;
                  };
                attributes = [];
              })

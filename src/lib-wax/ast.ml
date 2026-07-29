@@ -256,11 +256,25 @@ type 'info instr_desc =
    compilation-hints proposals) of this instruction, written in Wax as an
    attribute prefixing it ([#[likely]], [#[freq = 16]], ...). It is a field rather
    than a wrapper node so that the matches on [desc] — which is nearly every match
-   on an instruction — neither see it nor have to see through it. *)
+   on an instruction — neither see it nor have to see through it.
+
+   [expected] is the type the value this node produces MUST have, when a producer
+   knows it independently of Wax inference: {!Wax_conversion.From_wasm} records
+   the type the Wasm opcode it decompiled this node from states. Nothing in the
+   source language sets it (a parsed module leaves it [None]) and nothing
+   user-visible reads it — unlike [hints] it is never printed. The typer's
+   width-check mode ({!Typing.f}'s [~width_check]) compares its own inferred type
+   for the node against it and reports a mismatch as an internal-invariant
+   failure: a decompiled expression whose printed form Wax would re-infer at
+   another width silently changes the opcode on recompile. A field rather than a
+   side table keyed by location, because a synthesized dead-code node carries no
+   real span; and rather than a wrapper node, so no match on [desc] has to see
+   through it (as for [hints]). *)
 and 'info instr = {
   desc : 'info instr_desc;
   info : 'info;
   hints : ident Wax_wasm.Hints.t;
+  expected : valtype option;
 }
 
 and 'info trycatch_arm = {
@@ -274,7 +288,12 @@ and 'info trycatch_arm = {
    counterpart of [no_loc], which builds an [annotated] and so cannot serve a
    record that carries hints as well. *)
 let no_loc_instr desc : location instr =
-  { desc; info = Wax_utils.Ast.dummy_loc; hints = Wax_wasm.Hints.none }
+  {
+    desc;
+    info = Wax_utils.Ast.dummy_loc;
+    hints = Wax_wasm.Hints.none;
+    expected = None;
+  }
 
 (* An attribute is a name with an optional value expression and an optional
    conditional-compilation guard: [#[export = "f"]] carries a value, [#[start]]

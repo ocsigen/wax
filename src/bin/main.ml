@@ -229,7 +229,9 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d ->
-        Wax_lang.Typing.f ~simplify:(not faithful) ~faithful d wax_ast)
+        Wax_lang.Typing.f ~simplify:(not faithful) ~faithful
+          ~width_check:(Wax_utils.Debug.is_enabled Width_check)
+          d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
   let trivia, tail =
@@ -413,7 +415,9 @@ let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:None (fun d ->
-        Wax_lang.Typing.f ~simplify:(not faithful) ~faithful d wax_ast)
+        Wax_lang.Typing.f ~simplify:(not faithful) ~faithful
+          ~width_check:(Wax_utils.Debug.is_enabled Width_check)
+          d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
   output_wax ~oc ~color:output_color ~trivia:(Wax_utils.Trivia.empty ()) wax_ast
@@ -1059,13 +1063,16 @@ let debug_option =
   let doc =
     "Enable debug output for $(i,CATEGORY) (repeatable, comma-separated). \
      Categories: timing (log the wall-clock running time of each compiler \
-     pass)."
+     pass), width-check (on a wasm/wat to wax conversion, check that the \
+     decompiled Wax re-infers the widths the WebAssembly states)."
   in
   let category_conv =
     Arg.Conv.make ~docv:"CATEGORY" ~parser:Wax_utils.Debug.parse
       ~pp:(fun ppf c ->
         Format.pp_print_string ppf
-          (match (c : Wax_utils.Debug.category) with Timing -> "timing"))
+          (match (c : Wax_utils.Debug.category) with
+          | Timing -> "timing"
+          | Width_check -> "width-check"))
       ()
   in
   (* The value is a comma-separated list, so [list category_conv]'s own
