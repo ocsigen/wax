@@ -1050,24 +1050,6 @@ module Stack = struct
   (* Push a numeric value tagged with the width its opcode states. *)
   let push_num width i stack = ((1, width, expect_width width i) :: stack, ())
 
-  (* Wrap [i] in an identity cast to its non-i32 width, recording it too. NOT the
-     width-drift mechanism any more — the typer owns that, from the recorded
-     expectation — but the fix for a Wax surface that names no type for the operand
-     AT ALL: a narrow store or RMW ([m.store16(a, v)], [m.atomic_rmw_add16(a, v)])
-     picks its i32/i64 form from what the value operand re-types to, and in DEAD
-     code the typer leaves such an operand polymorphic, so there is no resolved type
-     for the reconciliation to disagree with and nothing for it to repair. The value
-     must therefore carry the type in its printed form. [i32] needs no cast (it is
-     what an unconstrained operand re-types to) and adding one would only be noise;
-     [simplify] drops a redundant pin on an already-i64 operand. *)
-  let pin_ambiguous_width w (i : _ Ast.instr) =
-    match w with
-    | Some `I64 -> cast_to (Valtype I64) i
-    | Some `F32 -> cast_to (Valtype F32) i
-    | Some `F64 -> cast_to (Valtype F64) i
-    | Some `I32 -> expect I32 i
-    | None -> i
-
   (* An unconditional control-flow instruction ([br]/[br_table]/[return]/[become]/
      [unreachable]/[throw]/…) leaves the values still on the stack — below the
      operands it consumed — dead: [run] emits them as leftover statements but no
@@ -3087,15 +3069,17 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* value = Stack.pop in
       let* addr = Stack.pop in
       (* A narrow store ([store8/16/32]) picks its i32/i64 type from the value
-         operand's type on re-parse ([To_wasm]). When that operand is anchor-free
-         (a hole on the polymorphic dead-code stack, or a width-flexible
-         expression), it re-defaults to i32, silently narrowing the i64 form. Pin
-         the value to [i64] for the i64 store, mirroring the atomic path below;
-         [simplify] drops a redundant pin on an already-i64 operand. *)
+         operand's type ([To_wasm]), which is the one place a Wax surface names no
+         type for its operand at all — [m.store16] is both the i32 and the i64
+         form. Record the store's own type on the value, and the typer states it in
+         the printed form wherever the value would not carry it: a width-flexible
+         expression that would re-default to i32, or (the [Unknown]-cell case) a
+         hole on the polymorphic dead-code stack, which the lowering reads as i32.
+         See {!Wax_lang.Typing.f}'s [~width_check]. *)
       let value =
-        match result_ty with
-        | `I64 -> Stack.pin_ambiguous_width (Some `I64) value
-        | `I32 -> value
+        Stack.expect_width
+          (Some (result_ty :> [ `I32 | `I64 | `F32 | `F64 ]))
+          value
       in
       let meth, nat =
         match size with
@@ -3128,9 +3112,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         if narrow then
           List.map2
             (fun e t ->
-              Stack.pin_ambiguous_width
-                (Some (t :> [ `I32 | `I64 | `F32 | `F64 ]))
-                e)
+              Stack.expect_width (Some (t :> [ `I32 | `I64 | `F32 | `F64 ])) e)
             ops operands
         else ops
       in

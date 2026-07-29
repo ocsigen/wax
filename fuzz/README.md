@@ -710,6 +710,21 @@ developer tool for locating a repair (and what
   so it surfaces through the ordinary decompile legs as a `ROUNDTRIP` finding. On a
   valid module it never fires: it means the module does not typecheck.
 
+After the pin heuristics were replaced by that reconciliation (including the
+values the typer leaves *unresolved*, which the lowering would otherwise read at
+its positional default), the silent-drift classes left are exactly two, and the
+second is why the round-trip legs above are not redundant:
+
+1. **Reference and v128 types**, which the expectation channel does not carry at
+   all — `From_wasm` still places those pins itself (a `ref.null` hierarchy pin, a
+   typed-`select` reference arm, the descriptor pins).
+2. **A recording gap** — a width-sensitive value `From_wasm` emits without
+   recording what its opcode stated. Reconciliation can only check what was
+   recorded, so such a value is invisible to it in either mode; only the
+   end-to-end opcode comparisons (`WIDTHDRIFT`, `FAITHDRIFT`, `drop-width.sh`) can
+   see it. Adding a `From_wasm` path therefore means adding the *recording*, and
+   these legs are what catch a forgotten one.
+
 ### Deliberately *not* an oracle
 
 Textual equivalence of `x → wasm` vs `x → wax → wasm`. wax legitimately reorders

@@ -1018,8 +1018,11 @@ module Error = struct
                not repair it."))
       (text "Decompiler width invariant violated for"
        ++ kw expr
-       ++ text "recompiling it would infer"
-       ++ kw (Infer.Output.valtype_string inferred)
+       ++ (match inferred with
+         | Some inferred ->
+             text "recompiling it would infer"
+             ++ kw (Infer.Output.valtype_string inferred)
+         | None -> text "recompiling it would leave its type unresolved")
        ++ text "but the WebAssembly it came from requires"
        ++ kw (Infer.Output.valtype_string required)
       ^^ text
@@ -12368,7 +12371,16 @@ let width_expr (i : _ instr) =
    the typer left polymorphic) is left alone: nothing was resolved to disagree
    with, and pinning it would invent a type where the Wasm side is polymorphic
    too. So is a node that leaves no value or several. *)
-let rec reconcile_widths mode diagnostics ~under_cast (i : _ instr) : _ instr =
+(* The type a cast ASCRIBES to its operand in the printed form: only an
+   identity/width cast states its operand's type ([_ as i64] makes the operand an
+   i64), and that is what a re-parse reads. A signed conversion states its RESULT's
+   ([_ as i64_s] is a truncation of a float), so it ascribes nothing to the operand
+   and a value under it still needs its own record honoured. *)
+let ascribed_type (t : Ast.casttype) =
+  match t with Valtype ((I32 | I64 | F32 | F64) as t) -> Some t | _ -> None
+
+let rec reconcile_widths mode diagnostics ~under_cast ~ascribed (i : _ instr) :
+    _ instr =
   (* This node first: a repair here grounds the cell its whole flexible subtree
      shares, so the recursion below sees the settled type. *)
   let pin =
@@ -12416,7 +12428,51 @@ let rec reconcile_widths mode diagnostics ~under_cast (i : _ instr) : _ instr =
                 end
                 else begin
                   Error.width_invariant_violated diagnostics ~location
-                    ~inferred:inferred_w ~required ~pinnable (width_expr i);
+                    ~inferred:(Some inferred_w) ~required ~pinnable
+                    (width_expr i);
+                  None
+                end
+            | _ -> None)
+        (* The cell is UNRESOLVED: nothing in the module fixed this value's type.
+           Only the genuinely polymorphic [Unknown] is repairable here (see below
+           for the other two), and only when the printed form does not already
+           state the recorded type — a hole under [_ as i64] needs nothing, the
+           cast IS the pin. Where nothing states it, the value's type is decided by
+           the LOWERING's default for its position, and the one family of positions
+           that reads an operand's type to pick an opcode — a narrow store or
+           atomic RMW, whose method name carries only the access width — defaults
+           to i32 ([To_wasm.atomic_op], the [StoreS] arm), so an [i64] record there
+           silently narrows the store. The pin is what states it.
+
+           Only a tree of HOLES is pinned: it holds no value, so grounding it
+           invents no conversion (the same argument as in the resolved case above),
+           and it is the only shape that reaches here — a live operand is typed by
+           its consumer, and a dead one is a hole. Anything else falls through
+           unrepaired, as before.
+
+           [Error] is skipped: this node's own typing already failed and was
+           reported, so a pin would only decorate a rejected module. [Collecting]
+           is skipped too: it is not a value's cell but a block's
+           result-under-inference, and [From_wasm]'s [forget_expected] clears the
+           expectations of the values feeding one, so an expectation reaching it
+           would mean that clearing has a hole — worth leaving visible as an
+           unrepaired case rather than papering over with a pin. (Measured over
+           300+ corpus modules: no expectation reaches either.) *)
+        | Some required, None -> (
+            match (inferred, numeric_valtype required) with
+            | Unknown, Some required_v
+              when ascribed <> Some required
+                   && (match under_cast with
+                     | Some accepted -> accepted = numeric_family required
+                     | None -> true)
+                   && defaulting_tree ~holes_only:true i ->
+                if mode = `Repair then begin
+                  Cell.set cell (Valtype required_v);
+                  Some (required, required_v)
+                end
+                else begin
+                  Error.width_invariant_violated diagnostics ~location
+                    ~inferred:None ~required ~pinnable:true (width_expr i);
                   None
                 end
             | _ -> None)
@@ -12435,10 +12491,14 @@ let rec reconcile_widths mode diagnostics ~under_cast (i : _ instr) : _ instr =
            position where a folded literal tree is still repairable, and the family
            it accepts travels with the recursion. *)
         | Cast (e, t) when cast_operand_family t <> None ->
-            Cast (sub ~under_cast:(cast_operand_family t) e, t)
+            Cast
+              ( sub ~under_cast:(cast_operand_family t)
+                  ~ascribed:(ascribed_type t) e,
+                t )
         | desc ->
-            Ast_utils.map_desc ~instr:(sub ~under_cast:None)
-              ~block:(Ast_utils.smart_map (sub ~under_cast:None))
+            Ast_utils.map_desc
+              ~instr:(sub ~under_cast:None ~ascribed:None)
+              ~block:(Ast_utils.smart_map (sub ~under_cast:None ~ascribed:None))
               desc);
     }
   in
@@ -12466,7 +12526,7 @@ let reconcile_module_widths mode diagnostics
           f with
           Annot.desc =
             Ast_utils.map_modulefield_instr
-              (reconcile_widths mode diagnostics ~under_cast:None)
+              (reconcile_widths mode diagnostics ~under_cast:None ~ascribed:None)
               f.Annot.desc;
         })
       m

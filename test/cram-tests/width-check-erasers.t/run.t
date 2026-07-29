@@ -46,6 +46,39 @@ the first one), naming the expression and the two types.
     it by pinning the expression.
   [128]
 
+One class the reconciliation owns has no inferred width to disagree with at all:
+a value the typer leaves UNRESOLVED (a hole on the polymorphic dead-code stack)
+whose printed form nothing ascribes. The lowering reads such an operand at its
+positional default — i32 wherever an operand's type picks the opcode, which is a
+narrow store or atomic RMW, whose method name carries only the access width — so
+an i64 record there would silently narrow the store. The pin is what states it:
+
+  $ cat > ns.wat <<'WAT'
+  > (module (memory 1) (func (export "f") unreachable i64.store16))
+  > WAT
+  $ wax -i wat -f wax ns.wat
+  memory m: i32 [1];
+  #[export]
+  fn f() {
+      unreachable;
+      m.store16(_, _ as i64);
+  }
+  $ wax -i wat -f wax ns.wat -o ns.wax && wax -i wax -f wasm ns.wax -o ns.wasm
+  $ wax -i wasm ns.wasm -f wat | grep -oE 'i(32|64)\.store16'
+  i64.store16
+
+The detector mode names that case in its own terms:
+
+  $ wax --debug width-check -i wat -f wax ns.wat -o /dev/null
+  Error:
+    Decompiler width invariant violated for '_' recompiling it would leave its
+    type unresolved but the WebAssembly it came from requires 'i64'.
+  Hint:
+    This is an internal invariant of the WebAssembly-to-Wax conversion, not a
+    problem with the input; without '--debug width-check' the conversion repairs
+    it by pinning the expression.
+  [128]
+
 Reconciliation is a decompiler self-check: a module that carries no recorded
 expectation (anything but `From_wasm` output) has nothing to reconcile, so both
 modes are a no-op on a wax input.
