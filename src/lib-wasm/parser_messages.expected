@@ -2102,7 +2102,7 @@ Expecting ')'.
 
 parse_link_script: LPAREN ASSERT_EXCEPTION WAIT
 
-Expecting a link action.
+Expecting an action.
 
 parse_link_script: LPAREN ASSERT_EXHAUSTION LPAREN GET STRING RPAREN STRING WAIT
 
@@ -2115,7 +2115,7 @@ Expecting a string.
 
 parse_link_script: LPAREN ASSERT_EXHAUSTION WAIT
 
-Expecting a link action.
+Expecting an action.
 
 parse_link_script: LPAREN ASSERT_INVALID LPAREN MODULE RPAREN STRING WAIT
 
@@ -2308,7 +2308,7 @@ Expecting ')', or a result pattern.
 
 parse_link_script: LPAREN ASSERT_RETURN WAIT
 
-Expecting a link action.
+Expecting an action.
 
 parse_link_script: LPAREN ASSERT_RETURN_NAN LPAREN GET STRING RPAREN WAIT
 
@@ -2317,7 +2317,7 @@ Expecting ')'.
 
 parse_link_script: LPAREN ASSERT_RETURN_NAN WAIT
 
-Expecting a link action.
+Expecting an action.
 
 parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN GET ID WAIT
 
@@ -2360,7 +2360,7 @@ Expecting 'get', or 'invoke'.
 
 parse_link_script: LPAREN ASSERT_SUSPENSION WAIT
 
-Expecting a link action.
+Expecting an action.
 
 parse_link_script: LPAREN ASSERT_TRAP LPAREN GET STRING RPAREN STRING WAIT
 
@@ -2386,7 +2386,7 @@ Expecting 'get', 'invoke', or 'module'.
 
 parse_link_script: LPAREN ASSERT_TRAP WAIT
 
-Expecting a link action, or a link script instance.
+Expecting a script instance, or an action.
 
 parse_link_script: LPAREN ASSERT_UNLINKABLE LPAREN MODULE RPAREN STRING WAIT
 
@@ -2403,7 +2403,7 @@ Expecting 'module'.
 
 parse_link_script: LPAREN ASSERT_UNLINKABLE WAIT
 
-Expecting a link script instance.
+Expecting a script instance.
 
 parse_link_script: LPAREN GET ID WAIT
 
@@ -2552,15 +2552,15 @@ Expecting ')', or a string.
 
 parse_link_script: LPAREN MODULE RPAREN LPAREN VEC_TERN_OP
 
-Syntax error
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
 
 parse_link_script: LPAREN MODULE RPAREN WAIT
 
-Expecting a link cmd, or end of file.
+Expecting a command, or end of file.
 
 parse_link_script: LPAREN MODULE WAIT
 
-Syntax error
+Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
 <2>This '(' opens the enclosing construct.
 
 parse_link_script: LPAREN OUTPUT ID WAIT
@@ -2651,7 +2651,7 @@ Expecting ')', a command, a shared clause, or an identifier ('$...').
 
 parse_link_script: LPAREN VEC_TERN_OP
 
-Syntax error
+Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
 
 parse_link_script: LPAREN WAIT ID WAIT
 
@@ -2665,7 +2665,7 @@ Expecting ')', or an identifier ('$...').
 
 parse_link_script: WAIT
 
-Expecting a parse link script.
+Expecting a script command or module field ('('), or end of file.
 
 parse_script: FEATURE_ANNOT STRING WAIT
 

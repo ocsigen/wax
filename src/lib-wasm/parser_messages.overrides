@@ -14,11 +14,13 @@
 # protection). The claim-soundness of the prose itself is the author's
 # responsibility: the oracle checks symbols, not free text.
 #
-# These are the 18 structurally immovable over-5 "enumeration" fallbacks (the
+# Most of these are the structurally immovable over-5 "enumeration" fallbacks (the
 # dot sits at the start of a construct whose FIRST set overflows the readable
-# cap, so the generated message degrades to a bare "Syntax error") plus one
-# residual misleading "(result" singular. Each names the legal category rather
-# than the bare error.
+# cap, so the generated message degrades to a bare "Syntax error"). Each names the
+# legal category rather than the bare error. The rest are the two states whose
+# generated message is misleading rather than absent: the residual "(result"
+# singular, and the link-script grammar's initial state, which the generator can
+# only name after its own start symbol.
 
 # state 242: bare top-level '(' — the head of a module or a top-level field.
 parse: LPAREN WAIT
@@ -79,6 +81,26 @@ Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'e
 parse_script: LPAREN VEC_TERN_OP
 Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
 
+# state 1136: the link-script grammar's initial state, where the whole script is
+# still to come. The plain grammar never errors here (it reduces the empty command
+# list first, and reports "the script is complete, expecting end of file"), so
+# there is nothing to mirror and the derived message names the start symbol itself
+# ("a parse link script"). Say what may open a script instead.
+parse_link_script: WAIT
+Expecting a script command or module field ('('), or end of file.
+
+# state 1137: the same position in the link-script grammar. The two grammars keep
+# their own copies of the script rules, so each top-level '(' state needs its own
+# entry; the message is the plain one's, since the user is writing the same script.
+parse_link_script: LPAREN VEC_TERN_OP
+Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+
+# state 1441: a '(' at link-script top level once a command has been read. The
+# bare-module-field form is only legal as the whole script, so unlike state 1137
+# this position takes a command and nothing else.
+parse_link_script: LPAREN MODULE RPAREN LPAREN VEC_TERN_OP
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+
 # state 1143: a '(' inside a (thread …) opens a command.
 parse_link_script: LPAREN THREAD LPAREN VEC_TERN_OP
 Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
@@ -90,6 +112,11 @@ Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'asse
 # state 1131: after (module in a script — a defined module, a binary/quote
 # module, or a module instance.
 parse_script: LPAREN MODULE WAIT
+Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
+<2>This '(' opens the enclosing construct.
+
+# state 1358: the same position in the link-script grammar (see state 1137).
+parse_link_script: LPAREN MODULE WAIT
 Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
 <2>This '(' opens the enclosing construct.
 
