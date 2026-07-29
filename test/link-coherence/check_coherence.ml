@@ -101,13 +101,8 @@ let delimiter_bytes = [ 0x0B; 0x05; 0x07; 0x18; 0x19 ]
 let parser_instr_offsets (m : Ast.location Binary.module_) =
   let acc = ref [] in
   let rec instr (i : Ast.location Binary.instr) =
-    match i.desc with
-    | Binary.Hinted (_, inner) ->
-        (* No bytecode of its own: the wrapped branch owns the offset. *)
-        instr inner
-    | desc ->
-        acc := i.info.loc_start.pos_cnum :: !acc;
-        block_children desc
+    acc := i.info.loc_start.pos_cnum :: !acc;
+    block_children i.desc
   and block_children = function
     | Binary.Block { block; _ }
     | Binary.Loop { block; _ }

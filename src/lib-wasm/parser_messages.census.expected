@@ -64,7 +64,7 @@
     1x Assuming that the locals are complete, expecting ')', or instructions.
        <^_>these locals
        <_>This '(' opens the enclosing construct.
-    4x Assuming that the module fields are complete, expecting ')'.
+    5x Assuming that the module fields are complete, expecting ')'.
        <^_>these module fields
        <_>This '(' opens the enclosing construct.
     1x Assuming that the module fields are complete, expecting end of file.
@@ -110,7 +110,7 @@
     2x Expecting '(', or a descriptor clause.
     5x Expecting '('.
     1x Expecting '(then', or a folded instruction.
-    1x Expecting ')', 'binary', 'quote', a module field, or an identifier ('$...').
+    2x Expecting ')', 'binary', 'quote', a module field, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', a block type, a label, catches, or instructions.
        <_>This '(' opens the enclosing construct.
@@ -145,7 +145,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a condition.
     1x Expecting ')', or a constant.
-    1x Expecting ')', or a constant.
+    2x Expecting ')', or a constant.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a data element.
     6x Expecting ')', or a data element.
@@ -162,10 +162,10 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a page-size clause.
     1x Expecting ')', or a result pattern.
-    1x Expecting ')', or a result pattern.
+    2x Expecting ')', or a result pattern.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a string.
-    5x Expecting ')', or a string.
+    7x Expecting ')', or a string.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or a type definition.
     1x Expecting ')', or a type definition.
@@ -183,7 +183,7 @@
     2x Expecting ')', or an external type.
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or an identifier ('$...').
-    3x Expecting ')', or an identifier ('$...').
+    4x Expecting ')', or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or an import group item.
     2x Expecting ')', or an index.
@@ -200,7 +200,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or parameters and results.
        <_>This '(' opens the enclosing construct.
-  112x Expecting ')'.
+  125x Expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'always_opt', 'freq', or 'never_opt'.
     1x Expecting 'and', 'not', 'or', a comparison operator, or an integer.
@@ -225,13 +225,13 @@
     1x Expecting 'field'.
     1x Expecting 'final', a composite type, an index, or descriptor clauses.
     2x Expecting 'func', 'global', 'memory', 'table', or 'tag'.
-    1x Expecting 'get', 'invoke', or 'module'.
-    1x Expecting 'get', or 'invoke'.
+    2x Expecting 'get', 'invoke', or 'module'.
+    2x Expecting 'get', or 'invoke'.
     1x Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'item', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
     1x Expecting 'memory', a data element type ('i8', 'i16', 'i32', 'i64', 'f32', 'f64', or 'v128'), or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
-    3x Expecting 'module'.
+    4x Expecting 'module'.
     2x Expecting 'mut', or 'ref'.
     1x Expecting 'nan', or a 32-bit float.
     1x Expecting 'nan', or a 64-bit float.
@@ -272,6 +272,10 @@
     2x Expecting a global type.
     3x Expecting a heap type.
     6x Expecting a label.
+    1x Expecting a link action, or a link script instance.
+    5x Expecting a link action.
+    1x Expecting a link cmd, or end of file.
+    1x Expecting a link script instance.
     2x Expecting a memory alignment, a memory offset, an 8-bit unsigned integer, or an index.
     2x Expecting a memory alignment, a memory offset, or an 8-bit unsigned integer.
     4x Expecting a memory alignment, or an 8-bit unsigned integer.
@@ -280,13 +284,14 @@
     1x Expecting a module field, or end of file.
     1x Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', 'rec', or 'module'.
     1x Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'elem', 'start', or 'rec'.
-    4x Expecting a module.
+    8x Expecting a module.
     1x Expecting a name, or an identifier ('$...').
     1x Expecting a name, or an import group item.
     6x Expecting a name.
     2x Expecting a number.
     1x Expecting a numeric operand, 'offset=', 'align=', or the next instruction.
     2x Expecting a parameter group.
+    1x Expecting a parse link script.
    11x Expecting a reference type.
     1x Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
     1x Expecting a result pattern.
@@ -296,8 +301,8 @@
     1x Expecting a script instance, or an action.
     1x Expecting a script instance.
     1x Expecting a storage type.
-    3x Expecting a string, or an identifier ('$...').
-   16x Expecting a string.
+    5x Expecting a string, or an identifier ('$...').
+   28x Expecting a string.
     1x Expecting a subtype, or an identifier ('$...').
     1x Expecting a subtype.
     1x Expecting a table type, or an identifier ('$...').
@@ -328,3 +333,6 @@
     1x Expecting instructions, or legacy catches.
     3x Expecting instructions.
     2x Expecting parameters and results.
+    2x Syntax error
+    1x Syntax error
+       <_>This '(' opens the enclosing construct.

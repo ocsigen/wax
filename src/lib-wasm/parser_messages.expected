@@ -911,7 +911,7 @@ parse: LPAREN FUNC IF ID LPAREN_THEN
 
 Expecting 'else', 'end', a block type, or instructions.
 
-parse: LPAREN FUNC IF LPAREN_RESULT RPAREN LPAREN_LOCAL
+parse: LPAREN FUNC IF LPAREN_RESULT RPAREN CATCH_ALL
 
 Assuming that the block type is complete, expecting 'else', 'end', or instructions.
 <^1>this block type
@@ -2095,6 +2095,578 @@ parse: WAIT
 Assuming that the module fields are complete, expecting end of file.
 <^1>these module fields
 
+parse_link_script: LPAREN ASSERT_EXCEPTION LPAREN GET STRING RPAREN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_EXCEPTION WAIT
+
+Expecting a link action.
+
+parse_link_script: LPAREN ASSERT_EXHAUSTION LPAREN GET STRING RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_EXHAUSTION LPAREN GET STRING RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_EXHAUSTION WAIT
+
+Expecting a link action.
+
+parse_link_script: LPAREN ASSERT_INVALID LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_INVALID LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_INVALID WAIT
+
+Expecting a module.
+
+parse_link_script: LPAREN ASSERT_INVALID_CUSTOM LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_INVALID_CUSTOM LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_INVALID_CUSTOM WAIT
+
+Expecting a module.
+
+parse_link_script: LPAREN ASSERT_MALFORMED LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_MALFORMED LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_MALFORMED WAIT
+
+Expecting a module.
+
+parse_link_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_MALFORMED_CUSTOM LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_MALFORMED_CUSTOM WAIT
+
+Expecting a module.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER LPAREN INSTR RPAREN WAIT
+
+Assuming that the result patterns are complete, expecting ')'.
+<^1>these result patterns
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER WAIT
+
+Expecting a result pattern.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST FLOAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST NAN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST WAIT
+
+Expecting 'nan', or a 32-bit float.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST FLOAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST NAN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST WAIT
+
+Expecting 'nan', or a 64-bit float.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST INT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST WAIT
+
+Expecting a 32-bit signed integer.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST INT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST WAIT
+
+Expecting a 64-bit signed integer.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR RPAREN WAIT
+
+Expecting ')', or a result pattern.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_ARRAY WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN NAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN WAIT
+
+Expecting ')', or an integer.
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_FUNC WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST NAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST WAIT
+
+Expecting an integer.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL WAIT
+
+Expecting ')', or a heap type.
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_STRUCT WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 FLOAT WAIT
+
+Assuming that the float or NaNs are complete, expecting ')'.
+<^1>these float or NaNs
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 WAIT
+
+Expecting a float or NaN.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST WAIT
+
+Expecting a vector shape.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
+
+Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
+
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN WAIT
+
+Expecting ')', or a result pattern.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN WAIT
+
+Expecting a link action.
+
+parse_link_script: LPAREN ASSERT_RETURN_NAN LPAREN GET STRING RPAREN WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_RETURN_NAN WAIT
+
+Expecting a link action.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN GET ID WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN GET STRING RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN GET STRING RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN GET STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN GET WAIT
+
+Expecting a string, or an identifier ('$...').
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN INVOKE ID WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN INVOKE STRING WAIT
+
+Expecting ')', or a constant.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN INVOKE WAIT
+
+Expecting a string, or an identifier ('$...').
+
+parse_link_script: LPAREN ASSERT_SUSPENSION LPAREN WAIT
+
+Expecting 'get', or 'invoke'.
+
+parse_link_script: LPAREN ASSERT_SUSPENSION WAIT
+
+Expecting a link action.
+
+parse_link_script: LPAREN ASSERT_TRAP LPAREN GET STRING RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_TRAP LPAREN GET STRING RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_TRAP LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_TRAP LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_TRAP LPAREN WAIT
+
+Expecting 'get', 'invoke', or 'module'.
+
+parse_link_script: LPAREN ASSERT_TRAP WAIT
+
+Expecting a link action, or a link script instance.
+
+parse_link_script: LPAREN ASSERT_UNLINKABLE LPAREN MODULE RPAREN STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN ASSERT_UNLINKABLE LPAREN MODULE RPAREN WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN ASSERT_UNLINKABLE LPAREN WAIT
+
+Expecting 'module'.
+
+parse_link_script: LPAREN ASSERT_UNLINKABLE WAIT
+
+Expecting a link script instance.
+
+parse_link_script: LPAREN GET ID WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN GET STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN GET WAIT
+
+Expecting a string, or an identifier ('$...').
+
+parse_link_script: LPAREN INPUT ID WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN INPUT STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INPUT WAIT
+
+Expecting a string, or an identifier ('$...').
+
+parse_link_script: LPAREN INVOKE ID WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT RPAREN WAIT
+
+Expecting ')', or a constant.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN F32_CONST WAIT
+
+Expecting a 32-bit float.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN F64_CONST FLOAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN F64_CONST WAIT
+
+Expecting a 64-bit float.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN I32_CONST INT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN I32_CONST WAIT
+
+Expecting a 32-bit signed integer.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN I64_CONST INT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN I64_CONST WAIT
+
+Expecting a 64-bit signed integer.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN REF_EXTERN NAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN REF_EXTERN WAIT
+
+Expecting an integer.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN REF_HOST NAT WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN REF_HOST WAIT
+
+Expecting an integer.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN REF_NULL NAT NAT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN REF_NULL WAIT
+
+Expecting a heap type.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 FLOAT WAIT
+
+Assuming that the 64-bit floats are complete, expecting ')'.
+<^1>these 64-bit floats
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 WAIT
+
+Expecting a 64-bit float.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN V128_CONST WAIT
+
+Expecting a vector shape.
+
+parse_link_script: LPAREN INVOKE STRING LPAREN WAIT
+
+Expecting a constant: 'i32.const', 'i64.const', 'f32.const', 'f64.const', 'v128.const', 'ref.null', 'ref.host', or 'ref.extern'.
+
+parse_link_script: LPAREN INVOKE STRING WAIT
+
+Expecting ')', or a constant.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN INVOKE WAIT
+
+Expecting a string, or an identifier ('$...').
+
+parse_link_script: LPAREN MODULE BINARY WAIT
+
+Expecting ')', or a string.
+<5>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN MODULE DEFINITION WAIT
+
+Expecting ')', 'binary', 'quote', a module field, or an identifier ('$...').
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN MODULE ID WAIT
+
+Assuming that the module fields are complete, expecting ')'.
+<^1>these module fields
+<5>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN MODULE QUOTE WAIT
+
+Expecting ')', or a string.
+<5>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN MODULE RPAREN LPAREN VEC_TERN_OP
+
+Syntax error
+
+parse_link_script: LPAREN MODULE RPAREN WAIT
+
+Expecting a link cmd, or end of file.
+
+parse_link_script: LPAREN MODULE WAIT
+
+Syntax error
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN OUTPUT ID WAIT
+
+Expecting ')', or a string.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN OUTPUT STRING WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN OUTPUT WAIT
+
+Expecting ')', a string, or an identifier ('$...').
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN REGISTER STRING ID WAIT
+
+Expecting ')'.
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN REGISTER STRING WAIT
+
+Expecting ')', or an identifier ('$...').
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN REGISTER WAIT
+
+Expecting a string.
+
+parse_link_script: LPAREN SCRIPT ID STRING_ANNOT
+
+Assuming that the script is complete, expecting ')'.
+<^1>this script
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
+
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
+
+parse_link_script: LPAREN SCRIPT WAIT
+
+Expecting ')', a command, or an identifier ('$...').
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN THREAD ID WAIT
+
+Assuming that the commands are complete, expecting ')'.
+<^1>these commands
+<4>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN RPAREN WAIT
+
+Assuming that the commands are complete, expecting ')'.
+<^1>these commands
+<5>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN WAIT
+
+Expecting '(', or ')'.
+
+parse_link_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE WAIT
+
+Expecting an identifier ('$...').
+
+parse_link_script: LPAREN THREAD LPAREN SHARED LPAREN WAIT
+
+Expecting 'module'.
+
+parse_link_script: LPAREN THREAD LPAREN SHARED WAIT
+
+Expecting '('.
+
+parse_link_script: LPAREN THREAD LPAREN VEC_TERN_OP
+
+Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
+
+parse_link_script: LPAREN THREAD WAIT
+
+Expecting ')', a command, a shared clause, or an identifier ('$...').
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN VEC_TERN_OP
+
+Syntax error
+
+parse_link_script: LPAREN WAIT ID WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_link_script: LPAREN WAIT WAIT
+
+Expecting ')', or an identifier ('$...').
+<2>This '(' opens the enclosing construct.
+
+parse_link_script: WAIT
+
+Expecting a parse link script.
+
 parse_script: FEATURE_ANNOT STRING WAIT
 
 Expecting ')'.
@@ -2268,138 +2840,6 @@ parse_script: LPAREN ASSERT_MALFORMED_CUSTOM WAIT
 
 Expecting a module.
 
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER LPAREN INSTR RPAREN WAIT
-
-Assuming that the result patterns are complete, expecting ')'.
-<^1>these result patterns
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN EITHER WAIT
-
-Expecting a result pattern.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST FLOAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST NAN WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F32_CONST WAIT
-
-Expecting 'nan', or a 32-bit float.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST FLOAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST NAN WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN F64_CONST WAIT
-
-Expecting 'nan', or a 64-bit float.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST INT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I32_CONST WAIT
-
-Expecting a 32-bit signed integer.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST INT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN I64_CONST WAIT
-
-Expecting a 64-bit signed integer.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR RPAREN WAIT
-
-Expecting ')', or a result pattern.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN INSTR WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_ARRAY WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN NAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_EXTERN WAIT
-
-Expecting ')', or an integer.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_FUNC WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST NAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_HOST WAIT
-
-Expecting an integer.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_NULL WAIT
-
-Expecting ')', or a heap type.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_STRUCT WAIT
-
-Expecting ')'.
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 FLOAT WAIT
-
-Assuming that the float or NaNs are complete, expecting ')'.
-<^1>these float or NaNs
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST F32X4 WAIT
-
-Expecting a float or NaN.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN V128_CONST WAIT
-
-Expecting a vector shape.
-
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
-
-Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
-
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN WAIT
 
 Expecting ')', or a result pattern.
@@ -2482,130 +2922,6 @@ parse_script: LPAREN DATA RPAREN WAIT
 
 Expecting a module field, or end of file.
 
-parse_script: LPAREN GET ID WAIT
-
-Expecting a string.
-
-parse_script: LPAREN GET STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN GET WAIT
-
-Expecting a string, or an identifier ('$...').
-
-parse_script: LPAREN INPUT ID WAIT
-
-Expecting a string.
-
-parse_script: LPAREN INPUT STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INPUT WAIT
-
-Expecting a string, or an identifier ('$...').
-
-parse_script: LPAREN INVOKE ID WAIT
-
-Expecting a string.
-
-parse_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT RPAREN WAIT
-
-Expecting ')', or a constant.
-
-parse_script: LPAREN INVOKE STRING LPAREN F32_CONST FLOAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN F32_CONST WAIT
-
-Expecting a 32-bit float.
-
-parse_script: LPAREN INVOKE STRING LPAREN F64_CONST FLOAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN F64_CONST WAIT
-
-Expecting a 64-bit float.
-
-parse_script: LPAREN INVOKE STRING LPAREN I32_CONST INT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN I32_CONST WAIT
-
-Expecting a 32-bit signed integer.
-
-parse_script: LPAREN INVOKE STRING LPAREN I64_CONST INT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN I64_CONST WAIT
-
-Expecting a 64-bit signed integer.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_EXTERN NAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_EXTERN WAIT
-
-Expecting an integer.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_HOST NAT WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_HOST WAIT
-
-Expecting an integer.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_NULL NAT NAT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN REF_NULL WAIT
-
-Expecting a heap type.
-
-parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 FLOAT WAIT
-
-Assuming that the 64-bit floats are complete, expecting ')'.
-<^1>these 64-bit floats
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE STRING LPAREN V128_CONST F32X4 WAIT
-
-Expecting a 64-bit float.
-
-parse_script: LPAREN INVOKE STRING LPAREN V128_CONST WAIT
-
-Expecting a vector shape.
-
-parse_script: LPAREN INVOKE STRING LPAREN WAIT
-
-Expecting a constant: 'i32.const', 'i64.const', 'f32.const', 'f64.const', 'v128.const', 'ref.null', 'ref.host', or 'ref.extern'.
-
-parse_script: LPAREN INVOKE STRING WAIT
-
-Expecting ')', or a constant.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN INVOKE WAIT
-
-Expecting a string, or an identifier ('$...').
-
 parse_script: LPAREN MODULE BINARY WAIT
 
 Expecting ')', or a string.
@@ -2650,21 +2966,6 @@ parse_script: LPAREN MODULE WAIT
 Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
 <2>This '(' opens the enclosing construct.
 
-parse_script: LPAREN OUTPUT ID WAIT
-
-Expecting ')', or a string.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN OUTPUT STRING WAIT
-
-Expecting ')'.
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN OUTPUT WAIT
-
-Expecting ')', a string, or an identifier ('$...').
-<2>This '(' opens the enclosing construct.
-
 parse_script: LPAREN REGISTER STRING ID WAIT
 
 Expecting ')'.
@@ -2679,76 +2980,9 @@ parse_script: LPAREN REGISTER WAIT
 
 Expecting a string.
 
-parse_script: LPAREN SCRIPT ID STRING_ANNOT
-
-Assuming that the script is complete, expecting ')'.
-<^1>this script
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
-
-Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
-
-parse_script: LPAREN SCRIPT WAIT
-
-Expecting ')', a command, or an identifier ('$...').
-<2>This '(' opens the enclosing construct.
-
-parse_script: LPAREN THREAD ID WAIT
-
-Assuming that the commands are complete, expecting ')'.
-<^1>these commands
-<4>This '(' opens the enclosing construct.
-
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN RPAREN WAIT
-
-Assuming that the commands are complete, expecting ')'.
-<^1>these commands
-<5>This '(' opens the enclosing construct.
-
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID RPAREN WAIT
-
-Expecting '(', or ')'.
-
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE ID WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN MODULE WAIT
-
-Expecting an identifier ('$...').
-
-parse_script: LPAREN THREAD LPAREN SHARED LPAREN WAIT
-
-Expecting 'module'.
-
-parse_script: LPAREN THREAD LPAREN SHARED WAIT
-
-Expecting '('.
-
-parse_script: LPAREN THREAD LPAREN VEC_TERN_OP
-
-Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
-
-parse_script: LPAREN THREAD WAIT
-
-Expecting ')', a command, a shared clause, or an identifier ('$...').
-<2>This '(' opens the enclosing construct.
-
 parse_script: LPAREN VEC_TERN_OP
 
 Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
-
-parse_script: LPAREN WAIT ID WAIT
-
-Expecting ')'.
-<3>This '(' opens the enclosing construct.
-
-parse_script: LPAREN WAIT WAIT
-
-Expecting ')', or an identifier ('$...').
-<2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN_EXPORT STRING LPAREN FUNC NAT NAT
 
@@ -2999,7 +3233,7 @@ parse_script: LPAREN_TYPE LPAREN CONT WAIT
 
 Expecting an index.
 
-parse_script: LPAREN_TYPE LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
+parse_script: LPAREN_TYPE LPAREN FUNC LPAREN_RESULT RPAREN VEC_TERN_OP
 
 Assuming that the parameters and results are complete, expecting ')'.
 <^1>these parameters and results
