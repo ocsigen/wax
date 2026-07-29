@@ -2,7 +2,11 @@
 
 type position = Line_start | Inline
 type kind = Line_comment | Block_comment | Annotation
-type trivia = Item of { content : string; kind : kind } | Blank_line
+
+type trivia =
+  | Item of { content : string; kind : kind; location : Ast.location }
+  | Blank_line
+
 type entry = { anchor : int; trivia : trivia; position : position }
 type context
 
@@ -52,8 +56,9 @@ val associate : collect:(locations -> unit) -> context -> t * entry list
 val make : unit -> context
 (** Create a new trivia context. *)
 
-val report_item : context -> kind -> string -> unit
-(** [report_item ctx kind content] reports a comment or an annotation. *)
+val report_item : context -> kind -> Ast.location -> string -> unit
+(** [report_item ctx kind location content] reports a comment or an annotation.
+*)
 
 val report_newline : context -> unit
 (** [report_newline ctx] reports a newline. *)

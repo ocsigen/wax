@@ -660,13 +660,15 @@ let rec token_rec ctx lexbuf =
       Wax_utils.Trivia.report_newline ctx;
       token_rec ctx lexbuf (* Skip standalone newlines in Wat *)
   | linecomment ->
-      let content = Sedlexing.Utf8.lexeme lexbuf in
-      Wax_utils.Trivia.report_item ctx Line_comment content;
+      let content =
+        with_loc ctx (fun lexbuf -> Sedlexing.Utf8.lexeme lexbuf) lexbuf
+      in
+      Wax_utils.Trivia.report_item ctx Line_comment content.info content.desc;
       token_rec ctx lexbuf
   | Plus (' ' | '\t') -> token_rec ctx lexbuf
   | "(;" ->
-      let s = comment lexbuf in
-      Wax_utils.Trivia.report_item ctx Block_comment s;
+      let s = with_loc ctx (fun lexbuf -> comment lexbuf) lexbuf in
+      Wax_utils.Trivia.report_item ctx Block_comment s.info s.desc;
       token_rec ctx lexbuf
   | "(@string" -> STRING_ANNOT
   | "(@char" -> CHAR_ANNOT
@@ -682,8 +684,8 @@ let rec token_rec ctx lexbuf =
   (* … and the function-level one. *)
   | "(@metadata.code.compilation_priority" -> COMPILATION_PRIORITY_ANNOT
   | "(@", Plus idchar ->
-      skip_annotation 1 lexbuf;
-      Wax_utils.Trivia.report_item ctx Annotation "";
+      let l = with_loc ctx (fun lexbuf -> skip_annotation 1 lexbuf) lexbuf in
+      Wax_utils.Trivia.report_item ctx Annotation l.info "";
       token_rec ctx lexbuf
   | "(@\"" ->
       let s = string lexbuf in
@@ -712,8 +714,8 @@ let rec token_rec ctx lexbuf =
                ( Sedlexing.lexing_bytes_positions lexbuf,
                  Wax_utils.Message.text
                    "An annotation id cannot be the empty string." ));
-        skip_annotation 1 lexbuf;
-        Wax_utils.Trivia.report_item ctx Annotation "";
+        let l = with_loc ctx (fun lexbuf -> skip_annotation 1 lexbuf) lexbuf in
+        Wax_utils.Trivia.report_item ctx Annotation l.info "";
         token_rec ctx lexbuf)
   | id ->
       let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in

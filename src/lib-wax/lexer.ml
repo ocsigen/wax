@@ -162,12 +162,14 @@ let rec token_rec ctx lexbuf =
       Wax_utils.Trivia.report_newline ctx;
       token_rec ctx lexbuf
   | linecomment ->
-      let content = Sedlexing.Utf8.lexeme lexbuf in
-      Wax_utils.Trivia.report_item ctx Line_comment content;
+      let content =
+        with_loc (fun lexbuf -> Sedlexing.Utf8.lexeme lexbuf) lexbuf
+      in
+      Wax_utils.Trivia.report_item ctx Line_comment content.info content.desc;
       token_rec ctx lexbuf
   | "/*" ->
-      let s = comment lexbuf in
-      Wax_utils.Trivia.report_item ctx Block_comment s;
+      let s = with_loc (fun lexbuf -> comment lexbuf) lexbuf in
+      Wax_utils.Trivia.report_item ctx Block_comment s.info s.desc;
       token_rec ctx lexbuf
   | ';' -> SEMI
   | '#' -> SHARP

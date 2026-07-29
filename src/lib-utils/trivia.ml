@@ -1,6 +1,10 @@
 type position = Line_start | Inline
 type kind = Line_comment | Block_comment | Annotation
-type trivia = Item of { content : string; kind : kind } | Blank_line
+
+type trivia =
+  | Item of { content : string; kind : kind; location : Ast.location }
+  | Blank_line
+
 type entry = { anchor : int; trivia : trivia; position : position }
 
 type associated = {
@@ -57,11 +61,11 @@ let make () =
 
 let add_entry ctx entry = ctx.comments <- entry :: ctx.comments
 
-let report_item ctx kind content =
+let report_item ctx kind location content =
   add_entry ctx
     {
       anchor = ctx.prev_token_end;
-      trivia = Item { content; kind };
+      trivia = Item { content; kind; location };
       position = (if ctx.at_start_of_line then Line_start else Inline);
     };
   ctx.at_start_of_line <- kind = Line_comment
@@ -384,11 +388,16 @@ let retarget_content ~src ~dst kind content =
 
 let retarget_entry ~src ~dst e =
   match e.trivia with
-  | Item { content; kind } ->
+  | Item { content; kind; location } ->
       {
         e with
         trivia =
-          Item { content = retarget_content ~src ~dst kind content; kind };
+          Item
+            {
+              content = retarget_content ~src ~dst kind content;
+              kind;
+              location;
+            };
       }
   | Blank_line -> e
 
