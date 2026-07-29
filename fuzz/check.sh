@@ -51,6 +51,7 @@ dune build src/bin/main.exe src/bin/fuzz_gen.exe src/bin/fuzz_recover.exe 2>&1 |
 # Deterministic cross-cutting guards (self-contained).
 run cast-lattice.sh
 run drop-width.sh
+run ref-width.sh
 run num-id-fuzz.sh
 run "COUNT=$count" annot-fuzz.sh
 run cond-fromwasm-fuzz.sh

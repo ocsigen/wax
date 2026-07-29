@@ -89,6 +89,7 @@ MODE=struct fuzz/mutate-wasm.sh [count] # structure-aware mutants (wasm-tools mu
 fuzz/fold-fuzz.sh           # fold/unfold confluence on modules generated dense with exotic opcodes; GEN=N
 
 # Deterministic cross-cutting guards (no corpus needed; CI-gating):
+fuzz/ref-width.sh           # enumerated sweep of the reference pins (ops x dead-code contexts); JOBS=N
 fuzz/stress.sh              # resource-limit sweep: deep nesting / wide constructs never crash
 fuzz/comment-preserve.sh    # planted sentinel comments survive every text<->text conversion
 
@@ -104,7 +105,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
 `validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`, `const-context.sh`,
 `fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh`,
-`bottom-fuzz.sh`, `null-mutate.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -698,6 +699,22 @@ developer tool for locating a repair (and what
   reconciliation cannot: a value `From_wasm` emits without recording an
   expectation for it. That is the residual risk of the whole design, and it is
   covered from the outside.
+* **`fuzz/ref-width.sh`** does for the REFERENCE pins what `drop-width.sh` does for
+  the widths: a grid of the reference operations whose Wax surface erases their
+  operand's hierarchy (`ref.i31`, `i31.get_s/u`, the two hierarchy converts, an
+  extern-hierarchy `ref.cast`, `ref.is_null`, `ref.eq`, `ref.test`, the
+  `br_on_cast*` forms, the typed-`select` reference immediate and the descriptor
+  ops) crossed with the dead-code contexts the pins exist for (a bare hole, a
+  select-of-holes, a hole through `ref.as_non_null`, a hole behind an interposed
+  `br_if`/`atomic.fence` statement, a stranded leftover). Each cell asserts exactly
+  which opcode must survive AND which confusable twin must be absent — the pairs
+  `FAITHDRIFT`'s normalisations deliberately fold (`ref.cast` vs
+  `extern.convert_any`, `ref.is_null` vs `i32.eqz`, `ref.eq` vs `i32.eq`) — on both
+  the default and the `--faithful` round trip. Its blast radius is decompiler
+  FIDELITY, not runtime behaviour: these operands live on the polymorphic dead-code
+  stack, so a finding is a lost or swapped opcode, not a wrong value. It found two
+  gaps on its first run (a select-of-holes operand was pinned by neither
+  `pin_hierarchy` nor `ref.eq`, both since fixed).
 * **`fuzz/drop-width.sh`** enumerates the erasers deterministically (drop,
   comparisons, `eqz`, `wrap`, a truncation's source float, narrow/atomic stores,
   `select` arms, branch leftovers, rotates) around width-sensitive trees whose
@@ -736,7 +753,9 @@ The two types the expectation channel does not carry are not a third class:
   (`ROUNDTRIP`). That is how every one of those pins was found in the first place.
   A reference pin is also not free to place: outside a hole or a bare `null` a
   `_ as &t` cast IS a `ref.cast` opcode, so a repair there could not be inert the
-  way a width pin is.
+  way a width pin is. **`fuzz/ref-width.sh`** is the enumerative guard for that
+  class — the deterministic complement to `FAITHDRIFT`'s statistical coverage,
+  described below.
 
 ### Deliberately *not* an oracle
 
