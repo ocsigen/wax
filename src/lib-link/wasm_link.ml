@@ -513,10 +513,43 @@ module Read = struct
   let namemap contents = Wax_wasm.Wasm_parser.namemap contents.ch
 end
 
-let read_branch_hints (contents : Read.t) =
+(* The [metadata.code.*] custom sections of the branch-hinting and
+   compilation-hints proposals, in the order [Wasm_output] emits them. All four
+   share a shape (per function index, a list of (byte offset, payload) pairs) and
+   so are merged by one pass; they differ only in whether the payload itself
+   names anything the merge renumbers, which the tag beside each name says. The
+   hints are
+   advisory, so a merge may drop one, but never keep one that has come to point
+   somewhere else. *)
+let code_metadata_sections =
+  [
+    ("branch_hint", `Opaque);
+    ("instr_freq", `Opaque);
+    ("call_targets", `Function_indices);
+    ("compilation_priority", `Opaque);
+  ]
+
+let read_code_metadata ~name (contents : Read.t) =
   if contents.ch.limit > 0 then
-    Array.to_list (Wax_wasm.Wasm_parser.branch_hint_section contents.ch)
+    Array.to_list (Wax_wasm.Wasm_parser.code_metadata_section ~name contents.ch)
   else []
+
+(* Rewrite a [metadata.code.call_targets] payload against a function-index
+   mapping: it lists the likely targets of an indirect call, which the merge
+   renumbers like any other function reference. [None] drops the hint, which is
+   what a payload that does not decode, or that names a function outside the
+   module it came from, has to do: the alternative is a hint that now names a
+   different function. *)
+let remap_call_targets func_map payload =
+  match Wax_wasm.Hints.call_targets_of_payload payload with
+  | Error _ -> None
+  | Ok targets ->
+      if List.exists (fun (idx, _) -> idx >= Array.length func_map) targets then
+        None
+      else
+        Some
+          (Wax_wasm.Hints.call_targets_payload
+             (List.map (fun (idx, pct) -> (func_map.(idx), pct)) targets))
 
 (* Raised by a constant-initializer scan (table or global section) when the
    initializer reads a global that the merged module cannot legally reference at
@@ -2018,7 +2051,11 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
       let code_pieces = Buffer.create 100000 in
       let resize_data = Scan.create_resize_data () in
       let source_maps = ref [] in
-      let linked_branch_hints = ref [] in
+      let linked_code_metadata =
+        List.map
+          (fun (name, payload_kind) -> (name, payload_kind, ref []))
+          code_metadata_sections
+      in
       Write.uint code_pieces func_count;
       Array.iteri
         (fun i { contents; source_map_contents; _ } ->
@@ -2062,42 +2099,64 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
             Scan.clear_resize_data resize_data;
             Scan.push_resize resize_data 0 (-Read.pos_in contents.ch);
             Read.repeat' count code contents.ch;
-            let branch_hint_section =
-              Read.focus_on_custom_section_payload contents
-                "metadata.code.branch_hint"
-            in
-            let hints = read_branch_hints branch_hint_section in
             let import_count =
               Array.length (get_exportable_info resolved_imports.(i) Func)
             in
-            let idx = ref 0 in
-            let acc = ref 0 in
-            let shift x =
-              while !idx < resize_data.i && x >= resize_data.pos.(!idx) do
-                acc := !acc + resize_data.delta.(!idx);
-                incr idx
-              done;
-              x + !acc
+            (* A hint's offset is relative to the start of its function body, and
+               renumbering an index may have changed a LEB's width, so each offset
+               moves with the bytes before it. [resize_data] holds those deltas by
+               source position; walking it costs nothing as long as the positions
+               asked about only grow, which they do within one section (entries are
+               in function order, hints in offset order). Hence a fresh walker per
+               section rather than one shared across the four. *)
+            let make_shift () =
+              let idx = ref 0 in
+              let acc = ref 0 in
+              fun x ->
+                while !idx < resize_data.i && x >= resize_data.pos.(!idx) do
+                  acc := !acc + resize_data.delta.(!idx);
+                  incr idx
+                done;
+                x + !acc
             in
             List.iter
-              (fun (funcidx, hints_list) ->
-                let k = funcidx - import_count in
-                if k >= 0 && k < count then
-                  let pos' = func_starts.(k) in
-                  let pos'_shifted = shift pos' in
-                  let mapped_hints =
-                    List.map
-                      (fun (offset, hint) ->
-                        let branch_pos = pos' + offset in
-                        let branch_pos_shifted = shift branch_pos in
-                        let new_offset = branch_pos_shifted - pos'_shifted in
-                        (new_offset, hint))
-                      hints_list
-                  in
-                  let new_funcidx = func_mappings.(i).(funcidx) in
-                  linked_branch_hints :=
-                    (new_funcidx, mapped_hints) :: !linked_branch_hints)
-              hints;
+              (fun (name, payload_kind, linked) ->
+                let section =
+                  Read.focus_on_custom_section_payload contents
+                    ("metadata.code." ^ name)
+                in
+                let entries = read_code_metadata ~name section in
+                let shift = make_shift () in
+                let map_payload =
+                  match payload_kind with
+                  | `Opaque -> fun p -> Some p
+                  | `Function_indices -> remap_call_targets func_mappings.(i)
+                in
+                List.iter
+                  (fun (funcidx, hints_list) ->
+                    let k = funcidx - import_count in
+                    (* An entry naming an import, or a function this module does
+                       not define, addresses no body here and is dropped, as the
+                       decoder drops it. *)
+                    if k >= 0 && k < count then
+                      let pos' = func_starts.(k) in
+                      let pos'_shifted = shift pos' in
+                      let mapped_hints =
+                        List.filter_map
+                          (fun (offset, hint) ->
+                            let hint_pos = pos' + offset in
+                            let hint_pos_shifted = shift hint_pos in
+                            let new_offset = hint_pos_shifted - pos'_shifted in
+                            Option.map
+                              (fun p -> (new_offset, p))
+                              (map_payload hint))
+                          hints_list
+                      in
+                      if mapped_hints <> [] then
+                        let new_funcidx = func_mappings.(i).(funcidx) in
+                        linked := (new_funcidx, mapped_hints) :: !linked)
+                  entries)
+              linked_code_metadata;
             Option.iter
               (fun sm ->
                 if not (Source_map.is_empty sm) then
@@ -2119,16 +2178,22 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
         Write.uint code_pieces (Buffer.length buf);
         Buffer.add_buffer code_pieces buf;
         Buffer.clear buf);
-      (* The branch-hint custom section must precede the code section (the
-         branch-hinting proposal requires it, and the decoder rejects a later
-         one), so emit it before writing code. Its offsets are relative to each
-         function body, so they need no rebasing against the code position. *)
-      let sorted_branch_hints = List.rev !linked_branch_hints in
-      if sorted_branch_hints <> [] then
-        ignore
-          (Wax_wasm.Wasm_output.output_branch_hint_section out_ch
-             sorted_branch_hints
-            : int);
+      (* Every [metadata.code.*] section must precede the code section (both
+         proposals require it, and the decoder rejects a later one), so emit them
+         before writing code. Their offsets are relative to each function body, so
+         they need no rebasing against the code position. The accumulated entries
+         come out in function order because the modules were read in order and
+         each one's functions are renumbered contiguously. *)
+      List.iter
+        (fun (name, _, linked) ->
+          match List.rev !linked with
+          | [] -> ()
+          | entries ->
+              ignore
+                (Wax_wasm.Wasm_output.output_code_metadata_section out_ch name
+                   entries
+                  : int))
+        linked_code_metadata;
       let code_section_offset =
         let b = Buffer.create 5 in
         Write.uint b (Buffer.length code_pieces);

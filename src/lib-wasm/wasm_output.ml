@@ -1373,19 +1373,6 @@ let output_code_metadata_section out_channel name
         b func_hints)
     ()
 
-(* The branch-hint section as [Wasm_link] carries it: a hint is a single boolean,
-   which the family's shape spells as a one-byte payload. *)
-let output_branch_hint_section out_channel
-    (func_hints : (int * (int * bool) list) list) =
-  output_code_metadata_section out_channel "branch_hint"
-    (List.map
-       (fun (funcidx, hints) ->
-         ( funcidx,
-           List.map
-             (fun (offset, hint) -> (offset, if hint then "\001" else "\000"))
-             hints ))
-       func_hints)
-
 let type_section out_channel types =
   output_section out_channel 1 (Encoder.vec Encoder.rectype) types
 

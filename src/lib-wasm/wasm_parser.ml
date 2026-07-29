@@ -1737,7 +1737,13 @@ let attach_code_metadata ~num_func_imports ~code_starts ~sections
             { c with instrs = List.map (go start_pos tbl) c.instrs })
       code
 
-let branch_hint_section ch =
+(* A [metadata.code.*] section on its own, for [Wasm_link]: the family's shared
+   shape read with the payloads left as bytes. Unlike [module_], which decodes
+   each payload into the hint it states, a merge only re-keys the entries by
+   their function's new index and shifts the offsets its rewriting moved, so a
+   payload it cannot read is still a payload it must carry. [name] is the
+   section's, for the diagnostic. *)
+let code_metadata_section ~name ch =
   vec
     (fun ch ->
       let funcidx = uint ch in
@@ -1746,12 +1752,8 @@ let branch_hint_section ch =
           (fun ch ->
             let offset = uint ch in
             let len = uint ch in
-            if len = 0 then error ch "empty branch hint";
-            let v = input_byte ch <> 0 in
-            for _ = 2 to len do
-              ignore (input_byte ch)
-            done;
-            (offset, v))
+            if len = 0 then error ch "empty %s hint" name;
+            (offset, String.init len (fun _ -> Char.chr (input_byte ch))))
           ch
       in
       (funcidx, Array.to_list hints))
