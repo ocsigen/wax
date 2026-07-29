@@ -79,12 +79,12 @@ Expecting a module field: 'func', 'global', 'table', 'memory', 'tag', 'data', 'e
 parse_script: LPAREN VEC_TERN_OP
 Expecting a script command or module field, such as 'module', 'func', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
 
-# state 1110: a '(' inside a (thread …) opens a command.
-parse_script: LPAREN THREAD LPAREN VEC_TERN_OP
+# state 1143: a '(' inside a (thread …) opens a command.
+parse_link_script: LPAREN THREAD LPAREN VEC_TERN_OP
 Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', 'script', or 'shared'.
 
-# state 1121: a '(' inside a (script …) opens a command.
-parse_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
+# state 1154: a '(' inside a (script …) opens a command.
+parse_link_script: LPAREN SCRIPT LPAREN VEC_TERN_OP
 Expecting a script command, such as 'module', 'invoke', 'get', 'register', 'assert_return', 'assert_trap', 'thread', or 'script'.
 
 # state 1131: after (module in a script — a defined module, a binary/quote
@@ -93,12 +93,12 @@ parse_script: LPAREN MODULE WAIT
 Expecting 'instance', 'definition', an identifier, 'binary', 'quote', a module field ('('), or ')'.
 <2>This '(' opens the enclosing construct.
 
-# state 1151: a constant operand opened with '(' inside an (invoke …).
-parse_script: LPAREN INVOKE STRING LPAREN WAIT
+# state 1184: a constant operand opened with '(' inside an (invoke …).
+parse_link_script: LPAREN INVOKE STRING LPAREN WAIT
 Expecting a constant: 'i32.const', 'i64.const', 'f32.const', 'f64.const', 'v128.const', 'ref.null', 'ref.host', or 'ref.extern'.
 
-# state 1223: a result pattern opened with '(' inside an (assert_return …).
-parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
+# state 1256: a result pattern opened with '(' inside an (assert_return …).
+parse_link_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN WAIT
 Expecting a result pattern, such as 'i32.const', 'f32.const', 'v128.const', 'ref.null', 'ref.func', 'ref.extern', or 'either'.
 
 # state 1280: after (module inside an (assert_malformed_custom …).

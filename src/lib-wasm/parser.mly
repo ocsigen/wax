@@ -1695,7 +1695,7 @@ link_script_instance:
    discarding it, so a behavioural assertion can be paired with the module it
    names. *)
 link_action:
-| "(" INVOKE id = ID ? STRING const * ")" { id }
+| "(" INVOKE id = ID ? STRING constant * ")" { id }
 | "(" GET id = ID ? STRING ")" { id }
 
 link_assertion:

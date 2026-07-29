@@ -214,7 +214,7 @@ end
 (* Menhir-only [Parsing.Make]: the harness is not on any hot path, and the fast
    parser has no [parse_link_script] entry point. *)
 module LinkScriptParser =
-  Wax_wasm.Parsing.Make
+  Wax_utils.Parsing.Make
     (struct
       type t = command list
     end)
@@ -224,7 +224,7 @@ module LinkScriptParser =
     (Wax_wasm.Lexer)
 
 module ModuleParser =
-  Wax_wasm.Parsing.Make_parser
+  Wax_utils.Parsing.Make_parser
     (struct
       type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)
@@ -237,16 +237,13 @@ module ModuleParser =
 (* Parse a wasm binary, returning the module or a rendered diagnostic. *)
 let parse_binary ~color txt =
   let buf = Buffer.create 256 in
-  let output = Format.formatter_of_buffer buf in
   match
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
-      ~source:None ~exit:false ~output (fun d ->
-        Wax_wasm.Wasm_parser.module_ d txt)
+      ~source:None ~exit:false ~output:(Wax_utils.Diagnostic.buffer_sink buf)
+      (fun d -> Wax_wasm.Wasm_parser.module_ d txt)
   with
   | m -> Ok m
-  | exception Wax_utils.Diagnostic.Aborted ->
-      Format.pp_print_flush output ();
-      Error (Buffer.contents buf)
+  | exception Wax_utils.Diagnostic.Aborted -> Error (Buffer.contents buf)
 
 (* --- Materialisation and linking --- *)
 
