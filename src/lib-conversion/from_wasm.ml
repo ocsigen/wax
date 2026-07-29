@@ -2073,7 +2073,10 @@ let is_poly_terminator (i : _ Ast.instr) =
    typed-[select] immediate, itself a documented residual. *)
 let rec pin_hierarchy pin (e : _ Ast.instr) =
   match e.Ast.desc with
-  | Ast.Hole -> Some (cast_to pin e)
+  (* A hole, or an untyped [select] of holes: both re-parse type-adaptively (the
+     select's result type is its arms'), so both take the target hierarchy under the
+     outer cast and absorb it. Same shapes [type_hole_src]/[convert_src] pin. *)
+  | Ast.Hole | Ast.Select _ -> Some (cast_to pin e)
   | Ast.NonNull inner ->
       Option.map
         (fun inner -> { e with Ast.desc = Ast.NonNull inner })
@@ -2804,19 +2807,32 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* o1 = Stack.try_pop in
       let* backing = Stack.effective_backing is_poly_terminator in
       let bare = Ast.no_loc_instr Ast.Hole in
-      let backed =
-        Option.is_some o1 || Option.is_some o2 || Option.is_some backing
+      let eq_pin e =
+        Ast.no_loc_instr
+          (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Eq })))
       in
+      (* An UNANNOTATED [select] operand is pinned, exactly as [RefIsNull] pins the
+         same shape: only a numeric select is unannotated, so in dead code it is a
+         polymorphic select of holes that re-parses to the numeric form — and then
+         [==] on it is an [i32.eq], an opcode-family change. It backs no concrete
+         reference either, so it does not count towards [backed]. *)
+      let is_select o =
+        match o with Some { Ast.desc = Ast.Select _; _ } -> true | _ -> false
+      in
+      let backs o = Option.is_some o && not (is_select o) in
+      let backed = backs o1 || backs o2 || Option.is_some backing in
       let e1 =
         match o1 with
+        | Some ({ Ast.desc = Ast.Select _; _ } as e) -> eq_pin e
         | Some e -> e
-        | None ->
-            if backed then bare
-            else
-              Ast.no_loc_instr
-                (Ast.Cast (bare, Valtype (Ref { nullable = true; typ = Eq })))
+        | None -> if backed then bare else eq_pin bare
       in
-      let e2 = match o2 with Some e -> e | None -> bare in
+      let e2 =
+        match o2 with
+        | Some ({ Ast.desc = Ast.Select _; _ } as e) -> eq_pin e
+        | Some e -> e
+        | None -> bare
+      in
       Stack.push 1 (with_loc (BinOp (op_loc i.info Ast.Eq, e1, e2)))
   | RefFunc f -> Stack.push 1 (with_loc (Get (idx ctx `Func f)))
   | RefNull typ ->
