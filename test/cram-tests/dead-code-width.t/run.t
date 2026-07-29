@@ -48,19 +48,19 @@ an i32 op or an anchored operand):
   }
   fn i64_add() {
       unreachable;
-      _ = _ as i64 + _;
+      _ = (_ + _) as i64;
   }
   fn f32_add() {
       unreachable;
-      _ = _ as f32 + _;
+      _ = (_ + _) as f32;
   }
   fn f64_add() {
       unreachable;
-      _ = _ as f64 + _;
+      _ = (_ + _) as f64;
   }
   fn i64_shr() {
       unreachable;
-      _ = _ as i64 >>u _;
+      _ = (_ >>u _) as i64;
   }
   fn i32_shl() {
       unreachable;
@@ -80,7 +80,7 @@ an i32 op or an anchored operand):
   }
   fn lit_flex() {
       unreachable;
-      _ = _ as i64 + 5;
+      _ = (_ + 5) as i64;
   }
   fn anchor(x: i64) {
       unreachable;

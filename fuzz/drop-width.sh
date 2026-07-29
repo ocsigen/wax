@@ -17,10 +17,15 @@
 # leftover statement with no consumer to pin it).
 # All are invisible to every validity oracle — both the original and the drifted
 # module validate; only execution sees the wrong value / introduced trap.
-# NOTE for maintainers: any new [From_wasm] path that emits a value without
-# routing it through a width-applying consumer (a [pop_width_erased]/[pin_width]
-# pop, or a [drop]/branch leftover pinned at the source) is a new eraser — add it
-# to the enumeration below.
+# NOTE for maintainers: the width pins are no longer placed per consumer — the
+# typer OWNS the invariant now (it reconciles the width [From_wasm] recorded on a
+# node with the one it resolves, and pins a value that would default wrong; see
+# [Wax_lang.Typing.f]'s [~width_check]). So a new [From_wasm] path does not have to
+# route its values through a width-applying consumer; it has to RECORD what its
+# opcode states, at the choke points that do so ([expect], [cast_to],
+# [typed_hole], [Stack.push_num]). A missed *pin* is healed here and invisible; a
+# missed *recording* is what this sweep, and the FAITHDRIFT/WIDTHDRIFT round-trip
+# legs, still catch end to end.
 #
 # The space is small and enumerable, so we enumerate it: each eraser wraps a
 # width-sensitive i64 tree (and the truncations wrap an f32/f64 const), round-trip
@@ -157,19 +162,14 @@ N=${#COMBOS[@]}
 # Worker: round-trip each module wat -> wax -> wat; a crash/rejection on either
 # leg is a finding, and the round-tripped wat must still contain the opcode.
 #
-# The decompile runs under [--debug width-check], which puts the decompiler's own
-# width reconciliation in DETECTOR mode ([From_wasm] records the width each source
-# opcode states on the node it emits; the typer compares its own inference against
-# it and, by default, REPAIRS a disagreement by pinning the value). Detector mode is
-# the point: a repaired decompilation round-trips, so the opcode assertion below
-# would stay green on a missing pin heuristic and this sweep would stop guarding
-# it. Every module here is valid by construction, so the reconciliation is
-# meaningful, and it reports the SAME bug one stage earlier — before the Wax is
-# printed, naming the expression instead of the opcode that went missing from the
-# recompiled wat. Both reports stay: the check only sees what from_wasm claimed,
-# the opcode compare sees the width that actually survived. Only the decompile
-# carries the flag; the [wax -> wat] leg back re-reads hand-written-shaped Wax,
-# which records nothing.
+# The decompile runs plain, in the repairing mode users get: the typer pins any
+# value whose recorded width its own inference would not give (see
+# [Wax_lang.Typing.f]'s [~width_check]). That is the whole assertion — the pin has
+# to arrive from SOMEWHERE for the opcode to survive the round trip below, and it
+# no longer matters whether a per-consumer heuristic or the typer's backstop
+# placed it. (It ran under [--debug width-check] while the heuristics still owned
+# the invariant, to catch a missing one; with the typer owning it, a repair here is
+# the mechanism working, not a finding.)
 worker() {
   local first="$1" last="$2" i label opcode body v out=""
   local p="$RESULTS/w$first"
@@ -181,15 +181,14 @@ worker() {
     opcode="${rest%%$'\t'*}"
     body="${rest#*$'\t'}"
     printf '%s\n' "$body" >"$wat"
-    v="$(classify_wax -i wat -f wax --debug width-check --error-format short \
-           "$wat" -o "$wax")"
+    v="$(classify_wax -i wat -f wax --error-format short "$wat" -o "$wax")"
     if [ "$v" != ok ]; then
-      # A generated module is valid, so a rejection here is a wax bug either way;
-      # distinguish the width check firing (which says precisely what drifted)
-      # from any other refusal.
+      # A generated module is valid, so a rejection here is a wax bug either way.
+      # One shape says precisely what went wrong: a width disagreement no pin can
+      # correct (an anchored value, which the typer errors on in every mode).
       local why="$v (wat->wax)" msg
       msg="$(grep -m1 -o 'Decompiler width invariant violated.*' "$ERRLOG" 2>/dev/null)"
-      [ -n "$msg" ] && why="width-check: $msg"
+      [ -n "$msg" ] && why="unrepairable width: $msg"
       out+="$(finding DROPWIDTH HIGH "$label" "$why" "$body")"$'\n'
       printf F >&2; continue
     fi

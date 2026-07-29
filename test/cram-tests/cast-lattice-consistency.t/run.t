@@ -51,6 +51,6 @@ composition as the two-step chain, which recompiles):
       p as &i31 as &extern;
   }
   fn g() -> &extern {
-      -1 as i64 as &i31 as &extern;
+      -1 as i64 as i32 as &extern;
   }
   $ wax -i wasm -f wax e.wasm -o e2.wax && wax e2.wax -f wasm -o /dev/null --validate

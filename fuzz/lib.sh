@@ -87,11 +87,15 @@ freeze_wax() {
 #   crash:... — anything else: cmdliner internal error from an uncaught
 #               exception (125), a bare uncaught exception (2), a signal,
 #               a timeout (124), or any unexpected code. These are the bugs.
-# One caveat for a caller that passes [--debug width-check]: the check reports a
-# decompiler width drift as an ordinary error diagnostic, so it too exits 128 and
-# lands in [rejected] — which is then NOT an intended answer. Such a caller must
-# discriminate on the message (see oracle.sh's oracle 5c and drop-width.sh), not
-# on this bucket.
+# One caveat on a DECOMPILE: the typer reports a width disagreement it cannot
+# repair (an anchored value — see [Wax_lang.Typing.f]'s [~width_check]) as an
+# ordinary error diagnostic, so it too exits 128 and lands in [rejected] — which is
+# then not an intended answer but a finding. On a valid module it never happens (it
+# means the module does not typecheck), so the buckets above hold as written; a
+# caller that wants to name it discriminates on the message in [$ERRLOG]
+# ("Decompiler width invariant violated"), as drop-width.sh does, not on this
+# bucket. The same is true of [--debug width-check], which turns every repairable
+# disagreement into that error as well.
 classify_wax() {
   timeout -k 5 "$TIMEOUT" "$WAX" "$@" >/dev/null 2>"$ERRLOG"
   local code=$?

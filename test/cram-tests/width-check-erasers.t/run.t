@@ -1,46 +1,57 @@
 "Width drift" is the decompiler bug class where the Wax printed for a Wasm opcode
 re-infers at a different width on recompile (a numeric literal tree with nothing
 to pin it re-defaults to i32/f64), silently changing the opcode and so the value
-or the traps. `From_wasm` prevents it by pinning such values, and records the type
-each source opcode states on the node it emits. The type checker then reconciles
-its own inference with those records, and by DEFAULT it repairs a disagreement: a
-value that merely defaulted to the wrong width is pinned, so a gap in the
-conversion's own pins costs an extra cast instead of a silent miscompile.
-`--debug width-check` turns the backstop back into a detector — it reports the
-disagreement instead of repairing it, which is what lets the fuzzing harness see
-a missing pin at all.
+or the traps. The type checker owns the invariant: `From_wasm` RECORDS the type
+each source opcode states on the node it emits, and the typer reconciles that
+record with the type it resolves, PINNING any value that would otherwise default
+to another width. `--debug width-check` reports each such pin instead of placing
+it — the developer's view of where the decompiler is relying on the backstop.
 
 `erasers.wat` enumerates the width erasers (the consumers whose Wax surface does
 not carry their operand's width) around width-sensitive i64/f32 trees, plus the
-dead-code shapes where every operand is a hole. The conversion's own pins hold, so
-there is nothing to repair and nothing to report:
+dead-code shapes where every operand is a hole. Decompiling it is clean, which is
+the user-facing assertion: every width is carried, however the pin got there.
 
-  $ wax --debug width-check -i wat -f wax erasers.wat -o /dev/null
+  $ wax -i wat -f wax erasers.wat -o /dev/null
 
 Under `--faithful`, which keeps the stream-reshaping recoveries out and turns the
 simplify pass off:
 
-  $ wax --debug width-check --faithful -i wat -f wax erasers.wat -o /dev/null
+  $ wax --faithful -i wat -f wax erasers.wat -o /dev/null
 
 And on the binary path, where the type-pinning holes are synthesized without a
 source location:
 
   $ wax -i wat -f wasm erasers.wat -o m.wasm
-  $ wax --debug width-check -i wasm m.wasm -f wax -o /dev/null
+  $ wax -i wasm m.wasm -f wax -o /dev/null
 
-Repair is therefore inert here: the decompilation is byte for byte what the
-detector mode prints.
+That the widths are carried *by the backstop* is what the detector mode shows: it
+turns each pin the typer would place into an error (and, being an error, stops at
+the first one), naming the expression and the two types.
 
-  $ wax -i wat -f wax erasers.wat -o repaired.wax
-  $ wax --debug width-check -i wat -f wax erasers.wat -o reported.wax
-  $ diff repaired.wax reported.wax && echo identical
-  identical
+  $ wax --debug width-check -i wat -f wax erasers.wat -o /dev/null
+  Error:
+    Decompiler width invariant violated for '4096 >>u 40' recompiling it would
+    infer 'i32' but the WebAssembly it came from requires 'i64'.
+    ──➤  erasers.wat:13:14
+  11 │   ;; comparison: yields i32 whatever the operands' width
+  12 │   (func (export "cmp") (result i32)
+  13 │     (i64.eq (i64.shr_u (i64.const 4096) (i64.const 40)) (i64.const 0)))
+     ·              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  14 │   ;; eqz: i64 operand, i32 result
+  15 │   (func (export "eqz") (result i32)
+  Hint:
+    This is an internal invariant of the WebAssembly-to-Wax conversion, not a
+    problem with the input; without '--debug width-check' the conversion repairs
+    it by pinning the expression.
+  [128]
 
 Reconciliation is a decompiler self-check: a module that carries no recorded
 expectation (anything but `From_wasm` output) has nothing to reconcile, so both
 modes are a no-op on a wax input.
 
-  $ wax --debug width-check -i wax repaired.wax -f wax -o /dev/null
+  $ wax -i wat -f wax erasers.wat -o erasers.wax
+  $ wax --debug width-check -i wax erasers.wax -f wax -o /dev/null
 
 A disagreement a pin CANNOT fix is an error in both modes, repair included: when
 the value's type is fixed by its context rather than defaulted, a cast there would

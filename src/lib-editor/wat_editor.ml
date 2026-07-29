@@ -582,7 +582,11 @@ let to_wax_string src =
         if has_errors d then Error (errors_string d)
         else
           let wax_ast =
-            Wax_lang.Typing.f ~simplify:true d wax_ast
+            (* [`Repair]: this is [From_wasm] output, so the typer owns the width
+               invariant here as it does on the CLI's decompile paths — a value the
+               conversion left to default at the wrong width is pinned rather than
+               printed wrong (see {!Wax_lang.Typing.f}'s [~width_check]). *)
+            Wax_lang.Typing.f ~simplify:true ~width_check:`Repair d wax_ast
             |> snd |> Wax_lang.Typing.erase_types
           in
           Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wat_syntax
@@ -633,7 +637,8 @@ let binary_to_wax_string bytes =
       if has_errors d then Error (errors_string d)
       else
         let wax_ast =
-          Wax_lang.Typing.f ~simplify:true d wax_ast
+          (* [`Repair] as in [to_wax_string] above: [From_wasm] output. *)
+          Wax_lang.Typing.f ~simplify:true ~width_check:`Repair d wax_ast
           |> snd |> Wax_lang.Typing.erase_types
         in
         let printed =

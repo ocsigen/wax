@@ -664,7 +664,6 @@ same modules decompiled to Wax, so no separate wax corpus is needed.
 | `DIAG_DUP`      | REVIEW | A rejection never repeats a diagnostic line (`--error-format short`, located lines): a location+message duplicate means two passes both reported one broken construct. |
 | `ROUNDTRIP`     | HIGH   | `x → wax → wasm` recompiles and validates; and for a wax input, `wax → wasm → wax → wasm` re-validates (the two directions compose). |
 | `STRUCT_DRIFT`  | HIGH   | For a wax input whose round-trip binaries both validate, their load-bearing structure (masked `ref.null` heaptypes, `(local …)` widths, `iNN/fNN.const` widths) is unchanged — a diff is the silent type-drift flavor of a dropped load-bearing annotation. |
-| `WIDTHCHECK`    | HIGH   | The decompiler's own width invariant, asserted in-tool: `From_wasm` records the type each source opcode states on the Wax node it emits, and under `--debug width-check` the type checker compares its own inference against that record — so decompiled Wax that would recompile at another width is caught before it is even printed, named and located. Runs only on an input known valid (see below). |
 | `IDEMPOTENCE`   | REVIEW | `format(format(x)) == format(x)` textually. |
 
 Each finding line is tab-separated: `FINDING  category  severity  input  detail
@@ -673,51 +672,43 @@ provably wrong; REVIEW = worth a human look (may include benign noise).
 
 ### The width-drift family
 
-Three guards cover the width-eraser class — a decompiled numeric tree with
-nothing to pin it re-defaults to `i32`/`f64` on re-parse, silently changing an
-opcode's width and with it the value it computes or the inputs it traps on — at
-increasing distance from the bug:
+The width-eraser class — a decompiled numeric tree with nothing to pin it
+re-defaults to `i32`/`f64` on re-parse, silently changing an opcode's width and
+with it the value it computes or the inputs it traps on — is now prevented *in the
+tool* and guarded here end to end.
 
-* **`WIDTHCHECK`** (oracle 5c) asks the tool itself, before it prints anything:
-  does the width `from_wasm` recorded for this node match the one the typer
-  infers? It sees every annotated node — each const, arithmetic result, pinned
-  hole, dead value, stranded leftover — so it catches a drift that changes a
-  *value* without changing an opcode, which no opcode comparison can. Its blind
-  spot is the mirror image: it only inspects what `from_wasm` claimed.
+**In the tool.** `From_wasm` records the type each source opcode states on the Wax
+node it emits, and the type checker reconciles that record with the type it
+resolves: a value that would merely default to the wrong width is PINNED (an
+identity cast at the recorded width). Correctness no longer rests on a
+per-consumer pin heuristic — the typer owns it — so the fuzzing legs no longer
+have to detect a missing heuristic, and the `WIDTHCHECK` leg that did (oracle 5c)
+is retired; the rationale is written out where it used to be in `oracle.sh`.
+`--debug width-check` still turns the backstop back into a detector, which is a
+developer tool for locating a repair (and what
+`test/cram-tests/width-check-erasers.t` pins), not a fuzzing oracle.
 
-  In the tool this is no longer a check but a **repairing backstop**: by default a
-  decompilation PINS a value whose width merely defaulted wrong, so a gap in
-  `from_wasm`'s own pin heuristics costs an extra cast instead of a miscompile.
-  `--debug width-check` is what turns it back into a detector (report the
-  disagreement, exit 128), and that is exactly why this leg passes the flag: with
-  repair on, a missing heuristic is healed, so `WIDTHDRIFT`, `FAITHDRIFT` and the
-  round-trip legs all go quiet on it and only this leg can still surface the root
-  cause. (A disagreement no pin can fix — a value whose type is fixed by its
-  context — is an error in both modes; on a valid module that never happens, which
-  is why the leg is gated on validity.)
+**What still guards it**, and why that is enough:
+
 * **`WIDTHDRIFT`** (oracle 5) compares a histogram of the width-sensitive opcode
   *families* (`div`/`rem`/shifts/`trunc_f`/ordered and equality comparisons/
-  `convert`/the width-named float methods) across a full `x → wax → wasm`
-  round trip, so it needs no recorded claim — a width nothing records still shows
-  as a changed opcode. `FAITHDRIFT` (oracle 5b) is the same idea over the whole
-  `--faithful` opcode stream.
+  `convert`/the width-named float methods) across a full `x → wax → wasm` round
+  trip, and **`FAITHDRIFT`** (oracle 5b) compares the whole `--faithful` opcode
+  stream. Neither consults the recorded widths, so both see the one failure the
+  reconciliation cannot: a value `From_wasm` emits without recording an
+  expectation for it. That is the residual risk of the whole design, and it is
+  covered from the outside.
 * **`fuzz/drop-width.sh`** enumerates the erasers deterministically (drop,
   comparisons, `eqz`, `wrap`, a truncation's source float, narrow/atomic stores,
-  `select` arms, branch leftovers) around width-sensitive trees whose *value*
-  changes with width, controlling the operand shape the corpus leaves to chance.
-  Its decompile leg runs `--debug width-check` too — in detector mode, so a
-  missing pin is reported (naming the expression) rather than repaired and
-  invisible; the opcode compare then names what went missing if it ever slips
-  past.
-
-`WIDTHCHECK` is gated on the input being valid, in the harness rather than in the
-tool: on a module validation rejects, the recorded widths are claims about a
-module that does not typecheck (a binary input is trusted, so the operand a
-consumer pops need not be the one the opcode's signature names), and the check is
-meaningless — measured, that split is 0 reports over ~5500 valid modules and 184
-over `fuzz/corpus/invalid`. Gating inside the tool instead would make the check
-unfireable end to end, since a valid module is silent by definition. The leg's
-comment in `oracle.sh` documents the per-format gate.
+  `select` arms, branch leftovers, rotates) around width-sensitive trees whose
+  *value* changes with width, controlling the operand shape the corpus leaves to
+  chance, and asserts the load-bearing opcode survives the round trip. It runs the
+  decompile plain — in the repairing mode users get — so it asserts the invariant
+  holds however the pin arrived.
+* An **anchored** disagreement — a width no pin can correct, because the value's
+  type is fixed by its context rather than defaulted — is an error in every mode,
+  so it surfaces through the ordinary decompile legs as a `ROUNDTRIP` finding. On a
+  valid module it never fires: it means the module does not typecheck.
 
 ### Deliberately *not* an oracle
 

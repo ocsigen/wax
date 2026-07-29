@@ -6060,8 +6060,14 @@ and type_cast ctx i =
            genuine demote; dropped as redundant (f64 IS the float re-parse
            default), the width-flexible operand re-defaults toward the outer [f32]
            and the demote collapses into an [f32.sqrt] (a precision change). A
-           bare-literal result is excluded: its demote is value-inert ([f64.const]
-           then demote equals the [f32.const]), so pinning would only add noise. *)
+           bare-literal result is excluded here: its demote is value-inert
+           ([f64.const] then demote equals the [f32.const]). That exclusion is now
+           inert in practice — the width reconciliation
+           ({!reconcile_widths}) re-grounds such a literal from the width
+           [From_wasm] recorded on it, so the inner cast comes back anyway and the
+           demote round-trips exactly (which is the better answer: rounding a
+           decimal once to f64 and then demoting is not always the f32 rounding of
+           that decimal). *)
       let inner_cast_type =
         match i'.desc with Cast (_, t) -> Some t | _ -> None
       in
@@ -12243,11 +12249,14 @@ let flexible_literal (ty : inferred_type) =
    {!flexible_literal} because a cast FOLDS a still-flexible literal into its
    target type ([cast] above), so by the end of inference such a tree's cell looks
    concrete even though its width was never anchored by anything. *)
-let rec defaulting_tree (i : _ instr) =
+let rec defaulting_tree ?(holes_only = false) (i : _ instr) =
+  let defaulting_tree = defaulting_tree ~holes_only in
   match i.desc with
-  (* A numeric literal or a hole. NOT a [Char], whose i32 value a cast would
-     convert rather than ground. *)
-  | Int _ | Float _ | Hole -> true
+  (* A hole — a value the Wasm side left polymorphic — or, unless [holes_only], a
+     numeric literal. NOT a [Char], whose i32 value a cast would convert rather
+     than ground. *)
+  | Hole -> true
+  | Int _ | Float _ -> not holes_only
   (* The operators whose result type IS their operands': a pin on the result
      grounds them. A comparison or [!] yields i32 whatever its operands, and a
      cast fixes its own type, so neither continues the tree. *)
@@ -12270,18 +12279,32 @@ let rec defaulting_tree (i : _ instr) =
       defaulting_tree recv && List.for_all defaulting_tree args
   | _ -> false
 
-(* Whether a pin to [required] is a WIDTH change and not a FAMILY change. A pin
-   only settles how wide a literal is; taking an integer to a float or back is a
-   CONVERSION — in Wax it even needs a signage ([as f32_s]), so a bare pin would
-   not type-check — so a recorded type in the other family is never repairable,
-   whatever the shape of the tree. A literal still free of a family ([Number], or
-   the float-capable [LargeInt]) narrows either way; one committed to a family by
-   an operator ([Int], [Float]) does not; and a value whose cell a cast already
-   folded keeps the family it folded to. *)
+(* Which family a numeric type belongs to. A pin only ever settles a value's WIDTH:
+   taking it across this divide is a CONVERSION (in Wax it even needs a signage,
+   [as f32_s]), so no repair may cross it. *)
+let numeric_family (t : Ast.valtype) =
+  match t with I32 | I64 -> `Int | F32 | F64 | Ref _ | V128 -> `Float
+
+(* The family a numeric CAST accepts for its operand, which is what bounds a pin
+   inserted there ([None] for a cast that is not numeric): an identity/width cast
+   ([as i64], [as f32] — a wrap, extend, promote or demote) takes its own family; a
+   signed conversion takes the OTHER one ([as i64_s] is a truncation, so its operand
+   is a float; [as f32_s] a convert, so its operand is an integer). *)
+let cast_operand_family (t : Ast.casttype) =
+  match t with
+  | Valtype ((I32 | I64 | F32 | F64) as t) -> Some (numeric_family t)
+  | Signedtype { typ = `I32 | `I64; _ } -> Some `Float
+  | Signedtype { typ = `F32 | `F64; _ } -> Some `Int
+  | Valtype (Ref _ | V128) | Functype _ -> None
+
+(* Whether a pin to [required] keeps the value in the family its own inferred type
+   commits it to. A literal still free of a family ([Number], or the float-capable
+   [LargeInt]) narrows either way; one an operator committed ([Int], [Float]) does
+   not; and a value whose cell a cast already folded keeps the family it folded to.
+   (Under a cast the bound comes from {!cast_operand_family} instead, which is
+   sharper: it is the consumer, not the fold, that constrains the operand there.) *)
 let pin_stays_in_family (inferred : inferred_type) ~resolved ~required =
-  let integral (t : Ast.valtype) =
-    match t with I32 | I64 -> true | _ -> false
-  in
+  let integral t = numeric_family t = `Int in
   match inferred with
   | Number | LargeInt -> true
   | Int -> integral required
@@ -12356,16 +12379,36 @@ let rec reconcile_widths mode diagnostics ~under_cast (i : _ instr) : _ instr =
         | Some required, Some resolved -> (
             match (inferred_width resolved, numeric_valtype required) with
             | Some inferred_w, Some required_v when inferred_w <> required ->
-                (* A pin can correct the disagreement when nothing anchored the
-                   value's width: either it is still flexible, or it is a literal
-                   tree a numeric cast folded to its own target (see
-                   {!defaulting_tree} — the cast constrains its operand only to be
-                   numeric, so re-grounding it under the cast is inert to the
-                   consumer, and the cast becomes the conversion the Wasm had). *)
+                (* Can a pin correct this disagreement? Two ways in:
+                   - the node is the OPERAND of a numeric cast and is a literal
+                     tree ({!defaulting_tree}). The cast folded that tree to its
+                     own target, so nothing but the cast ever fixed its width, and
+                     re-grounding it there is inert to the consumer — the cast
+                     becomes the conversion the Wasm had. Its one constraint is the
+                     family it accepts ({!cast_operand_family}): a truncation takes
+                     a float operand, a wrap an integer one, and a pin that crossed
+                     that would not even type-check.
+                   - otherwise the node's own type must be unfixed: a
+                     still-flexible literal, or a tree of HOLES alone — a value the
+                     Wasm side left polymorphic, so whatever type the typer settled
+                     on came from its own defaulting rather than from the module.
+                     (That is the dead-code case, and the type is often CONCRETE —
+                     an operator pins an [Unknown] operand outright — so the cell
+                     alone cannot recognise it.) A hole holds no value to convert,
+                     so it is exempt from the family bound, unless it sits under a
+                     cast whose own family bound applies. *)
+                let hole_only = defaulting_tree ~holes_only:true i in
                 let pinnable =
-                  pin_stays_in_family inferred ~resolved:inferred_w ~required
-                  && (flexible_literal inferred
-                     || (under_cast && defaulting_tree i))
+                  (* Under a cast the family it accepts bounds EVERY pin placed
+                     there, whatever made the value pinnable. *)
+                  (match under_cast with
+                    | Some accepted -> accepted = numeric_family required
+                    | None -> true)
+                  && ((under_cast <> None && defaulting_tree i)
+                     || (flexible_literal inferred || hole_only)
+                        && ((hole_only && under_cast = None)
+                           || pin_stays_in_family inferred ~resolved:inferred_w
+                                ~required))
                 in
                 if pinnable && mode = `Repair then begin
                   Cell.set cell (Valtype required_v);
@@ -12386,15 +12429,16 @@ let rec reconcile_widths mode diagnostics ~under_cast (i : _ instr) : _ instr =
       i with
       desc =
         (match i.desc with
-        (* A NUMERIC cast requires only that its operand be numeric, so a pin
-           inside it stays type-correct — unlike an operand a call or method
-           signature fixes, where a pin would make the call ill-typed. That is the
-           one position where a folded literal tree is still repairable. *)
-        | Cast (e, ((Valtype (I32 | I64 | F32 | F64) | Signedtype _) as t)) ->
-            Cast (sub ~under_cast:true e, t)
+        (* A numeric cast constrains its operand only by FAMILY, so a pin inside
+           it stays type-correct — unlike an operand a call or method signature
+           fixes, where a pin would make the call ill-typed. That is the one
+           position where a folded literal tree is still repairable, and the family
+           it accepts travels with the recursion. *)
+        | Cast (e, t) when cast_operand_family t <> None ->
+            Cast (sub ~under_cast:(cast_operand_family t) e, t)
         | desc ->
-            Ast_utils.map_desc ~instr:(sub ~under_cast:false)
-              ~block:(Ast_utils.smart_map (sub ~under_cast:false))
+            Ast_utils.map_desc ~instr:(sub ~under_cast:None)
+              ~block:(Ast_utils.smart_map (sub ~under_cast:None))
               desc);
     }
   in
@@ -12422,7 +12466,7 @@ let reconcile_module_widths mode diagnostics
           f with
           Annot.desc =
             Ast_utils.map_modulefield_instr
-              (reconcile_widths mode diagnostics ~under_cast:false)
+              (reconcile_widths mode diagnostics ~under_cast:None)
               f.Annot.desc;
         })
       m

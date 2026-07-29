@@ -22,10 +22,10 @@ differential-validation fuzzer.
   elem e: &func = [];
   #[export]
   fn f() -> f32 {
-      1 as f32;
-      2 as f32;
+      1;
+      2;
       e.drop();
-      _.min(_);
+      (_ as f32).min(_ as f32);
   }
 
 The two stranded [f32.const]s are leftovers past the [elem.drop] statement, so

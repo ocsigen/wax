@@ -23,7 +23,7 @@ against a concrete-arm select (an anchor), and never for an i32 op:
   $ wax -i wat -f wax --faithful m.wat
   fn shr_sel() {
       unreachable;
-      _ = _ as i64 >>u (_?_:_);
+      _ = (_ >>u (_?_:_)) as i64;
   }
   fn cmp_sel() {
       unreachable;
