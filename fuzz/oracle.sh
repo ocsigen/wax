@@ -837,6 +837,26 @@ if [ -n "$waxf" ] && [ -n "$watf" ]; then
     # WAT-ONLY one (the validator firing what the typer does not) would be a real
     # bug and is kept.
     only_wax="$(printf '%s\n' "$only_wax" | grep -vxE 'redundant-operation' || true)"
+    # [unused-field] on a TYPE is wax-side one-sided for the same reason: it asks
+    # whether the SOURCE names the definition, and Wax infers types the wat form
+    # must spell. A reftype can only name a type, so an inferred Wax type — a
+    # global's ([const g = f]), a local's ([let x = h]), a block's result —
+    # becomes an explicit [(ref $t)] the validator counts as a use. Both linters
+    # are right about their own input, and the wax report is the actionable one
+    # (deleting the definition recompiles: the lowering interns an anonymous type
+    # in its place), so it must stay. Dropped only when EVERY wax-only
+    # [unused-field] is about a type: one about any other index space — a
+    # function, global, table, segment, import — has no such inference story and
+    # is kept, as is a WAT-ONLY fire (the validator seeing what the typer does
+    # not). Genuine typer-side type over-reports do exist (a table's element type
+    # and an import's signature type went unrecorded until this exemption was
+    # written) and are pinned by cram tests instead of by this arm.
+    if printf '%s\n' "$only_wax" | grep -qxF 'unused-field' \
+       && ! timeout -k 5 "$TIMEOUT" "$WAX" check -W all=warning \
+            --error-format short "$waxf" 2>&1 \
+          | grep -F '[unused-field]' | grep -qv "The type '"; then
+      only_wax="$(printf '%s\n' "$only_wax" | grep -vxF 'unused-field' || true)"
+    fi
     if [ -n "$only_wax" ] || [ -n "$only_wat" ]; then
       dw="$(printf '%s' "$only_wax" | paste -sd, -)"
       dt="$(printf '%s' "$only_wat" | paste -sd, -)"

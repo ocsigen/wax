@@ -36,3 +36,40 @@ validator, which mirrors the same rule:
   >   (i31.get_u (ref.cast (ref i31) (local.get 0)))))
   > WAT
   $ wax check -W cast-always-fails=warning n.wat
+
+Only the INNERMOST cast of a chain is reported. Once a cast can never produce a
+value, whatever an outer cast or test says about that value merely follows from
+the inner verdict, and the fix belongs at the inner cast. Nested casts also share
+a start position, so the two reports would print as the same `line:col: message`
+to a `--error-format short`/`json` consumer. Regression: found by the mutation
+fuzzer's duplicate-diagnostic oracle.
+
+  $ cat > chain.wax <<'WAX'
+  > type a = open { x: i32 };
+  > type b = { y: i64 };
+  > type c: a = { x: i32, z: i32 };
+  > #[export]
+  > fn f(p: &a) -> i32 {
+  >     p as &b as &c is &a;
+  > }
+  > WAX
+  $ wax check -W correctness=warning --error-format short chain.wax
+  chain.wax:6:5: warning: This cast always traps: the value can never have this type. [cast-always-fails]
+
+Each cast on its own is still reported:
+
+  $ cat > single.wax <<'WAX'
+  > type a = open { x: i32 };
+  > type b = { y: i64 };
+  > #[export]
+  > fn f(p: &a) -> i32 {
+  >     !(p as &b);
+  > }
+  > #[export]
+  > fn g(p: &a) -> i32 {
+  >     !(p as &b);
+  > }
+  > WAX
+  $ wax check -W correctness=warning --error-format short single.wax
+  single.wax:5:7: warning: This cast always traps: the value can never have this type. [cast-always-fails]
+  single.wax:9:7: warning: This cast always traps: the value can never have this type. [cast-always-fails]

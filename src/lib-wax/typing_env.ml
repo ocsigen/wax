@@ -254,6 +254,20 @@ type module_context = {
          conditional branches. Deliberately not filtered by reachability:
          rewriting a [let] that only a dead function assigns into a [const] would
          not type-check, so a textual assignment is enough to keep the [mut]. *)
+  cast_traps_reported : (int * int, unit) Hashtbl.t;
+      (* Source spans (byte offsets) of the casts already found to trap on every
+         value, so a cast whose OPERAND always traps is not reported as well: its
+         verdict only follows from the inner one, and the fix belongs at the
+         inner. Nested casts share a start position ([a as &B as &C] both start
+         at [a]), so the two reports would also render as the same
+         [line:col: message] line to a [short]/[json] consumer. *)
+  canonical_type_references : (origin * Wax_wasm.Types.Id.t) list ref;
+      (* Type references made by CANONICAL index rather than by name, for the
+         uses that name no definition syntactically: a string literal builds the
+         canonical [mut i8] array, so every source definition that deduplicated
+         onto it is used by that literal. Resolved against the type table once,
+         in the unused-field pass, instead of scanning it per literal — the
+         validator's [canonical_type_references] does the same. *)
   origin : origin ref;
       (* Where references are currently being made from. The same ref every
          {!Tbl} of this context holds (see [Tbl.current]), so setting it here

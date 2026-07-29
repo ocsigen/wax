@@ -4762,6 +4762,18 @@ server](#language-server)).
           Only definitions written in the source are candidates: the implicit
           function types interned for an inline block or `call_indirect` signature
           are not reported.
+
+          A type is used wherever the source names it, including the positions
+          whose reference the compiled module carries implicitly: a table's
+          element type, an imported function's signature, and the array type a
+          string literal builds (a bare string names no type, so a like-typed
+          definition it is compiled onto counts as used). The converse also
+          holds, and is why a Wax module can report a type its compiled form
+          references: `type t = fn(); #[export] const g = f;` names `t` nowhere,
+          so it is reported, even though the global's lowered type `(ref $t)`
+          points at the definition (a reference type can only name a type).
+          Deleting it recompiles: the lowering then interns an anonymous function
+          type in its place.
         - `unused-import` (groups `unused`, `correctness`): an imported function,
           global, memory, table, or tag that nothing reachable references. Like
           `unused-field` — same reachability analysis — but for imports; `_`
@@ -4804,7 +4816,10 @@ server](#language-server)).
         - `cast-always-fails` (group `correctness`): a reference cast or test
           whose operand can never have the target type (the two are unrelated in
           the type hierarchy), so the cast always traps and the test is always
-          false. Shown by default.
+          false. Shown by default. In a chain only the innermost such cast is
+          reported: an outer cast or test over a value that can never be produced
+          says nothing the inner verdict does not already, and the fix belongs at
+          the inner cast.
         - `eager-select` (group `correctness`): a trapping or effectful
           operation in a branch of a `?:` (which compiles to a `select`,
           evaluating both branches unconditionally), so it runs even when the

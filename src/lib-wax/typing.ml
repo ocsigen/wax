@@ -1027,6 +1027,21 @@ module Tbl = struct
   let iter_references env f =
     Hashtbl.iter (fun name referrer -> f referrer name) env.used
 
+  (* Record a reference to [name] from [referrer], for a use that names no
+     declaration syntactically (see [canonical_type_references]). Same one
+     entry per (name, origin) pair as [resolve]. *)
+  let mark_reference env name referrer =
+    if
+      referrer <> Ignored
+      && not (List.mem referrer (Hashtbl.find_all env.used name))
+    then Hashtbl.add env.used name referrer
+
+  (* [f name value] for every declaration in this table. *)
+  let iter_entries env f =
+    Hashtbl.iter
+      (fun name entries -> List.iter (fun (_, v) -> f name v) entries)
+      env.tbl
+
   let cur env = !(env.namespace.cond)
 
   let entries env (x : Ast.ident) =
@@ -3328,6 +3343,30 @@ let context_block_typ ctx ~keyword (block_start : Lexing.position)
 let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
     target_natural =
   let info = subtyping_info ctx in
+  (* Report the INNERMOST always-trapping cast of a chain only: a cast or test
+     over a value that can never be produced is unreachable, and whatever it says
+     merely follows from the inner verdict — the fix belongs at the inner cast
+     (see [cast_traps_reported]). The span is recorded whether or not the report
+     came out, so a longer chain stays quiet past its second cast. *)
+  let span_key (l : Ast.location) =
+    (l.loc_start.Lexing.pos_cnum, l.loc_end.Lexing.pos_cnum)
+  in
+  let operand_traps =
+    match operand_location with
+    | Some ol -> Hashtbl.mem ctx.cast_traps_reported (span_key ol)
+    | None -> false
+  in
+  if operand_traps then
+    Hashtbl.replace ctx.cast_traps_reported (span_key location) ();
+  let cast_always_fails () =
+    Hashtbl.replace ctx.cast_traps_reported (span_key location) ();
+    if not operand_traps then
+      Error.cast_always_fails ctx.diagnostics ~location ~is_test
+  in
+  let redundant_cast ?edit () =
+    if not operand_traps then
+      Error.redundant_cast ?edit ctx.diagnostics ~location ~is_test
+  in
   match (op_natural, target_natural) with
   | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
       Valtype { internal = Ref tgt; _ } )
@@ -3350,7 +3389,7 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
       in
       if bridged then ()
       else if (not related) && not (op.nullable && tgt.nullable) then
-        Error.cast_always_fails ctx.diagnostics ~location ~is_test
+        cast_always_fails ()
       else if Wax_wasm.Types.ref_subtype info op tgt then
         let edit =
           match operand_location with
@@ -3358,7 +3397,7 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
               Some (deletion_edit (span ol.loc_end location.loc_end))
           | _ -> None
         in
-        Error.redundant_cast ?edit ctx.diagnostics ~location ~is_test
+        redundant_cast ?edit ()
   | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
       Valtype { internal = I32 | I64; _ } )
     when (not is_test)
@@ -3372,7 +3411,7 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
          reference that can never be an [i31] — a [struct]/[array], not
          [any]/[eq]/[i31] — makes that [ref.cast] always trap, exactly as the
          Wasm validator reports on the lowered form. *)
-      Error.cast_always_fails ctx.diagnostics ~location ~is_test
+      cast_always_fails ()
   | _ -> ()
 
 (* The type lookups below never fail *)
@@ -6283,8 +6322,8 @@ and type_cast ctx i =
        check_type ctx i' typ);
       (if ctx.warn_unused && not ctx.simplify then
          let>@ target = internalize ctx (Ref ty) in
-         lint_ref_cast ctx ~location:i.info ~is_test:true op_natural
-           (Cell.get target));
+         lint_ref_cast ~operand_location:(snd i'.info) ctx ~location:i.info
+           ~is_test:true op_natural (Cell.get target));
       return_expression i (Test (i', ty)) i32_cell
   (* Construction literals carry an optional type name that can be inferred from
      an expected type. Their typing lives in [check_instruction]; in synthesis position
@@ -8637,6 +8676,20 @@ and check_instruction ctx expected (i : location instr) =
         | Some name when not (is_default name) -> name
         | _ -> string_typ
       in
+      (* A bare string builds the canonical [mut i8] array, naming no source type
+         at all, so record a use of that canonical index — every definition the
+         array deduplicates onto is used by the literal. The mirror of the
+         validator's [string_type_reference]; resolved in the unused-field pass.
+         A string that adopted a named array type resolved (and so marked) that
+         name itself. *)
+      if ctx.warn_unused && typ.desc = string_typ.desc then
+        Option.iter
+          (fun id ->
+            let r = (!(ctx.origin), id) in
+            if not (List.mem r !(ctx.canonical_type_references)) then
+              ctx.canonical_type_references :=
+                r :: !(ctx.canonical_type_references))
+          (resolve_type_name ctx.diagnostics ctx.type_context string_typ);
       (let>@ field = lookup_array_type ctx typ in
        match field.typ with
        | Packed I8 -> ()
@@ -11170,13 +11223,16 @@ let fundecl_typ ctx name typ sign =
    reports, and its body is still checked (see [functions]) — the Wax mirror
    of the validator's poisoned index entries. A duplicate name registers
    nothing (the first entry stands; [Tbl.exists] reports the clash). *)
-let register_function ctx d name typ sign ~exact =
+let register_function ctx d name typ sign ~exact ~import =
   if not (Tbl.exists d ctx.functions name) then begin
-    (* A function's signature is a reference *it* makes, so attribute the types it
-       names to the function rather than letting a dead function's type look
-       externally referenced. *)
+    (* A defined function's signature is a reference *it* makes, so attribute the
+       types it names to the function rather than letting a dead function's type
+       look externally referenced. An IMPORT has no body: its signature is a
+       module-level reference, hence a root — as in the validator, and as for an
+       imported global's or tag's type here. *)
     let outer = !(ctx.origin) in
-    if outer <> Ignored then ctx.origin := From_function name.desc;
+    if (not import) && outer <> Ignored then
+      ctx.origin := From_function name.desc;
     let entry =
       Option.map (fun (i, n) -> (i, n, exact)) (fundecl_typ ctx name typ sign)
     in
@@ -11418,6 +11474,8 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       import_globals =
         Tbl.make ~hover:hover_of_global ~current namespace "global";
       assigned_globals = Hashtbl.create 16;
+      cast_traps_reported = Hashtbl.create 16;
+      canonical_type_references = ref [];
       origin = current;
       memories = Tbl.make ~current namespace "memory";
       datas = Tbl.make ~current (Namespace.make ~links cond) "data segment";
@@ -11469,11 +11527,17 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     in
     Tbl.add diagnostics ctx.tags name typ
   in
+  (* A table's element type is stored as written, so resolve it here for its two
+     side effects: an unbound type name is reported by the typer itself (rather
+     than only later, by the lowering, which is what the whole type-checking pass
+     exists to pre-empt), and a type named only as a table's element type counts
+     as used — as it does in the validator. *)
+  let resolve_table_reftype rt = ignore (internalize_valtype ctx (Ref rt)) in
   (* Register an imported entity under its Wax name. *)
   let register_import (decl : Ast.import_decl) =
     match decl.kind with
     | Import_func { typ; sign; exact } ->
-        register_function ctx diagnostics decl.id typ sign ~exact
+        register_function ctx diagnostics decl.id typ sign ~exact ~import:true
     | Import_global { mut; typ } ->
         let>@ typ = internalize_valtype ctx typ in
         Tbl.add diagnostics ctx.globals decl.id (mut, Some typ)
@@ -11483,6 +11547,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
         incr memory_index;
         Tbl.add diagnostics ctx.memories decl.id (i, address_type)
     | Import_table { address_type; reftype = rt; _ } ->
+        resolve_table_reftype rt;
         Tbl.add diagnostics ctx.tables decl.id (address_type, rt)
   in
   walk_fields
@@ -11513,11 +11578,12 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
             Wax_utils.Feature.is_enabled ctx.type_context.features
               Wax_utils.Feature.Custom_descriptors
           in
-          register_function ctx diagnostics name typ sign ~exact
+          register_function ctx diagnostics name typ sign ~exact ~import:false
       | Tag { name; typ; sign; _ } -> register_tag name typ sign
       | Data { name; _ } ->
           Option.iter (fun n -> Tbl.add diagnostics ctx.datas n ()) name
       | Table { name; address_type; reftype = rt; _ } ->
+          resolve_table_reftype rt;
           Tbl.add diagnostics ctx.tables name (address_type, rt)
       | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
       | Conditional _ | Type _ | Global _ | Module_annotation _ -> ())
@@ -11720,6 +11786,21 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      Then report the mutable ([let]) globals never assigned, which could be
      [const] instead. *)
   if warn_unused then begin
+    (* Resolve the by-canonical type references (a string literal's [mut i8]
+       array) against the definitions that deduplicated onto them, once, before
+       any of the reference graphs below are read. *)
+    (match !(ctx.canonical_type_references) with
+    | [] -> ()
+    | refs ->
+        Tbl.iter_entries ctx.types (fun name (r, _) ->
+            match (r : Wax_wasm.Types.ref_index) with
+            | Def id ->
+                List.iter
+                  (fun (origin, id') ->
+                    if Wax_wasm.Types.Id.equal id id' then
+                      Tbl.mark_reference ctx.types name origin)
+                  refs
+            | Rec _ -> ()));
     let exempt field =
       List.exists
         (fun (a : Ast.attribute) ->

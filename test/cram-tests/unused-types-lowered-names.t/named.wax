@@ -1,0 +1,13 @@
+type sig = fn();
+type elems = fn();
+type bytes = [mut i8];
+
+import "m"
+#[export = "imported"]
+fn imported: sig ;
+
+#[export]
+table tbl: &?elems [1];
+
+#[export]
+const msg = "hi";

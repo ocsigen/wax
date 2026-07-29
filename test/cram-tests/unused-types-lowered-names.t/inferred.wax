@@ -1,0 +1,6 @@
+type t = fn();
+
+fn h() {}
+
+#[export]
+const g = h;

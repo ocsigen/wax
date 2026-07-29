@@ -158,6 +158,8 @@ type module_context = {
   globals : (bool * Infer.inferred_valtype option) Tbl.t;
   import_globals : (bool * Infer.inferred_valtype option) Tbl.t;
   assigned_globals : (string, unit) Hashtbl.t;
+  cast_traps_reported : (int * int, unit) Hashtbl.t;
+  canonical_type_references : (origin * Wax_wasm.Types.Id.t) list ref;
   origin : origin ref;
   tags : Ast.functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
