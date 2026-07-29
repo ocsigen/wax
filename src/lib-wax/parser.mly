@@ -681,7 +681,7 @@ case_labels:
 
 heap_type:
 | CONT { (Cont : heaptype) }
-| t = ident { try Hashtbl.find absheaptype_tbl t.desc with Not_found -> Type t }
+| t = ident { try Hashtbl.find absheaptype_tbl t.Annot.desc with Not_found -> Type t }
 
 reference_type:
 | "&" nullable = boption("?") exact = boption("!") typ = heap_type
@@ -785,7 +785,7 @@ rectype:
 (* Reuse the type definition's own (already registered) location rather than
    register a duplicate one for the same span, which would split trivia between
    them. *)
-| t = type_definition { {desc = [|t|]; info = t.info} }
+| t = type_definition { {Annot.desc = [|t|]; info = t.Annot.info} }
 
 attribute_expression: e = expression { e }
 
@@ -959,7 +959,7 @@ on_clause:
 | t = ident "->" l = label { OnLabel (t, l) }
 (* [switch] is a contextual identifier here (no longer a keyword). *)
 | t = ident "->" s = ident
-  { if s.desc = "switch" then OnSwitch t
+  { if s.Annot.desc = "switch" then OnSwitch t
     else
       raise
         (Wax_utils.Parsing.syntax_error_pair
@@ -1137,9 +1137,11 @@ plaininstr:
 | c = CHAR
   { with_loc $loc (Char c) }
 | s = STRING
-  { with_loc (s.info.loc_start, s.info.loc_end) (String (None, s.desc)) }
+  { with_loc (s.Annot.info.loc_start, s.Annot.info.loc_end)
+      (String (None, s.Annot.desc)) }
 | t = ident "#" s = STRING
-  { with_loc ($symbolstartpos, s.info.loc_end) (String (Some t, s.desc)) }
+  { with_loc ($symbolstartpos, s.Annot.info.loc_end)
+      (String (Some t, s.Annot.desc)) }
 | i = INT { with_loc $sloc (Int i) }
 | f = FLOAT { with_loc $sloc (Float f) }
 | INF { with_loc $sloc (Float "inf") }
@@ -1442,7 +1444,7 @@ data_init:
 | l = separated_nonempty_list("++", data_element) { l }
 
 data_element:
-| s = STRING { Data_string s.desc }
+| s = STRING { Data_string s.Annot.desc }
 | "[" t = ident ":" l = separated_list_trailing(",", data_run_item) "]"
   { data_run $loc(t) t l }
 
@@ -1533,7 +1535,7 @@ elem:
    field. There is no standalone brace group: [{ … }] only appears as a
    conditional branch body. *)
 module_field:
-| r = rectype { RF_plain {Ast.desc = Type r.desc; info = r.info} }
+| r = rectype { RF_plain {Annot.desc = Type r.Annot.desc; info = r.Annot.info} }
 | a = inner_attribute { RF_plain (annot $sloc (Module_annotation [a])) }
 | attributes = list(attribute) d = definition
   { RF_plain (attributed $sloc attributes d) }
@@ -1585,7 +1587,7 @@ condition:
 | name = ident op = condition_relop rhs = condition_literal
   { Wax_wasm.Ast.Cond_cmp (op, Wax_wasm.Ast.Cond_var name, rhs) }
 | name = ident "(" l = separated_list_trailing(",", condition) ")"
-  { match name.desc, l with
+  { match name.Annot.desc, l with
     | "all", _ -> Wax_wasm.Ast.Cond_and l
     | "any", _ -> Wax_wasm.Ast.Cond_or l
     | "not", [c] -> Wax_wasm.Ast.Cond_not c
