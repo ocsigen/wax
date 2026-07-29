@@ -29,6 +29,11 @@ KEEP="$ROOT/fuzz/run-findings"
 mkdir -p "$KEEP"
 REPORT="$(mktemp)"
 ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
+# Run against a snapshot of the binary, as the mutators do: a rebuild while the
+# sweep is running leaves the workers exec'ing a half-written file, and every
+# [exit(126)] the crash oracle then reports is a phantom HIGH finding.
+freeze_wax
+trap 'rm -f "${WAX_FROZEN:-}"' EXIT
 
 # Worker: derive the expected validity from the path, then run the oracle.
 check_one() {
