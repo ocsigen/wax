@@ -157,6 +157,35 @@ for op in trunc_f32_s trunc_f32_u trunc_f64_s trunc_f64_u \
   done
 done
 
+# ---- A receiver whose pop is BLOCKED by an interposed zero-value statement, feeding
+# a width-named float method whose result is then cast. The interposed statement (a
+# [data.drop], an [atomic.fence], an empty block) sits on the stack above the value,
+# so the method's operand pop reads a HOLE and the value below becomes a stranded
+# leftover — and a hole takes its type from what it re-connects to on a re-parse,
+# not from a default, so the DOWNSTREAM cast (a demote, or the trunc's own [as int])
+# grounds the whole chain: the method, the demote and the constant all narrow at
+# once. (The shape a wasm-smith round trip found as `f64.floor` -> `f32.floor`:
+# `f64.const ; data.drop ; f64.floor ; f32.demote_f64`.) The pin is the receiver's
+# own cast, which the typer must keep rather than prune as redundant. ----
+for meth in floor ceil trunc nearest sqrt abs; do
+  for stmt in "data.drop 0" "atomic.fence" "(block)"; do
+    # f64 method under an f32 demote: the demote is the eraser that re-grounds the
+    # hole, so the f64 form must survive.
+    add "blocked-recv f64.$meth ($stmt) + demote" "f64.$meth" \
+      "(module (memory 1 1 shared) (data \"x\") (func (export \"f\") (result f32)
+         f64.const 0x1p-1063 $stmt f64.$meth f32.demote_f64))"
+    # f32 method under an f64 promote: the mirror direction.
+    add "blocked-recv f32.$meth ($stmt) + promote" "f32.$meth" \
+      "(module (memory 1 1 shared) (data \"x\") (func (export \"f\") (result f64)
+         f32.const 0x1p-125 $stmt f32.$meth f64.promote_f32))"
+    # f64 method under a truncation, whose [as int] surface carries the result
+    # width and so re-grounds the source the same way.
+    add "blocked-recv f64.$meth ($stmt) + trunc" "f64.$meth" \
+      "(module (memory 1 1 shared) (data \"x\") (func (export \"f\") (result i32)
+         f64.const 0x1.8p+1 $stmt f64.$meth i32.trunc_f64_u))"
+  done
+done
+
 N=${#COMBOS[@]}
 
 # Worker: round-trip each module wat -> wax -> wat; a crash/rejection on either

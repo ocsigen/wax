@@ -46,6 +46,15 @@
     (f32.gt (block (result f32) (call $dummy) (f32.const 3))
             (block (result f32) (call $dummy) (f32.const 3))))
 
+  ;; a receiver whose pop an interposed zero-value statement blocks, so the method
+  ;; reads a HOLE and the value below is stranded: the downstream demote then
+  ;; re-grounds the whole chain unless the receiver's own type is stated
+  (func (export "blocked_receiver") (result f32)
+    f64.const 0x1p-1063
+    (block)
+    f64.floor
+    f32.demote_f64)
+
   ;; --- Dead code: every operand is a hole on a polymorphic stack.
   (func (export "dead") (result i32)
     unreachable

@@ -3963,6 +3963,46 @@ let is_width_preserving_method m =
       true
   | _ -> false
 
+(* Whether the node's printed form takes its numeric type by DEFAULTING: a tree of
+   numeric literals, holes and width-PRESERVING operators with nothing in it that
+   fixes a width — no local, call result, memory read or cast. A pin around such a
+   tree grounds every literal in it and converts nothing, whereas a pin around a
+   tree holding a
+   real datum would be a numeric CONVERSION of that datum. Mirrors [From_wasm]'s
+   anchor-free notion ([is_anchor]/[reparse_adaptive]), and is needed beside
+   {!flexible_literal} because a cast FOLDS a still-flexible literal into its
+   target type ([cast] above), so by the end of inference such a tree's cell looks
+   concrete even though its width was never anchored by anything. *)
+let rec defaulting_tree ?(holes_only = false) (i : _ instr) =
+  let defaulting_tree = defaulting_tree ~holes_only in
+  match i.desc with
+  (* A hole — a value the Wasm side left polymorphic — or, unless [holes_only], a
+     numeric literal. NOT a [Char], whose i32 value a cast would convert rather
+     than ground. *)
+  | Hole -> true
+  | Int _ | Float _ -> not holes_only
+  (* The operators whose result type IS their operands': a pin on the result
+     grounds them. A comparison or [!] yields i32 whatever its operands, and a
+     cast fixes its own type, so neither continues the tree. *)
+  | UnOp ({ Annot.desc = Neg | Pos; _ }, a) -> defaulting_tree a
+  | BinOp
+      ( {
+          Annot.desc =
+            Add | Sub | Mul | Div _ | Rem _ | And | Or | Xor | Shl | Shr _;
+          _;
+        },
+        a,
+        b ) ->
+      defaulting_tree a && defaulting_tree b
+  | Select (_, a, b) -> defaulting_tree a && defaulting_tree b
+  | Sequence (_ :: _ as l) -> defaulting_tree (List.nth l (List.length l - 1))
+  (* A method whose result width is its receiver's ([(5).clz()],
+     [(1).rotl(40)]): the pin on the result reaches the receiver through it. *)
+  | Call ({ desc = StructGet (recv, meth); _ }, args)
+    when is_width_preserving_method meth.Annot.desc ->
+      defaulting_tree recv && List.for_all defaulting_tree args
+  | _ -> false
+
 (* Register (once) a type definition for an anonymous function signature and
    return the synthetic name standing for it — used when a cast or [call_ref]
    needs a named [func] type but the source wrote the signature inline. The name
@@ -6343,6 +6383,23 @@ and type_cast ctx i =
         | Some d, Valtype { typ; _ } -> d <> typ
         | _ -> false
       in
+      (* A cast on a tree of HOLES is load-bearing whatever its target, even when
+         that target is the operand's own default width. The rule above reasons that
+         a still-flexible operand "re-parses at its default", which holds for a
+         literal tree — but a HOLE carries no value of its own: on a re-parse it
+         re-connects to the value stranded above it, and what the two settle on is
+         whatever the ENCLOSING context grounds them to. Dropping the cast hands
+         that decision to the context: [(_ as f64).floor() as f32] without the
+         [as f64] re-parses with the demote grounding the whole chain, i.e. as an
+         [f32.floor] of an [f32.const] — the f64 operation AND its demote both lost
+         (a wasm-smith round-trip finding, where an interposed [data.drop] made the
+         receiver a hole). This cast is the only thing stating the type in the
+         printed form, so it stays. *)
+      let load_bearing_hole =
+        match natural_typ with
+        | Some _ -> defaulting_tree ~holes_only:true i'
+        | None -> false
+      in
       (* So is a cast whose operand is pending a width repair: [From_wasm]
          recorded a width for it ([Ast.instr]'s [expected]) that its own defaulting
          does not give, so {!reconcile_widths} will pin it — and the pin lands
@@ -6428,8 +6485,8 @@ and type_cast ctx i =
       in
       let unnecessary_cast =
         (ctx.simplify || (ctx.faithful && target_nullable_ref))
-        && (not load_bearing_literal) && (not operand_pin_pending)
-        && (not load_bearing_null)
+        && (not load_bearing_literal) && (not load_bearing_hole)
+        && (not operand_pin_pending) && (not load_bearing_null)
         && (not load_bearing_bottom_ref)
         && (not load_bearing_cont)
         && (not (is_unknown_or_error ty'))
@@ -12241,46 +12298,6 @@ let flexible_literal (ty : inferred_type) =
   | Unknown | Error | UnknownRef | Null | Int8 | Int16 | Valtype _
   | Collecting _ ->
       false
-
-(* Whether the node's printed form takes its numeric type by DEFAULTING: a tree of
-   numeric literals, holes and width-PRESERVING operators with nothing in it that
-   fixes a width — no local, call result, memory read or cast. A pin around such a
-   tree grounds every literal in it and converts nothing (it is exactly what
-   [From_wasm]'s [Stack.pin_width] emits), whereas a pin around a tree holding a
-   real datum would be a numeric CONVERSION of that datum. Mirrors [From_wasm]'s
-   anchor-free notion ([is_anchor]/[reparse_adaptive]), and is needed beside
-   {!flexible_literal} because a cast FOLDS a still-flexible literal into its
-   target type ([cast] above), so by the end of inference such a tree's cell looks
-   concrete even though its width was never anchored by anything. *)
-let rec defaulting_tree ?(holes_only = false) (i : _ instr) =
-  let defaulting_tree = defaulting_tree ~holes_only in
-  match i.desc with
-  (* A hole — a value the Wasm side left polymorphic — or, unless [holes_only], a
-     numeric literal. NOT a [Char], whose i32 value a cast would convert rather
-     than ground. *)
-  | Hole -> true
-  | Int _ | Float _ -> not holes_only
-  (* The operators whose result type IS their operands': a pin on the result
-     grounds them. A comparison or [!] yields i32 whatever its operands, and a
-     cast fixes its own type, so neither continues the tree. *)
-  | UnOp ({ Annot.desc = Neg | Pos; _ }, a) -> defaulting_tree a
-  | BinOp
-      ( {
-          Annot.desc =
-            Add | Sub | Mul | Div _ | Rem _ | And | Or | Xor | Shl | Shr _;
-          _;
-        },
-        a,
-        b ) ->
-      defaulting_tree a && defaulting_tree b
-  | Select (_, a, b) -> defaulting_tree a && defaulting_tree b
-  | Sequence (_ :: _ as l) -> defaulting_tree (List.nth l (List.length l - 1))
-  (* A method whose result width is its receiver's ([(5).clz()],
-     [(1).rotl(40)]): the pin on the result reaches the receiver through it. *)
-  | Call ({ desc = StructGet (recv, meth); _ }, args)
-    when is_width_preserving_method meth.Annot.desc ->
-      defaulting_tree recv && List.for_all defaulting_tree args
-  | _ -> false
 
 (* Which family a numeric type belongs to. A pin only ever settles a value's WIDTH:
    taking it across this divide is a CONVERSION (in Wax it even needs a signage,
