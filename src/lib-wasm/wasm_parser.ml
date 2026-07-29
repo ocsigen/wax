@@ -295,7 +295,10 @@ let blocktype ch =
   else Some (Typeuse (sint ch))
 
 let storagetype ch =
-  let i = uint ch in
+  (* The discriminator is a single byte, as in [valtype_first_byte]: the packed
+     types share the value-type encoding, so an overlong [ff 00] must be rejected
+     rather than read as [0x7f] ([i32]). *)
+  let i = input_byte ch in
   match i with
   | 0x78 -> Packed I8
   | 0x77 -> Packed I16
@@ -419,7 +422,9 @@ let importdesc ch d =
   | 2 -> Memory (memtype ch)
   | 3 -> Global (globaltype ch)
   | 4 ->
-      let b = uint ch in
+      (* The attribute is a single byte (as in [tag] for the tag section), not an
+         unbounded LEB: an overlong [80 00] must not read as the required 0. *)
+      let b = input_byte ch in
       if b <> 0 then error ch "malformed tag attribute";
       Tag (uint ch)
   | _ -> error ch "malformed import kind 0x%02x" d
@@ -430,24 +435,33 @@ let importdesc ch d =
    second name, a [0x7F] marker groups a whole [(field name, externtype)] list
    under the one module name ([Group1]), and [0x7E] groups a [field name] list
    that all share one externtype ([Group2]). Neither marker is a valid kind byte,
-   so a plain import stays unambiguous. *)
+   so a plain import stays unambiguous. Like every externtype kind, the marker is
+   a single byte, not an unbounded LEB: an overlong [ff 00] must not read as the
+   [0x7F] group marker. *)
 let import_entry ch =
   let module_ = name ch in
   let nm = name ch in
-  match uint ch with
+  (* A group leaves the field-name position unused, and the proposal fixes it at
+     the empty name; a group carrying one there would silently lose it. *)
+  let group_name_must_be_empty () =
+    if nm <> "" then error ch "malformed import group name"
+  in
+  match input_byte ch with
   | 0x7F ->
+      group_name_must_be_empty ();
       let items =
         Array.to_list
           (vec
              (fun ch ->
                let name = name ch in
-               (name, importdesc ch (uint ch)))
+               (name, importdesc ch (input_byte ch)))
              ch)
       in
       Wax_utils.Feature.mark_used ch.features Compact_import_section;
       Group1 { module_; items }
   | 0x7E ->
-      let desc = importdesc ch (uint ch) in
+      group_name_must_be_empty ();
+      let desc = importdesc ch (input_byte ch) in
       let names = Array.to_list (vec (fun ch -> name ch) ch) in
       Wax_utils.Feature.mark_used ch.features Compact_import_section;
       Group2 { module_; desc; names }
@@ -464,7 +478,8 @@ let exportable_kind d : exportable =
 
 let export ch =
   let export_name = name ch in
-  let d = uint ch in
+  (* A single byte, like the import kind above. *)
+  let d = input_byte ch in
   if d > 4 then error ch "unknown export description 0x%02x" d;
   let idx = uint ch in
   let kind = exportable_kind d in

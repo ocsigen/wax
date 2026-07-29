@@ -20,3 +20,37 @@ not silently read as `i32` — otherwise `overlong-valtype.wasm` (a param typed
   File "overlong-valtype.wasm", line 1, characters 17-17:
   Error: malformed reference type 0xff
   [128]
+
+Every other single-byte discriminator is read the same way. Each binary below
+spells one of them overlong, so that its 7-bit value is a byte the decoder
+accepts, and each must be rejected (`wasm-tools` rejects all four):
+
+An import kind — `ff 00` is `0x7f`, the compact-import-section group marker, so
+this once decoded as a group with no items:
+
+  $ wax check overlong-import-kind.wasm
+  File "overlong-import-kind.wasm", line 1, characters 16-16:
+  Error: malformed import kind 0xff
+  [128]
+
+An export description — `80 00` is `0x00`, a function export:
+
+  $ wax check overlong-export-desc.wasm
+  File "overlong-export-desc.wasm", line 1, characters 24-24:
+  Error: unknown export description 0x80
+  [128]
+
+A tag attribute, which the spec fixes at the single byte `0x00`:
+
+  $ wax check overlong-tag-attr.wasm
+  File "overlong-tag-attr.wasm", line 1, characters 23-23:
+  Error: malformed tag attribute
+  [128]
+
+A struct field's storage type, which shares the value-type encoding, so `ff 00`
+once read as `i32`:
+
+  $ wax check overlong-storagetype.wasm
+  File "overlong-storagetype.wasm", line 1, characters 14-14:
+  Error: malformed reference type 0xff
+  [128]

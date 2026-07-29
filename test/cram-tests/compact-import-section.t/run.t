@@ -54,3 +54,23 @@ the three consecutive `env` imports print as one grouped `(import "env" (item �
   )
   (import "other" "x" (func))
   (import "env" "d" (memory 1))
+
+A group entry leaves the field-name position unused, and the proposal fixes it at
+the empty name. One carrying a name there would lose it silently on decode, so it
+is rejected (as `wasm-tools` does):
+
+  $ wax check group-named.wasm
+  File "group-named.wasm", line 1, characters 18-18:
+  Error: malformed import group name
+  [128]
+
+A group with no items denotes no import at all. It is accepted (the encoding is
+well-formed, and `wasm-tools` accepts it too), but nothing is lifted from it: its
+text form would be a bare `(import "m")`, which no text grammar — wax's or
+wasm-tools' — reads back. A wax `import "m" { }` block is dropped the same way.
+
+  $ wax group-empty.wasm -f wat
+  (@feature "compact-import-section")
+
+  $ wax group-empty.wasm -f wax
+  #![feature = "compact-import-section"]

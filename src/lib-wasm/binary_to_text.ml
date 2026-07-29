@@ -676,7 +676,18 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
         in
         (counts, field :: acc))
       ((0, 0, 0, 0, 0), [])
-      m.imports
+      (* A compact group that denotes no import at all is dropped rather than
+         lifted: it declares nothing and advances no index space, and its text
+         form ([(import "m")], with no item to print) is not something the text
+         grammar accepts back — the wax path drops an empty [import "m" {}]
+         block the same way. *)
+      (List.filter
+         (fun (entry : B.import_entry) ->
+           match entry with
+           | Single _ -> true
+           | Group1 { items; _ } -> items <> []
+           | Group2 { names; _ } -> names <> [])
+         m.imports)
   in
   let func_cnt, table_cnt, mem_cnt, global_cnt, tag_cnt = counts in
   let imports = List.rev imports in
