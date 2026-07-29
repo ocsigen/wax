@@ -1,6 +1,6 @@
 dummy_ctx: WAIT
 
-Expecting a dummy ctx.
+Expecting end of file.
 
 parse: LPAREN DATA ID WAIT
 
@@ -776,7 +776,7 @@ Expecting ')'.
 
 parse: LPAREN FUNC CALL_TARGETS_ANNOT WAIT
 
-Expecting ')', or a call targets payload.
+Expecting ')', or a call-target list.
 <1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC CHAR_ANNOT STRING WAIT
@@ -948,7 +948,7 @@ Expecting instructions.
 
 parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT RPAREN WAIT
 
-Expecting ')', or a cond else.
+Expecting ')', or an else-branch.
 <3>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC IF_ANNOT ID THEN_ANNOT WAIT
@@ -958,7 +958,7 @@ Expecting ')', or instructions.
 
 parse: LPAREN FUNC IF_ANNOT ID WAIT
 
-Expecting a cond then.
+Expecting a then-branch.
 
 parse: LPAREN FUNC IF_ANNOT WAIT
 
@@ -994,7 +994,7 @@ Expecting ')'.
 
 parse: LPAREN FUNC INSTR_FREQ_ANNOT WAIT
 
-Expecting an instr freq payload.
+Expecting an instruction frequency.
 
 parse: LPAREN FUNC LOCAL_GET WAIT
 
@@ -1091,7 +1091,7 @@ Expecting ')', a value type, or an identifier ('$...').
 
 parse: LPAREN FUNC LPAREN_RESULT RPAREN LPAREN_THEN
 
-Assuming that the type use is complete, expecting ')', a compilation priority annot, a local declaration, or instructions.
+Assuming that the type use is complete, expecting ')', a compilation priority annotation, a local declaration, or instructions.
 <^1>this type use
 <5>This '(' opens the enclosing construct.
 
@@ -2117,7 +2117,7 @@ Assuming that the module fields are complete, expecting ')'.
 
 parse_script: IF_ANNOT ID THEN_ANNOT RPAREN WAIT
 
-Expecting ')', or cond else fields.
+Expecting ')', or an else-branch.
 <3>This '(' opens the enclosing construct.
 
 parse_script: IF_ANNOT ID THEN_ANNOT WAIT
@@ -2128,7 +2128,7 @@ Assuming that the module fields are complete, expecting ')'.
 
 parse_script: IF_ANNOT ID WAIT
 
-Expecting cond then fields.
+Expecting a then-branch.
 
 parse_script: IF_ANNOT LPAREN AND WAIT
 

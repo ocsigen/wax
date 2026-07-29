@@ -9,10 +9,11 @@ generic fallback (expected list over 5, not overridden): 0
 delimiter hints: 237
 missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
+jargon-rendered nonterminals: 0
 state/automaton item-set match: 706/706
 unsound claims: 0
 entries with uncovered actions: 23
 uncovered action tokens (total): 1769
-names configured: 29, unused: 2
+names configured: 37, unused: 2
   FLOAT (expecting: unused, assuming: unused)
   INT (expecting: unused, assuming: unused)

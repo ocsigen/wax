@@ -1021,6 +1021,36 @@ let renders_as_jargon cfg terminals s =
   && special_name cfg s = None
   && String.contains s '_'
 
+(* Code abbreviations that read as internal jargon in a user-facing message. A
+   nonterminal's auto-derived name is its identifier with the underscores turned
+   into spaces, so a rule named for the implementer's convenience —
+   [compilation_priority_annot], [instr_freq_payload] — surfaces verbatim as "a
+   compilation priority annot". The list is grammar-agnostic on purpose: these are
+   how programmers shorten words, not anything about a particular grammar, so a new
+   grammar inherits the lint with no configuration.
+
+   Deliberately not here: whole words that merely read oddly ("payload", "body",
+   "item"). Those are judgement calls, and a word list that tried to make them
+   would produce false positives on names that are fine. This catches the
+   mechanical, unarguable cases; the [names] entry remains the fix for the rest. *)
+let jargon_words =
+  [
+    "annot"; "arg"; "args"; "attr"; "attrs"; "aux"; "cond"; "conds"; "ctx";
+    "decl"; "decls"; "def"; "defs"; "elt"; "elts"; "expr"; "exprs"; "fn";
+    "freq"; "idx"; "impl"; "instr"; "instrs"; "num"; "opt"; "opts"; "param";
+    "params"; "pat"; "pats"; "ptr"; "ref"; "refs"; "req"; "res"; "sep"; "stmt";
+    "stmts"; "tmp"; "val"; "vals"; "var"; "vars";
+  ]
+
+(* Whether an auto-derived rendering contains one of those. Words are compared
+   whole (so "reference" is not flagged for containing "ref"), and the leading
+   article the derivation added is skipped. *)
+let rendering_has_jargon_word rendered =
+  String.split_on_char ' ' rendered
+  |> List.exists (fun w ->
+         (not (w = "a" || w = "an"))
+         && List.mem (String.lowercase_ascii w) jargon_words)
+
 (* --- Hand-written overrides (the sanctioned escape hatch) --- *)
 
 (* A per-grammar [.overrides] file supplies hand-written messages for the states
@@ -1787,6 +1817,29 @@ let output_stats cfg gram auto results =
   in
   Printf.printf "jargon-rendered tokens: %d\n" (StringSet.cardinal jargon);
   StringSet.iter (fun s -> Printf.printf "  %s\n" s) jargon;
+  (* The nonterminal counterpart. The token lint above cannot see these: it opens
+     with [String.uppercase_ascii s = s], true only of a terminal, so a nonterminal
+     never reaches it. That blind spot shipped "a hinted unfolded" and "a
+     compilation priority opt" while the token count still read 0; both were caught
+     only by someone reading the message diff. Keyed on the *rendered* text of every
+     auto-derived name a shown message uses, so it fires wherever the leak actually
+     surfaces. *)
+  let nt_jargon =
+    List.fold_left
+      (fun acc (_, s) ->
+        List.fold_left
+          (fun acc u ->
+            if u.nu_source = Auto && rendering_has_jargon_word u.nu_rendered then
+              StringSet.add
+                (Printf.sprintf "%s (%s)" u.nu_symbol u.nu_rendered)
+                acc
+            else acc)
+          acc s.name_uses)
+      StringSet.empty results
+  in
+  Printf.printf "jargon-rendered nonterminals: %d\n"
+    (StringSet.cardinal nt_jargon);
+  StringSet.iter (fun s -> Printf.printf "  %s\n" s) nt_jargon;
 
   (* Soundness oracle (state 3): claims-vs-automaton. *)
   let matched, total = check_correspondence auto (List.map fst results) in

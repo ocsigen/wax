@@ -1,6 +1,6 @@
 dummy_ctx: WHILE
 
-Expecting a dummy ctx.
+Expecting end of file.
 
 parse: CONST IDENT COLON IDENT EQUAL CHAR EQUAL
 

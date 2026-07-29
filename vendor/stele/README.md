@@ -429,6 +429,21 @@ opaque, saying "an expression" rather than enumerating its FIRST set, so a
 name that reads as a noun phrase is a better error message with no further
 work.
 
+Two lints guard step 4, and they are separate because they can see different
+things. `jargon-rendered tokens` covers step 6 only: it opens with a
+`String.uppercase_ascii s = s` test, so it is structurally blind to
+nonterminals. `jargon-rendered nonterminals` covers step 4, firing when an
+auto-derived rendering contains a code abbreviation (`ctx`, `annot`, `opt`,
+`expr`, `instr`, …) — the mechanical cases, where the rule was named for the
+implementer. Both ratchet to 0 in the stats golden.
+
+Neither judges whole words. `call_targets_payload` reading "a call targets
+payload" is bad English that no word list can flag without also flagging names
+that are fine, so a rendering can still be poor with both lints at 0. That is
+what `stele names` is for: it tables every symbol a message renders with the
+step that produced it, and scanning the `auto-derived` rows is the periodic
+audit the lints do not replace.
+
 Three techniques follow. The first two are ordinary grammar tidying; the third
 addresses a specific, more advanced problem and can wait until you meet it.
 

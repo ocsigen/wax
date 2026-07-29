@@ -234,7 +234,6 @@
     4x Expecting a data element.
     2x Expecting a data name.
     3x Expecting a descriptor operand.
-    1x Expecting a dummy ctx.
     2x Expecting a field type.
     1x Expecting a float, or an integer.
     2x Expecting a function name.
@@ -269,3 +268,4 @@
        <_>This '(' opens the enclosing construct.
     2x Expecting braced fields.
     2x Expecting case labels.
+    1x Expecting end of file.
