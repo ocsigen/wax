@@ -585,14 +585,14 @@ let to_wax_string src =
             Wax_lang.Typing.f ~simplify:true d wax_ast
             |> snd |> Wax_lang.Typing.erase_types
           in
+          Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wat_syntax
+            ~dst:Wax_utils.Trivia.wax_syntax ctx;
           let trivia, tail =
             collect_trivia
               ~print:(fun p ~collect ->
                 Wax_lang.Output.module_ p
                   ~trivia:(Wax_utils.Trivia.empty ())
                   ~collect wax_ast)
-              ~retarget:
-                (Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
               ctx
           in
           let printed =

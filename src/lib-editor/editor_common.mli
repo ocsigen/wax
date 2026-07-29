@@ -65,11 +65,9 @@ type position_encoding = UTF8 | UTF16
    locations [print] visits (it prints the module through the given printer,
    passing its [collect] table on to the language's [Output.module_]).
    Language-agnostic: the caller chooses the Wax or Wasm-text printer, so this
-   module needs neither language's [Output]. [retarget], when given, rewrites the
-   comment delimiters from the source syntax to the target's. *)
+   module needs neither language's [Output]. *)
 val collect_trivia :
   print:(Wax_utils.Printer.t -> collect:Wax_utils.Trivia.locations -> unit) ->
-  ?retarget:Wax_utils.Trivia.comment_syntax * Wax_utils.Trivia.comment_syntax ->
   Wax_utils.Trivia.context ->
   Wax_utils.Trivia.t * Wax_utils.Trivia.entry list
 

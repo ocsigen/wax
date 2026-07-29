@@ -724,14 +724,14 @@ let to_wat_string src =
         if has_errors d then Error (errors_string d)
         else
           let wasm_ast = Wax_conversion.To_wasm.module_ d types ast in
+          Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wax_syntax
+            ~dst:Wax_utils.Trivia.wat_syntax ctx;
           let trivia, tail =
             collect_trivia
               ~print:(fun p ~collect ->
                 Wax_wasm.Output.module_ p
                   ~trivia:(Wax_utils.Trivia.empty ())
                   ~collect wasm_ast)
-              ~retarget:
-                (Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
               ctx
           in
           let printed =

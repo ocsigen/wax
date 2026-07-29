@@ -105,7 +105,8 @@ val drop_trailing_blank_lines : entry list -> entry list
     The comment text stored by a lexer keeps the source syntax's delimiters
     ([;; …]/[(; … ;)] for WebAssembly, [// …]/[/* … */] for Wax). When trivia
     collected from one format is replayed onto an AST that is printed in the
-    other format (during conversion), the delimiters must be rewritten. *)
+    other format, the delimiters must be rewritten; a conversion does so on the
+    context it carries over. *)
 
 type comment_syntax = {
   line : string;  (** line-comment prefix, e.g. [";;"] or ["//"] *)
@@ -116,9 +117,14 @@ type comment_syntax = {
 val wax_syntax : comment_syntax
 val wat_syntax : comment_syntax
 
-val retarget :
-  src:comment_syntax -> dst:comment_syntax -> t -> entry list -> t * entry list
-(** [retarget ~src ~dst trivia tail] rewrites every comment's delimiters from
-    the [src] syntax to the [dst] syntax (line-comment prefix and block-comment
-    delimiters), leaving blank lines and annotations untouched. Block delimiters
-    are balanced in stored content, so a global swap preserves nesting. *)
+val retarget : src:comment_syntax -> dst:comment_syntax -> context -> unit
+(** [retarget ~src ~dst ctx] rewrites the delimiters of every comment collected
+    in [ctx] from the [src] syntax to the [dst] syntax (line-comment prefix and
+    block-comment delimiters), leaving blank lines and annotations untouched.
+    Block delimiters are balanced in stored content, so a global swap preserves
+    nesting.
+
+    Called by a cross-format conversion, on the context whose trivia will be
+    replayed onto the converted AST — the rewrite belongs to the translation,
+    not to printing. It touches only comment text, never an anchor or a kind, so
+    it commutes with {!associate}. *)

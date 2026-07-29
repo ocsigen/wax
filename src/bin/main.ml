@@ -155,31 +155,24 @@ let output_wat ?(tail = []) ~oc ~color ~trivia doc =
    the already-laid-out [doc] — no separate print pass, so the [sexp] tree is
    built once (in [prepare]) and shared with the real emit rather than rebuilt.
    This keeps a comment from attaching to a node the printer skips — which would
-   drop it. [retarget], when given, rewrites the comment delimiters between
-   formats. *)
-let wat_trivia ?retarget ctx doc =
+   drop it. *)
+let wat_trivia ctx doc =
   let used = Wax_utils.Trivia.create_locations () in
   Wax_wasm.Output.collect doc used;
-  let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
-  match retarget with
-  | None -> (trivia, tail)
-  | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
+  Wax_utils.Trivia.associate ~only:used ctx
 
 (* The Wax printer streams straight from the AST (no intermediate tree to
    share), so its dry pass is a discarded print traversal — no double tree-build
    to eliminate, unlike the Wat path's {!wat_trivia}. Width is irrelevant to the
    dry pass: it only records which locations the printer looks up, and the
    traversal is the same at any width. *)
-let wax_trivia ?retarget ctx ast =
+let wax_trivia ctx ast =
   let used = Wax_utils.Trivia.create_locations () in
   Wax_utils.Printer.run_discard (fun p ->
       Wax_lang.Output.module_ p
         ~trivia:(Wax_utils.Trivia.empty ())
         ~collect:used ast);
-  let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
-  match retarget with
-  | None -> (trivia, tail)
-  | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
+  Wax_utils.Trivia.associate ~only:used ctx
 
 (* Process exit codes (see docs/src/cli.md, "Exit status"):
      0   success
@@ -242,20 +235,18 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
       ~source:(Some text) (fun d ->
         Wax_conversion.From_wasm.module_ ~faithful ~features d ast)
   in
+  (* The converted Wax nodes carry the source Wat locations, so the source
+     trivia (keyed by those locations) maps onto them; the comments are part of
+     what is translated, so rewrite their delimiters to Wax syntax here. *)
+  Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wat_syntax
+    ~dst:Wax_utils.Trivia.wax_syntax ctx;
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d ->
         Wax_lang.Typing.f ~simplify:(not faithful) ~faithful d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
-  (* The converted Wax nodes carry the source Wat locations, so the source
-     trivia (keyed by those locations) maps onto them; rewrite the comment
-     delimiters from Wat to Wax syntax. *)
-  let trivia, tail =
-    wax_trivia
-      ~retarget:(Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
-      ctx wax_ast
-  in
+  let trivia, tail = wax_trivia ctx wax_ast in
   Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
       Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
         ~tail wax_ast);
@@ -286,6 +277,12 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
       ~source:(Some text) (fun d ->
         Wax_conversion.To_wasm.module_ ~features d types ast)
   in
+  (* Typing and conversion preserve the source Wax locations, so the source
+     trivia (keyed by those locations) maps onto the converted Wasm nodes; the
+     comments are part of what is translated, so rewrite their delimiters to Wat
+     syntax here. *)
+  Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wax_syntax
+    ~dst:Wax_utils.Trivia.wat_syntax ctx;
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->
@@ -297,15 +294,8 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     else wasm_ast
   in
   let wasm_ast = fold_module ~fold_mode ~color ~source:(Some text) wasm_ast in
-  (* Typing and conversion preserve the source Wax locations, so the source
-     trivia (keyed by those locations) maps onto the converted Wasm nodes;
-     rewrite the comment delimiters from Wax to Wat syntax. *)
   let doc = Wax_wasm.Output.prepare wasm_ast in
-  let trivia, tail =
-    wat_trivia
-      ~retarget:(Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
-      ctx doc
-  in
+  let trivia, tail = wat_trivia ctx doc in
   output_wat ~oc ~color:output_color ~trivia ~tail doc
 
 let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused

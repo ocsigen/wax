@@ -16,18 +16,12 @@ let () = Wax_wasm.Validation.validate_refs := false
 (* Comments and blank-line trivia keyed by source location, restricted to the
    locations [print] (the caller's module printer, [collect]ing the visited
    locations) actually visits. Language-agnostic — the caller supplies the Wax or
-   Wasm-text printer — so this stays free of either language's [Output].
-   [retarget], when given, rewrites the comment delimiters from the source
-   language's syntax to the target's (for the cross-language conversions, whose
-   converted nodes carry the source locations). Same logic as [wax_trivia] /
-   [wat_trivia] in bin/main.ml. *)
-let collect_trivia ~print ?retarget ctx =
+   Wasm-text printer — so this stays free of either language's [Output]. Same
+   logic as [wax_trivia] / [wat_trivia] in bin/main.ml. *)
+let collect_trivia ~print ctx =
   let used = Wax_utils.Trivia.create_locations () in
   Wax_utils.Printer.run_discard (fun p -> print p ~collect:used);
-  let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
-  match retarget with
-  | None -> (trivia, tail)
-  | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
+  Wax_utils.Trivia.associate ~only:used ctx
 
 type diag = {
   severity : Wax_utils.Diagnostic.severity;

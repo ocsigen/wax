@@ -388,15 +388,5 @@ let retarget_entry ~src ~dst e =
       }
   | Blank_line -> e
 
-let retarget ~src ~dst tbl tail =
-  let conv = retarget_entry ~src ~dst in
-  let conv_assoc a =
-    {
-      before = List.map conv a.before;
-      within = List.map conv a.within;
-      after = List.map conv a.after;
-    }
-  in
-  let tbl' = Tbl.create (Tbl.length tbl) in
-  Tbl.iter (fun k v -> Tbl.add tbl' k (conv_assoc v)) tbl;
-  (tbl', List.map conv tail)
+let retarget ~src ~dst ctx =
+  ctx.comments <- List.map (retarget_entry ~src ~dst) ctx.comments
