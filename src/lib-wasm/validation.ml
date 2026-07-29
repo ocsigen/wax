@@ -3261,6 +3261,27 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
                   (Hashtbl.add seen d ();
                    false)
             in
+            (* Two DISTINCT targets can still impose the SAME types on the same
+               values, and then their reports are anchored identically too — a
+               present value's report points at where that value was pushed, not
+               at the label — so the second would print as one repeated
+               [line:col: message]. Key the value check on the requirement, not
+               the target: distinct types still report, once each. *)
+            let checked = ref [] in
+            let requirement_checked params =
+              let same p =
+                Array.length p = Array.length params
+                && Array.for_all2
+                     (fun a b ->
+                       Types.val_subtype ctx.modul.subtyping_info a b
+                       && Types.val_subtype ctx.modul.subtyping_info b a)
+                     p params
+              in
+              List.exists same !checked
+              ||
+              (checked := params :: !checked;
+               false)
+            in
             List.iter
               (fun idx' ->
                 if not (repeated idx') then
@@ -3270,8 +3291,16 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
                     Error.branch_parameter_count_mismatch ctx.modul.diagnostics
                       ~location:idx'.Ast.info ~default_loc:idx.Ast.info idx len
                       idx' len'
-                  else ignore (pop_args ctx loc ~source:param_source params st))
-              (idx :: lst))
+                    (* Blame the LABEL, not the instruction, as the arity report
+                       above already does: the requirement is that target's, and
+                       two targets demanding the same missing value would
+                       otherwise print as one repeated [line:col: message]. *)
+                  else if not (requirement_checked params) then
+                    ignore
+                      (pop_args ctx idx'.Ast.info ~source:param_source params st))
+              (* In source order — the default target is written last — so the
+                 per-label reports come out in the order they are read. *)
+              (lst @ [ idx ]))
       in
       unreachable
   | Br_on_null idx -> (

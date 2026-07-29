@@ -321,8 +321,24 @@ module Error = struct
        ++ typ ty1 ++ text "and" ++ typ ty2
       ^^ text ".")
 
-  let expression_type_mismatch context ~location ~provided ~expected =
+  (* [expected_at] points a secondary caret at whatever imposes [expected] when
+     that is elsewhere and would otherwise be guesswork — a [br_table] target
+     label, whose block's result type is what the value must satisfy, and which
+     tells apart two reports on the same value from differently-typed targets.
+     The validator's [instruction_type_mismatch] labels its own the same way. *)
+  let expression_type_mismatch ?expected_at context ~location ~provided
+      ~expected =
     report context ~location
+      ?related:
+        (Option.map
+           (fun loc ->
+             [
+               {
+                 Wax_utils.Diagnostic.location = loc;
+                 message = text "expected here";
+               };
+             ])
+           expected_at)
       (text "This expression has type"
        ++ typ provided
        ++ text "but is expected to have type"
@@ -2577,25 +2593,25 @@ let expression_type ctx (i : _ Ast.instr) =
           Error.not_an_expression ctx.diagnostics ~location (Array.length typ));
       Cell.make Error
 
-let check_subtype ?(pin = true) ctx ~location ty' ty =
+let check_subtype ?(pin = true) ?expected_at ctx ~location ty' ty =
   (* Pass [location] so that, when [ty] is an inferring block result, the value
      is recorded with its branch site (see [Collecting]). *)
   if not (subtype ~location ~pin ctx ty' ty) then
-    Error.expression_type_mismatch ctx.diagnostics ~location ~provided:ty'
-      ~expected:ty
+    Error.expression_type_mismatch ?expected_at ctx.diagnostics ~location
+      ~provided:ty' ~expected:ty
 
 (* [~pin:false] checks the subtypes without resolving a polymorphic left-hand
    value against the (single) right-hand type — for a [br_table], whose one set
    of values is checked against every target label, so pinning a bottom value to
    the first target's type would wrongly reject a later, differently-typed one
    (see {!subtype}). *)
-let check_subtypes ?(pin = true) ctx ~location types' types =
+let check_subtypes ?(pin = true) ?expected_at ctx ~location types' types =
   if Array.length types' <> Array.length types then
     Error.value_count_mismatch ctx.diagnostics ~location
       ~expected:(Array.length types) ~provided:(Array.length types')
   else
     Array.iter2
-      (fun ty' ty -> check_subtype ~pin ctx ~location ty' ty)
+      (fun ty' ty -> check_subtype ~pin ?expected_at ctx ~location ty' ty)
       types' types
 
 let check_type ctx i ty =
@@ -4762,6 +4778,26 @@ and type_branch ctx i =
             Error.value_count_mismatch ctx.diagnostics ~location:i.info
               ~expected:len ~provided:(Array.length types);
           let seen = Hashtbl.create 8 in
+          (* The type checks below are keyed by the target's PARAMETER TYPES, not
+             by its name: two distinct targets imposing the same types on the same
+             values yield the same report at the same span (the values'), which
+             would render as one repeated [line:col: message]. Their arity reports
+             are still per name — those carry the label's own span. Compared
+             through [standalone_valtype], which is pure; a parameter with no
+             resolved type yet compares unequal, so it is checked rather than
+             silently skipped. *)
+          let checked = ref [] in
+          let same_requirement a b =
+            Array.length a = Array.length b
+            && Array.for_all2
+                 (fun x y ->
+                   match
+                     (standalone_valtype ctx x, standalone_valtype ctx y)
+                   with
+                   | Some x, Some y -> valtype_equal ctx x y
+                   | _ -> false)
+                 a b
+          in
           List.iter
             (fun ((label : Ast.ident), bound, params) ->
               if bound && not (Hashtbl.mem seen label.desc) then begin
@@ -4778,8 +4814,18 @@ and type_branch ctx i =
                    against every target, so a polymorphic (bottom) value must
                    not be pinned to one target's type — it is a subtype of each
                    legitimately-different target (see {!check_subtypes}). *)
-                if Array.length types = Array.length params then
-                  check_subtypes ~pin:false ctx ~location:loc types params
+                if
+                  Array.length types = Array.length params
+                  && not (List.exists (same_requirement params) !checked)
+                then begin
+                  checked := params :: !checked;
+                  (* The value is what has the wrong type, so it keeps the
+                     primary span; the label says which target wants what, so two
+                     reports on the same value from differently-typed targets read
+                     apart. *)
+                  check_subtypes ~pin:false ~expected_at:label.info ctx
+                    ~location:loc types params
+                end
               end)
             targets
       | None -> ());

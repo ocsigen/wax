@@ -62,7 +62,10 @@ resolving to that same depth — is checked and reported once.
   br-table-repeat.wat:4:8: error: Type mismatch: this produces a value of type 'i64', but type 'i32' is expected.
   [128]
 
-Two DISTINCT mismatching targets still get one report each.
+Two DISTINCT targets are deduplicated as well when they impose the SAME types on
+the same values: a present value's report is anchored where that value was
+pushed, not at the label, so the second target's report would be identical in
+both text and location. The check is keyed on the requirement, not the target.
 
   $ cat > br-table-two.wat <<'WAT'
   > (module
@@ -75,7 +78,56 @@ Two DISTINCT mismatching targets still get one report each.
   > WAT
   $ wax check --error-format short br-table-two.wat
   br-table-two.wat:5:10: error: Type mismatch: this produces a value of type 'i64', but type 'i32' is expected.
-  br-table-two.wat:5:10: error: Type mismatch: this produces a value of type 'i64', but type 'i32' is expected.
+  [128]
+
+Targets whose requirements DIFFER report one each, and a report about a value
+that is not there — nothing was pushed, so there is no push site to anchor it at
+— is blamed on the label that wants it, in the order the labels are written:
+
+  $ cat > br-table-missing.wat <<'WAT'
+  > (module
+  >   (func
+  >     (block (result f64)
+  >       (block (result f32)
+  >         (i32.const 1)
+  >         (br_table 0 1 1))
+  >       (drop)
+  >       (f64.const 0x0p+0))
+  >     (drop)))
+  > WAT
+  $ wax check -W unused-field=hidden --error-format short br-table-missing.wat
+  br-table-missing.wat:6:19: error: Type mismatch: expecting 1 argument(s) from the stack, but there are 0.
+  br-table-missing.wat:6:21: error: Type mismatch: expecting 1 argument(s) from the stack, but there are 0.
+  [128]
+
+The Wax typer mirrors the requirement keying. Both targets here want an `f32`, so
+the single wrong value is reported once:
+
+  $ cat > br-table-two.wax <<'WAX'
+  > fn g() -> (i32, i32) {
+  >     (1, 2);
+  > }
+  > #[export = "f"]
+  > fn f() {
+  >     _ = 'a: do f32 {
+  >         _ = 'b: do f32 {
+  >             br_table [ 'a, else 'b ] g();
+  >         };
+  >         0x0p+0;
+  >     };
+  > }
+  > WAX
+  $ wax check --error-format short br-table-two.wax
+  br-table-two.wax:8:38: error: This expression has type 'i32' but is expected to have type 'f32'.
+  [128]
+
+Make the targets want different types and each requirement is reported, at the
+value they all share:
+
+  $ sed "s/'b: do f32/'b: do f64/" br-table-two.wax > br-table-two-types.wax
+  $ wax check --error-format short br-table-two-types.wax
+  br-table-two-types.wax:8:38: error: This expression has type 'i32' but is expected to have type 'f32'.
+  br-table-two-types.wax:8:38: error: This expression has type 'i32' but is expected to have type 'f64'.
   [128]
 
 Lint parity for a type test on a bottom-typed operand: the Wax typer lints it
