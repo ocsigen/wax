@@ -13,16 +13,6 @@ let () = Wax_wasm.Validation.validate_refs := false
 (* A formatter that discards everything, for the dry pass that records which
    source locations the printer looks up (as in bin/main.ml). *)
 
-(* Comments and blank-line trivia keyed by source location, restricted to the
-   locations the printer will look up: [collect] records them into the table it
-   is handed (the language's [Output.collect]). Language-agnostic — the caller
-   picks the Wax or Wasm-text one — so this stays free of either language's
-   [Output]. Same logic as [wax_trivia] / [wat_trivia] in bin/main.ml. *)
-let collect_trivia ~collect ctx =
-  let used = Wax_utils.Trivia.create_locations () in
-  collect used;
-  Wax_utils.Trivia.associate ~only:used ctx
-
 type diag = {
   severity : Wax_utils.Diagnostic.severity;
   location : Wax_utils.Ast.location;

@@ -20,32 +20,34 @@ val empty : unit -> t
     binary-input conversion, or the dry pass that only populates [collect]). *)
 
 type locations
-(** An opaque set of source locations — the [only]/[collect]/[seen] tables. It
-    keys on the start/end byte offsets only (cheap to hash and compare, no
+(** An opaque set of source locations — the [collect]/[seen] tables. It keys on
+    the start/end byte offsets only (cheap to hash and compare, no
     filename-string traversal), which the location-keyed lookup on every printed
-    atom used to be dominated by. Callers only create one with
-    {!create_locations} and pass it back; all lookups happen inside {!Trivia}.
-*)
+    atom used to be dominated by. A caller only ever fills the one {!associate}
+    hands its [collect] function; all lookups happen inside {!Trivia}. *)
 
 val create_locations : unit -> locations
 
 val mark : locations -> Ast.location -> unit
-(** [mark set loc] records [loc] in [set]. Lets a caller build the [only] set by
-    walking the document it is about to print, instead of driving a discarded
-    dry print pass whose only effect is the same {!val:get}-time [collect]. *)
+(** [mark set loc] records [loc] in [set]. Lets {!associate}'s [collect] build
+    its set by walking the document it is about to print, instead of driving a
+    discarded dry print pass whose only effect is the same {!val:get}-time
+    [collect]. *)
 
-val associate : only:locations -> context -> t * entry list
-(** [associate ~only ctx] associates trivia to locations. The second component
-    holds the leftover comments that no location owns (trailing comments, or
-    every comment when there are no locations); the caller prints them as tail
-    trivia.
+val associate : collect:(locations -> unit) -> context -> t * entry list
+(** [associate ~collect ctx] associates trivia to locations. The second
+    component holds the leftover comments that no location owns (trailing
+    comments, or every comment when there are no locations); the caller prints
+    them as tail trivia.
 
-    [only] is the set of locations the printer will actually look up (see
-    {!val:get}), collected with a dry printing pass or with {!mark}. The
-    association covers the spans in it that are also parse nodes: a comment
-    would otherwise either attach to a node the printer skips (and be lost) or
-    to a looked-up span that is no source construct at all — a conversion also
-    stamps output nodes with token spans and with {!Ast.dummy_loc}. *)
+    [collect] records the locations the printer will actually look up (see
+    {!val:get}) into a set of this function's making — it is the language's
+    [Output.collect] (a walk of the laid-out document, or a dry printing pass).
+    The association covers the spans in that set that are also parse nodes: a
+    comment would otherwise either attach to a node the printer skips (and be
+    lost) or to a looked-up span that is no source construct at all — a
+    conversion also stamps output nodes with token spans and with
+    {!Ast.dummy_loc}. *)
 
 val make : unit -> context
 (** Create a new trivia context. *)

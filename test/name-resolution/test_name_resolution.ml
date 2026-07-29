@@ -30,9 +30,7 @@ let render_hover ~name = function
   | Typing.Value_type ity -> Infer.inferred_type_string (Infer.valtype_cell ity)
   | Typing.Type_def st ->
       let field = Ast.no_loc (Ast.no_loc name, st) in
-      String.trim
-        (Wax_utils.Printer.run_string ~width:Output.width (fun p ->
-             Output.subtype p field))
+      String.trim (Output.run_string (fun p -> Output.subtype p field))
 
 let resolve name src =
   Printf.printf "=== %s ===\n" name;

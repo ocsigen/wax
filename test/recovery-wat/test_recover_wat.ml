@@ -10,15 +10,13 @@ let report name source =
   (match ast with
   | None -> print_string "none\n"
   | Some m ->
-      let used = Wax_utils.Trivia.create_locations () in
-      Wax_utils.Printer.run_discard (fun p ->
-          Wax_wasm.Output.module_ p
-            ~trivia:(Wax_utils.Trivia.empty ())
-            ~collect:used m);
-      let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
+      let doc = Wax_wasm.Output.prepare m in
+      let trivia, tail =
+        Wax_utils.Trivia.associate ~collect:(Wax_wasm.Output.collect doc) ctx
+      in
       print_string
         (Wax_utils.Printer.run_string ~width:80 (fun p ->
-             Wax_wasm.Output.module_ p ~trivia ~tail m)));
+             Wax_wasm.Output.emit p ~trivia ~tail doc)));
   print_newline ()
 
 let () =

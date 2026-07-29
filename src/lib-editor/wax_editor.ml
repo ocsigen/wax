@@ -93,10 +93,10 @@ let format_string src =
       Error (String.trim (Wax_utils.Message.to_plain_string message))
   | Ok (ast, ctx) ->
       let trivia, tail =
-        collect_trivia ctx ~collect:(Wax_lang.Output.collect ast)
+        Wax_utils.Trivia.associate ~collect:(Wax_lang.Output.collect ast) ctx
       in
       let printed =
-        Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+        Wax_lang.Output.run_string (fun p ->
             Wax_lang.Output.module_ p ~trivia ~tail ast)
       in
       Ok (printed ^ "\n")
@@ -318,8 +318,7 @@ let render_hover_target ~name = function
   | Wax_lang.Typing.Type_def st ->
       let field = Wax_lang.Ast.no_loc (Wax_lang.Ast.no_loc name, st) in
       String.trim
-        (Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
-             Wax_lang.Output.subtype p field))
+        (Wax_lang.Output.run_string (fun p -> Wax_lang.Output.subtype p field))
 
 (* Hover types (Wax only). Reads the cell-annotated tree [analyze] built (every
    node's [info] is the inference cells for the values it leaves on the stack,
@@ -725,7 +724,9 @@ let to_wat_string src =
             ~dst:Wax_utils.Trivia.wat_syntax ctx;
           let doc = Wax_wasm.Output.prepare wasm_ast in
           let trivia, tail =
-            collect_trivia ~collect:(Wax_wasm.Output.collect doc) ctx
+            Wax_utils.Trivia.associate
+              ~collect:(Wax_wasm.Output.collect doc)
+              ctx
           in
           let printed =
             Wax_utils.Printer.run_string (fun p ->

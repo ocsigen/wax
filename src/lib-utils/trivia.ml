@@ -119,7 +119,11 @@ let drop_in_ranges ctx ranges =
       in
       ctx.comments <- List.rev (sweep ranges comments)
 
-let associate ~only ctx =
+let associate ~collect ctx =
+  (* The printer states which spans it looks up by filling a fresh set (see
+     {!val:get}'s [collect] and each [Output.collect]). *)
+  let only = create_locations () in
+  collect only;
   (* Associate over the spans that are both a parse node ([ctx.locations], from
      {!with_pos}) and looked up by the printer ([only]); the two sets clip each
      other in opposite directions, so neither alone will do.

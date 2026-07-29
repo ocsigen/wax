@@ -473,6 +473,6 @@ let () =
   counter := 0;
   target := next () mod total;
   let m' = go_module m in
-  Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width stdout (fun p ->
+  Wax_lang.Output.run_channel stdout (fun p ->
       Wax_lang.Output.module_ ~color p ~trivia:(Wax_utils.Trivia.empty ()) m');
   flush stdout

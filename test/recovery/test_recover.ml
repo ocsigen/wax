@@ -22,11 +22,11 @@ let report_ast name source =
   (match ast with
   | None -> print_string "none\n"
   | Some m ->
-      let used = Wax_utils.Trivia.create_locations () in
-      Wax_lang.Output.collect m used;
-      let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
+      let trivia, tail =
+        Wax_utils.Trivia.associate ~collect:(Wax_lang.Output.collect m) ctx
+      in
       print_string
-        (Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+        (Wax_lang.Output.run_string (fun p ->
              Wax_lang.Output.module_ p ~trivia ~tail m)));
   print_newline ()
 

@@ -1506,11 +1506,8 @@ let emit ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
   let tail = Trivia.drop_trailing_blank_lines tail in
   print_trivia ctx tail
 
-let module_ ?color ?out_channel ?(tail = []) ?collect:used printer ~trivia m =
-  let doc = prepare m in
-  match used with
-  | Some set -> collect doc set
-  | None -> emit ?color ?out_channel ~tail printer ~trivia doc
+let module_ ?color ?out_channel ?(tail = []) printer ~trivia m =
+  emit ?color ?out_channel ~tail printer ~trivia (prepare m)
 
 let instr printer i =
   let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in

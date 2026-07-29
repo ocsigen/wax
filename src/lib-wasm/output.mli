@@ -33,14 +33,13 @@ val module_ :
   ?color:Wax_utils.Colors.flag ->
   ?out_channel:out_channel ->
   ?tail:Wax_utils.Trivia.entry list ->
-  ?collect:Wax_utils.Trivia.locations ->
   Wax_utils.Printer.t ->
   trivia:Wax_utils.Trivia.t ->
   Ast.location Ast.Text.module_ ->
   unit
-(** {!prepare} then {!collect} (when [collect] is given, a dry pass — pass an
-    empty [trivia]) or {!emit}, in one call. Convenience for a single-pass
-    caller; a two-pass caller should {!prepare} once and share the result. *)
+(** {!prepare} then {!emit}, in one call. Convenience for a caller that renders
+    once and needs no {!collect} pass; one that needs both should {!prepare}
+    once and drive them off the result. *)
 
 val instr : Wax_utils.Printer.t -> Ast.location Ast.Text.instr -> unit
 

@@ -2,8 +2,16 @@
 
 val width : int
 (** Target line width for Wax output (the Rust Style Guide's default of 100).
-    Pass it as the [?width] at every Wax module render (e.g.
-    [Printer.run_channel]/[Printer.run_string]). *)
+    Applied by {!run_string} / {!run_channel}; exposed for a caller that drives
+    a printer some other way. *)
+
+val run_string : (Wax_utils.Printer.t -> unit) -> string
+(** [Wax_utils.Printer.run_string] at the Wax {!width}. Render Wax through this
+    rather than the printer's own runners, which default to the narrower
+    WebAssembly-text width. *)
+
+val run_channel : out_channel -> (Wax_utils.Printer.t -> unit) -> unit
+(** [Wax_utils.Printer.run_channel] at the Wax {!width}. *)
 
 val instr : Wax_utils.Printer.t -> _ Ast.instr -> unit
 val valtype : Wax_utils.Printer.t -> Ast.valtype -> unit

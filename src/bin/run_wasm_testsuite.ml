@@ -471,7 +471,7 @@ let runtest filename _ =
   in
   (* Translation to new syntax *)
   let wax_string ~color m =
-    Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+    Wax_lang.Output.run_string (fun p ->
         Wax_lang.Output.module_ ~color p ~trivia:(Wax_utils.Trivia.empty ()) m)
   in
   List.iter

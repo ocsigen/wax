@@ -28,7 +28,7 @@ let format_string src =
          real emit off it (as bin/main.ml does). *)
       let doc = Wax_wasm.Output.prepare ast in
       let trivia, tail =
-        collect_trivia ctx ~collect:(Wax_wasm.Output.collect doc)
+        Wax_utils.Trivia.associate ~collect:(Wax_wasm.Output.collect doc) ctx
       in
       let printed =
         Wax_utils.Printer.run_string (fun p ->
@@ -588,10 +588,12 @@ let to_wax_string src =
           Wax_utils.Trivia.retarget ~src:Wax_utils.Trivia.wat_syntax
             ~dst:Wax_utils.Trivia.wax_syntax ctx;
           let trivia, tail =
-            collect_trivia ~collect:(Wax_lang.Output.collect wax_ast) ctx
+            Wax_utils.Trivia.associate
+              ~collect:(Wax_lang.Output.collect wax_ast)
+              ctx
           in
           let printed =
-            Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+            Wax_lang.Output.run_string (fun p ->
                 Wax_lang.Output.module_ p ~trivia ~tail wax_ast)
           in
           Ok (printed ^ "\n")
@@ -635,7 +637,7 @@ let binary_to_wax_string bytes =
           |> snd |> Wax_lang.Typing.erase_types
         in
         let printed =
-          Wax_utils.Printer.run_string ~width:Wax_lang.Output.width (fun p ->
+          Wax_lang.Output.run_string (fun p ->
               Wax_lang.Output.module_ p
                 ~trivia:(Wax_utils.Trivia.empty ())
                 wax_ast)

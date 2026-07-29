@@ -61,16 +61,6 @@ type rename_outcome =
    position functions and the [?encoding] arguments default to [UTF16]. *)
 type position_encoding = UTF8 | UTF16
 
-(* Comments and blank-line trivia keyed by source location, restricted to the
-   locations the printer will look up: [collect] records them into the table it
-   is handed (the language's [Output.collect]). Language-agnostic: the caller
-   picks the Wax or Wasm-text one, so this module needs neither language's
-   [Output]. *)
-val collect_trivia :
-  collect:(Wax_utils.Trivia.locations -> unit) ->
-  Wax_utils.Trivia.context ->
-  Wax_utils.Trivia.t * Wax_utils.Trivia.entry list
-
 (* Render a structured message to plain text. *)
 val render : Wax_utils.Message.t -> string
 

@@ -150,25 +150,13 @@ let output_wat ?(tail = []) ~oc ~color ~trivia doc =
   output_char oc '\n';
   flush oc
 
-(* Build the trivia for printing [doc], restricting the association to the
-   locations the printer actually emits. [Output.collect] gathers them by walking
-   the already-laid-out [doc] — no separate print pass, so the [sexp] tree is
-   built once (in [prepare]) and shared with the real emit rather than rebuilt.
-   This keeps a comment from attaching to a node the printer skips — which would
-   drop it. *)
-let wat_trivia ctx doc =
-  let used = Wax_utils.Trivia.create_locations () in
-  Wax_wasm.Output.collect doc used;
-  Wax_utils.Trivia.associate ~only:used ctx
-
-(* The same for a Wax module. The Wax printer streams straight from the AST (no
-   intermediate tree to share), so [Output.collect] is a discarded print
-   traversal — no double tree-build to eliminate, unlike the Wat path's
-   {!wat_trivia}. *)
-let wax_trivia ctx ast =
-  let used = Wax_utils.Trivia.create_locations () in
-  Wax_lang.Output.collect ast used;
-  Wax_utils.Trivia.associate ~only:used ctx
+(* Render a Wax module to the channel at the Wax line width (which
+   {!Wax_lang.Output.run_channel} pins), plus a trailing newline. *)
+let output_wax ?(tail = []) ~oc ~color ~trivia ast =
+  Wax_lang.Output.run_channel oc (fun p ->
+      Wax_lang.Output.module_ p ~color ~out_channel:oc ~tail ~trivia ast);
+  output_char oc '\n';
+  flush oc
 
 (* Process exit codes (see docs/src/cli.md, "Exit status"):
      0   success
@@ -206,7 +194,9 @@ let wat_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   in
   let ast = fold_module ~fold_mode ~color ~source:(Some text) ast in
   let doc = Wax_wasm.Output.prepare ast in
-  let trivia, tail = wat_trivia ctx doc in
+  let trivia, tail =
+    Wax_utils.Trivia.associate ~collect:(Wax_wasm.Output.collect doc) ctx
+  in
   output_wat ~oc ~color:output_color ~trivia ~tail doc
 
 let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
@@ -242,12 +232,10 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
         Wax_lang.Typing.f ~simplify:(not faithful) ~faithful d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
-  let trivia, tail = wax_trivia ctx wax_ast in
-  Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
-      Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
-        ~tail wax_ast);
-  output_char oc '\n';
-  flush oc
+  let trivia, tail =
+    Wax_utils.Trivia.associate ~collect:(Wax_lang.Output.collect wax_ast) ctx
+  in
+  output_wax ~oc ~color:output_color ~trivia ~tail wax_ast
 
 let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode ~defines ~desugar ~source_map:_ ~faithful:_
@@ -291,7 +279,9 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   in
   let wasm_ast = fold_module ~fold_mode ~color ~source:(Some text) wasm_ast in
   let doc = Wax_wasm.Output.prepare wasm_ast in
-  let trivia, tail = wat_trivia ctx doc in
+  let trivia, tail =
+    Wax_utils.Trivia.associate ~collect:(Wax_wasm.Output.collect doc) ctx
+  in
   output_wat ~oc ~color:output_color ~trivia ~tail doc
 
 let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
@@ -306,12 +296,10 @@ let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d -> Wax_lang.Typing.check ~warn_unused d ast);
-  let trivia, tail = wax_trivia ctx ast in
-  Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
-      Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
-        ~tail ast);
-  output_char oc '\n';
-  flush oc
+  let trivia, tail =
+    Wax_utils.Trivia.associate ~collect:(Wax_lang.Output.collect ast) ctx
+  in
+  output_wax ~oc ~color:output_color ~trivia ~tail ast
 
 let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
     ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map ~faithful:_ =
@@ -428,12 +416,7 @@ let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
         Wax_lang.Typing.f ~simplify:(not faithful) ~faithful d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
-  Wax_utils.Printer.run_channel ~width:Wax_lang.Output.width oc (fun p ->
-      Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
-        ~trivia:(Wax_utils.Trivia.empty ())
-        wax_ast);
-  output_char oc '\n';
-  flush oc
+  output_wax ~oc ~color:output_color ~trivia:(Wax_utils.Trivia.empty ()) wax_ast
 
 (*** Formats, options, and policy ***)
 
