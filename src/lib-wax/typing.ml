@@ -986,27 +986,47 @@ module Error = struct
         ]
       ((text "This dispatch has several cases named" ++ name x) ^^ text ".")
 
-  (* Not a fault in the module being checked but in the tool: the Wasm-to-Wax
-     conversion recorded the type a node's value must have (see [Ast.instr]'s
-     [expected]) and this run inferred another one, so the Wax it is about to
-     print would recompile to a different opcode width — a silent miscompile.
-     Reported only under [~width_check] (the [--debug width-check] switch), and as
-     an error, so a drift stops the pipeline instead of being shipped. The
-     expression is spelled out because a synthesized dead-code node has no real
-     source span to point at. *)
-  let width_invariant_violated context ~location ~inferred ~required expr =
+  (* The Wasm-to-Wax conversion recorded the type a node's value must have (see
+     [Ast.instr]'s [expected]) and this run resolved another one, so the Wax about
+     to be printed would recompile at a different opcode width — a silent
+     miscompile. [pinnable] says whether a grounding pin could have corrected it
+     (the value is a flexible literal tree), which is exactly what the conversion's
+     default [`Repair] mode does instead of reporting; see {!reconcile_widths}:
+     - pinnable: this report IS the [--debug width-check] mode of a repair, so it
+       is purely a fault of the tool — the pin [From_wasm] should have placed.
+     - not pinnable: the value's type is fixed by its context, so no cast can
+       correct it (one would convert the value) — either the input is invalid, or
+       the conversion is wrong. Reported in BOTH modes.
+     The expression is spelled out because a synthesized dead-code node has no real
+     source span to point at. Both wordings share the leading phrase, which the
+     fuzz harness greps for (oracle 5c, drop-width.sh). *)
+  let width_invariant_violated context ~location ~inferred ~required ~pinnable
+      expr =
     report context ~location
       ~hint:
         (text
-           "This is an internal invariant of the WebAssembly-to-Wax \
-            conversion, not a problem with the input.")
+           (if pinnable then
+              "This is an internal invariant of the WebAssembly-to-Wax \
+               conversion, not a problem with the input; without '--debug \
+               width-check' the conversion repairs it by pinning the \
+               expression."
+            else
+              "Either this WebAssembly is invalid — a binary input is trusted, \
+               never validated, so check it with 'wax check' — or the \
+               WebAssembly-to-Wax conversion is wrong. A cast here would \
+               convert the value rather than pin it, so the conversion does \
+               not repair it."))
       (text "Decompiler width invariant violated for"
        ++ kw expr
        ++ text "recompiling it would infer"
        ++ kw (Infer.Output.valtype_string inferred)
        ++ text "but the WebAssembly it came from requires"
        ++ kw (Infer.Output.valtype_string required)
-      ^^ text ".")
+      ^^ text
+           (if pinnable then "."
+            else
+              ": its type is fixed by context, not defaulted, so no pin can \
+               correct it."))
 end
 
 (*** Symbol tables and namespaces ***)
@@ -3924,6 +3944,22 @@ let is_unary_method m =
       true
   | _ -> false
 
+(* The instruction methods whose result has the width of their RECEIVER: the
+   integer and float unary operators plus the two-operand rotates and float
+   pairs, as opposed to those that fix a width of their own ([to_bits]/
+   [from_bits], whose result is the receiver's bit width in the other family, and
+   [length]). A cast on such a call's RESULT propagates back through it to the
+   receiver — which is how a width pin on [(5).clz()] makes it an [i64.clz], the
+   very mechanism [From_wasm] relies on when it tags a method result with its
+   receiver's flexibility. Used by {!defaulting_tree}. *)
+let is_width_preserving_method m =
+  match m with
+  | "clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s" | "abs" | "ceil"
+  | "floor" | "trunc" | "nearest" | "sqrt" | "rotl" | "rotr" | "min" | "max"
+  | "copysign" ->
+      true
+  | _ -> false
+
 (* Register (once) a type definition for an anonymous function signature and
    return the synthetic name standing for it — used when a cast or [call_ref]
    needs a named [func] type but the source wrote the signature inline. The name
@@ -6298,6 +6334,19 @@ and type_cast ctx i =
         | Some d, Valtype { typ; _ } -> d <> typ
         | _ -> false
       in
+      (* So is a cast whose operand is pending a width repair: [From_wasm]
+         recorded a width for it ([Ast.instr]'s [expected]) that its own defaulting
+         does not give, so {!reconcile_widths} will pin it — and the pin lands
+         INSIDE this cast. Dropping the cast as a no-op (its operand having just
+         folded to the target) would both lose the instruction it lowers to (the
+         [i32.wrap_i64] of an unpinned [i64] tree) and leave the repair nowhere to
+         attach. Never true on a decompile whose own pins are in place: the
+         operand's recorded width is then the width it settles on. *)
+      let operand_pin_pending =
+        match (i'.expected, natural_typ) with
+        | Some w, Some d -> w <> d
+        | _ -> false
+      in
       (* A cast of a bare [null] to a non-[any]-hierarchy reference is also load
          bearing: dropping it leaves a bare [null], whose non-null / branch
          consumers ([null!], [br_on_*]) fall back to the [any]-hierarchy bottom
@@ -6370,7 +6419,8 @@ and type_cast ctx i =
       in
       let unnecessary_cast =
         (ctx.simplify || (ctx.faithful && target_nullable_ref))
-        && (not load_bearing_literal) && (not load_bearing_null)
+        && (not load_bearing_literal) && (not operand_pin_pending)
+        && (not load_bearing_null)
         && (not load_bearing_bottom_ref)
         && (not load_bearing_cont)
         && (not (is_unknown_or_error ty'))
@@ -12119,26 +12169,29 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
        checking above for its diagnostics and discards it. *)
     if not build then [] else typed_fields )
 
+(* The concrete storage type an inference cell finally takes — the resolution
+   behind {!project_annotation}, factored out so the width pass below settles a
+   cell exactly as the projection does (the two disagreeing would make the width
+   comparison read a type the tree never takes). [Unknown]/[Error]/[Collecting]
+   have no concrete type ([None]); a flexible numeric literal takes its default
+   width. *)
+let resolved_storagetype (ty : inferred_type) =
+  match ty with
+  | Unknown | Error | Collecting _ -> None
+  | Null -> Some (Value (Ref { nullable = true; typ = None_ }))
+  | UnknownRef -> Some (Value (Ref { nullable = false; typ = None_ }))
+  | Number -> Some (Value I32)
+  | Int8 -> Some (Packed I8)
+  | Int16 -> Some (Packed I16)
+  | Int -> Some (Value I32)
+  | LargeInt -> Some (Value I64)
+  | Float -> Some (Value F64)
+  | Valtype { typ; _ } -> Some (Value typ)
+
 (* Resolve the inference cells at each node to concrete storage types — the
-   projection [f] applies before handing the typed tree to the Wasm conversion.
-   [Unknown]/[Error]/[Collecting] have no concrete type ([None]); a flexible
-   numeric literal takes its default width. *)
+   projection [f] applies before handing the typed tree to the Wasm conversion. *)
 let project_annotation (types, loc) =
-  ( Array.map
-      (fun ty ->
-        match Cell.get ty with
-        | Unknown | Error | Collecting _ -> None
-        | Null -> Some (Value (Ref { nullable = true; typ = None_ }))
-        | UnknownRef -> Some (Value (Ref { nullable = false; typ = None_ }))
-        | Number -> Some (Value I32)
-        | Int8 -> Some (Packed I8)
-        | Int16 -> Some (Packed I16)
-        | Int -> Some (Value I32)
-        | LargeInt -> Some (Value I64)
-        | Float -> Some (Value F64)
-        | Valtype { typ; _ } -> Some (Value typ))
-      types,
-    loc )
+  (Array.map (fun ty -> resolved_storagetype (Cell.get ty)) types, loc)
 
 let project_module (m : inferred_module_annotation Ast.module_) :
     typed_module_annotation Ast.module_ =
@@ -12151,9 +12204,9 @@ let project_module (m : inferred_module_annotation Ast.module_) :
     m
 
 (* The numeric width a type states, [None] for a reference or vector (the width
-   check covers the scalars only). A packed narrow read ([i8]/[i16] — a [load8], an
+   pass covers the scalars only). A packed narrow read ([i8]/[i16] — a [load8], an
    [i8] field) is an i32 value the typer tracks narrow, so it counts as [i32]:
-   the check is about the value's numeric width, and a narrow read has none of its
+   the pass is about the value's numeric width, and a narrow read has none of its
    own. *)
 let numeric_width (ty : Ast.valtype) =
   match ty with I32 | I64 | F32 | F64 -> Some ty | Ref _ | V128 -> None
@@ -12163,39 +12216,216 @@ let inferred_width (ty : Ast.storagetype) =
   | Value ty -> numeric_width ty
   | Packed (I8 | I16) -> Some Ast.I32
 
-(* Compare the type each node's producer recorded on it (see [Ast.instr]'s
-   [expected] — only {!Wax_conversion.From_wasm} records any) against the type
-   this run inferred for it, and report a disagreement.
+(* Whether an inferred type is a FLEXIBLE numeric literal — one with no type of
+   its own, which a context narrows and, with none, {!resolved_storagetype}
+   defaults. Only such a value can be repaired by a pin: an identity cast grounds
+   it AT the pinned width, exactly as [From_wasm]'s [Stack.pin_width] does. Every
+   other numeric type is ANCHORED — resolved from a local, a call result, a merged
+   context — and there the same cast would be a numeric CONVERSION changing the
+   value, not a pin, so a disagreement is reported instead of repaired. The packed
+   narrow reads ([Int8]/[Int16]) are anchored in exactly that sense: their value
+   comes from a [load8]/[load16], and a cast on one fuses into the load rather than
+   grounding a literal. *)
+let flexible_literal (ty : inferred_type) =
+  match ty with
+  | Number | Int | LargeInt | Float -> true
+  | Unknown | Error | UnknownRef | Null | Int8 | Int16 | Valtype _
+  | Collecting _ ->
+      false
 
-   Runs on the PROJECTED tree, so the comparison is against the type the node
-   finally takes: a flexible numeric literal is only pinned to a width at
-   projection time ([project_annotation] defaults [int]/[number] to i32,
-   [large number] to i64, [float] to f64), which is exactly the width a re-parse of
-   the printed form would settle on. Comparing the inference cells earlier would
-   read a flexible literal as "no type yet" and miss every drift.
+(* Whether the node's printed form takes its numeric type by DEFAULTING: a tree of
+   numeric literals, holes and width-PRESERVING operators with nothing in it that
+   fixes a width — no local, call result, memory read or cast. A pin around such a
+   tree grounds every literal in it and converts nothing (it is exactly what
+   [From_wasm]'s [Stack.pin_width] emits), whereas a pin around a tree holding a
+   real datum would be a numeric CONVERSION of that datum. Mirrors [From_wasm]'s
+   anchor-free notion ([is_anchor]/[reparse_adaptive]), and is needed beside
+   {!flexible_literal} because a cast FOLDS a still-flexible literal into its
+   target type ([cast] above), so by the end of inference such a tree's cell looks
+   concrete even though its width was never anchored by anything. *)
+let rec defaulting_tree (i : _ instr) =
+  match i.desc with
+  (* A numeric literal or a hole. NOT a [Char], whose i32 value a cast would
+     convert rather than ground. *)
+  | Int _ | Float _ | Hole -> true
+  (* The operators whose result type IS their operands': a pin on the result
+     grounds them. A comparison or [!] yields i32 whatever its operands, and a
+     cast fixes its own type, so neither continues the tree. *)
+  | UnOp ({ Annot.desc = Neg | Pos; _ }, a) -> defaulting_tree a
+  | BinOp
+      ( {
+          Annot.desc =
+            Add | Sub | Mul | Div _ | Rem _ | And | Or | Xor | Shl | Shr _;
+          _;
+        },
+        a,
+        b ) ->
+      defaulting_tree a && defaulting_tree b
+  | Select (_, a, b) -> defaulting_tree a && defaulting_tree b
+  | Sequence (_ :: _ as l) -> defaulting_tree (List.nth l (List.length l - 1))
+  (* A method whose result width is its receiver's ([(5).clz()],
+     [(1).rotl(40)]): the pin on the result reaches the receiver through it. *)
+  | Call ({ desc = StructGet (recv, meth); _ }, args)
+    when is_width_preserving_method meth.Annot.desc ->
+      defaulting_tree recv && List.for_all defaulting_tree args
+  | _ -> false
+
+(* Whether a pin to [required] is a WIDTH change and not a FAMILY change. A pin
+   only settles how wide a literal is; taking an integer to a float or back is a
+   CONVERSION — in Wax it even needs a signage ([as f32_s]), so a bare pin would
+   not type-check — so a recorded type in the other family is never repairable,
+   whatever the shape of the tree. A literal still free of a family ([Number], or
+   the float-capable [LargeInt]) narrows either way; one committed to a family by
+   an operator ([Int], [Float]) does not; and a value whose cell a cast already
+   folded keeps the family it folded to. *)
+let pin_stays_in_family (inferred : inferred_type) ~resolved ~required =
+  let integral (t : Ast.valtype) =
+    match t with I32 | I64 -> true | _ -> false
+  in
+  match inferred with
+  | Number | LargeInt -> true
+  | Int -> integral required
+  | Float -> not (integral required)
+  | _ -> integral resolved = integral required
+
+(* The inference lattice's entry for a numeric base type. [None] for the types the
+   width pass does not handle, which {!numeric_width} has already excluded. *)
+let numeric_valtype (ty : Ast.valtype) =
+  match ty with
+  | I32 -> Some i32_valtype
+  | I64 -> Some i64_valtype
+  | F32 -> Some f32_valtype
+  | F64 -> Some f64_valtype
+  | Ref _ | V128 -> None
+
+(* The offending expression, elided past a line's worth: a disagreement is
+   reported against a whole operand tree, which can be large. *)
+let width_expr (i : _ instr) =
+  let expr = Infer.Output.instr_string i in
+  if String.length expr <= 40 then expr else String.sub expr 0 40 ^ "..."
+
+(* Reconcile the type each node's producer recorded on it (see [Ast.instr]'s
+   [expected] — only {!Wax_conversion.From_wasm} records any) with the type this
+   run resolves for it.
+
+   Compares against the RESOLVED type, the one the node finally takes: a flexible
+   numeric literal is only pinned to a width by {!resolved_storagetype}'s
+   defaulting (int/number -> i32, large number -> i64, float -> f64), which is
+   exactly the width a re-parse of the printed form would settle on. Reading the
+   cell as-is would take a flexible literal for "no type yet" and miss every
+   drift.
+
+   Two outcomes, by whether a pin CAN fix the disagreement (see
+   {!flexible_literal}):
+
+   - a flexible tree resolving to the wrong width is REPAIRED under
+     [`Repair] — the node is wrapped in an identity cast to the recorded type, the
+     grounding pin [From_wasm] should have placed, so the printed Wax re-infers the
+     width the Wasm states. The cell is grounded with it ([Cell.set]), which is
+     what makes one pass converge: the cells of a flexible tree are UNIFIED, so
+     grounding the outermost node's cell settles every node beneath it and their
+     own (identical) expectations are then met — no second pin inside the tree the
+     first one already grounds. Under [`Report] it is reported instead, which is
+     what keeps the fuzz harness able to see a missing [From_wasm] pin
+     ([--debug width-check], oracle 5c) rather than a silently healed one.
+   - an ANCHORED type that disagrees is reported in BOTH modes: no cast can fix it
+     (one would convert the value), so it is either an invalid input — a binary is
+     trusted, never validated, so its operands need not be what its opcodes name —
+     or a conversion bug that must be fixed at the source.
+
+   Runs after the whole module is typed and after [simplify]'s rewrites, which is
+   also why an inserted pin cannot oscillate with [simplify]'s redundant-cast
+   pruning: pruning has already happened, in the typing pass proper, and nothing
+   re-enters it. A repair is by construction NOT redundant — the cast is what
+   changes the tree's resolved type — so a later re-type of the printed Wax keeps
+   it (and if it ever did become redundant, the [simplify] of a fresh decompile
+   would drop it and this pass would put it back only if it were still needed).
 
    A node with no resolved type ([Unknown]/[Error] — a hole in unreachable code
-   the typer left polymorphic) is skipped: nothing was inferred to disagree with.
-   So is a node that leaves no value or several. *)
-let check_widths diagnostics (m : typed_module_annotation Ast.module_) =
-  Ast_utils.iter_module_instr
-    (fun (i : _ instr) ->
-      match (i.expected, i.info) with
-      | Some required, ([| Some inferred |], location) -> (
-          match (numeric_width required, inferred_width inferred) with
-          | Some required, Some inferred when required <> inferred ->
-              (* The expression, elided past a line's worth: a mismatch is
-                 reported against a whole operand tree, which can be large. *)
-              let expr = Infer.Output.instr_string i in
-              let expr =
-                if String.length expr <= 40 then expr
-                else String.sub expr 0 40 ^ "..."
-              in
-              Error.width_invariant_violated diagnostics ~location ~inferred
-                ~required expr
-          | _ -> ())
-      | _ -> ())
-    m
+   the typer left polymorphic) is left alone: nothing was resolved to disagree
+   with, and pinning it would invent a type where the Wasm side is polymorphic
+   too. So is a node that leaves no value or several. *)
+let rec reconcile_widths mode diagnostics ~under_cast (i : _ instr) : _ instr =
+  (* This node first: a repair here grounds the cell its whole flexible subtree
+     shares, so the recursion below sees the settled type. *)
+  let pin =
+    match (i.expected, i.info) with
+    | Some required, ([| cell |], location) -> (
+        let inferred = Cell.get cell in
+        match (numeric_width required, resolved_storagetype inferred) with
+        | Some required, Some resolved -> (
+            match (inferred_width resolved, numeric_valtype required) with
+            | Some inferred_w, Some required_v when inferred_w <> required ->
+                (* A pin can correct the disagreement when nothing anchored the
+                   value's width: either it is still flexible, or it is a literal
+                   tree a numeric cast folded to its own target (see
+                   {!defaulting_tree} — the cast constrains its operand only to be
+                   numeric, so re-grounding it under the cast is inert to the
+                   consumer, and the cast becomes the conversion the Wasm had). *)
+                let pinnable =
+                  pin_stays_in_family inferred ~resolved:inferred_w ~required
+                  && (flexible_literal inferred
+                     || (under_cast && defaulting_tree i))
+                in
+                if pinnable && mode = `Repair then begin
+                  Cell.set cell (Valtype required_v);
+                  Some (required, required_v)
+                end
+                else begin
+                  Error.width_invariant_violated diagnostics ~location
+                    ~inferred:inferred_w ~required ~pinnable (width_expr i);
+                  None
+                end
+            | _ -> None)
+        | _ -> None)
+    | _ -> None
+  in
+  let sub = reconcile_widths mode diagnostics in
+  let i =
+    {
+      i with
+      desc =
+        (match i.desc with
+        (* A NUMERIC cast requires only that its operand be numeric, so a pin
+           inside it stays type-correct — unlike an operand a call or method
+           signature fixes, where a pin would make the call ill-typed. That is the
+           one position where a folded literal tree is still repairable. *)
+        | Cast (e, ((Valtype (I32 | I64 | F32 | F64) | Signedtype _) as t)) ->
+            Cast (sub ~under_cast:true e, t)
+        | desc ->
+            Ast_utils.map_desc ~instr:(sub ~under_cast:false)
+              ~block:(Ast_utils.smart_map (sub ~under_cast:false))
+              desc);
+    }
+  in
+  match pin with
+  | None -> i
+  | Some (required, required_v) ->
+      (* The pin takes the node's span (as [From_wasm]'s own pins do, so the source
+         trivia still lands on it) and the recorded type as its own; the
+         instruction's own hints stay on the instruction. It carries no [expected]
+         of its own: the claim it was inserted for is now met. *)
+      {
+        desc = Cast (i, Valtype required);
+        info = ([| valtype_cell required_v |], snd i.info);
+        hints = Wax_wasm.Hints.none;
+        expected = None;
+      }
+
+let reconcile_module_widths mode diagnostics
+    (m : inferred_module_annotation Ast.module_) =
+  if mode = `Off then m
+  else
+    List.map
+      (fun (f : (_ modulefield, location) Ast.annotated) ->
+        {
+          f with
+          Annot.desc =
+            Ast_utils.map_modulefield_instr
+              (reconcile_widths mode diagnostics ~under_cast:false)
+              f.Annot.desc;
+        })
+      m
 
 (* Conditional annotations denote mutually-exclusive branches, so they are
    type-checked by exploring every reachable configuration (as the WAT validator
@@ -12818,16 +13048,18 @@ let lint_confusable diagnostics fields =
   walk fields
 
 let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
-    ?(faithful = false) ?(width_check = false)
+    ?(faithful = false) ?(width_check = `Off)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   if warn_unused then lint_confusable diagnostics fields;
   let types, typed =
     f_infer ~simplify ~warn_unused ~suggest ~faithful ~features diagnostics
       fields
   in
-  let typed = project_module typed in
-  if width_check then check_widths diagnostics typed;
-  (types, typed)
+  (* Reconcile the recorded widths BEFORE projecting: the pass settles the
+     inference cell of whatever it pins, so the projection then reports the pinned
+     width both at that node and at every node its tree shares a cell with. *)
+  let typed = reconcile_module_widths width_check diagnostics typed in
+  (types, project_module typed)
 
 let check ?(warn_unused = false) ?(suggest = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =

@@ -685,10 +685,17 @@ fi
 # ---- 5c. Width check: the decompiler's own recorded widths vs what Wax infers. --
 # The in-tool mirror of oracle 5's WIDTHDRIFT histogram, and strictly earlier in
 # the pipeline. [From_wasm] records the type each source opcode states on the Wax
-# node it emits ([Ast.instr]'s [expected]); under [--debug width-check] the typer —
-# which already runs over the decompiled module — compares its own inference
-# against that record and reports a disagreement as an error (exit 128) instead of
-# printing Wax that would recompile at another width. Where WIDTHDRIFT can only
+# node it emits ([Ast.instr]'s [expected]); the typer — which already runs over the
+# decompiled module — reconciles its own inference with that record.
+#
+# The flag is load-bearing, not just verbosity: a decompilation REPAIRS such a
+# disagreement by default (it pins the value at the recorded width, so a gap in the
+# conversion's pin heuristics costs a cast rather than a miscompile), which would
+# leave every width oracle permanently green on a missing heuristic —
+# WIDTHDRIFT/FAITHDRIFT included, since the repaired output round-trips.
+# [--debug width-check] turns the backstop back into a DETECTOR: it reports the
+# disagreement as an error (exit 128) instead of repairing it, which is what makes
+# a missing pin visible here at all. Where WIDTHDRIFT can only
 # see the width-sensitive opcode FAMILIES that survive a recompile, this sees every
 # annotated node (each const, arithmetic result, pinned hole, dead value and
 # stranded leftover), so it catches a drift no opcode histogram can — one that

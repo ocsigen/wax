@@ -101,6 +101,16 @@ val map_modulefield : ('a -> 'b) -> 'a Ast.modulefield -> 'b Ast.modulefield
 (** [map_modulefield f modulefield] applies the function [f] to the info field
     of instructions within [modulefield] and returns a new [modulefield]. *)
 
+val map_modulefield_instr :
+  ('info Ast.instr -> 'info Ast.instr) ->
+  'info Ast.modulefield ->
+  'info Ast.modulefield
+(** [map_modulefield_instr fi modulefield] rewrites each instruction ROOT the
+    field holds (a function body's statements, an initializer, a segment offset)
+    with [fi], which owns the recursion into that root's operands — the
+    rewriting counterpart of {!iter_module_instr}'s field walk. A field's
+    attribute values are left alone (they are always location-annotated). *)
+
 val iter_fields :
   (('info Ast.modulefield, Ast.location) Ast.annotated -> unit) ->
   'info Ast.module_ ->

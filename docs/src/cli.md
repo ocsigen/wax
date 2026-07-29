@@ -386,15 +386,23 @@ server](#language-server)).
           (parse, specialize, validate, type-check, convert, output) to stderr,
           one line per pass as it finishes. The normal output on stdout is
           unchanged.
-        - `width-check`: on a wasm or wat to wax conversion, check the
-          decompiled Wax against the widths the WebAssembly states. The
-          conversion records the type of each value the source opcodes produce,
-          and the type checker — which already runs over the decompiled module —
-          compares its own inference against it, so a Wax expression that would
+        - `width-check`: on a wasm or wat to wax conversion, *report* a width
+          disagreement instead of repairing it. The conversion records the type
+          of each value the source opcodes produce, and the type checker — which
+          already runs over the decompiled module — reconciles its own inference
+          with those records. Normally it REPAIRS: an expression that would
           recompile at another width (an `i64` operation re-read as `i32`, say)
-          is reported as an error instead of being printed. A tool
-          self-check, not a check on the input: a mismatch is a bug in the
-          decompiler, and it reports nothing for any other conversion.
+          is pinned with a cast at the width the WebAssembly states, so the
+          output stays faithful even where the decompiler's own pins missed a
+          spot. With this category it is reported as an error instead, which is
+          what a tool developer (or the fuzzing harness) needs to find the missing
+          pin rather than a healed symptom. Either way it is a self-check on the
+          decompiler, not a check on the input, and it does nothing for any other
+          conversion. A disagreement a pin cannot fix — the value's type is fixed
+          by its context, so a cast would convert the value instead of grounding
+          it — is an error in both modes; that means the WebAssembly is invalid
+          (a binary input is trusted, never validated — check it with
+          `wax check`) or the decompiler is wrong.
 
 - **`--version`**
     - Print the toolchain version and exit. In a released build this is the git

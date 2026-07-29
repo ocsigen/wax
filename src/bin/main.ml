@@ -199,6 +199,17 @@ let wat_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   in
   output_wat ~oc ~color:output_color ~trivia ~tail doc
 
+(* How a decompilation reconciles the widths [From_wasm] recorded on the Wax it
+   emits with what the typer re-infers (see {!Wax_lang.Typing.f}'s [~width_check]).
+   REPAIRING by default — a value the conversion left to default at the wrong width
+   is pinned rather than printed wrong, so a gap in the conversion's own pin
+   heuristics costs an extra cast, not a silent miscompile. [--debug width-check]
+   turns the backstop back into a detector: it reports the disagreement instead of
+   repairing it, which is what lets the fuzzing harness (fuzz/oracle.sh's oracle 5c)
+   see a missing pin rather than a healed one. *)
+let width_check_mode () =
+  if Wax_utils.Debug.is_enabled Width_check then `Report else `Repair
+
 let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map:_
     ~faithful =
@@ -230,8 +241,7 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d ->
         Wax_lang.Typing.f ~simplify:(not faithful) ~faithful
-          ~width_check:(Wax_utils.Debug.is_enabled Width_check)
-          d wax_ast)
+          ~width_check:(width_check_mode ()) d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
   let trivia, tail =
@@ -416,8 +426,7 @@ let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:None (fun d ->
         Wax_lang.Typing.f ~simplify:(not faithful) ~faithful
-          ~width_check:(Wax_utils.Debug.is_enabled Width_check)
-          d wax_ast)
+          ~width_check:(width_check_mode ()) d wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
   output_wax ~oc ~color:output_color ~trivia:(Wax_utils.Trivia.empty ()) wax_ast

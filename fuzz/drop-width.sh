@@ -157,15 +157,19 @@ N=${#COMBOS[@]}
 # Worker: round-trip each module wat -> wax -> wat; a crash/rejection on either
 # leg is a finding, and the round-tripped wat must still contain the opcode.
 #
-# The decompile runs under [--debug width-check], the decompiler's own differential
-# width check ([From_wasm] records the width each source opcode states on the node
-# it emits; the typer compares its own inference against it). Every module here is
-# valid by construction, so the check is meaningful — and it reports the SAME bug
-# this sweep hunts, one stage earlier: before the Wax is printed, naming the
-# expression instead of the opcode that went missing from the recompiled wat. Both
-# reports stay: the check only sees what from_wasm claimed, the opcode compare sees
-# the width that actually survived. Only the decompile carries the flag; the
-# [wax -> wat] leg back re-reads hand-written-shaped Wax, which records nothing.
+# The decompile runs under [--debug width-check], which puts the decompiler's own
+# width reconciliation in DETECTOR mode ([From_wasm] records the width each source
+# opcode states on the node it emits; the typer compares its own inference against
+# it and, by default, REPAIRS a disagreement by pinning the value). Detector mode is
+# the point: a repaired decompilation round-trips, so the opcode assertion below
+# would stay green on a missing pin heuristic and this sweep would stop guarding
+# it. Every module here is valid by construction, so the reconciliation is
+# meaningful, and it reports the SAME bug one stage earlier — before the Wax is
+# printed, naming the expression instead of the opcode that went missing from the
+# recompiled wat. Both reports stay: the check only sees what from_wasm claimed,
+# the opcode compare sees the width that actually survived. Only the decompile
+# carries the flag; the [wax -> wat] leg back re-reads hand-written-shaped Wax,
+# which records nothing.
 worker() {
   local first="$1" last="$2" i label opcode body v out=""
   local p="$RESULTS/w$first"

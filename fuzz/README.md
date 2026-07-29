@@ -684,6 +684,17 @@ increasing distance from the bug:
   hole, dead value, stranded leftover — so it catches a drift that changes a
   *value* without changing an opcode, which no opcode comparison can. Its blind
   spot is the mirror image: it only inspects what `from_wasm` claimed.
+
+  In the tool this is no longer a check but a **repairing backstop**: by default a
+  decompilation PINS a value whose width merely defaulted wrong, so a gap in
+  `from_wasm`'s own pin heuristics costs an extra cast instead of a miscompile.
+  `--debug width-check` is what turns it back into a detector (report the
+  disagreement, exit 128), and that is exactly why this leg passes the flag: with
+  repair on, a missing heuristic is healed, so `WIDTHDRIFT`, `FAITHDRIFT` and the
+  round-trip legs all go quiet on it and only this leg can still surface the root
+  cause. (A disagreement no pin can fix — a value whose type is fixed by its
+  context — is an error in both modes; on a valid module that never happens, which
+  is why the leg is gated on validity.)
 * **`WIDTHDRIFT`** (oracle 5) compares a histogram of the width-sensitive opcode
   *families* (`div`/`rem`/shifts/`trunc_f`/ordered and equality comparisons/
   `convert`/the width-named float methods) across a full `x → wax → wasm`
@@ -694,9 +705,10 @@ increasing distance from the bug:
   comparisons, `eqz`, `wrap`, a truncation's source float, narrow/atomic stores,
   `select` arms, branch leftovers) around width-sensitive trees whose *value*
   changes with width, controlling the operand shape the corpus leaves to chance.
-  Its decompile leg runs `--debug width-check` too, so a drift there is reported
-  both by the check (naming the expression) and by the opcode compare (naming what
-  went missing).
+  Its decompile leg runs `--debug width-check` too — in detector mode, so a
+  missing pin is reported (naming the expression) rather than repaired and
+  invisible; the opcode compare then names what went missing if it ever slips
+  past.
 
 `WIDTHCHECK` is gated on the input being valid, in the harness rather than in the
 tool: on a module validation rejects, the recorded widths are claims about a

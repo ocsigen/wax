@@ -19,7 +19,7 @@ val f :
   ?warn_unused:bool ->
   ?suggest:bool ->
   ?faithful:bool ->
-  ?width_check:bool ->
+  ?width_check:[ `Off | `Repair | `Report ] ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -48,14 +48,24 @@ val f :
     are reported as [Suggestion] diagnostics (see {!check}); it is mutually
     exclusive with [simplify].
 
-    When [width_check] is set (default [false], the [--debug width-check]
-    switch), every node on which the Wasm-to-Wax conversion recorded the type
-    its value must have ({!Ast.instr}'s [expected]) is checked against the type
-    inferred here, and a disagreement is reported as an error: the Wax about to
-    be printed would recompile to a different opcode width. It is a check on the
-    decompiler, not on the module, so it reports nothing for a module that
-    carries no recorded expectation (anything but {!Wax_conversion.From_wasm}
-    output). *)
+    [width_check] (default [`Off]) reconciles the type the Wasm-to-Wax
+    conversion recorded on a node ({!Ast.instr}'s [expected]) with the type
+    resolved here — a disagreement means the Wax about to be printed would
+    recompile at a different opcode width. It is about the decompiler, not the
+    module, so it does nothing for a module that carries no recorded expectation
+    (anything but {!Wax_conversion.From_wasm} output).
+
+    - [`Repair] is what the decompilation pipelines pass: a value whose type
+      merely DEFAULTED to the wrong width is repaired in place — wrapped in the
+      identity cast that pins it at the recorded width, the grounding pin the
+      conversion should have placed — so a missing pin becomes correct output
+      rather than a silent miscompile.
+    - [`Report] reports the same disagreement as an error instead of repairing
+      it (the [--debug width-check] switch). That is what lets the fuzzing
+      harness see a missing conversion pin at all, rather than a healed one.
+    - A disagreement no pin can fix — the value's type is fixed by its context,
+      so a cast would convert the value rather than ground it — is reported as
+      an error in BOTH modes. *)
 
 val reserved_type_names : string list
 (** The built-in type names a [type] declaration (or a [rec] member) may not

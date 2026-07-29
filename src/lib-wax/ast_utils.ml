@@ -777,7 +777,14 @@ let lower_match ~block_info ~labels ~scrutinee ~arms
       in
       wrap block_l0 p0 b0.Annot.desc rest_labels rest_arms
 
-let rec map_modulefield f field =
+(* The structural field walk shared by {!map_modulefield} — which maps the info
+   type at every instruction — and {!map_modulefield_instr}, which rewrites the
+   instructions themselves. [fi] is applied to each instruction ROOT the field
+   holds (a function body's statements, an initializer, a segment offset) and owns
+   the recursion into that root's own operands. A field's ATTRIBUTES are not
+   touched: an attribute value is always location-annotated, whatever the field's
+   info type. *)
+let rec map_modulefield_gen fi field =
   match field with
   | Type t -> Type t
   | Module_annotation a -> Module_annotation a
@@ -786,14 +793,13 @@ let rec map_modulefield f field =
   | Import_group { module_; decls } -> Import_group { module_; decls }
   | Tag t -> Tag t
   | Func ({ body = s, instrs; _ } as func) ->
-      Func { func with body = (s, List.map (map_instr f) instrs) }
-  | Global g -> Global { g with def = map_instr f g.def }
+      Func { func with body = (s, List.map fi instrs) }
+  | Global g -> Global { g with def = fi g.def }
   | Memory m ->
       Memory
         {
           m with
-          data =
-            List.map (fun d -> { d with offset = map_instr f d.offset }) m.data;
+          data = List.map (fun d -> { d with offset = fi d.offset }) m.data;
         }
   | Data ({ mode; _ } as d) ->
       Data
@@ -802,10 +808,9 @@ let rec map_modulefield f field =
           mode =
             (match mode with
             | Passive -> Passive
-            | Active (mem, off) -> Active (mem, map_instr f off));
+            | Active (mem, off) -> Active (mem, fi off));
         }
-  | Table ({ init; _ } as t) ->
-      Table { t with init = Option.map (map_instr f) init }
+  | Table ({ init; _ } as t) -> Table { t with init = Option.map fi init }
   | Elem ({ mode; init; _ } as e) ->
       Elem
         {
@@ -813,8 +818,8 @@ let rec map_modulefield f field =
           mode =
             (match mode with
             | EPassive -> EPassive
-            | EActive (tab, off) -> EActive (tab, map_instr f off));
-          init = List.map (map_instr f) init;
+            | EActive (tab, off) -> EActive (tab, fi off));
+          init = List.map fi init;
         }
   | Conditional { cond; then_fields; else_fields } ->
       let map_fields b =
@@ -823,7 +828,7 @@ let rec map_modulefield f field =
           Annot.desc =
             List.map
               (fun (a : (_ modulefield, location) Ast.annotated) ->
-                { a with desc = map_modulefield f a.desc })
+                { a with desc = map_modulefield_gen fi a.desc })
               b.Annot.desc;
         }
       in
@@ -833,6 +838,9 @@ let rec map_modulefield f field =
           then_fields = map_fields then_fields;
           else_fields = Option.map map_fields else_fields;
         }
+
+let map_modulefield f field = map_modulefield_gen (map_instr f) field
+let map_modulefield_instr fi field = map_modulefield_gen fi field
 
 let rec iter_fields f l =
   List.iter
