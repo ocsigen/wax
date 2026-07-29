@@ -664,11 +664,48 @@ same modules decompiled to Wax, so no separate wax corpus is needed.
 | `DIAG_DUP`      | REVIEW | A rejection never repeats a diagnostic line (`--error-format short`, located lines): a location+message duplicate means two passes both reported one broken construct. |
 | `ROUNDTRIP`     | HIGH   | `x → wax → wasm` recompiles and validates; and for a wax input, `wax → wasm → wax → wasm` re-validates (the two directions compose). |
 | `STRUCT_DRIFT`  | HIGH   | For a wax input whose round-trip binaries both validate, their load-bearing structure (masked `ref.null` heaptypes, `(local …)` widths, `iNN/fNN.const` widths) is unchanged — a diff is the silent type-drift flavor of a dropped load-bearing annotation. |
+| `WIDTHCHECK`    | HIGH   | The decompiler's own width invariant, asserted in-tool: `From_wasm` records the type each source opcode states on the Wax node it emits, and under `--debug width-check` the type checker compares its own inference against that record — so decompiled Wax that would recompile at another width is caught before it is even printed, named and located. Runs only on an input known valid (see below). |
 | `IDEMPOTENCE`   | REVIEW | `format(format(x)) == format(x)` textually. |
 
 Each finding line is tab-separated: `FINDING  category  severity  input  detail
 repro`, where `repro` is a runnable command. HIGH = wax did something
 provably wrong; REVIEW = worth a human look (may include benign noise).
+
+### The width-drift family
+
+Three guards cover the width-eraser class — a decompiled numeric tree with
+nothing to pin it re-defaults to `i32`/`f64` on re-parse, silently changing an
+opcode's width and with it the value it computes or the inputs it traps on — at
+increasing distance from the bug:
+
+* **`WIDTHCHECK`** (oracle 5c) asks the tool itself, before it prints anything:
+  does the width `from_wasm` recorded for this node match the one the typer
+  infers? It sees every annotated node — each const, arithmetic result, pinned
+  hole, dead value, stranded leftover — so it catches a drift that changes a
+  *value* without changing an opcode, which no opcode comparison can. Its blind
+  spot is the mirror image: it only inspects what `from_wasm` claimed.
+* **`WIDTHDRIFT`** (oracle 5) compares a histogram of the width-sensitive opcode
+  *families* (`div`/`rem`/shifts/`trunc_f`/ordered and equality comparisons/
+  `convert`/the width-named float methods) across a full `x → wax → wasm`
+  round trip, so it needs no recorded claim — a width nothing records still shows
+  as a changed opcode. `FAITHDRIFT` (oracle 5b) is the same idea over the whole
+  `--faithful` opcode stream.
+* **`fuzz/drop-width.sh`** enumerates the erasers deterministically (drop,
+  comparisons, `eqz`, `wrap`, a truncation's source float, narrow/atomic stores,
+  `select` arms, branch leftovers) around width-sensitive trees whose *value*
+  changes with width, controlling the operand shape the corpus leaves to chance.
+  Its decompile leg runs `--debug width-check` too, so a drift there is reported
+  both by the check (naming the expression) and by the opcode compare (naming what
+  went missing).
+
+`WIDTHCHECK` is gated on the input being valid, in the harness rather than in the
+tool: on a module validation rejects, the recorded widths are claims about a
+module that does not typecheck (a binary input is trusted, so the operand a
+consumer pops need not be the one the opcode's signature names), and the check is
+meaningless — measured, that split is 0 reports over ~5500 valid modules and 184
+over `fuzz/corpus/invalid`. Gating inside the tool instead would make the check
+unfireable end to end, since a valid module is silent by definition. The leg's
+comment in `oracle.sh` documents the per-format gate.
 
 ### Deliberately *not* an oracle
 

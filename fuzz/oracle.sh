@@ -28,6 +28,11 @@
 #   5. Round-trip — x -> wasm  and  x -> wax -> wasm  must be semantically equal
 #                   (canonicalised with `wasm-tools print`). Tests the whole
 #                   decompile+recompile path's fidelity.
+#   5c. Width check — the decompiler's own width invariant: every width
+#                   [From_wasm] recorded on a node it emitted must be the width
+#                   the typer infers for it (`--debug width-check`), or the Wax
+#                   would recompile at another width. Only on a VALID input (see
+#                   the leg).
 #   6. Wax round-trip — for a wax input, wax -> wasm -> wax -> wasm must still
 #                   validate (the dual of 5: tests both directions compose); and
 #                   when both binaries validate, their LOAD-BEARING structure
@@ -675,6 +680,100 @@ if [ "$FMT" != wax ]; then
         "$(repro "${fwa[@]}") && $(repro "${frb[@]}") && diff <(wasm-tools print $WORK/faithful_ref.wasm 2>/dev/null || wasm-tools print $IN) <(wasm-tools print $WORK/faithful.wasm)"
     fi
   fi
+fi
+
+# ---- 5c. Width check: the decompiler's own recorded widths vs what Wax infers. --
+# The in-tool mirror of oracle 5's WIDTHDRIFT histogram, and strictly earlier in
+# the pipeline. [From_wasm] records the type each source opcode states on the Wax
+# node it emits ([Ast.instr]'s [expected]); under [--debug width-check] the typer —
+# which already runs over the decompiled module — compares its own inference
+# against that record and reports a disagreement as an error (exit 128) instead of
+# printing Wax that would recompile at another width. Where WIDTHDRIFT can only
+# see the width-sensitive opcode FAMILIES that survive a recompile, this sees every
+# annotated node (each const, arithmetic result, pinned hole, dead value and
+# stranded leftover), so it catches a drift no opcode histogram can — one that
+# changes a value without changing the opcode — and names the offending expression
+# and its span instead of a histogram diff. Its own blind spot is the mirror image:
+# it only ever inspects what from_wasm CLAIMED, so a width nothing records stays
+# invisible here and is left to WIDTHDRIFT/FAITHDRIFT. Distinct category so the two
+# stay separately triageable — the same root cause reported by both is one bug, and
+# the earlier, located report is the one to debug from.
+#
+# GATED ON INPUT VALIDITY, and deliberately in the HARNESS rather than in the
+# tool. On a module validation rejects, the check is meaningless by construction:
+# a binary input is TRUSTED (never validated), so the operand a consumer pops need
+# not be the one the opcode's signature names, and the recorded type is then a
+# claim about a module that does not typecheck. The phase-1 sweep measured exactly
+# that split, running the flag straight from the command line: 0 reports over
+# ~5500 valid modules, 184 over fuzz/corpus/invalid. Gating inside the TOOL
+# instead would make the check unfireable end to end (a valid module is silent by
+# definition), leaving its firing proof with nothing to assert — so the harness
+# owns the gate. Two of them here, one shared and one this leg's own:
+#   * every oracle from 3b on already requires [wax check] to have ACCEPTED the
+#     input (the [$verdict] test above), so a module wax itself rejects — the whole
+#     of fuzz/corpus/invalid — never reaches this leg at all;
+#   * this leg adds the REFERENCE as arbiter wherever wax's own verdict is the only
+#     thing vouching for the module, so a validator that wrongly accepts cannot
+#     turn into a width finding on top of the FALSE_ACCEPT it already is.
+# Per input format:
+#   wasm — [wt_validate] (skipped for a documented [valid] ground truth). The
+#          conversion never validates a binary, and [wax check]'s accept is wax's
+#          own opinion; wasm-tools makes the gate independent of the tool under
+#          test.
+#   wat  — nothing beyond the shared gate: the convert pipeline validates a text
+#          input before converting it to a DIFFERENT format, so an invalid module
+#          is rejected (exit 128) before [From_wasm] or the typer ever runs — the
+#          flagged run below cannot reach the check on a module wax rejects.
+#   wax  — a wax input is never itself decompiled; its decompile is the return leg
+#          of oracle 6 ([wax -> wasm -> wax]), so what the check runs on is wax's
+#          OWN binary. Gate on that compile succeeding (which validates the wax
+#          source — text input to a different format again) and on the reference
+#          accepting the binary it produced, exactly the gate oracle 6 applies
+#          before its own structural compare. Worth its own arm: this is the
+#          to_wasm-shaped binary distribution (authorial constructs, the
+#          mutate-wax mutants), not the smith/corpus one the wasm arm sees.
+# A corpus file documented [invalid] is skipped whatever its format: if wax
+# accepted it anyway, that is oracle 2's FALSE_ACCEPT and a width report would be
+# a second symptom of it.
+wc_src="" wc_fmt=""
+if [ "$EXPECT" != invalid ]; then
+  case "$FMT" in
+    wasm)
+      if [ "$EXPECT" = valid ] || wt_validate "$IN"; then
+        wc_src="$IN"; wc_fmt=wasm
+      fi ;;
+    wat)
+      wc_src="$IN"; wc_fmt=wat ;;
+    wax)
+      if [ "$(classify_wax -i wax -f wasm "$IN" -o "$WORK/wc_mid.wasm")" = ok ] \
+         && wt_validate "$WORK/wc_mid.wasm"; then
+        wc_src="$WORK/wc_mid.wasm"; wc_fmt=wasm
+      fi ;;
+  esac
+fi
+if [ -n "$wc_src" ]; then
+  # [--error-format short] renders each diagnostic on one line, so the message
+  # quoted in the finding (and grepped for here) is the whole of it.
+  wc=(-i "$wc_fmt" -f wax --debug width-check --error-format short "$wc_src"
+      -o "$WORK/wc.wax")
+  r="$(classify_wax "${wc[@]}")"
+  case "$r" in
+    crash:*)
+      # The flag adds a tree walk to a path oracle 1 already sweeps unflagged, so
+      # a crash only under it belongs to the check itself.
+      finding CRASH HIGH "$IN" "${r#crash:} on: wax --debug width-check ${FMT}->wax" \
+        "$(repro "${wc[@]}")" ;;
+    *)
+      # A rejection here is EITHER the check firing or an ordinary conversion
+      # rejection (which other oracles own), so the message discriminates rather
+      # than the exit status.
+      if msg="$(grep -m1 -o 'Decompiler width invariant violated.*' "$ERRLOG" 2>/dev/null)" \
+         && [ -n "$msg" ]; then
+        finding WIDTHCHECK HIGH "$IN" \
+          "the decompiled Wax re-infers a width the WebAssembly does not state: $msg" \
+          "$(repro "${wc[@]}")"
+      fi ;;
+  esac
 fi
 
 # ---- 6. Wax round-trip stability: wax -> wasm -> wax -> wasm re-validates. ----

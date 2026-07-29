@@ -87,6 +87,11 @@ freeze_wax() {
 #   crash:... — anything else: cmdliner internal error from an uncaught
 #               exception (125), a bare uncaught exception (2), a signal,
 #               a timeout (124), or any unexpected code. These are the bugs.
+# One caveat for a caller that passes [--debug width-check]: the check reports a
+# decompiler width drift as an ordinary error diagnostic, so it too exits 128 and
+# lands in [rejected] — which is then NOT an intended answer. Such a caller must
+# discriminate on the message (see oracle.sh's oracle 5c and drop-width.sh), not
+# on this bucket.
 classify_wax() {
   timeout -k 5 "$TIMEOUT" "$WAX" "$@" >/dev/null 2>"$ERRLOG"
   local code=$?

@@ -156,6 +156,16 @@ N=${#COMBOS[@]}
 
 # Worker: round-trip each module wat -> wax -> wat; a crash/rejection on either
 # leg is a finding, and the round-tripped wat must still contain the opcode.
+#
+# The decompile runs under [--debug width-check], the decompiler's own differential
+# width check ([From_wasm] records the width each source opcode states on the node
+# it emits; the typer compares its own inference against it). Every module here is
+# valid by construction, so the check is meaningful — and it reports the SAME bug
+# this sweep hunts, one stage earlier: before the Wax is printed, naming the
+# expression instead of the opcode that went missing from the recompiled wat. Both
+# reports stay: the check only sees what from_wasm claimed, the opcode compare sees
+# the width that actually survived. Only the decompile carries the flag; the
+# [wax -> wat] leg back re-reads hand-written-shaped Wax, which records nothing.
 worker() {
   local first="$1" last="$2" i label opcode body v out=""
   local p="$RESULTS/w$first"
@@ -167,9 +177,16 @@ worker() {
     opcode="${rest%%$'\t'*}"
     body="${rest#*$'\t'}"
     printf '%s\n' "$body" >"$wat"
-    v="$(classify_wax -i wat -f wax "$wat" -o "$wax")"
+    v="$(classify_wax -i wat -f wax --debug width-check --error-format short \
+           "$wat" -o "$wax")"
     if [ "$v" != ok ]; then
-      out+="$(finding DROPWIDTH HIGH "$label" "$v (wat->wax)" "$body")"$'\n'
+      # A generated module is valid, so a rejection here is a wax bug either way;
+      # distinguish the width check firing (which says precisely what drifted)
+      # from any other refusal.
+      local why="$v (wat->wax)" msg
+      msg="$(grep -m1 -o 'Decompiler width invariant violated.*' "$ERRLOG" 2>/dev/null)"
+      [ -n "$msg" ] && why="width-check: $msg"
+      out+="$(finding DROPWIDTH HIGH "$label" "$why" "$body")"$'\n'
       printf F >&2; continue
     fi
     v="$(classify_wax -i wax -f wat "$wax" -o "$back")"
