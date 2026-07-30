@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c2eac4f0.js";
+            window.path_to_searchindex_js = "searchindex-52d4dcd4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -323,7 +323,11 @@ other reference one another, yet neither can ever run. The roots are the
 functions reachable from outside — exported, or the start function — and
 every reference made from a module-level context, which runs at
 instantiation: a global or table initializer, an element or data
-segment. Liveness then follows calls, and taking a function <em>reference</em>
+segment. A <em>declarative</em> element segment is the exception, since it
+installs nothing and runs nothing: it exists so that a <code>ref.func</code>
+elsewhere validates, so the function it names is reachable exactly when
+that other <code>ref.func</code> is. Liveness then follows calls, and taking a
+function <em>reference</em>
 counts as calling it, since where the reference ends up is not tracked
 — so the analysis never reports a function that might run. A field that
 only dead code references is dead in turn: a global read solely from an
