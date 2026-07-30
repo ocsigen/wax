@@ -5858,6 +5858,16 @@ and type_arith ctx i =
   | BinOp (op, i1, i2) ->
       let* i1' = typed ctx i1 in
       let* i2' = typed ctx i2 in
+      (* Snapshot BEFORE the arms below: they unify an [Error] operand cell onto
+         the other operand's type (recovery), which erases the poison. *)
+      let poisoned_operand =
+        let poisoned c =
+          match Cell.get (expression_type ctx c) with
+          | Error -> true
+          | _ -> false
+        in
+        poisoned i1' || poisoned i2'
+      in
       let ty =
         let ty1 = expression_type ctx i1' in
         let ty2 = expression_type ctx i2' in
@@ -6026,6 +6036,16 @@ and type_arith ctx i =
         Typing_lint.lint_comparison ctx op i1' i2';
         Typing_lint.lint_redundant ctx op i1' i2'
       end;
+      (* An operand that already FAILED poisons the result. The arms above treat
+         [Error] like [Unknown] on purpose — unifying it onto the other operand's
+         type so the operand cells still get a usable recovery type — but the
+         VALUE this produces is derived from a reported failure, so a consumer
+         must not report about it again: without this, calling the result of
+         [0x1p+1() - 1] said "Expected function" a second time, at the same start
+         column as the inner call's own report (a duplicated diagnostic the
+         mutation fuzzer caught). A callee, receiver or argument typed [Error] is
+         absorbed silently, as it is for a failed call or cast. *)
+      let ty = if poisoned_operand then Cell.make Error else ty in
       return_expression i (BinOp (op, i1', i2')) ty
   | UnOp (op, i') ->
       let* i' = instruction ctx i' in

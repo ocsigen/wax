@@ -58,3 +58,16 @@ nesting shapes rather than by a fuzz run:
   $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short test_chain.wax
   test_chain.wax:4:6: error: This expression has type 'i32' but is expected to have type '&?any'.
   [128]
+
+A call whose callee is an arithmetic expression with an already-failed operand.
+The failed call recovers with an `Error` value, but the binop arms deliberately
+treat `Error` like `Unknown` — unifying it onto the other operand's type so the
+operand cells still get a usable recovery type — which erased the poison and let
+the outer call report "Expected function" a second time, at the chain's shared
+start column. The binop now yields `Error` when either operand had already
+failed, so the outer callee is absorbed silently, as it is for a failed call or
+cast:
+
+  $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short call_binop.wax
+  call_binop.wax:3:6: error: Expected function.
+  [128]
