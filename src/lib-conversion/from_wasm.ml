@@ -1144,6 +1144,17 @@ let rec forget_expected (i : _ Ast.instr) : _ Ast.instr =
 
 (*** The conversion stack ***)
 
+(* An operand tree whose printed form re-parses type-ADAPTIVELY: with no width or
+   type of its own it re-defaults (a numeric tree to [i32]). A bare hole is the
+   base case, and an untyped [select] is adaptive when BOTH arms are (its result
+   type is its arms'). Mirrors the typer's [reparse_adaptive] (kept local to
+   from_wasm so it carries no dependency on the typer). *)
+let rec reparse_adaptive (i : _ Ast.instr) =
+  match i.Ast.desc with
+  | Ast.Hole | Ast.Null -> true
+  | Ast.Select (_, a, b) -> reparse_adaptive a && reparse_adaptive b
+  | _ -> false
+
 module Stack = struct
   (* [width] records the numeric result width the producing opcode states — a
      const or arithmetic op tags its own width, everything else is [None]. It is
@@ -1305,6 +1316,16 @@ module Stack = struct
        re-parsed as an [i32.eq] (a bottom-fuzz finding). *)
     | (a, w, i) :: rem when a >= 1 && (w <> None || i.Ast.expected <> None) ->
         effective_backing stop rem
+    (* An ADAPTIVE value — an untyped [select] of holes, or a bare hole — is not a
+       backing: its own printed form carries no hierarchy, so on a re-parse the ref
+       op's hole reconnects to it and the pair re-defaults to the NUMERIC form (a
+       [select] of holes becomes the i32 select and [!] on it an [i32.eqz]). It
+       stops the scan rather than being skipped: the hole reconnects to IT, so
+       whatever reference lies deeper is not what the printed form would find. The
+       caller then pins the hole, which grounds the reconnected value through the
+       same unification (as it already does for such a value popped directly as the
+       operand). *)
+    | (a, None, i) :: _ when a >= 1 && reparse_adaptive i -> None
     | (a, None, i) :: _ when a >= 1 -> Some i
     | _ -> None
 
@@ -1541,17 +1562,6 @@ let floattype ty : Ast.valtype =
   | `F32 -> F32
   | `F64 -> F64
   | _ -> assert false
-
-(* An operand tree whose printed form re-parses type-ADAPTIVELY: with no width or
-   type of its own it re-defaults (a numeric tree to [i32]). A bare hole is the
-   base case, and an untyped [select] is adaptive when BOTH arms are (its result
-   type is its arms'). Mirrors the typer's [reparse_adaptive] (kept local to
-   from_wasm so it carries no dependency on the typer). *)
-let rec reparse_adaptive (i : _ Ast.instr) =
-  match i.Ast.desc with
-  | Ast.Hole | Ast.Null -> true
-  | Ast.Select (_, a, b) -> reparse_adaptive a && reparse_adaptive b
-  | _ -> false
 
 let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
   (* A Wax instruction at the source instruction's span. Built fresh rather than

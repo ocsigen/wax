@@ -151,6 +151,15 @@ ctx "memsize-resid"     "unreachable memory.size atomic.fence drop @OP@ @CONS@"
 # [drop] did — so the op's hole is fresh and needs the pin after all.
 ctx "ref-resid-blocked" "unreachable local.get 3 atomic.fence drop @OP@ @CONS@"
 ctx "ref-aggr-blocked"  "unreachable local.get 4 i32.const 0 array.get \$ra atomic.fence drop @OP@ @CONS@"
+# An untyped SELECT of holes as the residual (not as the operand — the [select]
+# context above covers that). It is a value entry with no tag and no record, so the
+# scan used to report it as a backing and suppress the pin; but its own printed form
+# carries no hierarchy, so on a re-parse the ref op's hole reconnects to it and both
+# re-default to the NUMERIC form ([!] on an i32 select is an [i32.eqz]). Reached
+# exhaustively by bottom-fuzz. Both statement shapes: a plain fence, and a fence plus
+# the hole-bearing statement a blocked drop emits.
+ctx "select-resid"      "unreachable select atomic.fence @OP@ @CONS@"
+ctx "select-resid-drop" "unreachable select atomic.fence drop @OP@ @CONS@"
 # The op's own result stranded past a statement, so no consumer pops it
 # ([Stack.run]'s leftover path rather than a direct pop).
 ctx "strand"     "unreachable @OP@ nop @CONS@"
@@ -206,6 +215,8 @@ cell "ref.eq/v128-resid-op" "" \
   "unreachable i64x2.neg atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/ref-resid-blocked" "" \
   "unreachable local.get 3 atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
+cell "ref.eq/select-resid" "" \
+  "unreachable select atomic.fence ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/v128-resid-scalar" "" \
   "unreachable v128.const i32x4 0 0 0 0 i32x4.bitmask atomic.fence drop ref.eq drop" \
   "ref.eq" "i32.eq"
