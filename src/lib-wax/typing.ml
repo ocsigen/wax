@@ -6527,16 +6527,39 @@ and type_cast ctx i =
       let* i' = instruction ctx operand in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
-      (* The operand's natural type, before [check_type] below concretises it. *)
+      (* The operand's natural type, before the check below concretises it. *)
       let op_natural = Cell.get (expression_type ctx i') in
-      (let>@ typ = top_heap_type ctx ty.typ in
-       let>@ typ = internalize ctx (Ref { nullable = true; typ }) in
-       check_type ctx i' typ);
+      (* Check the operand, and poison the result on failure (below), as the
+         chained SIMD lane op does: [is] yields an [i32], so a chain
+         [(x is &s) is &s] hands the outer [is] a non-reference operand of its
+         own and — both anchored at the shared leftmost operand — reports an
+         identical error at the same location. The innermost is the one to fix.
+         An operand that is ALREADY poison satisfies the check silently and
+         poisons the result too, so the chain stays quiet past its first link. *)
+      let operand_ok =
+        match
+          let*@ typ = top_heap_type ctx ty.typ in
+          internalize ctx (Ref { nullable = true; typ })
+        with
+        | Some typ ->
+            let ty' = expression_type ctx i' in
+            let ok = subtype ctx ty' typ in
+            if not ok then
+              Error.expression_type_mismatch ctx.diagnostics
+                ~location:(snd i'.info) ~provided:ty' ~expected:typ;
+            ok
+        | None -> true
+      in
+      let poisoned =
+        (not operand_ok) || match op_natural with Error -> true | _ -> false
+      in
       (if ctx.warn_unused && not ctx.simplify then
          let>@ target = internalize ctx (Ref ty) in
          lint_ref_cast ~operand_location:(snd i'.info) ctx ~location:i.info
            ~is_test:true op_natural (Cell.get target));
-      return_expression i (Test (i', ty)) i32_cell
+      return_expression i
+        (Test (i', ty))
+        (if poisoned then Cell.make Error else i32_cell)
   (* Construction literals carry an optional type name that can be inferred from
      an expected type. Their typing lives in [check_instruction]; in synthesis position
      there is no expectation, so [check_instruction] against the [Unknown] sentinel keeps a
@@ -7419,7 +7442,7 @@ and type_block_construct ctx i =
           let*! results = array_map_opt (internalize ctx) typ.results in
           let body' = block ctx i.info label [||] results results body in
           let catches, catch_all =
-            type_try_catches ctx i label ~results catches catch_all
+            type_try_catches ctx label ~results catches catch_all
           in
           return_statement i
             (Try
@@ -8054,7 +8077,18 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
          (a [null], a computed value) cannot be compiled. Type the arguments for
          recovery, then reject. *)
       let* args' = instructions ctx (arg1 :: rest) in
-      Error.invalid_management_call ctx.diagnostics ~location:i.info meth.desc;
+      (* Not when the RECEIVER is already poison: a failed call recovers with an
+         [Error] value, so a chained [m.init(…).init(…)] would report the same
+         rejection once per link — and, sharing the chain's start column, the
+         reports render as one repeated [line:col: message]. The innermost
+         failure is the one to fix; the rest follow from it. This is the poison
+         convention the cast chain uses, read through the error-free
+         [expression_type_opt] so the check itself reports nothing. *)
+      (match Option.map Cell.get (Typing_env.expression_type_opt a') with
+      | Some Error -> ()
+      | _ ->
+          Error.invalid_management_call ctx.diagnostics ~location:i.info
+            meth.desc);
       return_statement i
         (Call
            ( {
@@ -9253,7 +9287,7 @@ and check_instruction ctx expected (i : location instr) =
           ~br_params:[| result_cell |] body
       in
       let catches, catch_all =
-        type_try_catches ctx i label ~results:[| r |] catches catch_all
+        type_try_catches ctx label ~results:[| r |] catches catch_all
       in
       let kept_annotation =
         typ.results <> [||]
@@ -9899,7 +9933,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let* () = pop_args ctx `Input ~location:i.info params in
       let body' = block ctx i.info label params results results body in
       let catches, catch_all =
-        type_try_catches ctx i label ~results catches catch_all
+        type_try_catches ctx label ~results catches catch_all
       in
       return_statement i
         (Try
@@ -10144,7 +10178,7 @@ and trycatch_inference ctx i label typ ~body ~arms =
    handler is a block that produces the try's result, like the body. Shared by
    the expression-, statement-, and checking-position [Try] cases; the body is
    typed by the caller. *)
-and type_try_catches ctx i label ~results catches catch_all =
+and type_try_catches ctx label ~results catches catch_all =
   let catches =
     List.filter_map
       (fun (tag, body) ->
@@ -10157,8 +10191,15 @@ and type_try_catches ctx i label ~results catches catch_all =
               internalize ctx (snd p.desc))
             params
         in
+        (* The HANDLER's own span, not the [try]'s: a handler is a block of its
+           own, and its parameters — the tag's payload, which the handler entry
+           pushes — are pushed at that span. Anchored at the [try] instead, a
+           payload the handler never consumes was reported as a value remaining
+           on the stack *at the try's opening*, which is both misleading and
+           indistinguishable from the enclosing construct's own leftover report
+           (a duplicated diagnostic the mutation fuzzer caught). *)
         let body' =
-          block ctx i.info label params results results body.Annot.desc
+          block ctx body.Annot.info label params results results body.Annot.desc
         in
         (tag, { body with desc = body' }))
       catches
@@ -10169,7 +10210,7 @@ and type_try_catches ctx i label ~results catches catch_all =
         {
           body with
           Annot.desc =
-            block ctx i.info label [||] results results body.Annot.desc;
+            block ctx body.Annot.info label [||] results results body.Annot.desc;
         })
       catch_all
   in
@@ -10712,7 +10753,7 @@ and try_inference ctx i label typ ~body ~catches ~catch_all =
       let results = [| r |] in
       let body' = block ctx i.info label [||] results results body.desc in
       let catches, catch_all =
-        type_try_catches ctx i label ~results catches catch_all
+        type_try_catches ctx label ~results catches catch_all
       in
       fun typ ->
         Try

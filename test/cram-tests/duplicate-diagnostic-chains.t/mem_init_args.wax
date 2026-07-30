@@ -1,0 +1,6 @@
+#[export]
+fn test() {
+    m.init(m.init, 65534, 1, 3).init(m.init, 65534, 1, 3);
+}
+memory m: i64 [1];
+data d = "7";

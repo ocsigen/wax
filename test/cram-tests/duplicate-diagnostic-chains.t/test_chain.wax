@@ -1,0 +1,5 @@
+type s = open { a: i32 };
+#[export]
+fn probe() -> i32 {
+    ((null as &?s).a is &s) is &s;
+}
