@@ -3428,9 +3428,15 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
   let info = subtyping_info ctx in
   (* Report the INNERMOST always-trapping cast of a chain only: a cast or test
      over a value that can never be produced is unreachable, and whatever it says
-     merely follows from the inner verdict — the fix belongs at the inner cast
-     (see [cast_traps_reported]). The span is recorded whether or not the report
-     came out, so a longer chain stays quiet past its second cast. *)
+     about that value merely follows from the inner verdict — the fix belongs at
+     the inner cast (see [cast_traps_reported]). The span is recorded whether or
+     not the report came out, so a longer chain stays quiet past its second cast.
+     Only the always-trapping verdict is chained: a REDUNDANT outer cast is an
+     independent claim about the cast itself (its target is the type the operand
+     already has, whatever that operand does at run time) with its own fix, and
+     the Wasm validator's [lint_cast] reports it on the lowered form — a source
+     chain lowers to one [ref.cast] per cast, so suppressing it here left the wat
+     form of [g as &t as &t] linted and the wax form silent. *)
   let span_key (l : Ast.location) =
     (l.loc_start.Lexing.pos_cnum, l.loc_end.Lexing.pos_cnum)
   in
@@ -3447,8 +3453,7 @@ let lint_ref_cast ?operand_location ctx ~location ~is_test op_natural
       Error.cast_always_fails ctx.diagnostics ~location ~is_test
   in
   let redundant_cast ?edit () =
-    if not operand_traps then
-      Error.redundant_cast ?edit ctx.diagnostics ~location ~is_test
+    Error.redundant_cast ?edit ctx.diagnostics ~location ~is_test
   in
   match (op_natural, target_natural) with
   | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },

@@ -73,3 +73,30 @@ Each cast on its own is still reported:
   $ wax check -W correctness=warning --error-format short single.wax
   single.wax:5:7: warning: This cast always traps: the value can never have this type. [cast-always-fails]
   single.wax:9:7: warning: This cast always traps: the value can never have this type. [cast-always-fails]
+
+The chain rule covers only the always-trapping verdict. A REDUNDANT outer cast is
+an independent claim — its target is the type the operand already has, whatever
+that operand does at run time — with its own fix (delete that cast), and each
+source cast lowers to its own `ref.cast`, so the Wasm validator reports it on the
+lowered form. Suppressing it here left the wat form of the chain below linted and
+the wax form silent. Regression: found by the lint-parity fuzz oracle.
+
+  $ cat > redundant-chain.wax <<'WAX'
+  > import "m" fn g();
+  > #[export]
+  > fn f() -> &func {
+  >     g as &fn(i32) -> i32 as &fn(i32) -> i32;
+  > }
+  > WAX
+  $ wax check -W correctness=warning -W redundant-operation=warning --error-format short redundant-chain.wax
+  redundant-chain.wax:4:5: warning: This cast always traps: the value can never have this type. [cast-always-fails]
+  redundant-chain.wax:4:5: warning: This cast is redundant: the value already has this type. [redundant-operation]
+
+The same two warnings on the lowered form, where the two casts have distinct
+start columns (a Wax cast chain shares one, since each cast's span starts at the
+innermost operand):
+
+  $ wax -i wax -f wat redundant-chain.wax -o redundant-chain.wat
+  $ wax check -W correctness=warning -W redundant-operation=warning --error-format short redundant-chain.wat
+  redundant-chain.wat:4:6: warning: This cast always traps: the value can never have this type. [cast-always-fails]
+  redundant-chain.wat:3:4: warning: This cast is redundant: the value already has this type. [redundant-operation]
