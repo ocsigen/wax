@@ -494,6 +494,16 @@ let memarg ch =
   let o = uint64 ch in
   (m, { align = Wax_utils.Uint64.of_int (1 lsl a); offset = o })
 
+(* The cast flags byte of a branching cast ([br_on_cast] and its variants)
+   carries the nullability of the two reference types in bits 0 and 1; the spec
+   production [castflags] admits only 0..3, so every other bit is reserved and a
+   nonzero one is malformed (silently masking it would drop information the
+   encoding states). Returns the two nullability bits, source type first. *)
+let castflags ch =
+  let flags = input_byte ch in
+  if flags land 0xFC <> 0 then error ch "malformed br_on_cast flags";
+  (flags land 1 <> 0, flags land 2 <> 0)
+
 (* An instruction, located at the byte range it was decoded from: its
    [loc_start.pos_cnum] is the absolute file offset of its opcode, which is what
    lets the [metadata.code.…] attach passes match a hint's body-relative offset.
@@ -953,20 +963,20 @@ and instruction ch =
         | 22 -> RefCast { nullable = false; typ = heaptype ch }
         | 23 -> RefCast (nullable (heaptype ch))
         | 24 ->
-            let flags = input_byte ch in
+            let n1, n2 = castflags ch in
             let label = uint ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
-            let rt1 = { nullable = flags land 1 <> 0; typ = ht1 } in
-            let rt2 = { nullable = flags land 2 <> 0; typ = ht2 } in
+            let rt1 = { nullable = n1; typ = ht1 } in
+            let rt2 = { nullable = n2; typ = ht2 } in
             Br_on_cast (label, rt1, rt2)
         | 25 ->
-            let flags = input_byte ch in
+            let n1, n2 = castflags ch in
             let label = uint ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
-            let rt1 = { nullable = flags land 1 <> 0; typ = ht1 } in
-            let rt2 = { nullable = flags land 2 <> 0; typ = ht2 } in
+            let rt1 = { nullable = n1; typ = ht1 } in
+            let rt2 = { nullable = n2; typ = ht2 } in
             Br_on_cast_fail (label, rt1, rt2)
         | 26 -> AnyConvertExtern
         | 27 -> ExternConvertAny
@@ -979,20 +989,20 @@ and instruction ch =
         | 35 -> RefCastDescEq { nullable = false; typ = heaptype ch }
         | 36 -> RefCastDescEq (nullable (heaptype ch))
         | 37 ->
-            let flags = input_byte ch in
+            let n1, n2 = castflags ch in
             let label = uint ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
-            let rt1 = { nullable = flags land 1 <> 0; typ = ht1 } in
-            let rt2 = { nullable = flags land 2 <> 0; typ = ht2 } in
+            let rt1 = { nullable = n1; typ = ht1 } in
+            let rt2 = { nullable = n2; typ = ht2 } in
             Br_on_cast_desc_eq (label, rt1, rt2)
         | 38 ->
-            let flags = input_byte ch in
+            let n1, n2 = castflags ch in
             let label = uint ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
-            let rt1 = { nullable = flags land 1 <> 0; typ = ht1 } in
-            let rt2 = { nullable = flags land 2 <> 0; typ = ht2 } in
+            let rt1 = { nullable = n1; typ = ht1 } in
+            let rt2 = { nullable = n2; typ = ht2 } in
             Br_on_cast_desc_eq_fail (label, rt1, rt2)
         | c -> error ch "unknown GC opcode %d" c)
     | 0xFC -> (

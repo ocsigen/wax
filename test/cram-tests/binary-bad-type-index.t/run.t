@@ -54,3 +54,19 @@ once read as `i32`:
   File "overlong-storagetype.wasm", line 1, characters 14-14:
   Error: malformed reference type 0xff
   [128]
+
+A branching cast's flags byte is a *constrained* byte rather than a set of
+independent bits: the spec's `castflags` production admits only `0`..`3` (bit 0 is
+the source type's nullability, bit 1 the target's), so every other bit is
+reserved and a nonzero one is malformed. Masking the two bits out and ignoring the
+rest — what the decoder used to do — silently accepts a byte the encoding does not
+define, here `07` on a `br_on_cast` whose written flags were `03`; the reference
+interpreter ("malformed br_on_cast flags") and `wasm-tools` ("invalid cast flags:
+00000111") both reject it. The same check guards `br_on_cast_fail` and the
+custom-descriptors pair `br_on_cast_desc_eq`/`_fail`, which share the production.
+Regression: found by the WASM-mutation fuzzer.
+
+  $ wax check br-on-cast-flags.wasm
+  File "br-on-cast-flags.wasm", line 1, characters 35-35:
+  Error: malformed br_on_cast flags
+  [128]
