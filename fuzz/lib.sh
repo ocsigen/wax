@@ -9,8 +9,13 @@ WASM_TOOLS="${WASM_TOOLS:-wasm-tools}"
 TIMEOUT="${TIMEOUT:-30}"        # seconds per wax invocation; longer counts as a hang
 # wax targets bleeding-edge proposals (stack switching, GC, ...). Validate the
 # reference against the same feature set, or it rejects valid wax output for a
-# proposal it has merely defaulted off.
-WT_FEATURES="${WT_FEATURES:-all}"
+# proposal it has merely defaulted off. Minus [shared-everything-threads], which
+# wax does not implement (as [SMITH_FLAGS] below already says): with it on, the
+# reference reads a mutated global's [02] flags byte as a SHARED global and
+# accepts a module wax rightly rejects as a malformed mutability, which the
+# validator-parity arm then reports as a divergence. The feature sets have to
+# match on BOTH sides to compare verdicts.
+WT_FEATURES="${WT_FEATURES:-all,-shared-everything-threads}"
 
 # Flags for `wasm-tools smith` (shared by smith.sh and wax-corpus.sh). Enable the
 # bleeding-edge proposals wax targets (GC, exceptions, stack switching, threads /
