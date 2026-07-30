@@ -124,6 +124,17 @@ ctx "num-resid-const" "unreachable f32.const 1 atomic.fence drop @OP@ @CONS@"
 ctx "num-resid-load" "unreachable f64.load atomic.fence drop @OP@ @CONS@"
 # The residual behind the statement a DROP emits, with no fence.
 ctx "num-resid-drop" "unreachable f32.sqrt drop @OP@ @CONS@"
+# A V128 residual in the same position. [v128] carries no width tag (the tag lattice
+# is scalar), so only its RECORD marks it as not-a-reference — a smith finding, where
+# a dead vector op read as a backing left a [ref.is_null] unpinned and it re-parsed
+# as an [i32.eqz]. Three producers: a vector op, a vector const, and a vector local.
+ctx "v128-resid-op"    "unreachable i64x2.neg atomic.fence drop @OP@ @CONS@"
+ctx "v128-resid-const" "unreachable v128.const i32x4 0 0 0 0 atomic.fence drop @OP@ @CONS@"
+ctx "v128-resid-local" "unreachable local.get 0 atomic.fence drop @OP@ @CONS@"
+# A SCALAR result of a SIMD op (an [i32] from a bitmask, a lane extraction), which
+# must be recorded like any other numeric producer.
+ctx "v128-resid-scalar" "unreachable local.get 0 i32x4.bitmask atomic.fence drop @OP@ @CONS@"
+ctx "v128-resid-lane"   "unreachable local.get 0 i32x4.extract_lane 0 atomic.fence drop @OP@ @CONS@"
 # The op's own result stranded past a statement, so no consumer pops it
 # ([Stack.run]'s leftover path rather than a direct pop).
 ctx "strand"     "unreachable @OP@ nop @CONS@"
@@ -175,6 +186,11 @@ cell "ref.eq/num-resid-load" "" \
   "unreachable f64.load atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/num-resid-drop" "" \
   "unreachable f32.sqrt drop ref.eq drop" "ref.eq" "i32.eq"
+cell "ref.eq/v128-resid-op" "" \
+  "unreachable i64x2.neg atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
+cell "ref.eq/v128-resid-scalar" "" \
+  "unreachable v128.const i32x4 0 0 0 0 i32x4.bitmask atomic.fence drop ref.eq drop" \
+  "ref.eq" "i32.eq"
 
 # The typed-[select] REFERENCE immediate: its arms carry no type on the Wax [?:]
 # surface, so an arm must be pinned or the select re-parses as the numeric one and
@@ -223,7 +239,7 @@ module() {
   if [ -n "$flags" ]; then
     printf '(module\n  (rec\n    (type $a (sub (descriptor $b) (struct)))\n    (type $b (sub (describes $a) (struct))))\n  (memory 1 1 shared)\n  (func (export "f") %s))\n' "$body"
   else
-    printf '(module\n  (type $s (sub (struct (field i32))))\n  (memory 1 1 shared)\n  (func (export "f") %s))\n' "$body"
+    printf '(module\n  (type $s (sub (struct (field i32))))\n  (memory 1 1 shared)\n  (func (export "f") (param $v v128) %s))\n' "$body"
   fi
 }
 

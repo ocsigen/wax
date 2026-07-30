@@ -936,14 +936,22 @@ Step 2: use this info to generate using names without reusing existing names
    drift instead of shipping it (see {!Wax_lang.Typing.f}'s [~width_check]).
    Recording is annotation only: it never changes what is emitted.
 
-   Only a numeric scalar is recorded: the drift class is a flexible numeric
-   literal defaulting (to [i32]/[f64]). A reference or vector type is left
-   unrecorded, for a later phase to add. *)
-let scalar_expectation (ty : Ast.valtype) =
-  match ty with I32 | I64 | F32 | F64 -> Some ty | Ref _ | V128 -> None
+   Every non-reference value type is recorded — the four numeric scalars and
+   [v128]. Only the scalars are ever CHECKED (the drift class is a flexible numeric
+   literal defaulting to [i32]/[f64], and [v128] has no member in that lattice, so
+   the reconciliation's arms skip it: [numeric_width]/[numeric_valtype] return
+   nothing for it). A recorded [v128] serves a second purpose the check does not:
+   it marks the value as PROVABLY NOT A REFERENCE for
+   {!Stack.effective_backing}, which otherwise reads an untagged residual as the
+   reference a bare hole reconnects to — a dead v128 residual there left a
+   [ref.is_null] unpinned and it re-parsed as an [i32.eqz] (a smith finding). A
+   reference type is still not recorded: that is the one class outside this
+   channel. *)
+let recorded_expectation (ty : Ast.valtype) =
+  match ty with I32 | I64 | F32 | F64 | V128 -> Some ty | Ref _ -> None
 
 let expect (ty : Ast.valtype) (i : _ Ast.instr) : _ Ast.instr =
-  { i with Ast.expected = scalar_expectation ty }
+  { i with Ast.expected = recorded_expectation ty }
 
 let valtype_of_width : [ `I32 | `I64 | `F32 | `F64 ] -> Ast.valtype = function
   | `I32 -> I32
@@ -955,7 +963,7 @@ let valtype_of_width : [ `I32 | `I64 | `F32 | `F64 ] -> Ast.valtype = function
    operand's. *)
 let cast_result (ty : Ast.casttype) =
   match ty with
-  | Ast.Valtype ty -> scalar_expectation ty
+  | Ast.Valtype ty -> recorded_expectation ty
   | Signedtype { typ; _ } -> Some (valtype_of_width typ)
   | Functype _ -> None
 
@@ -1124,12 +1132,22 @@ module Stack = struct
         the [br_if] condition lost), not the operand the ref op actually pops.
      [stop] marks the terminator sentinels ([arity] 0 too, but the polymorphic
      bottom, so they stop the scan). Returns the first residual that CAN back the
-     hole — an [arity] >= 1 value with no numeric tag (a reference by validity) —
-     else [None] (a terminator bottom, a stranded numeric only, or empty). A [None]
-     tag also covers an untyped [select] of holes, correctly treated as a backing
-     that the caller then pins; a genuinely numeric untagged residual (a bare
-     [load]/[rmw]) is rare in this position and, if it arises, only leaves the ref
-     op un-pinned (the pre-existing best-effort). *)
+     hole — an [arity] >= 1 value that is neither tagged nor recorded — else [None]
+     (a terminator bottom, a numeric/vector residual only, or empty). A [None] tag
+     with no record also covers an untyped [select] of holes, correctly treated as a
+     backing that the caller then pins.
+
+     What is RECORDED, and therefore skipped, is the accurate list of what cannot be
+     a reference: every const and arithmetic result (the width tags), the method-form
+     ops (which record their opcode's type even when their tag stays flexible), the
+     loads, a local's or global's numeric/vector type, and every SIMD result. What
+     is NOT yet recorded — so still read as a possible reference backing — is a
+     numeric CALL result (its type needs the callee's signature, which this scan's
+     tables do not carry) and the aggregate reads ([struct.get], [array.get],
+     [table.size], [i31.get], [memory.size]). Those are the residual of this
+     mechanism, owned end to end by the round-trip legs (FAITHDRIFT/WIDTHDRIFT and
+     fuzz/ref-width.sh), which is how each of the recorded classes above was found
+     in the first place. *)
   let rec effective_backing stop = function
     | (0, _, i) :: rem when not (stop i) -> effective_backing stop rem
     (* Numeric by its width TAG, or by the type its producer RECORDED on it
@@ -1360,6 +1378,15 @@ let inttype ty : Ast.valtype =
   | `F32 -> I32
   | `F64 -> I64
   | _ -> assert false
+
+(* The scalar type one lane of a SIMD shape holds — the type a lane EXTRACTION
+   produces (a narrow [i8x16]/[i16x8] lane extends to an i32, as in Wasm). *)
+let lane_valtype (s : Wax_wasm.Ast.vec_shape) : Ast.valtype =
+  match s with
+  | I8x16 | I16x8 | I32x4 -> I32
+  | I64x2 -> I64
+  | F32x4 -> F32
+  | F64x2 -> F64
 
 let floattype ty : Ast.valtype =
   match ty with
@@ -3358,50 +3385,57 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
+  (* Every SIMD result is recorded, so a dead residual of one is known not to be a
+     reference (see {!recorded_expectation}): a vector op produces [v128], the
+     tests and bitmasks an [i32], and a lane extraction its shape's scalar. *)
   | VecUnOp op ->
       let* v = Stack.pop in
-      Stack.push 1 (meth_call v (Simd.unop_name op) [])
+      Stack.push 1 (expect V128 (meth_call v (Simd.unop_name op) []))
   | VecBinOp op ->
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
-      Stack.push 1 (meth_call e1 (Simd.binop_name op) [ e2 ])
+      Stack.push 1 (expect V128 (meth_call e1 (Simd.binop_name op) [ e2 ]))
   | VecTernOp op ->
       let* e3 = Stack.pop in
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
-      Stack.push 1 (meth_call e1 (Simd.ternop_name op) [ e2; e3 ])
+      Stack.push 1 (expect V128 (meth_call e1 (Simd.ternop_name op) [ e2; e3 ]))
   | VecShift op ->
       let* count = Stack.pop in
       let* v = Stack.pop in
-      Stack.push 1 (meth_call v (Simd.shift_name op) [ count ])
+      Stack.push 1 (expect V128 (meth_call v (Simd.shift_name op) [ count ]))
   | VecTest op ->
       let* v = Stack.pop in
-      Stack.push 1 (meth_call v (Simd.test_name op) [])
+      (* [any_true]/[all_true] yield an i32. *)
+      Stack.push 1 (expect I32 (meth_call v (Simd.test_name op) []))
   | VecBitmask op ->
       let* v = Stack.pop in
-      Stack.push 1 (meth_call v (Simd.bitmask_name op) [])
+      Stack.push 1 (expect I32 (meth_call v (Simd.bitmask_name op) []))
   | VecSplat s ->
       let* x = Stack.pop in
-      Stack.push 1 (meth_call x (Simd.splat_name s) [])
+      Stack.push 1 (expect V128 (meth_call x (Simd.splat_name s) []))
   | VecBitselect ->
       let* e3 = Stack.pop in
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
       Stack.push 1
-        (path_call Simd.free_namespace
-           (Simd.free_member Simd.bitselect_name)
-           [ e1; e2; e3 ])
+        (expect V128
+           (path_call Simd.free_namespace
+              (Simd.free_member Simd.bitselect_name)
+              [ e1; e2; e3 ]))
   | VecExtract (s, sign, lane) ->
       let* v = Stack.pop in
       Stack.push 1
-        (meth_call v (Simd.extract_name s sign)
-           [ integer i.Src.info (Int.to_string lane) ])
+        (expect (lane_valtype s)
+           (meth_call v (Simd.extract_name s sign)
+              [ integer i.Src.info (Int.to_string lane) ]))
   | VecReplace (s, lane) ->
       let* value = Stack.pop in
       let* v = Stack.pop in
       Stack.push 1
-        (meth_call v (Simd.replace_name s)
-           [ integer i.Src.info (Int.to_string lane); value ])
+        (expect V128
+           (meth_call v (Simd.replace_name s)
+              [ integer i.Src.info (Int.to_string lane); value ]))
   | VecShuffle lanes ->
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
@@ -3409,7 +3443,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         List.init 16 (fun k ->
             integer i.Src.info (Int.to_string (Char.code lanes.[k])))
       in
-      Stack.push 1 (meth_call e1 Simd.shuffle_name (imms @ [ e2 ]))
+      Stack.push 1
+        (expect V128 (meth_call e1 Simd.shuffle_name (imms @ [ e2 ])))
   | VecConst v ->
       let lit =
         match v.Wax_utils.V128.shape with
@@ -3417,9 +3452,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | I8x16 | I16x8 | I32x4 | I64x2 -> integer i.Src.info
       in
       Stack.push 1
-        (path_call Simd.free_namespace
-           (Simd.free_member (Simd.const_name v.shape))
-           (List.map lit v.components))
+        (expect V128
+           (path_call Simd.free_namespace
+              (Simd.free_member (Simd.const_name v.shape))
+              (List.map lit v.components)))
   | VecLoad (m, op, memarg) ->
       let* addr = Stack.pop in
       let nat = Simd.vec_load_nat_align op in
