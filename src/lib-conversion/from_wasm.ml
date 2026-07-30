@@ -1325,9 +1325,20 @@ module Stack = struct
        caller then pins the hole, which grounds the reconnected value through the
        same unification (as it already does for such a value popped directly as the
        operand). *)
-    | (a, None, i) :: _ when a >= 1 && reparse_adaptive i -> None
-    | (a, None, i) :: _ when a >= 1 -> Some i
-    | _ -> None
+    | (a, None, i) :: _ when a >= 1 && reparse_adaptive i -> `Blocked
+    | (a, None, i) :: _ when a >= 1 -> `Backing i
+    (* The two no-backing outcomes are NOT the same: [`Floor] means the scan
+       walked cleanly to the block's own floor — where the enclosing block's
+       PARAMETERS are the next stack values, so a reference among them can still
+       back the hole (see [ctx.block_params]) — while [`Blocked] means a
+       terminator sentinel or a hole-bearing statement stands between: the printed
+       hole is bottom-sprung there and reconnects to nothing, so nothing (a block
+       parameter included) can back it. Conflating them let a block's reference
+       parameter suppress the pin THROUGH an [unreachable] — [do (&?extern) {
+       unreachable; !_ }] re-defaulted to [i32.eqz] even though the parameter was
+       real (a ref-width grid finding). *)
+    | [] -> `Floor
+    | _ -> `Blocked
 
   let effective_backing stop stack = (stack, effective_backing stop stack)
 
@@ -3111,7 +3122,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         match o with Some { Ast.desc = Ast.Select _; _ } -> true | _ -> false
       in
       let backs o = Option.is_some o && not (is_select o) in
-      let backed = backs o1 || backs o2 || Option.is_some backing in
+      let backed =
+        backs o1 || backs o2
+        || match backing with `Backing _ -> true | `Floor | `Blocked -> false
+      in
       let e1 =
         match o1 with
         | Some ({ Ast.desc = Ast.Select _; _ } as e) -> eq_pin e
@@ -3165,7 +3179,11 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          its type, and pinning [&?any] over it would cross hierarchies instead —
          an [(&?noextern)] block parameter had the pin materialise an
          [any.convert_extern] (a wasm-smith finding). Leave it bare and let the
-         parameter type it. *)
+         parameter type it — but ONLY when the scan reached the block floor
+         cleanly ([`Floor]): past a terminator ([`Blocked]) the printed hole is
+         bottom-sprung and reconnects to nothing, so the parameter cannot type it
+         and the bare [!_] would re-default to [i32.eqz] (a ref-width grid
+         finding: [do (&?extern) { unreachable; !_ }]). *)
       let backed_by_block_param =
         match ctx.block_params with
         | [||] -> false
@@ -3178,10 +3196,11 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         match o with
         | Some ({ Ast.desc = Ast.Select _; _ } as e) -> any_pin e
         | Some e -> e
-        | None ->
-            if Option.is_some backing || backed_by_block_param then
-              Ast.no_loc_instr Ast.Hole
-            else any_pin (Ast.no_loc_instr Ast.Hole)
+        | None -> (
+            match backing with
+            | `Backing _ -> Ast.no_loc_instr Ast.Hole
+            | `Floor when backed_by_block_param -> Ast.no_loc_instr Ast.Hole
+            | `Floor | `Blocked -> any_pin (Ast.no_loc_instr Ast.Hole))
       in
       Stack.push 1 (expect I32 (with_loc (UnOp (op_loc i.info Ast.Not, e))))
   | Select tys -> (

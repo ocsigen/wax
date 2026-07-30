@@ -217,6 +217,16 @@ cell "ref.eq/ref-resid-blocked" "" \
   "unreachable local.get 3 atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/select-resid" "" \
   "unreachable select atomic.fence ref.eq drop" "ref.eq" "i32.eq"
+# The SUPPRESSION side of the backing model: a block's reference PARAMETER is a
+# genuine backing (its params are its first stack values, though never entries in
+# the conversion's per-block stack — [ctx.block_params] carries them), so the dead
+# [ref.is_null] hole must stay BARE. Pinning it [(_ as &?any)] over the
+# [(ref null extern)] parameter would cross hierarchies and the re-lowering
+# materialises an [any.convert_extern] the original never had. Guards the
+# block-param rule against an over-extension of the pin-more rules above.
+cell "ref.is_null/block-param-backing" "" \
+  "ref.null extern (block (param (ref null extern)) unreachable ref.is_null drop unreachable)" \
+  "ref.is_null" "any.convert_extern"
 cell "ref.eq/v128-resid-scalar" "" \
   "unreachable v128.const i32x4 0 0 0 0 i32x4.bitmask atomic.fence drop ref.eq drop" \
   "ref.eq" "i32.eq"
