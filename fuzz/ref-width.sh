@@ -145,6 +145,12 @@ ctx "aggr-resid-signed" "unreachable local.get 2 struct.get_s \$s 1 atomic.fence
 ctx "aggr-resid-field"  "unreachable local.get 2 struct.get \$s 0 atomic.fence drop @OP@ @CONS@"
 # A memory size, whose result is the memory's address type.
 ctx "memsize-resid"     "unreachable memory.size atomic.fence drop @OP@ @CONS@"
+# A REFERENCE residual behind a hole-bearing statement (the [_ = _] a blocked [drop]
+# emits). The scan used to read such a residual as a backing and suppress the pin,
+# but on a re-parse that statement's own hole claims the value — exactly as the Wasm
+# [drop] did — so the op's hole is fresh and needs the pin after all.
+ctx "ref-resid-blocked" "unreachable local.get 3 atomic.fence drop @OP@ @CONS@"
+ctx "ref-aggr-blocked"  "unreachable local.get 4 i32.const 0 array.get \$ra atomic.fence drop @OP@ @CONS@"
 # The op's own result stranded past a statement, so no consumer pops it
 # ([Stack.run]'s leftover path rather than a direct pop).
 ctx "strand"     "unreachable @OP@ nop @CONS@"
@@ -198,6 +204,8 @@ cell "ref.eq/num-resid-drop" "" \
   "unreachable f32.sqrt drop ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/v128-resid-op" "" \
   "unreachable i64x2.neg atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
+cell "ref.eq/ref-resid-blocked" "" \
+  "unreachable local.get 3 atomic.fence drop ref.eq drop" "ref.eq" "i32.eq"
 cell "ref.eq/v128-resid-scalar" "" \
   "unreachable v128.const i32x4 0 0 0 0 i32x4.bitmask atomic.fence drop ref.eq drop" \
   "ref.eq" "i32.eq"
@@ -249,7 +257,7 @@ module() {
   if [ -n "$flags" ]; then
     printf '(module\n  (rec\n    (type $a (sub (descriptor $b) (struct)))\n    (type $b (sub (describes $a) (struct))))\n  (memory 1 1 shared)\n  (func (export "f") %s))\n' "$body"
   else
-    printf '(module\n  (type $s (sub (struct (field i64) (field i8))))\n  (type $ft (sub (func (result i64))))\n  (memory 1 1 shared)\n  (func $callee (result i64) (i64.const 1))\n  (func (export "f") (param $v v128) (param $fr (ref null $ft)) (param $sr (ref null $s)) %s))\n' "$body"
+    printf '(module\n  (type $s (sub (struct (field i64) (field i8))))\n  (type $ft (sub (func (result i64))))\n  (type $ra (sub (array (ref null func))))\n  (memory 1 1 shared)\n  (func $callee (result i64) (i64.const 1))\n  (func (export "f") (param $v v128) (param $fr (ref null $ft)) (param $sr (ref null $s)) (param $r (ref null any)) (param $arr (ref null $ra)) %s))\n' "$body"
   fi
 }
 

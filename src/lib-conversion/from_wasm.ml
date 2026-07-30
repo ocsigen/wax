@@ -1244,8 +1244,25 @@ module Stack = struct
      see is a value from a producer added later without a record — which is why
      fuzz/ref-width.sh enumerates the shape and the round-trip legs
      FAITHDRIFT/WIDTHDRIFT watch the rest.) *)
+  (* Whether a statement carries a HOLE. Such a statement is NOT transparent to the
+     scan below, however zero-valued it is: on a re-parse its hole claims the first
+     value above it, so that value cannot also back a later hole. This is where the
+     scan's model used to diverge from both Wasm and Wax. In
+     [array.get ; atomic.fence ; drop ; ref.is_null] the WASM [drop] pops the
+     array element; the fence's zero-value entry only blocks the pop in THIS
+     conversion's stack, so the element is left as a residual and the [drop] emits
+     [_ = _]. Reading the element as a backing for the [ref.is_null] hole then
+     suppressed its pin — but on a re-parse the [_ = _] claims the element (exactly
+     as the Wasm [drop] did), leaving the bare [!_] to default to i32 and re-lower
+     as an [i32.eqz]: an opcode-family change. *)
+  let rec carries_hole (i : _ Ast.instr) =
+    match i.Ast.desc with
+    | Ast.Hole -> true
+    | _ -> List.exists carries_hole (Ast_utils.sub_instrs i)
+
   let rec effective_backing stop = function
-    | (0, _, i) :: rem when not (stop i) -> effective_backing stop rem
+    | (0, _, i) :: rem when (not (stop i)) && not (carries_hole i) ->
+        effective_backing stop rem
     (* Numeric by its width TAG, or by the type its producer RECORDED on it
        ([Ast.instr]'s [expected], which only ever holds a numeric scalar): either
        way it cannot be the reference operand, so keep scanning. The record is what
