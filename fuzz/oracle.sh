@@ -66,6 +66,31 @@ wt_ahead_divergence() {
   grep -q "non-constant operator: visit_cont_new" "$1" 2>/dev/null
 }
 
+# The converse asymmetry, on WAT text: wasm-tools does not implement the
+# compilation-hints convention, so it skips a `(@metadata.code.…)` annotation
+# whole without reading its contents (verified: it accepts
+# `(@metadata.code.call_targets (target hello world nonsense))`). wax DOES parse
+# them — it round-trips the hints through the custom section — so a wax rejection
+# whose diagnostics all point inside such an annotation is UN-ADJUDICATED by the
+# reference, not a divergence. The WAT mutator hits this whenever it corrupts a
+# hint's payload, e.g. turning a `(target 1 0.73)` function index into the hex
+# float `0x1p1000000` (which is no `index`; see [call_targets_payload] in
+# src/lib-wasm/parser.mly). Detected positionally rather than by message, so it
+# stays scoped to the annotation and any rejection elsewhere in the module still
+# reports: every located ERROR line (the warnings do not make the verdict) must
+# fall on a source line that opens a `(@metadata.code.…)` annotation. $1 = the
+# input WAT.
+wt_unparsed_annotation() {
+  grep -q '(@metadata\.code\.' "$1" 2>/dev/null || return 1
+  local lines line
+  lines="$(NO_COLOR=1 timeout -k 5 "$TIMEOUT" "$WAX" check -s --error-format short "$1" \
+    2>&1 >/dev/null | sed -nE 's/^[^ ]+:([0-9]+):[0-9]+: error: .*/\1/p' | sort -u)"
+  [ -n "$lines" ] || return 1
+  for line in $lines; do
+    sed -n "${line}p" "$1" | grep -q '(@metadata\.code\.' || return 1
+  done
+}
+
 # Count-per-opcode histogram of the *width-sensitive* numeric operators in a
 # module — integer div/rem, the shifts (shl/shr), the (non-saturating)
 # float->int truncations, and the ORDERED comparisons (lt/gt/le/ge, with
@@ -463,6 +488,12 @@ case "$verdict:$EXPECT" in
           # wat2wasm, which warns but accepts); only wasm-tools refuses a bare
           # empty top-level. That divergence is a reference quirk the text
           # mutator hits whenever it deletes every token — suppress it.
+          report_diff=0
+        elif [ "$FMT" = wat ] && [ "$sverdict" = rejected ] && [ "$ref" = ok ] \
+          && wt_unparsed_annotation "$IN"; then
+          # wax rejected the CONTENTS of a `(@metadata.code.…)` annotation, which
+          # wasm-tools skips unread — its acceptance is silence, not a verdict
+          # (see [wt_unparsed_annotation]).
           report_diff=0
         elif [ "$sverdict" = ok ] || [ "$FMT" = wat ]; then
           # wax MORE LENIENT (accepts what the reference rejects — the soundness

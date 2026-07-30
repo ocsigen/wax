@@ -92,3 +92,22 @@ meaningless rather than merely imprecise.
   8 │     (call_indirect $t (type $ft) (i32.const 0))))
   9 │ 
   [128]
+
+A `(target …)` names its callee by *index* (a `u32` or a `$name`), so a numeric
+literal that is no index — here the hex float `0x1p1000000`, which a fuzz mutant
+put where the function index was — is a syntax error rather than something read
+loosely and dropped. `wasm-tools` accepts this module, but only because it does
+not implement the convention at all and skips the whole annotation unread; the
+reference for the payload's grammar is the annotation itself (`fuzz/oracle.sh`'s
+`wt_unparsed_annotation` records that asymmetry).
+
+  $ wax check nonindex.wat
+  Error: Expecting an index.
+   ──➤  nonindex.wat:5:42
+  3 │   (func $a (param i32) (result i32) (local.get 0))
+  4 │   (func (export "go") (param (ref null $ft) i32) (result i32)
+  5 │     (@metadata.code.call_targets (target 0x1p1000000 0.73))
+    ·                                          ^^^^^^^^^^^
+  6 │     (call_ref $ft (local.get 1) (local.get 0))))
+  7 │ 
+  [128]
