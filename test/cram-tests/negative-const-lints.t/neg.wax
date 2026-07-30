@@ -3,3 +3,12 @@ fn shift(x: i32) -> i32 { x << -1073741824; }
 
 #[export = "cond"]
 fn cond() -> i32 { if -117775691 { 1; } else { 2; } }
+
+#[export = "div"]
+fn div(x: i32) -> i32 { x /s -0; }
+
+#[export = "rem"]
+fn rem(x: i64) -> i64 { x %u +0; }
+
+#[export = "cmp"]
+fn cmp(x: i32) -> i32 { (x <u -0) as i32; }

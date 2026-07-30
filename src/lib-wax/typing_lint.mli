@@ -31,12 +31,12 @@ val find_eager_hazard : 'a Ast.instr -> 'a option
     spine of a [?:] branch, or [None] if the branch is pure. *)
 
 val int_literal_value : string -> int64 option
-val int_literal_value_is : int64 -> 'a Ast.instr -> bool
-val int_literal_value_is_zero : 'a Ast.instr -> bool
-
 val int_operand_value : 'a Ast.instr -> int64 option
-(** Constant-integer-operand parsing/matching for the lints (looking through a
-    leading sign for {!int_operand_value}). *)
+
+val int_operand_value_is_zero : 'a Ast.instr -> bool
+(** Constant-integer-operand parsing/matching for the lints. The operand forms
+    look through a leading sign, matching how {!Wax_conversion.To_wasm} folds it
+    into the emitted [iNN.const]. *)
 
 val lint_shift :
   Typing_env.module_context ->

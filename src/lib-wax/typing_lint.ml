@@ -496,13 +496,6 @@ let rec find_eager_hazard (e : _ Ast.instr) =
 let int_literal_value s =
   Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
 
-(* Whether [e] is the integer literal equal to [n]. *)
-let int_literal_value_is n (e : _ Ast.instr) =
-  match e.desc with Ast.Int s -> int_literal_value s = Some n | _ -> false
-
-(* Whether [e] is the integer literal zero. *)
-let int_literal_value_is_zero e = int_literal_value_is 0L e
-
 (* The [int64] value of a constant integer operand, folding a leading sign
    exactly as [To_wasm] does — so the lint fires only when the emitted operand is
    a folded [i32.const], matching what the Wasm validator sees. A negative literal
@@ -519,6 +512,13 @@ let rec int_operand_value (e : _ Ast.instr) =
       Option.map Int64.neg (int_literal_value s)
   | UnOp ({ desc = Pos; _ }, a) -> int_operand_value a
   | _ -> None
+
+(* Whether [e] is a constant integer operand equal to zero. Signed, so a written
+   [-0] / [+0] counts: the sign folds into the emitted [iNN.const 0] (see
+   [int_operand_value]), which is what the Wasm validator's constant stack sees,
+   so a bare-literal-only test would leave the wat form of [x /s -0] linted and
+   the wax form silent. *)
+let int_operand_value_is_zero e = int_operand_value e = Some 0L
 
 (* [x << n] / [x >> n] with a constant [n] at least the operand's bit width:
    Wasm masks [n] modulo the width, so the shift is almost certainly not what
@@ -579,7 +579,7 @@ let flush_deferred_lints ctx =
    trap on a zero divisor). *)
 let lint_division ctx (op : (Ast.binop, location) Ast.annotated) rhs =
   match op.desc with
-  | (Div (Some _) | Rem _) when int_literal_value_is_zero rhs ->
+  | (Div (Some _) | Rem _) when int_operand_value_is_zero rhs ->
       Error.division_by_zero ctx.diagnostics ~location:op.info
   | _ -> ()
 
@@ -669,10 +669,10 @@ let lint_comparison ctx (op : (Ast.binop, location) Ast.annotated)
   in
   let tautology =
     match op.desc with
-    | Lt (Some Unsigned) when int_literal_value_is_zero r -> Some false
-    | Ge (Some Unsigned) when int_literal_value_is_zero r -> Some true
-    | Gt (Some Unsigned) when int_literal_value_is_zero l -> Some false
-    | Le (Some Unsigned) when int_literal_value_is_zero l -> Some true
+    | Lt (Some Unsigned) when int_operand_value_is_zero r -> Some false
+    | Ge (Some Unsigned) when int_operand_value_is_zero r -> Some true
+    | Gt (Some Unsigned) when int_operand_value_is_zero l -> Some false
+    | Le (Some Unsigned) when int_operand_value_is_zero l -> Some true
     | (Lt (Some _) | Gt (Some _)) when identical_operands l r -> Some false
     | (Le (Some _) | Ge (Some _)) when identical_operands l r -> Some true
     | Eq when identical_operands l r && is_int l -> Some true
