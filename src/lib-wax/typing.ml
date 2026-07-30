@@ -6099,6 +6099,7 @@ and type_arith ctx i =
                       ~expected:(Cell.make Number));
                 typ)
       in
+      if ctx.warn_unused then Typing_lint.lint_redundant_unop ctx op i';
       return_expression i (UnOp (op, i')) ty
   | _ -> assert false (* only invoked on BinOp/UnOp *)
 

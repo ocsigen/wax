@@ -93,6 +93,15 @@ val lint_redundant :
 (** Flag an arithmetic operation with no effect or a constant result (off by
     default). *)
 
+val lint_redundant_unop :
+  Typing_env.module_context ->
+  (Ast.unop, Ast.location) Ast.annotated ->
+  (Infer.inferred_type Infer.Cell.t array * 'a) Ast.instr ->
+  unit
+(** As {!lint_redundant} for a unary operation: [-e] lowers to [0 - e], so a
+    zero operand is the [x - 0] identity the Wasm validator reports on the
+    lowered form. *)
+
 val lint_condition :
   Typing_env.module_context -> ?is_while:bool -> Ast.location Ast.instr -> unit
 (** Flag a branch/loop/[select] condition that is a constant literal. *)

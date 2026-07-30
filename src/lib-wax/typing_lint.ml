@@ -687,6 +687,18 @@ let lint_comparison ctx (op : (Ast.binop, location) Ast.annotated)
 (* An arithmetic operation with no effect on its result (an identity operand or
    two identical operands), or whose result is a constant regardless of the
    variable operand (an absorbing operand). Off by default. *)
+(* A concrete float operand, or a float literal not yet pinned to a width. The
+   arithmetic identities below hold only for integers (see [lint_redundant]), and
+   the Wasm validator likewise runs them only for integer binops, so both lints
+   gate on this. *)
+let is_float_operand e =
+  match expression_type_opt e with
+  | Some c -> (
+      match Cell.get c with
+      | Valtype { internal = F32 | F64; _ } | Float -> true
+      | _ -> false)
+  | None -> false
+
 let lint_redundant ctx (op : (Ast.binop, location) Ast.annotated)
     (l : _ Ast.instr) (r : _ Ast.instr) =
   (* Look through a leading sign so a signed identity literal — [x + -0],
@@ -702,21 +714,10 @@ let lint_redundant ctx (op : (Ast.binop, location) Ast.annotated)
         | _ -> false)
     | None -> false
   in
-  (* A concrete float operand, or a float literal not yet pinned to a width.
-     These identities and absorptions hold only for integer arithmetic — a float
+  (* These identities and absorptions hold only for integer arithmetic — a float
      [0.0 * x] is NaN when [x] is NaN or an infinity, and [-0.0 + 0.0] is [+0.0],
-     so neither result is constant or effect-free. The Wasm validator likewise
-     runs these checks only for integer binops ([check_int_binop] is reached only
-     from [BinOp (I32 _)]/[BinOp (I64 _)]), so gating on non-float here keeps the
-     two linters in parity. *)
-  let is_float e =
-    match expression_type_opt e with
-    | Some c -> (
-        match Cell.get c with
-        | Valtype { internal = F32 | F64; _ } | Float -> true
-        | _ -> false)
-    | None -> false
-  in
+     so neither result is constant or effect-free (see [is_float_operand]). *)
+  let is_float = is_float_operand in
   let no_effect () =
     Error.redundant_operation ctx.diagnostics ~location:op.info
       (Wax_utils.Message.text "This operation has no effect on its result.")
@@ -743,6 +744,25 @@ let lint_redundant ctx (op : (Ast.binop, location) Ast.annotated)
      an infinity, so the result is not a constant. *)
     | Sub when identical_operands l r && is_int l -> always 0L
     | _ -> ()
+
+(* [-e] has no Wasm instruction of its own: it lowers to [0 - e], so the Wasm
+   validator sees the [x - 0] identity whenever [e] is zero and reports it there.
+   Mirror it here, with the same wording — it is the same finding, reached through
+   the lowering — for the one shape that reaches it: a bare literal folds ([-0]
+   becomes the constant [i32.const -0] and emits no subtraction at all, so the
+   validator stays silent and so must this), while a negation of anything else
+   zero-valued ([-(-0)]) does emit the subtraction. Integers only, as for the
+   binop identities: a float [-0.0] genuinely produces negative zero. *)
+let lint_redundant_unop ctx (op : (Ast.unop, location) Ast.annotated)
+    (e : _ Ast.instr) =
+  match op.desc with
+  | Ast.Neg
+    when (not (is_float_operand e))
+         && int_operand_value e = Some 0L
+         && match e.Ast.desc with Ast.Int _ -> false | _ -> true ->
+      Error.redundant_operation ctx.diagnostics ~location:op.info
+        (Wax_utils.Message.text "This operation has no effect on its result.")
+  | Neg | Pos | Not -> ()
 
 (* A branch, loop, or [select] condition that is a constant literal, so it
    always takes the same path. [is_while] excludes the idiomatic infinite loop
