@@ -30,7 +30,7 @@ reconnects there rather than at the block's `&?any` result:
       'l: do &?any {
           unreachable;
           br_on_null 'l (_, _ as &?extern);
-          _ as &?extern as &?any;
+          _ as &extern as &any;
           unreachable;
       }
   }

@@ -7,8 +7,20 @@ opcode's source type — otherwise a bare `_ as &i31` / `_ as i32_s` re-types th
 hole to the target and drops the op: `ref.i31` (source `i32`) becomes
 `(_ as i32) as &i31`, `i31.get_s/u` (source `&?i31`) becomes
 `(_ as &?i31) as i32_s`, `extern.convert_any` (source `&?any`) becomes
-`(_ as &?any) as &?extern`, and `any.convert_extern` (source `&?extern`) becomes
-`(_ as &?extern) as &?any`.
+`(_ as &any) as &extern`, and `any.convert_extern` (source `&?extern`) becomes
+`(_ as &extern) as &any`.
+
+The two converts pin their hole NON-NULL, and state a non-null RESULT to match. A
+hole stands for a value off the polymorphic bottom, which is non-null, and the
+converts propagate that: pinned nullable, the convert yields `&?extern` where the
+original yielded `&extern`, and a consumer typed non-null — `$nonnull_consumer`'s
+`(ref extern)` local below — rejects the decompiled Wax outright, breaking the
+round trip (a wasm-smith finding). Non-null satisfies a nullable consumer too, by
+subtyping. The result type is stated here rather than left to the typer, whose
+nullability refinement is gated on the simplify pass and so does not run under
+`--faithful`. Only a bare hole is narrowed this way: a `select`'s arms may be
+concrete nullable values, and a `br_on_null`'s tested ref is nullable by
+construction, so both keep the source's own nullability.
 
 A `ref.cast` into the EXTERN hierarchy needs the same pin, for the opposite
 reason: `as &extern` is also the surface of `extern.convert_any`, so a hole left
@@ -32,6 +44,8 @@ carries no result type) with `as f32`.
   >   (func $i31_get_s unreachable i31.get_s drop)
   >   (func $extern_of_any unreachable extern.convert_any drop)
   >   (func $any_of_extern unreachable any.convert_extern drop)
+  >   (func $nonnull_consumer (local $x (ref extern))
+  >     unreachable extern.convert_any local.set $x)
   >   (func $cast_extern unreachable ref.cast (ref extern) drop)
   >   (func $cast_noextern unreachable ref.as_non_null ref.cast (ref noextern) drop)
   >   (func $extern_of_null unreachable ref.null any extern.convert_any drop)
@@ -50,11 +64,15 @@ carries no result type) with `as f32`.
   }
   fn extern_of_any() {
       unreachable;
-      _ = _ as &?any as &?extern;
+      _ = _ as &any as &extern;
   }
   fn any_of_extern() {
       unreachable;
-      _ = _ as &?extern as &?any;
+      _ = _ as &extern as &any;
+  }
+  fn nonnull_consumer() {
+      unreachable;
+      let x: &extern = _ as &any as &extern;
   }
   fn cast_extern() {
       unreachable;
@@ -89,6 +107,11 @@ Round-tripping back to Wasm recovers every operation (and the select arm's width
   (func $i31_get_s (unreachable) (drop (i31.get_s)))
   (func $extern_of_any (unreachable) (drop (extern.convert_any)))
   (func $any_of_extern (unreachable) (drop (any.convert_extern)))
+  (func $nonnull_consumer
+    (local $x (ref extern))
+    (unreachable)
+    (local.set $x (extern.convert_any))
+  )
   (func $cast_extern (unreachable) (drop (ref.cast (ref extern))))
   (func $cast_noextern
     (unreachable)

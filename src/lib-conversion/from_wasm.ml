@@ -1549,9 +1549,32 @@ let type_hole_src src e =
    reference fixes the convert on its own and is left alone. The typer keeps the
    pin only when load-bearing (its [restore_inner] mirrors [reparse_adaptive]) and
    prunes it for a concrete operand, so reachable non-adaptive code is untouched. *)
-let rec convert_src src e =
+(* A bare HOLE is pinned NON-NULL ([nullable = false], the default): it stands for
+   a value off the polymorphic bottom, which is non-null (the bottom reference is a
+   subtype of every non-nullable type), and the converts propagate that — pinned
+   nullable, the convert yields [&?extern] where the original yielded [&extern] and
+   a consumer typed non-null (a [(ref extern)] local) rejects the decompiled Wax
+   outright, breaking the round trip. Non-null satisfies a nullable consumer too,
+   by subtyping.
+
+   Everywhere else the source's own nullability is kept: a [select]'s arms may be
+   concrete nullable values (or [null] literals), and a [br_on_null]'s tested ref
+   and a [ref.as_non_null]'s operand are nullable by construction — narrowing any
+   of those would be a real cast, not a pin. *)
+(* A bare hole — the shape [convert_src] pins non-null (see there). *)
+let is_bare_hole (e : _ Ast.instr) =
+  match e.Ast.desc with Ast.Hole -> true | _ -> false
+
+let rec convert_src ?(nullable = true) src e =
   match e.Ast.desc with
-  | Ast.Hole | Ast.Select _ -> cast_to (Valtype src) e
+  | Ast.Hole ->
+      cast_to
+        (Valtype
+           (match src with
+           | Ast.Ref r when not nullable -> Ast.Ref { r with nullable = false }
+           | t -> t))
+        e
+  | Ast.Select _ -> cast_to (Valtype src) e
   (* [br_on_null] forwards its operand's value on the fall-through (its non-null
      version), so the source cast must pin that operand INSIDE the branch, not wrap
      the branch result: wrapping would cast the branch's already-[any]-defaulted
@@ -2711,11 +2734,17 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let src : Ast.valtype = Ref { nullable = true; typ = Any } in
       let* () = pin_forwarding_source src in
       let* e = Stack.pop in
+      (* A bare hole is pinned NON-NULL and the convert preserves non-nullness, so
+         the RESULT is non-null too. State that here rather than leaving it to the
+         typer's refinement, which is gated on [simplify] and so does not happen
+         under [--faithful] — there the nullable target made the decompiled Wax
+         ill-typed against a non-null consumer. *)
+      let nullable = not (is_bare_hole e) in
       Stack.push 1
         (with_loc
            (Cast
-              ( convert_src src e,
-                Valtype (Ref { nullable = true; typ = Extern }) )))
+              ( convert_src ~nullable src e,
+                Valtype (Ref { nullable; typ = Extern }) )))
   | AnyConvertExtern ->
       (* Source is [&?extern]; a dead-code hole is pinned [(_ as &?extern)] so the
          conversion survives. As [ExternConvertAny], a forwarding [br_on_null]
@@ -2723,10 +2752,13 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let src : Ast.valtype = Ref { nullable = true; typ = Extern } in
       let* () = pin_forwarding_source src in
       let* e = Stack.pop in
+      (* As [ExternConvertAny]: a non-null pin gives a non-null result. *)
+      let nullable = not (is_bare_hole e) in
       Stack.push 1
         (with_loc
            (Cast
-              (convert_src src e, Valtype (Ref { nullable = true; typ = Any }))))
+              ( convert_src ~nullable src e,
+                Valtype (Ref { nullable; typ = Any }) )))
   | ArrayNewData (t, d) ->
       let* len = Stack.pop in
       let* off = Stack.pop in
