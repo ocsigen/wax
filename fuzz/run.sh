@@ -42,7 +42,17 @@ check_one() {
     */invalid/*) expect=invalid ;;
     *)           expect=unknown ;;
   esac
-  bash "$2" "$1" "$expect"
+  local out
+  out="$(bash "$2" "$1" "$expect")"
+  # Re-verify before reporting, as the mutation fuzzers do: wax is
+  # deterministic, so a real finding reproduces, while a transient failure under
+  # heavy parallel load does not. Without this one bad window fills the report
+  # with phantom findings — a sweep once reported 756 valid modules as rejected,
+  # every one of which passed when re-checked one at a time. Only a finding pays
+  # for the second run, so a clean sweep costs nothing.
+  if [ -n "$out" ] && [ -n "$(bash "$2" "$1" "$expect" 2>/dev/null)" ]; then
+    printf '%s\n' "$out"
+  fi
 }
 export -f check_one
 
