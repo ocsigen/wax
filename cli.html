@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fbe00be1.js";
+            window.path_to_searchindex_js = "searchindex-c2eac4f0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -660,6 +660,22 @@ value may list several categories separated by commas
 (parse, specialize, validate, type-check, convert, output) to stderr,
 one line per pass as it finishes. The normal output on stdout is
 unchanged.</li>
+<li><code>width-check</code>: on a wasm or wat to wax conversion, <em>report</em> a width
+disagreement instead of repairing it. The conversion records the type
+of each value the source opcodes produce, and the type checker — which
+already runs over the decompiled module — reconciles its own inference
+with those records: an expression that would recompile at another width
+(an <code>i64</code> operation re-read as <code>i32</code>, say) is PINNED with a cast at the
+width the WebAssembly states. That is how the decompiler keeps widths
+faithful, so a pin appearing in the output is the mechanism working, not
+a fault. This category reports each such pin as an error instead, which
+is what a tool developer needs to see WHERE the decompiler is relying on
+it and why — it is a self-check on the decompiler, not a check on the
+input, and it does nothing for any other conversion. A disagreement a pin
+cannot fix — the value’s type is fixed by its context, so a cast would
+convert the value instead of grounding it — is an error either way; that
+means the WebAssembly is invalid (a binary input is trusted, never
+validated — check it with <code>wax check</code>) or the decompiler is wrong.</li>
 </ul>
 </li>
 </ul>
