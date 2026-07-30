@@ -1,0 +1,8 @@
+#[export]
+fn f(c: i32) -> i32 {
+    'l: do {
+        'inner: do {
+            if c { br 'inner 5; }
+        }
+    };
+}

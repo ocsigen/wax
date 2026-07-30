@@ -10625,7 +10625,21 @@ and collect_into ctx loc label ~cs ~r instrs =
        | Cons (loc, tv, (Unreachable | Poisoned)) ->
            cs.collected <- (loc, tv) :: cs.collected;
            (Unreachable, body')
-       | Empty -> (Empty, body')
+       (* A REACHABLE fall-through delivering nothing, while a branch delivered a
+          value ([cs.collected]), leaves the block yielding a result its own exit
+          does not produce — the lowering would emit a block whose declared result
+          the body never leaves. The annotated paths ([block_with_keep],
+          [block_keep_bool]) catch this through their [pop_args ~`Output]; report
+          the same thing here, since an inferred result must be delivered by every
+          exit just as a declared one is. An [Unreachable] fall-through (the case
+          above) needs no value: nothing reaches the exit that way. *)
+       | Empty ->
+           if cs.collected <> [] then
+             (* Anchored at the block's closing token, as [pop] anchors every
+                other [`Output] underflow. *)
+             Error.short_stack ctx.diagnostics `Output
+               ~location:(loc_last_char loc) ~actual:0 ~expected:1;
+           (Empty, body')
        | (Unreachable | Poisoned) as st -> (st, body')
        | Cons _ -> (st, body'))
 
