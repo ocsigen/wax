@@ -135,6 +135,12 @@ ctx "v128-resid-local" "unreachable local.get 0 atomic.fence drop @OP@ @CONS@"
 # must be recorded like any other numeric producer.
 ctx "v128-resid-scalar" "unreachable local.get 0 i32x4.bitmask atomic.fence drop @OP@ @CONS@"
 ctx "v128-resid-lane"   "unreachable local.get 0 i32x4.extract_lane 0 atomic.fence drop @OP@ @CONS@"
+# A numeric CALL result as the residual: its type comes from the callee's signature,
+# which the conversion records at the call's push site.
+ctx "call-resid"        "unreachable call 0 atomic.fence drop @OP@ @CONS@"
+ctx "call-ref-resid"    "unreachable local.get 1 call_ref \$ft atomic.fence drop @OP@ @CONS@"
+# A signed packed aggregate read (an i32 whatever the field's width).
+ctx "aggr-resid-signed" "unreachable local.get 2 struct.get_s \$s 1 atomic.fence drop @OP@ @CONS@"
 # The op's own result stranded past a statement, so no consumer pops it
 # ([Stack.run]'s leftover path rather than a direct pop).
 ctx "strand"     "unreachable @OP@ nop @CONS@"
@@ -239,7 +245,7 @@ module() {
   if [ -n "$flags" ]; then
     printf '(module\n  (rec\n    (type $a (sub (descriptor $b) (struct)))\n    (type $b (sub (describes $a) (struct))))\n  (memory 1 1 shared)\n  (func (export "f") %s))\n' "$body"
   else
-    printf '(module\n  (type $s (sub (struct (field i32))))\n  (memory 1 1 shared)\n  (func (export "f") (param $v v128) %s))\n' "$body"
+    printf '(module\n  (type $s (sub (struct (field i32) (field i8))))\n  (type $ft (sub (func (result i64))))\n  (memory 1 1 shared)\n  (func $callee (result i64) (i64.const 1))\n  (func (export "f") (param $v v128) (param $fr (ref null $ft)) (param $sr (ref null $s)) %s))\n' "$body"
   fi
 }
 

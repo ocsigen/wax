@@ -823,6 +823,17 @@ let implicit_functype ctx (idx : Src.idx) =
   | Src.Num n -> Hashtbl.find_opt ctx.implicit_types n
   | Id _ -> None
 
+(* The result type of a signature that returns exactly one NON-REFERENCE value —
+   what to record on a call's result node so that a dead call residual is known not
+   to be the reference a bare hole reconnects to (see [Stack.effective_backing]).
+   [None] for a void, multi-value or reference-returning signature: the scan's own
+   arity test covers the first two, and a reference result is exactly what must stay
+   a candidate backing. *)
+let functype_value_result ctx { Src.results; _ } =
+  match Array.to_list results with
+  | [ t ] -> ( match valtype ctx t with Ref _ -> None | t -> Some t)
+  | _ -> None
+
 let type_arity ctx idx =
   match implicit_functype ctx idx with
   | Some ty -> functype_arity ty
@@ -832,6 +843,20 @@ let type_arity ctx idx =
       | Struct _ | Array _ | Cont _ ->
           conversion_error ctx ~location:idx.Ast.info
             (Wax_utils.Message.text "This type should be a function type."))
+
+let type_value_result ctx idx =
+  match implicit_functype ctx idx with
+  | Some ty -> functype_value_result ctx ty
+  | None -> (
+      match (lookup_type ctx Type idx).typ with
+      | Func ty -> functype_value_result ctx ty
+      | Struct _ | Array _ | Cont _ -> None)
+
+let typeuse_value_result ctx (i, ty) =
+  match (i, ty) with
+  | _, Some t -> functype_value_result ctx t
+  | Some i, None -> type_value_result ctx i
+  | None, None -> None
 
 let typeuse_arity ctx (i, ty) =
   match (i, ty) with
@@ -952,6 +977,11 @@ let recorded_expectation (ty : Ast.valtype) =
 
 let expect (ty : Ast.valtype) (i : _ Ast.instr) : _ Ast.instr =
   { i with Ast.expected = recorded_expectation ty }
+
+(* Record a call's single non-reference result type on its node (see
+   {!functype_value_result}); a void, multi-value or reference-returning call is
+   left as is. *)
+let expect_value_result ty e = match ty with Some t -> expect t e | None -> e
 
 let valtype_of_width : [ `I32 | `I64 | `F32 | `F64 ] -> Ast.valtype = function
   | `I32 -> I32
@@ -1138,16 +1168,32 @@ module Stack = struct
      backing that the caller then pins.
 
      What is RECORDED, and therefore skipped, is the accurate list of what cannot be
-     a reference: every const and arithmetic result (the width tags), the method-form
-     ops (which record their opcode's type even when their tag stays flexible), the
-     loads, a local's or global's numeric/vector type, and every SIMD result. What
-     is NOT yet recorded — so still read as a possible reference backing — is a
-     numeric CALL result (its type needs the callee's signature, which this scan's
-     tables do not carry) and the aggregate reads ([struct.get], [array.get],
-     [table.size], [i31.get], [memory.size]). Those are the residual of this
-     mechanism, owned end to end by the round-trip legs (FAITHDRIFT/WIDTHDRIFT and
-     fuzz/ref-width.sh), which is how each of the recorded classes above was found
-     in the first place. *)
+     a reference: every const and arithmetic result (the width tags); the
+     method-form ops, which record their opcode's type even when their tag stays
+     flexible; the loads; a local's or global's numeric or vector type; every SIMD
+     result (a [v128] record exists for this scan alone — the reconciliation skips
+     it); the i32-valued reference ops ([ref.test], [ref.eq], [ref.is_null],
+     [array.len], [i31.get_s/u]); the numeric conversions ([wrap], [promote],
+     [demote], [extend_i32]); a [Char]; a signed packed field or element read; and a
+     CALL whose signature returns one non-reference value ([call], [call_ref],
+     [call_indirect] — the callee's type is reachable at the push site even though it
+     is not from this scan).
+
+     Two producers are still unrecorded, so a dead residual of one is read as a
+     possible reference backing and the ref op above it goes unpinned:
+       * an UNSIGNED aggregate read of a non-packed field or element
+         ([struct.get]/[array.get] of an [i64] field), whose type needs the field's
+         position resolved against the type definition — the field immediate here is
+         an index or a name and only the name sequence is at hand;
+       * [memory.size]/[memory.grow]/[table.size]/[table.grow], whose result is the
+         memory's or table's ADDRESS type, which no table in this context carries
+         (it is read once, where the memory/table field itself is converted).
+     Both are constructible (a dead [struct.get] of an i64 field above a bottom
+     [ref.is_null] re-parses as an [i32.eqz]) and both want the same treatment as
+     the classes above: a lookup at the push site, or a side table filled where the
+     field is converted. Until then they are owned end to end by the round-trip legs
+     (FAITHDRIFT/WIDTHDRIFT and fuzz/ref-width.sh), which is how every recorded
+     class above was found. *)
   let rec effective_backing stop = function
     | (0, _, i) :: rem when not (stop i) -> effective_backing stop rem
     (* Numeric by its width TAG, or by the type its producer RECORDED on it
@@ -2570,10 +2616,15 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let e = with_loc (StructGet (arg, name)) in
       Stack.push 1
         (match s with
+        (* A packed field read with a sign ([struct.get_s/u] of an [i8]/[i16])
+           yields an i32 whatever the field's width; record it. An unsigned read of
+           a non-packed field yields the field's own type, which is not at hand
+           here — see [Stack.effective_backing]'s residual note. *)
         | None -> e
         | Some signage ->
-            with_loc
-              (Cast (e, Signedtype { typ = `I32; signage; strict = false })))
+            expect I32
+              (with_loc
+                 (Cast (e, Signedtype { typ = `I32; signage; strict = false }))))
   | StructSet (t, f) ->
       let type_name = idx ctx `Type t in
       let name = Sequence.get (fst (struct_fields ctx type_name)) f in
@@ -2634,10 +2685,12 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let e = with_loc (ArrayGet (e1, e2)) in
       Stack.push 1
         (match s with
+        (* As [StructGet]: a signed packed element read is an i32. *)
         | None -> e
         | Some signage ->
-            with_loc
-              (Cast (e, Signedtype { typ = `I32; signage; strict = false })))
+            expect I32
+              (with_loc
+                 (Cast (e, Signedtype { typ = `I32; signage; strict = false }))))
   | ArraySet t ->
       let* e3 = Stack.pop in
       let* e2 = Stack.pop in
@@ -2657,9 +2710,12 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let input, output = function_arity ctx f in
       let* args = Stack.grab input in
       Stack.push output
-        (with_loc (Call (with_loc (Get (idx ctx `Func f)), args)))
+        (expect_value_result
+           (typeuse_value_result ctx (lookup_type ctx Func f))
+           (with_loc (Call (with_loc (Get (idx ctx `Func f)), args))))
   | CallRef t ->
       let input, output = type_arity ctx t in
+      let result_ty = type_value_result ctx t in
       let* f = Stack.pop in
       let f =
         {
@@ -2672,7 +2728,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         }
       in
       let* args = Stack.grab input in
-      Stack.push output (with_loc (Call (f, args)))
+      Stack.push output
+        (expect_value_result result_ty (with_loc (Call (f, args))))
   | ReturnCall f ->
       let input, _ = function_arity ctx f in
       let* args = Stack.grab input in
@@ -2721,38 +2778,43 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          survives (a bare [_ as i32_s] re-types the hole to i32 and drops it). *)
       let* e = Stack.pop in
       Stack.push 1
-        (with_loc
-           (Cast
-              ( type_hole_src (Ref { nullable = true; typ = I31 }) e,
-                Signedtype { typ = `I32; signage; strict = false } )))
+        (expect I32
+           (with_loc
+              (Cast
+                 ( type_hole_src (Ref { nullable = true; typ = I31 }) e,
+                   Signedtype { typ = `I32; signage; strict = false } ))))
   | I64ExtendI32 signage ->
       (* Source is i32; a dead-code hole is pinned [(_ as i32)] so the widen
          survives (a bare [_ as i64_s] drops the [extend_i32_s]). *)
       let* e = Stack.pop in
       Stack.push 1
-        (with_loc
-           (Cast
-              ( type_hole_src I32 e,
-                Signedtype { typ = `I64; signage; strict = false } )))
+        (expect I64
+           (with_loc
+              (Cast
+                 ( type_hole_src I32 e,
+                   Signedtype { typ = `I64; signage; strict = false } ))))
   | I32WrapI64 ->
       (* Width eraser: [i32.wrap_i64 (4096 >>u 40)] is 0, but a bare [4096 >>u 40]
          re-defaults to i32 and the shift count masks to 8, yielding 16 (a LIVE
          miscompilation). Pin the i64 operand; a dead-code hole is pinned
          [(_ as i64)] so [(_ as i64) as i32] re-emits the [wrap] (else it drops). *)
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (Cast (type_hole_src I64 e, Valtype I32)))
+      Stack.push 1
+        (expect I32 (with_loc (Cast (type_hole_src I64 e, Valtype I32))))
   | F64PromoteF32 ->
       (* Width eraser: the f32 source is not carried by [e as f64]; a bare float
          literal re-defaults to f64, dropping the promote (and its f32 rounding).
          A dead-code hole is pinned [(_ as f32)] so the promote survives. *)
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (Cast (type_hole_src F32 e, Valtype F64)))
+      Stack.push 1
+        (expect F64 (with_loc (Cast (type_hole_src F32 e, Valtype F64))))
   | F32DemoteF64 ->
       (* Width eraser: an integer-valued f64 source prints as a bare integer that
          re-defaults to i32, turning the demote into an i32->f32 convert. A
          dead-code hole is pinned [(_ as f64)] so the demote survives. *)
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (Cast (type_hole_src F64 e, Valtype F32)))
+      Stack.push 1
+        (expect F32 (with_loc (Cast (type_hole_src F64 e, Valtype F32))))
   | ExternConvertAny ->
       (* Source is [&?any]; a dead-code hole is pinned [(_ as &?any)] so the
          conversion survives (a bare [_ as &?extern] re-types the hole and drops
@@ -2814,7 +2876,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* index = Stack.pop in
       let* args = Stack.grab input in
       let f = indirect_callee ctx with_loc tab tu index in
-      Stack.push output (with_loc (Call (f, args)))
+      Stack.push output
+        (expect_value_result
+           (typeuse_value_result ctx tu)
+           (with_loc (Call (f, args))))
   | ReturnCallIndirect (tab, tu) ->
       let input, _ = typeuse_arity ctx tu in
       let* index = Stack.pop in
@@ -2825,7 +2890,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* e = Stack.pop in
       let e = cast_ref e Array in
       Stack.push 1
-        (with_loc (Call (with_loc (StructGet (e, Ast.no_loc "length")), [])))
+        (expect I32
+           (with_loc (Call (with_loc (StructGet (e, Ast.no_loc "length")), []))))
   | RefCast t ->
       let* e = Stack.pop in
       (* A cast into the EXTERN hierarchy shares the Wax [as &extern] surface
@@ -2895,7 +2961,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1 (with_loc (GetDescriptor arg))
   | RefTest t ->
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (Test (e, reftype ctx t)))
+      Stack.push 1 (expect I32 (with_loc (Test (e, reftype ctx t))))
   | RefEq ->
       (* [ref.eq] shares the Wax [==] surface with the numeric comparisons, but
          the numeric width pin ([(_ as i64)]) is an [as t] cast and cannot spell
@@ -2943,7 +3009,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | Some e -> e
         | None -> bare
       in
-      Stack.push 1 (with_loc (BinOp (op_loc i.info Ast.Eq, e1, e2)))
+      Stack.push 1
+        (expect I32 (with_loc (BinOp (op_loc i.info Ast.Eq, e1, e2))))
   | RefFunc f -> Stack.push 1 (with_loc (Get (idx ctx `Func f)))
   | RefNull typ ->
       Stack.push 1
@@ -2985,7 +3052,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             if Option.is_some backing then Ast.no_loc_instr Ast.Hole
             else any_pin (Ast.no_loc_instr Ast.Hole)
       in
-      Stack.push 1 (with_loc (UnOp (op_loc i.info Ast.Not, e)))
+      Stack.push 1 (expect I32 (with_loc (UnOp (op_loc i.info Ast.Not, e))))
   | Select tys -> (
       (* The Wax [?:] carries no result type, so resolve the annotation (if any)
          both to catch an out-of-range type reference and to recover the single
@@ -3288,7 +3355,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
           Stack.push_num (Some (t :> [ `I32 | `I64 | `F32 | `F64 ])) result
       | _ -> Stack.push (List.length results) result)
   | AtomicFence -> Stack.push 0 (path_call "atomic" "fence" [])
-  | Char c -> Stack.push 1 (with_loc (Char c))
+  | Char c -> Stack.push 1 (expect I32 (with_loc (Char c)))
   | String (t, s) ->
       let s = Wax_utils.Ast.concat_desc s in
       Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
