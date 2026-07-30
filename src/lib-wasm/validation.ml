@@ -5207,11 +5207,24 @@ let segments ctx fields =
                   in
                   constant_expression ctx ~location:field.info
                     ~expected_source:(source_of_valtype aty) aty e);
+              (* A DECLARATIVE segment installs nothing and runs nothing: it
+                 exists so that a [ref.func] elsewhere validates, so the
+                 references in its init expressions are not roots. The function
+                 is reachable exactly when that other [ref.func] is — otherwise a
+                 function only its own dead body takes a reference of would look
+                 live here while the Wax typer, whose surface leaves the segment
+                 implicit, correctly reports it dead (a lint-parity finding from
+                 the wasm-smith campaign). An ACTIVE segment does install into a
+                 table, and a PASSIVE one can be [table.init]ed, so both keep
+                 rooting theirs. *)
+              let outer = ctx.types.origin in
+              if mode = Declare then ctx.types.origin <- Ignored;
               List.iter
                 (fun e ->
                   constant_expression ctx ~location:field.info
                     ~expected_source:elem_source (Ref typ) e)
                 init;
+              ctx.types.origin <- outer;
               Sequence.register ctx.elem id (typ, elem_source))
       | _ -> ())
     fields

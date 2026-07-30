@@ -4745,7 +4745,11 @@ server](#language-server)).
           functions reachable from outside — exported, or the start function — and
           every reference made from a module-level context, which runs at
           instantiation: a global or table initializer, an element or data
-          segment. Liveness then follows calls, and taking a function *reference*
+          segment. A *declarative* element segment is the exception, since it
+          installs nothing and runs nothing: it exists so that a `ref.func`
+          elsewhere validates, so the function it names is reachable exactly when
+          that other `ref.func` is. Liveness then follows calls, and taking a
+          function *reference*
           counts as calling it, since where the reference ends up is not tracked
           — so the analysis never reports a function that might run. A field that
           only dead code references is dead in turn: a global read solely from an

@@ -136,3 +136,30 @@ typer walks the module once, reporting each field where it is declared):
      ·    ^^^^^^^
   17 │ 
   18 │ // live chain from an export
+
+An `(elem declare …)` segment is not a root. It installs nothing and runs
+nothing: it exists so that a `ref.func` elsewhere validates, so the function it
+names is reachable exactly when that other `ref.func` is. `$dead_self` here takes
+a reference of itself and nothing else reaches it, so the declaration does not
+keep it alive, while `$reached` — referenced from an exported function's body —
+stays live. (An *active* segment does install into a table, and a *passive* one
+can be `table.init`ed, so both keep rooting their references.)
+
+  $ cat > declare.wat <<'WAT'
+  > (module
+  >   (func $live (export "live") (result funcref) (ref.func $reached))
+  >   (func $reached)
+  >   (func $dead_self (result funcref) (ref.func $dead_self))
+  >   (elem declare func $reached $dead_self))
+  > WAT
+  $ wax check -W unused=warning --error-format short declare.wat
+  declare.wat:4:9: warning: The function '$dead_self' is never used. [unused-field]
+
+The Wax surface leaves that segment implicit — the lowering synthesizes it for a
+body-only `ref.func` — so the two forms agreed only once the segment stopped
+rooting. Regression: the wasm-smith lint-parity oracle, where a `mut` global read
+only by such a function was reported `unnecessary-mut` as wat and
+`unused-field` as wax.
+
+  $ wax -i wat -f wax declare.wat -o declare.wax && wax check -W unused=warning --error-format short declare.wax
+  declare.wax:6:4: warning: The function 'dead_self' is never used. [unused-field]
