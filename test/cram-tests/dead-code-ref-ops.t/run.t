@@ -38,8 +38,16 @@ the select does not re-default to the numeric form: `ref.is_null` (the `!` surfa
 else an `i32.eqz`) with `(_?_:_) as &?any`, and an `f32.const` select arm (the `?:`
 carries no result type) with `as f32`.
 
+The enclosing block's own PARAMETERS are its first stack values, so a reference
+among them backs the hole just as a value residual does and it stays bare
+(`$blockparam_backing`): the hole reconnects to the parameter on re-parse and
+takes its type. Pinning `&?any` over an `(&?noextern)` parameter would cross
+hierarchies and materialise an `any.convert_extern` instead — a wasm-smith
+finding.
+
   $ cat > m.wat <<'WAT'
   > (module
+  >   (type $tp (func (param nullexternref) (result i32)))
   >   (func $ref_i31 unreachable ref.i31 drop)
   >   (func $i31_get_s unreachable i31.get_s drop)
   >   (func $extern_of_any unreachable extern.convert_any drop)
@@ -51,9 +59,12 @@ carries no result type) with `as f32`.
   >   (func $extern_of_null unreachable ref.null any extern.convert_any drop)
   >   (func $any_of_null unreachable ref.null extern any.convert_extern drop)
   >   (func $isnull_sel (result i32) unreachable i32.const 1 select ref.is_null)
-  >   (func $const_sel unreachable f32.const 0x0p+0 i32.const 0 select unreachable))
+  >   (func $const_sel unreachable f32.const 0x0p+0 i32.const 0 select unreachable)
+  >   (func $blockparam_backing (result i32) (local $e nullexternref)
+  >     unreachable local.get $e block $b (type $tp) ref.is_null end))
   > WAT
   $ wax -i wat -f wax --faithful m.wat
+  type tp = fn(&?noextern) -> i32;
   fn ref_i31() {
       unreachable;
       _ = _ as i32 as &i31;
@@ -99,10 +110,19 @@ carries no result type) with `as f32`.
       0?_:0x0p+0 as f32;
       unreachable;
   }
+  fn blockparam_backing() -> i32 {
+      unreachable;
+      let e: &?noextern;
+      e;
+      'b: do (&?noextern) -> i32 {
+          !_;
+      }
+  }
 
 Round-tripping back to Wasm recovers every operation (and the select arm's width):
 
   $ wax -i wat -f wax --faithful m.wat -o m.wax && wax -i wax -f wat m.wax
+  (type $tp (func (param nullexternref) (result i32)))
   (func $ref_i31 (unreachable) (drop (ref.i31)))
   (func $i31_get_s (unreachable) (drop (i31.get_s)))
   (func $extern_of_any (unreachable) (drop (extern.convert_any)))
@@ -133,4 +153,10 @@ Round-tripping back to Wasm recovers every operation (and the select arm's width
     (unreachable)
     (select (f32.const 0x0p+0) (i32.const 0))
     (unreachable)
+  )
+  (func $blockparam_backing (result i32)
+    (local $e nullexternref)
+    (unreachable)
+    (local.get $e)
+    (block $b (param nullexternref) (result i32) (ref.is_null))
   )

@@ -497,6 +497,14 @@ type ctx = {
   labels : LabelStack.t;
   tag_types : Src.typeuse CondTbl.t;
   label_arities : (string option * int) list;
+  block_params : Src.valtype array;
+      (* The parameters of the INNERMOST enclosing block, which it takes off the
+         enclosing stack and which are therefore its first stack values. A
+         reference among them BACKS a hole popped there, so the dead-code
+         reference pins ([ref.is_null]) leave it bare instead of pinning a
+         hierarchy of their own: the hole reconnects to the parameter on re-parse
+         and takes its type. A function's parameters are locals, not stack values,
+         so the function level leaves this empty. *)
   return_arity : int;
   strict_constants : bool;
       (* When set, every numeric constant is wrapped in a cast to its concrete
@@ -914,6 +922,31 @@ let blocktype_arity ctx (typ : Src.blocktype option) =
   | None -> (0, 0)
   | Some (Valtype _) -> (0, 1)
   | Some (Typeuse t) -> typeuse_arity ctx t
+
+(* The types a block takes off the enclosing stack as its own parameters (see
+   [ctx.block_params]). A [Valtype] blocktype declares a result, not a parameter,
+   and a missing one declares neither. *)
+let blocktype_params ctx (typ : Src.blocktype option) : Src.valtype array =
+  let of_functype { Src.params; _ } =
+    Array.map (fun p -> snd p.Wax_utils.Ast.desc) params
+  in
+  match typ with
+  | None | Some (Valtype _) -> [||]
+  | Some (Typeuse (i, ty)) -> (
+      match (i, ty) with
+      | _, Some t -> of_functype t
+      | Some i, None -> (
+          (* Through [implicit_functype] first, as [type_arity] does: a blocktype
+             index may name a type synthesised from an inline signature, which the
+             named-type tables do not hold — looking it up there reports it as an
+             unbound reference. *)
+          match implicit_functype ctx i with
+          | Some t -> of_functype t
+          | None -> (
+              match (lookup_type ctx Type i).typ with
+              | Func t -> of_functype t
+              | Struct _ | Array _ | Cont _ -> [||]))
+      | None, None -> [||])
 
 (* The arity used to convert a reference (how many operands a call consumes) is
    fixed in the produced Wax, so it must be the same in every branch reachable
@@ -2106,7 +2139,9 @@ let push_label ctx ~loop ~targeted label typ =
   let label, labels =
     LabelStack.push ~diagnostics:ctx.diagnostics ~targeted ctx.labels label
   in
-  (label, { ctx with labels; label_arities })
+  ( label,
+    { ctx with labels; label_arities; block_params = blocktype_params ctx typ }
+  )
 
 (*
 let bottom_heap_type ctx (t : Src.heaptype) : Ast.heaptype =
@@ -3114,12 +3149,28 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         Ast.no_loc_instr
           (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Any })))
       in
+      (* The innermost enclosing block's own parameters are its first stack
+         values, so a REFERENCE among them backs this hole exactly as a value
+         residual does: the hole reconnects to the parameter on re-parse and takes
+         its type, and pinning [&?any] over it would cross hierarchies instead —
+         an [(&?noextern)] block parameter had the pin materialise an
+         [any.convert_extern] (a wasm-smith finding). Leave it bare and let the
+         parameter type it. *)
+      let backed_by_block_param =
+        match ctx.block_params with
+        | [||] -> false
+        | params -> (
+            match params.(Array.length params - 1) with
+            | Src.Ref _ -> true
+            | _ -> false)
+      in
       let e =
         match o with
         | Some ({ Ast.desc = Ast.Select _; _ } as e) -> any_pin e
         | Some e -> e
         | None ->
-            if Option.is_some backing then Ast.no_loc_instr Ast.Hole
+            if Option.is_some backing || backed_by_block_param then
+              Ast.no_loc_instr Ast.Hole
             else any_pin (Ast.no_loc_instr Ast.Hole)
       in
       Stack.push 1 (expect I32 (with_loc (UnOp (op_loc i.info Ast.Not, e))))
@@ -3976,6 +4027,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
             local_valtypes = Hashtbl.create 16;
             labels;
             label_arities = [ (None, return_arity) ];
+            block_params = [||];
             return_arity;
           }
         in
@@ -4891,6 +4943,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
         global_valtypes = Hashtbl.create 16;
         labels = LabelStack.make ();
         label_arities = [];
+        block_params = [||];
         return_arity = 0;
         strict_constants;
         faithful;
