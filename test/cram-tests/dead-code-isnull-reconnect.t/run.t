@@ -9,10 +9,14 @@ the bottom, not the interposed value.
 
 `From_wasm`'s `effective_backing` looks through the interposed entries to decide.
 It skips a zero-value statement (the `br_if`, the `fence`) and a numeric value
-residual (the `i32.const`, the tagged `atomic.rmw` result: a number can never be
-a `ref.is_null` operand, so it is a leftover from a grab an interposed statement
-blocked, not what the op pops), reaching the terminator sentinel and pinning
-`(_ as &?any)`. A genuine reference residual instead backs a bare `!_`
+residual (the `i32.const`, the tagged `atomic.rmw` result, the *numeric local*
+read: a number can never be a `ref.is_null` operand, so it is a leftover from a
+grab an interposed statement blocked, not what the op pops), reaching the
+terminator sentinel and pinning `(_ as &?any)`. A local read is the case a tag
+cannot catch, since a `local.get` states no type of its own: its type lives in
+its declaration, so `From_wasm` records it on the node (see `local_valtypes` /
+`global_valtypes`), which is how a numeric one is told from a reference one here.
+A global read is the same case, and is covered too. A genuine reference residual instead backs a bare `!_`
 (dead-code-flexible-result.t relies on that: a `&nofunc` `br_on_cast` fall-through
 must stay bare).
 
@@ -30,6 +34,24 @@ must stay bare).
   >     (block $l
   >       unreachable
   >       i32.const 0 i32.const 5 i32.atomic.rmw.add
+  >       atomic.fence
+  >       br_if $l
+  >       ref.is_null
+  >       drop))
+  >   (func $local_between (param i32)
+  >     (local $i i32)
+  >     (block $l
+  >       unreachable
+  >       local.get $i
+  >       atomic.fence
+  >       br_if $l
+  >       ref.is_null
+  >       drop))
+  >   (global $g (mut i32) (i32.const 0))
+  >   (func $global_between (param i32)
+  >     (block $l
+  >       unreachable
+  >       global.get $g
   >       atomic.fence
   >       br_if $l
   >       ref.is_null
@@ -55,10 +77,32 @@ must stay bare).
           _ = !(_ as &?any);
       }
   }
+  fn local_between(i32) {
+      'l: do {
+          unreachable;
+          let i: i32;
+          i;
+          atomic::fence();
+          br_if 'l _;
+          _ = !(_ as &?any);
+      }
+  }
+  let g: i32 = 0;
+  fn global_between(i32) {
+      'l: do {
+          unreachable;
+          g;
+          atomic::fence();
+          br_if 'l _;
+          _ = !(_ as &?any);
+      }
+  }
 
 The round trip keeps `ref.is_null`, not a re-defaulted `i32.eqz`:
 
   $ wax -i wat -f wax --faithful m.wat -o m.wax && wax -i wax -f wasm m.wax -o m.wasm
   $ wax -i wasm -f wat m.wasm | grep -oE 'ref.is_null|i32.eqz'
+  ref.is_null
+  ref.is_null
   ref.is_null
   ref.is_null

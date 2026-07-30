@@ -470,6 +470,21 @@ type ctx = {
          guarded [#[start, if <cond>]] and mutually exclusive starts (at most one
          per configuration) stay on their own functions. *)
   locals : Sequence.t;
+  local_valtypes : (string, Ast.valtype) Hashtbl.t;
+      (* The Wax type of each local (parameters included), keyed by the Wax name;
+         a fresh table per function, like [locals] itself. *)
+  global_valtypes : (string, Ast.valtype) Hashtbl.t;
+      (* The same for the module's globals, imported ones included, filled while
+         their names are registered (before any body is converted, so a forward
+         reference resolves).
+
+         [LocalGet]/[GlobalGet] record a NUMERIC type from these on the node they
+         emit (see [expect]), which is what tells [Stack.effective_backing] that
+         such a residual cannot be the reference backing a dead [ref.is_null] /
+         [ref.eq] hole: a [Get] carries no width tag and states no type of its
+         own — its type lives in its declaration — so without the record a
+         numeric local or global read looked like a reference and left the hole
+         unpinned, re-lowering [!] to [i32.eqz]. *)
   labels : LabelStack.t;
   tag_types : Src.typeuse CondTbl.t;
   label_arities : (string option * int) list;
@@ -649,6 +664,20 @@ let rectype st (t : Src.rectype) : Ast.rectype =
     t
 
 let globaltype st = muttype valtype st
+
+(* Remember a global's numeric type under its Wax name, for the numeric-residual
+   test in [Stack.effective_backing] (see [global_valtypes]). Read off the SOURCE
+   type rather than through [globaltype]: this runs while the names are being
+   registered, before the type section is, so resolving a reference type here
+   would report an unbound name. Only the numeric scalars are wanted anyway —
+   they alone rule a residual out as a reference — and they need no resolution. *)
+let record_global_valtype ctx (typ : Src.globaltype) name =
+  match typ.Wax_wasm.Ast.typ with
+  | I32 -> Hashtbl.replace ctx.global_valtypes name Ast.I32
+  | I64 -> Hashtbl.replace ctx.global_valtypes name Ast.I64
+  | F32 -> Hashtbl.replace ctx.global_valtypes name Ast.F32
+  | F64 -> Hashtbl.replace ctx.global_valtypes name Ast.F64
+  | V128 | Ref _ -> ()
 
 (*** Type lookup and arity ***)
 
@@ -2407,8 +2436,22 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          condition), not its last, breaking the wax→wat→wax round-trip. *)
       let* () = instructions ctx l in
       instruction ctx { head with Src.info = i.Src.info }
-  | LocalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Local x)))
-  | GlobalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Global x)))
+  | LocalGet x ->
+      (* Record the local's numeric type on the node (see [local_valtypes]). *)
+      let name = idx ctx `Local x in
+      let e = with_loc (Get name) in
+      Stack.push 1
+        (match Hashtbl.find_opt ctx.local_valtypes name.Ast.desc with
+        | Some t -> expect t e
+        | None -> e)
+  | GlobalGet x ->
+      (* As for [LocalGet]: record the global's numeric type on the node. *)
+      let name = idx ctx `Global x in
+      let e = with_loc (Get name) in
+      Stack.push 1
+        (match Hashtbl.find_opt ctx.global_valtypes name.Ast.desc with
+        | Some t -> expect t e
+        | None -> e)
   | LocalSet x ->
       let* e = Stack.pop in
       Stack.push 0 (with_loc (set_desc (idx ctx `Local x) e))
@@ -3395,10 +3438,10 @@ let bind_locals st l =
   List.map
     (fun e ->
       let _, t = e.Wax_utils.Ast.desc in
-      Ast.no_loc_instr
-        (Ast.Let
-           ( [ (Some (Sequence.get_current st.locals), Some (valtype st t)) ],
-             None )))
+      let name = Sequence.get_current st.locals in
+      let t = valtype st t in
+      Hashtbl.replace st.local_valtypes name.Ast.desc t;
+      Ast.no_loc_instr (Ast.Let ([ (Some name, Some t) ], None)))
     l
 
 let typeuse ctx ((typ, sign) : Src.typeuse) =
@@ -3715,6 +3758,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
             ctx with
             locals =
               Sequence.make ~diagnostics:ctx.diagnostics local_namespace "x";
+            local_valtypes = Hashtbl.create 16;
             labels;
             label_arities = [ (None, return_arity) ];
             return_arity;
@@ -3763,7 +3807,12 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                         Ast.no_loc name
                     | Some id -> { id with Ast.desc = name })
               in
-              annotated p.Ast.info pat (valtype ctx t))
+              let t = valtype ctx t in
+              Option.iter
+                (fun (nm : Ast.ident) ->
+                  Hashtbl.replace ctx.local_valtypes nm.Ast.desc t)
+                pat;
+              annotated p.Ast.info pat t)
             params
         in
         let param_arr, result_arr =
@@ -4276,9 +4325,10 @@ let register_names ctx export_tbl fields =
             | Table _ ->
                 Sequence.register ?hint ctx.tables export_tbl (Some Table) id
                   exports
-            | Global _ ->
-                Sequence.register ?hint ctx.globals export_tbl (Some Global) id
-                  exports
+            | Global typ ->
+                record_global_valtype ctx typ
+                  (Sequence.register' ?hint ctx.globals export_tbl (Some Global)
+                     id exports)
             | Tag ty -> register_type ?hint ctx export_tbl Tag id exports ty)
         | Types rectype ->
             Array.iter
@@ -4327,8 +4377,10 @@ let register_names ctx export_tbl fields =
                     Hashtbl.replace ctx.struct_fields name
                       (seq, Array.to_list fields))
               rectype
-        | Global { id; exports; _ } ->
-            Sequence.register ctx.globals export_tbl (Some Global) id exports
+        | Global { id; exports; typ; _ } ->
+            record_global_valtype ctx typ
+              (Sequence.register' ctx.globals export_tbl (Some Global) id
+                 exports)
         (* Groups are flattened below, so only their [Import] members reach here. *)
         | Func _ | Export _ | Start _ | Import_group1 _ | Import_group2 _
         | Feature_annotation _ ->
@@ -4612,6 +4664,8 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
         exports = Hashtbl.create 16;
         starts = Hashtbl.create 16;
         locals = Sequence.make ~diagnostics common_namespace "x";
+        local_valtypes = Hashtbl.create 16;
+        global_valtypes = Hashtbl.create 16;
         labels = LabelStack.make ();
         label_arities = [];
         return_arity = 0;
