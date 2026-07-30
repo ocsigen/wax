@@ -485,6 +485,15 @@ type ctx = {
          own — its type lives in its declaration — so without the record a
          numeric local or global read looked like a reference and left the hole
          unpinned, re-lowering [!] to [i32.eqz]. *)
+  address_types : (string, Ast.valtype) Hashtbl.t;
+      (* The address type ([i32], or [i64] under memory64) of each memory and
+         table, keyed by the Wax name — what [memory.size]/[memory.grow] and
+         [table.size]/[table.grow] return. Filled in the naming pre-pass, where the
+         field's limits are in hand, and read at those four instructions so a dead
+         residual of one is known not to be a reference backing (see
+         [Stack.effective_backing]). Memories and tables share one table: their Wax
+         names live in different index spaces but are drawn from one namespace, so
+         a name identifies at most one of them. *)
   labels : LabelStack.t;
   tag_types : Src.typeuse CondTbl.t;
   label_arities : (string option * int) list;
@@ -844,6 +853,42 @@ let type_arity ctx idx =
           conversion_error ctx ~location:idx.Ast.info
             (Wax_utils.Message.text "This type should be a function type."))
 
+(* The value type a NON-PACKED, non-reference field or element holds — what an
+   UNSIGNED aggregate read yields ([struct.get]/[array.get]), recorded so a dead read
+   is known not to be a reference backing (see [Stack.effective_backing]). A packed
+   field is read through the signed/unsigned path, whose i32 result is recorded
+   there; a reference field records nothing, since that is exactly the value a hole
+   may reconnect to. The field is located by the name its immediate resolves to,
+   against the ordered name list [ctx.struct_fields] already keeps for the type. *)
+let src_typedef ctx (name : Ast.ident) =
+  try Some (CondTbl.find ctx.type_defs ctx.cond_asm name.Wax_utils.Ast.desc)
+  with Not_found -> None
+
+let field_value_type ctx (ft : Src.fieldtype) =
+  match ft.Src.typ with
+  | Src.Value v -> ( match valtype ctx v with Ref _ -> None | t -> Some t)
+  | Src.Packed _ -> None
+
+let struct_field_value_type ctx type_name (field_name : Ast.ident) =
+  match src_typedef ctx type_name with
+  | Some { Src.typ = Struct fields; _ } -> (
+      let names = Array.of_list (snd (struct_fields ctx type_name)) in
+      let rec position k =
+        if k >= Array.length names then None
+        else if String.equal names.(k) field_name.Wax_utils.Ast.desc then Some k
+        else position (k + 1)
+      in
+      match position 0 with
+      | Some k when k < Array.length fields ->
+          field_value_type ctx (get_type fields.(k))
+      | _ -> None)
+  | _ -> None
+
+let array_element_value_type ctx type_name =
+  match src_typedef ctx type_name with
+  | Some { Src.typ = Array ft; _ } -> field_value_type ctx ft
+  | _ -> None
+
 let type_value_result ctx idx =
   match implicit_functype ctx idx with
   | Some ty -> functype_value_result ctx ty
@@ -949,6 +994,12 @@ Step 1: traverse types and find existing names
 Step 2: use this info to generate using names without reusing existing names
 *)
 
+(* Remember the address type of a memory or table under the Wax [name] it was just
+   registered under (see [ctx.address_types]). *)
+let record_address_type ctx name (at : [ `I32 | `I64 ]) =
+  Hashtbl.replace ctx.address_types name
+    (match at with `I32 -> Ast.I32 | `I64 -> Ast.I64)
+
 (*** Recorded type expectations ***)
 
 (* A Wasm opcode states the type of every value it produces; the Wax surface form
@@ -982,6 +1033,13 @@ let expect (ty : Ast.valtype) (i : _ Ast.instr) : _ Ast.instr =
    {!functype_value_result}); a void, multi-value or reference-returning call is
    left as is. *)
 let expect_value_result ty e = match ty with Some t -> expect t e | None -> e
+
+(* Record the address type of the memory or table [name] on [e] — the result type of
+   its [size]/[grow] (see [ctx.address_types]). *)
+let expect_address_type ctx (name : Ast.ident) e =
+  match Hashtbl.find_opt ctx.address_types name.Ast.desc with
+  | Some t -> expect t e
+  | None -> e
 
 let valtype_of_width : [ `I32 | `I64 | `F32 | `F64 ] -> Ast.valtype = function
   | `I32 -> I32
@@ -1179,21 +1237,13 @@ module Stack = struct
      [call_indirect] — the callee's type is reachable at the push site even though it
      is not from this scan).
 
-     Two producers are still unrecorded, so a dead residual of one is read as a
-     possible reference backing and the ref op above it goes unpinned:
-       * an UNSIGNED aggregate read of a non-packed field or element
-         ([struct.get]/[array.get] of an [i64] field), whose type needs the field's
-         position resolved against the type definition — the field immediate here is
-         an index or a name and only the name sequence is at hand;
-       * [memory.size]/[memory.grow]/[table.size]/[table.grow], whose result is the
-         memory's or table's ADDRESS type, which no table in this context carries
-         (it is read once, where the memory/table field itself is converted).
-     Both are constructible (a dead [struct.get] of an i64 field above a bottom
-     [ref.is_null] re-parses as an [i32.eqz]) and both want the same treatment as
-     the classes above: a lookup at the push site, or a side table filled where the
-     field is converted. Until then they are owned end to end by the round-trip legs
-     (FAITHDRIFT/WIDTHDRIFT and fuzz/ref-width.sh), which is how every recorded
-     class above was found. *)
+     With the aggregate reads and the memory/table sizes recorded, that list is
+     complete for a valid module: every instruction whose result is a numeric or
+     vector value now says so on its node, so the only residual this scan can
+     return is a value that really may be a reference. (The one thing it cannot
+     see is a value from a producer added later without a record — which is why
+     fuzz/ref-width.sh enumerates the shape and the round-trip legs
+     FAITHDRIFT/WIDTHDRIFT watch the rest.) *)
   let rec effective_backing stop = function
     | (0, _, i) :: rem when not (stop i) -> effective_backing stop rem
     (* Numeric by its width TAG, or by the type its producer RECORDED on it
@@ -2617,10 +2667,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1
         (match s with
         (* A packed field read with a sign ([struct.get_s/u] of an [i8]/[i16])
-           yields an i32 whatever the field's width; record it. An unsigned read of
-           a non-packed field yields the field's own type, which is not at hand
-           here — see [Stack.effective_backing]'s residual note. *)
-        | None -> e
+           yields an i32 whatever the field's width; an unsigned read of a
+           non-packed field yields the field's own type. Record either. *)
+        | None ->
+            expect_value_result (struct_field_value_type ctx type_name name) e
         | Some signage ->
             expect I32
               (with_loc
@@ -2685,8 +2735,11 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let e = with_loc (ArrayGet (e1, e2)) in
       Stack.push 1
         (match s with
-        (* As [StructGet]: a signed packed element read is an i32. *)
-        | None -> e
+        (* As [StructGet], for the array's element type. *)
+        | None ->
+            expect_value_result
+              (array_element_value_type ctx (idx ctx `Type t))
+              e
         | Some signage ->
             expect I32
               (with_loc
@@ -3380,10 +3433,15 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
           else_body
       in
       Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
-  | MemorySize m -> Stack.push 1 (mem_call m "size" [])
+  (* [size]/[grow] return the memory's ADDRESS type (i64 under memory64); record
+     it (see [ctx.address_types]). *)
+  | MemorySize m ->
+      Stack.push 1
+        (expect_address_type ctx (idx ctx `Mem m) (mem_call m "size" []))
   | MemoryGrow m ->
       let* d = Stack.pop in
-      Stack.push 1 (mem_call m "grow" [ d ])
+      Stack.push 1
+        (expect_address_type ctx (idx ctx `Mem m) (mem_call m "grow" [ d ]))
   | MemoryFill m ->
       let* n = Stack.pop in
       let* v = Stack.pop in
@@ -3406,11 +3464,16 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let seg = with_loc (Ast.Get (idx ctx `Data data)) in
       Stack.push 0 (mem_call m "init" [ seg; d; s; n ])
   | DataDrop data -> Stack.push 0 (drop_call `Data data)
-  | TableSize t -> Stack.push 1 (table_call t "size" [])
+  (* As for a memory: a table's [size]/[grow] return its address type. *)
+  | TableSize t ->
+      Stack.push 1
+        (expect_address_type ctx (idx ctx `Table t) (table_call t "size" []))
   | TableGrow t ->
       let* n = Stack.pop in
       let* v = Stack.pop in
-      Stack.push 1 (table_call t "grow" [ v; n ])
+      Stack.push 1
+        (expect_address_type ctx (idx ctx `Table t)
+           (table_call t "grow" [ v; n ]))
   | TableFill t ->
       let* n = Stack.pop in
       let* v = Stack.pop in
@@ -4522,10 +4585,18 @@ let register_names ctx export_tbl fields =
             ()
         | Elem { id; _ } -> Sequence.register ctx.elems export_tbl None id []
         | Data { id; _ } -> Sequence.register ctx.datas export_tbl None id []
-        | Memory { id; exports; _ } ->
-            Sequence.register ctx.memories export_tbl (Some Memory) id exports
-        | Table { id; exports; _ } ->
-            Sequence.register ctx.tables export_tbl (Some Table) id exports
+        | Memory { id; exports; limits; _ } ->
+            (* [register'] rather than [register]: the Wax name it returns is the
+               key the address type is remembered under. ([get_current] must not be
+               used here — it advances the conversion pass's positional cursor.) *)
+            record_address_type ctx
+              (Sequence.register' ctx.memories export_tbl (Some Memory) id
+                 exports)
+              limits.Ast.desc.address_type
+        | Table { id; exports; typ; _ } ->
+            record_address_type ctx
+              (Sequence.register' ctx.tables export_tbl (Some Table) id exports)
+              typ.Src.limits.Ast.desc.address_type
         | Tag { id; exports; typ; _ } ->
             register_type ctx export_tbl Tag id exports typ
         | String_global { id; _ } ->
@@ -4806,6 +4877,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
         return_arity = 0;
         strict_constants;
         faithful;
+        address_types = Hashtbl.create 8;
         cond_env = Cond.create ();
         cond_diag = Wax_utils.Diagnostic.collector ();
         cond_asm = Cond.true_;
