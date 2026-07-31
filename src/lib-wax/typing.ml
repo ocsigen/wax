@@ -7444,7 +7444,7 @@ and type_block_construct ctx i =
       | None ->
           let*! results = array_map_opt (internalize ctx) typ.results in
           let body' = block ctx i.info label [||] results results body in
-          let arms' = type_trycatch_arms ctx i label ~results arms in
+          let arms' = type_trycatch_arms ctx label ~results arms in
           return_statement i
             (TryCatch
                {
@@ -9973,7 +9973,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! results = array_map_opt (internalize ctx) typ.results in
       let body' = block ctx i.info label [||] results results body in
-      let arms' = type_trycatch_arms ctx i label ~results arms in
+      let arms' = type_trycatch_arms ctx label ~results arms in
       return_statement i
         (TryCatch
            { label; typ; block = { blkloc with desc = body' }; arms = arms' })
@@ -10127,7 +10127,7 @@ and check_trytable_catches ctx catches =
    result as its branch type, so [br 'l] exits carrying the try's value.
    Diverging arms are exempt as any block body is. Each arm's entry types are
    recorded in the node ([arm_types]) for [To_wasm]'s re-lowering. *)
-and type_trycatch_arms ctx i label ~results arms =
+and type_trycatch_arms ctx label ~results arms =
   (* The arm's entry stack, as source types: the tag's payload, plus the
      non-null [&exn] for a [&] arm ([[]] for the catch-all). Mirrors
      [check_trytable_catches]' tag validation (a caught tag must have no
@@ -10160,8 +10160,17 @@ and type_trycatch_arms ctx i label ~results arms =
         let arm' =
           match (internalized e, exit_types) with
           | Some params, Some exits ->
+              (* The ARM's own span, not the try's: an arm is a block of its own,
+                 and anchoring its reports at the enclosing try makes them collide
+                 with the try body's — an arm that completes with nothing (an
+                 empty [t => {}]) reported the missing value at the try's closing
+                 token, exactly where the body's own report already sat, so the
+                 same line printed twice (a duplicated diagnostic the mutation
+                 fuzzer caught). Same fix as [type_try_catches] for a legacy
+                 [try]'s handlers. *)
               let body' =
-                block ctx i.info label params exits results arm.arm_body.desc
+                block ctx arm.arm_body.Annot.info label params exits results
+                  arm.arm_body.desc
               in
               {
                 arm with
@@ -10173,7 +10182,8 @@ and type_trycatch_arms ctx i label ~results arms =
                  recover by typing the body as a plain result-producing block
                  rather than cascading. *)
               let body' =
-                block ctx i.info label [||] results results arm.arm_body.desc
+                block ctx arm.arm_body.Annot.info label [||] results results
+                  arm.arm_body.desc
               in
               {
                 arm with
@@ -10190,7 +10200,7 @@ and trycatch_inference ctx i label typ ~body ~arms =
   infer_synthesized ctx i typ ~type_body:(fun ~cs:_ ~r ->
       let results = [| r |] in
       let body' = block ctx i.info label [||] results results body.desc in
-      let arms' = type_trycatch_arms ctx i label ~results arms in
+      let arms' = type_trycatch_arms ctx label ~results arms in
       fun typ ->
         TryCatch
           { label; typ; block = { body with desc = body' }; arms = arms' })

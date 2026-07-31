@@ -71,3 +71,27 @@ cast:
   $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short call_binop.wax
   call_binop.wax:3:6: error: Expected function.
   [128]
+
+A structured `try`'s catch arm is a block of its own, like a legacy `try`'s
+handler. Anchoring its reports at the enclosing `try` made them collide with the
+try body's: an arm that completes with nothing (an empty `t => {}`) reported the
+missing value at the try's closing token, exactly where the body's own report
+already sat, so the same line printed twice. Each now carries its own span — the
+arm's braces, and the try's close:
+
+  $ cat > try_arm.wax <<'WAX'
+  > tag t();
+  > #[export]
+  > fn f(k: i32) -> i32 {
+  >     try {
+  >         _ = k;
+  >     } catch {
+  >         t => {}
+  >     }
+  > }
+  > WAX
+  $ wax check -W dead-code=hidden -W unused-field=hidden -W unused-result=hidden --error-format short try_arm.wax
+  try_arm.wax:8:5: error: Expecting 1 returned value(s) from the stack, but there are 0.
+  try_arm.wax:7:15: error: Expecting 1 returned value(s) from the stack, but there are 0.
+  try_arm.wax:4:5: error: An expression is expected here. This instruction returns 0 values.
+  [128]
