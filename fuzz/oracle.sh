@@ -464,13 +464,22 @@ case "$verdict:$EXPECT" in
       # keep exercising wax's default (relaxed) [$verdict].
       scheck=(check -s "$IN")
       sverdict="$(classify_wax "${scheck[@]}")"
-      if wt_validate "$IN"; then ref=ok; else ref=rejected; fi
+      # [wt_validate] leaves its message beside its ARGUMENT, and [$IN] is the
+      # caller's file — a corpus entry, or a mutation worker's temp file — so
+      # validate a copy inside [$WORK] (removed by the trap above). Passing [$IN]
+      # dropped a stray [$IN.err] next to every wat/wasm input any oracle run ever
+      # saw, which nothing cleaned up: a mutation worker deletes its mutant, not
+      # the sidecar (the /tmp accumulation), and a corpus sweep left one per file
+      # in the corpus tree. This is the only [wt_validate] call whose argument the
+      # oracle does not own; keep it that way.
+      cp "$IN" "$WORK/in.$FMT"
+      if wt_validate "$WORK/in.$FMT"; then ref=ok; else ref=rejected; fi
       report_diff=0
       diffmsg="wax says $sverdict, wasm-tools says $ref"
       if [ "$sverdict" != "$ref" ]; then
         if [ "$sverdict" = ok ] && [ "$ref" = rejected ] \
-          && { grep -q "likely-confusing unicode" "$IN.err" \
-               || wt_ahead_divergence "$IN.err" \
+          && { grep -q "likely-confusing unicode" "$WORK/in.$FMT.err" \
+               || wt_ahead_divergence "$WORK/in.$FMT.err" \
                || { [ "$FMT" = wat ] && grep -qE '\(do([[:space:]]|\)|$)' "$IN"; }; }; then
           # A known non-divergence where wax accepts and wasm-tools rejects:
           #   * a "Trojan Source" bidirectional control character in a string —

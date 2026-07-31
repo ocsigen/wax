@@ -89,4 +89,8 @@ echo "note: behavioural (execution) oracles are separate — run fuzz/exec-ref.s
 
 # Gate on HIGH findings only (REVIEW items may include benign naming noise).
 grep -q $'\tHIGH\t' "$REPORT" && exit 1
+# The report outlives the run on purpose — its path is printed above. But a clean
+# run prints no path (that line sits in the findings branch), so its report is a
+# zero-byte orphan in $TMPDIR, one per run. Drop an empty one; a real one stays.
+[ -s "$REPORT" ] || rm -f "$REPORT"
 exit 0
