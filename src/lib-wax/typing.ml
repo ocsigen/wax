@@ -2009,6 +2009,15 @@ let cast ctx ty ty' =
   | Valtype { internal = V128; _ }, (I64 | F32 | F64 | Ref _)
   | (Int8 | Int16), _ ->
       false
+  (* An operand already known to be a REFERENCE cannot be cast to a numeric type,
+     exactly as the concrete-reference case above says — [UnknownRef] is "some
+     reference, type not yet resolved", not "unknown whether a reference". Left in
+     the blanket-accepting arm below, the check passed here and [to_wasm] was later
+     handed a ref->float cast it has no lowering for, hitting its [assert false]
+     rather than reporting anything (a wax-mutation-fuzzer crash). A genuinely
+     unresolved [Unknown] hole must stay polymorphic and is still accepted: it is a
+     dead-code stack value that unifies with whatever its block needs. *)
+  | UnknownRef, (I32 | I64 | F32 | F64 | V128) -> false
   | (Unknown | Error | UnknownRef | Collecting _), _ -> true
 
 let signed_cast ctx ty ty' =
