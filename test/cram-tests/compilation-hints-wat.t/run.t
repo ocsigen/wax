@@ -111,3 +111,32 @@ reference for the payload's grammar is the annotation itself (`fuzz/oracle.sh`'s
   6 │     (call_ref $ft (local.get 1) (local.get 0))))
   7 │ 
   [128]
+
+A frequency must be a FINITE number. `nan:0x0` is a perfectly good Wasm float
+spelling, so a fuzz mutant reached it easily — and it crashed every pipeline with
+an uncaught `Failure "float_of_string"`, which does not accept that form. Bare
+`nan` and `inf` are rejected for the same reason even though `float_of_string`
+does read them: neither is a meaningful ratio, and a NaN slips through any range
+test since every comparison with it is false.
+
+  $ wax check nonfinite.wat
+  Error: An instruction frequency must be a finite number.
+   ──➤  nonfinite.wat:5:38
+  3 │   (func $a (param i32) (result i32) (local.get 0))
+  4 │   (func (export "go") (param (ref null $ft) i32) (result i32)
+  5 │     (@metadata.code.instr_freq (freq nan:0x0))
+    ·                                      ^^^^^^^
+  6 │     (call_ref $ft (local.get 1) (local.get 0))))
+  7 │ 
+  [128]
+
+  $ sed 's/(freq nan:0x0)/(freq inf)/' nonfinite.wat > inf.wat
+  $ wax check inf.wat 2>&1 | head -1
+  Error: An instruction frequency must be a finite number.
+
+A call-target frequency is parsed the same way, so it rejects the same spellings
+rather than crashing:
+
+  $ sed 's/(@metadata.code.instr_freq (freq nan:0x0))/(@metadata.code.call_targets (target $a nan:0x0))/' nonfinite.wat > target.wat
+  $ wax check target.wat 2>&1 | head -1
+  Error: A call-target frequency must be a finite number.

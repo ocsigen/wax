@@ -294,6 +294,20 @@ let hinted aloc setters (i : _ instr) =
    tokens); recover which hint each stands for, rejecting anything else in a hint
    position. [#[freq = r]] gives an executions-per-call ratio, which the section
    stores as an offset base-2 logarithm. *)
+(* A hint attribute's float payload, which must be a FINITE number.
+   [float_of_string] raises on a NaN spelling ([nan:0x0]) — an uncaught [Failure]
+   that crashed every pipeline, found by the mutation fuzzer — and it accepts
+   [nan]/[inf], neither of which is a meaningful frequency (a NaN also slips
+   through any range test, since every comparison with it is false). Mirrors
+   [annotation_ratio] in the WAT grammar. *)
+let annotation_ratio loc what n =
+  match float_of_string_opt n with
+  | Some f when Float.is_finite f -> f
+  | _ ->
+      raise (Wax_utils.Parsing.syntax_error_pair
+               (loc, Wax_utils.Message.text
+                       (what ^ " must be a finite number.\n")))
+
 let hint_of_attr loc ({attr_name = name; attr_value = value; _} : attribute) =
   let bad () =
     raise
@@ -307,8 +321,9 @@ let hint_of_attr loc ({attr_name = name; attr_value = value; _} : attribute) =
   | "unlikely", None -> `Branch false
   | "never_opt", None -> `Freq Wax_wasm.Hints.never_opt
   | "always_opt", None -> `Freq Wax_wasm.Hints.always_opt
-  | "freq", Some {desc = Int n; _} -> `Freq (Wax_wasm.Hints.freq_of_ratio (float_of_string n))
-  | "freq", Some {desc = Float n; _} -> `Freq (Wax_wasm.Hints.freq_of_ratio (float_of_string n))
+  | "freq", Some {desc = Int n; _} | "freq", Some {desc = Float n; _} ->
+      `Freq (Wax_wasm.Hints.freq_of_ratio
+               (annotation_ratio loc "An instruction frequency" n))
   | _ -> bad ()
 
 (* [#[targets(f: 0.73, …)]] takes a *list*, which neither attribute shape
@@ -327,7 +342,7 @@ let targets_of_attr loc name l =
 (* A call-target frequency is written as a fraction of 1, and stored as a whole
    percent — what the section holds. Mirrors [target_percent] in the WAT grammar. *)
 let target_percent loc n =
-  let f = float_of_string n in
+  let f = annotation_ratio loc "A call-target frequency" n in
   if f < 0. || f > 1. then
     raise (Wax_utils.Parsing.syntax_error_pair
              (loc, Wax_utils.Message.text

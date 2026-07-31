@@ -250,3 +250,33 @@ the same rule the Wasm validator follows:
   6 │     p(x)
   7 │ }
   [128]
+
+A frequency must be a FINITE number, on this side too. `nan:0x0` is a valid float
+spelling that `float_of_string` does not accept, so it crashed every pipeline with
+an uncaught `Failure`; bare `nan` and `inf` are rejected as well, since neither is
+a meaningful ratio and a NaN slips through any range test (found by the mutation
+fuzzer on the WAT side, fixed in both grammars).
+
+  $ wax check nonfinite.wax
+  Error: An instruction frequency must be a finite number.
+   ──➤  nonfinite.wax:4:5
+  2 │ #[export]
+  3 │ fn go(p: &?ft, x: i32) -> i32 {
+  4 │     #[freq = nan:0x0]
+    ·     ^^^^^^^^^^^^^^^^^
+  5 │     p(x)
+  6 │ }
+  [128]
+
+  $ sed 's/nan:0x0/nan/' nonfinite.wax > nan.wax
+  $ wax check nan.wax 2>&1 | head -1
+  Error: An instruction frequency must be a finite number.
+
+  $ sed 's/#\[freq = nan:0x0\]/#[targets(go: nan:0x0)]/' nonfinite.wax > target.wax
+  $ wax check target.wax 2>&1 | head -1
+  Error: A call-target frequency must be a finite number.
+
+A finite one is accepted, as before:
+
+  $ sed 's/nan:0x0/0.5/' nonfinite.wax > finite.wax
+  $ wax check finite.wax

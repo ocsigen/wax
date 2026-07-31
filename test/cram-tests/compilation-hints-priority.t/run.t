@@ -107,3 +107,41 @@ an imported one has no code-section entry to key an offset-0 hint in.
   3 │     fn ext();
   4 │ }
   [128]
+
+A priority is stored as a ULEB, and both the compilation and the optimization
+value are range-checked: a `NAT` token can be arbitrarily long, and an over-long
+one used to reach a raw `int_of_string` and crash the whole pipeline with an
+uncaught `Failure` — the same class as the non-finite frequency, found by the same
+fuzzer.
+
+  $ cat > huge.wat <<'WAT'
+  > (module (func (export "f")
+  >   (@metadata.code.compilation_priority (priority 99999999999999999999999))
+  >   nop))
+  > WAT
+  $ wax check huge.wat 2>&1 | head -1
+  Error: Constant 99999999999999999999999 is out of range.
+
+  $ sed 's/(priority 99999999999999999999999)/(priority 1) (optimization 99999999999999999999999)/' huge.wat > huge2.wat
+  $ wax check huge2.wat 2>&1 | head -1
+  Error: Constant 99999999999999999999999 is out of range.
+
+The Wax attribute is checked by the typer instead, so the value is rejected before
+it reaches the lowering — which trusts its input, and whose own `int_of_string`
+was the thing crashing. The boundary is the u32 the encoding can carry:
+
+  $ cat > huge.wax <<'WAX'
+  > fn g() {}
+  > #[priority = 99999999999999999999999]
+  > #[export]
+  > fn f() { g(); }
+  > WAX
+  $ wax check huge.wax 2>&1 | head -1
+  Error: The priority annotation expects an integer in the u32 range.
+
+  $ sed 's/99999999999999999999999/4294967296/' huge.wax > over.wax
+  $ wax check over.wax 2>&1 | head -1
+  Error: The priority annotation expects an integer in the u32 range.
+
+  $ sed 's/99999999999999999999999/4294967295/' huge.wax > max.wax
+  $ wax check max.wax

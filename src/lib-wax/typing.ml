@@ -11689,11 +11689,22 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
          needs a body to attach to, so it is allowed on a defined function only —
          an imported one has no code-section entry to key an offset-0 hint in. *)
       | "priority" | "optimization" ->
+          (* In range as well as an integer: the section stores the priority as a
+             ULEB, and an over-long literal would otherwise reach [to_wasm]'s
+             [int_of_string] and crash it (as for the SIMD lane index above; the
+             WAT grammar range-checks the same payload with [priority_of_nat]). *)
           (match value with
-          | Some { desc = Int _; _ } -> ()
+          | Some ({ desc = Int _; _ } as v)
+            when Option.fold ~none:false
+                   ~some:(fun l ->
+                     Wax_utils.Uint64.compare l
+                       (Wax_utils.Uint64.of_string "0x1_0000_0000")
+                     < 0)
+                   (int_literal v) ->
+              ()
           | _ ->
               Error.annotation_value_mismatch diagnostics ~location name
-                "an integer");
+                "an integer in the u32 range");
           if not priority_ok then
             Error.annotation_not_allowed diagnostics ~location name
       | "run_once" ->

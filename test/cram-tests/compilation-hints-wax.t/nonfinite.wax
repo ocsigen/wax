@@ -1,0 +1,6 @@
+type ft = fn(i32) -> i32;
+#[export]
+fn go(p: &?ft, x: i32) -> i32 {
+    #[freq = nan:0x0]
+    p(x)
+}

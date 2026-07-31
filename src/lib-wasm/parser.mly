@@ -445,10 +445,33 @@ let freq_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
       raise (Wax_utils.Parsing.syntax_error_pair
                (loc, Wax_utils.Message.text (msg ^ "\n")))
 
+(* A compilation-hints priority: a plain [int] the section stores as a ULEB. A
+   [NAT] token can be arbitrarily long and [int_of_string] RAISES on overflow — the
+   same uncaught-[Failure] crash class as the non-finite frequency below, and found
+   by the same fuzzer — so range-check it as any other wat constant, which also
+   bounds it to what the encoding can carry. *)
+let priority_of_nat loc s =
+  check_constant Misc.is_int32 loc s;
+  int_of_string s
+
+(* A float payload of a compilation-hints annotation, which must be a FINITE
+   number. [float_of_string] raises on a Wasm NaN spelling ([nan:0x0]) — an
+   uncaught [Failure] that crashed every pipeline, found by the WAT mutation
+   fuzzer — and it accepts [nan]/[inf], neither of which is a meaningful
+   frequency (a NaN also slips through any range test, since every comparison
+   with it is false). Parse safely and reject all three at the annotation. *)
+let annotation_ratio loc what n =
+  match float_of_string_opt n with
+  | Some f when Float.is_finite f -> f
+  | _ ->
+      raise (Wax_utils.Parsing.syntax_error_pair
+               (loc, Wax_utils.Message.text
+                       (what ^ " must be a finite number.\n")))
+
 (* A call-target percentage is written as a fraction of 1 and stored as a whole
    percent, which is what the section holds. *)
 let target_percent loc n =
-  let f = float_of_string n in
+  let f = annotation_ratio loc "A call-target frequency" n in
   if f < 0. || f > 1. then
     raise (Wax_utils.Parsing.syntax_error_pair
              (loc, Wax_utils.Message.text
@@ -755,7 +778,9 @@ hint_annot:
    offset base-2 logarithm; [(never_opt)]/[(always_opt)] are its reserved values.
    The raw byte is accepted too, and is what an out-of-range value round-trips as. *)
 instr_freq_payload:
-| "(" FREQ n = number ")" { Hints.freq_of_ratio (float_of_string n) }
+| "(" FREQ n = number ")"
+  { Hints.freq_of_ratio
+      (annotation_ratio $loc(n) "An instruction frequency" n) }
 | "(" NEVER_OPT ")" { Hints.never_opt }
 | "(" ALWAYS_OPT ")" { Hints.always_opt }
 | s = STRING { freq_of_annotation $loc(s) s }
@@ -778,12 +803,12 @@ compilation_priority_annot:
 
 compilation_priority_payload:
 | "(" PRIORITY n = NAT ")" o = compilation_priority_opt
-  { { Hints.compilation = int_of_string n; optimization = o } }
+  { { Hints.compilation = priority_of_nat $loc(n) n; optimization = o } }
 | s = STRING { priority_of_annotation $loc(s) s }
 
 compilation_priority_opt:
 | { None }
-| "(" OPTIMIZATION n = NAT ")" { Some (int_of_string n) }
+| "(" OPTIMIZATION n = NAT ")" { Some (priority_of_nat $loc(n) n) }
 | "(" RUN_ONCE ")" { Some Hints.run_once }
 
 number:
