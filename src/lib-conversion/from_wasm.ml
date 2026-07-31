@@ -1299,13 +1299,21 @@ module Stack = struct
      suppressed its pin — but on a re-parse the [_ = _] claims the element (exactly
      as the Wasm [drop] did), leaving the bare [!_] to default to i32 and re-lower
      as an [i32.eqz]: an opcode-family change. *)
-  let rec carries_hole (i : _ Ast.instr) =
+  (* A hole the re-parse types NUMERICALLY is not such a claimant: it cannot take
+     the reference residual, so the statement stays transparent. The value a
+     [set]/[tee] writes to a numeric local or global records its type exactly for
+     this ([expect_local]/[expect_global]) — without it, [x = _] over a
+     [ref.null func] blocked the scan, the [ref.is_null] below it was pinned
+     [(_ as &?any)] as if bottom-sprung, and on re-parse the hole DID reconnect to
+     the func-hierarchy value: the pin crossed hierarchies and the decompiled Wax
+     did not type-check (a wat-mutation-fuzzer finding). *)
+  let rec carries_untyped_hole (i : _ Ast.instr) =
     match i.Ast.desc with
-    | Ast.Hole -> true
-    | _ -> List.exists carries_hole (Ast_utils.sub_instrs i)
+    | Ast.Hole -> i.Ast.expected = None
+    | _ -> List.exists carries_untyped_hole (Ast_utils.sub_instrs i)
 
   let rec effective_backing stop = function
-    | (0, _, i) :: rem when (not (stop i)) && not (carries_hole i) ->
+    | (0, _, i) :: rem when (not (stop i)) && not (carries_untyped_hole i) ->
         effective_backing stop rem
     (* Numeric by its width TAG, or by the type its producer RECORDED on it
        ([Ast.instr]'s [expected], which only ever holds a numeric scalar): either
@@ -2351,6 +2359,20 @@ let rec pin_hierarchy pin (e : _ Ast.instr) =
    onto the Wax instruction it decompiles to. A Wasm instruction contributes one
    entry to the stack of Wax expressions being built, so the hints go on whatever
    [instruction_desc] left on top. *)
+(* Record a local's / global's NUMERIC type on a node that carries its value —
+   the [Get] that reads it, and the value a [set]/[tee] writes to it. A reference
+   local records nothing: the channel holds numeric scalars only (and [v128], as a
+   not-a-reference marker), which is exactly what its readers ask about. *)
+let expect_local ctx (name : (string, _) Ast.annotated) e =
+  match Hashtbl.find_opt ctx.local_valtypes name.Ast.desc with
+  | Some t -> expect t e
+  | None -> e
+
+let expect_global ctx (name : (string, _) Ast.annotated) e =
+  match Hashtbl.find_opt ctx.global_valtypes name.Ast.desc with
+  | Some t -> expect t e
+  | None -> e
+
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let* () = instruction_desc ctx i in
   if Wax_wasm.Hints.is_empty i.hints then return ()
@@ -2666,28 +2688,27 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
   | LocalGet x ->
       (* Record the local's numeric type on the node (see [local_valtypes]). *)
       let name = idx ctx `Local x in
-      let e = with_loc (Get name) in
-      Stack.push 1
-        (match Hashtbl.find_opt ctx.local_valtypes name.Ast.desc with
-        | Some t -> expect t e
-        | None -> e)
+      Stack.push 1 (expect_local ctx name (with_loc (Get name)))
   | GlobalGet x ->
       (* As for [LocalGet]: record the global's numeric type on the node. *)
       let name = idx ctx `Global x in
-      let e = with_loc (Get name) in
-      Stack.push 1
-        (match Hashtbl.find_opt ctx.global_valtypes name.Ast.desc with
-        | Some t -> expect t e
-        | None -> e)
+      Stack.push 1 (expect_global ctx name (with_loc (Get name)))
   | LocalSet x ->
+      (* Record the target's numeric type on the assigned VALUE too, not only on a
+         [Get]: a hole assigned to a numeric local is a hole the re-parse types
+         numerically, which is what [Stack.effective_backing] needs to know to see
+         past the statement (see [carries_untyped_hole]). *)
+      let name = idx ctx `Local x in
       let* e = Stack.pop in
-      Stack.push 0 (with_loc (set_desc (idx ctx `Local x) e))
+      Stack.push 0 (with_loc (set_desc name (expect_local ctx name e)))
   | GlobalSet x ->
+      let name = idx ctx `Global x in
       let* e = Stack.pop in
-      Stack.push 0 (with_loc (set_desc (idx ctx `Global x) e))
+      Stack.push 0 (with_loc (set_desc name (expect_global ctx name e)))
   | LocalTee x ->
+      let name = idx ctx `Local x in
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (Tee (idx ctx `Local x, e)))
+      Stack.push 1 (with_loc (Tee (name, expect_local ctx name e)))
   | BinOp (I32 op) -> int_bin_op i `I32 op
   | BinOp (I64 op) -> int_bin_op i `I64 op
   | BinOp (F32 op) -> float_bin_op i `F32 op

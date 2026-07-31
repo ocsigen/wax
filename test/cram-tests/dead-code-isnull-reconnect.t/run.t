@@ -106,3 +106,47 @@ The round trip keeps `ref.is_null`, not a re-defaulted `i32.eqz`:
   ref.is_null
   ref.is_null
   ref.is_null
+
+The opposite direction, where the scan must NOT stop: a statement that carries a
+hole normally blocks it, because on a re-parse that hole claims the first value
+above the statement, so the value cannot also back a later hole. But a hole the
+re-parse types NUMERICALLY claims no reference. Here `data.drop` sits between the
+`i32.const` and the `local.set`, so the set's operand is not popped in the
+conversion's stack model and it prints as `x = _` — while in the Wasm the set
+really does consume that `i32.const` and the `ref.null func` below stays for the
+`ref.is_null`.
+
+  $ cat > typed.wat <<'WAT'
+  > (module
+  >   (data "a")
+  >   (func (param i32)
+  >     unreachable
+  >     ref.null func
+  >     i32.const 1
+  >     data.drop 0
+  >     local.set 0
+  >     ref.is_null
+  >     drop))
+  > WAT
+
+Read as a blocker, that `x = _` made the `ref.is_null` look bottom-sprung and it
+was pinned `(_ as &?any)` — but the hole DID reconnect, to the func-hierarchy
+value, and the pin crossed hierarchies: the decompiled Wax did not type-check at
+all (`wax check` accepted the wat, the conversion rejected its own output — a
+wat-mutation-fuzzer finding). The value a set writes to a numeric local records
+that local's type, exactly as a `local.get` does, so the statement stays
+transparent and `!_` is left bare to reconnect:
+
+  $ wax -i wat -f wax typed.wat
+  data d = "a";
+  fn f(x: i32) {
+      unreachable;
+      null as &?func;
+      1;
+      d.drop();
+      x = _;
+      _ = !_;
+  }
+
+  $ wax -i wat -f wax typed.wat -o typed.wax && wax typed.wax -f wat | grep -oE 'ref.is_null|i32.eqz'
+  ref.is_null
