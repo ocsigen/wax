@@ -450,6 +450,17 @@ let datamode (names : B.names) local_names (d : _ B.datamode) : _ T.datamode =
 
 let id map idx = Option.map Ast.no_loc (B.IntMap.find_opt idx map)
 
+(* A name-section entry that is the EMPTY string cannot be written as an
+   identifier at all: [$""] is not valid text, unlike the quoted [$"…"] form that
+   carries a merely awkward name (one with spaces, escapes, non-ASCII). Drop it
+   and let the index stand, as the wax path already does — it claims a source name
+   only when it is a valid identifier. Dropped BEFORE [unique_names], which would
+   otherwise turn a second empty name into the perfectly valid ["_1"] and keep the
+   first unrenderable. Without this, wax accepted a binary and printed WAT that
+   neither wasm-tools nor its own parser could read back. *)
+let drop_empty_names map = B.IntMap.filter (fun _ name -> name <> "") map
+let drop_empty_names_indirect map = B.IntMap.map drop_empty_names map
+
 let unique_names map =
   let seen = Hashtbl.create 16 in
   let suffixes = Hashtbl.create 16 in
@@ -480,17 +491,17 @@ let unique_names_indirect map = B.IntMap.map unique_names map
 let make_names_unique (names : B.names) =
   {
     names with
-    functions = unique_names names.functions;
-    types = unique_names names.types;
-    tags = unique_names names.tags;
-    globals = unique_names names.globals;
-    tables = unique_names names.tables;
-    memories = unique_names names.memories;
-    data = unique_names names.data;
-    elem = unique_names names.elem;
-    locals = unique_names_indirect names.locals;
-    labels = unique_names_indirect names.labels;
-    fields = unique_names_indirect names.fields;
+    functions = unique_names (drop_empty_names names.functions);
+    types = unique_names (drop_empty_names names.types);
+    tags = unique_names (drop_empty_names names.tags);
+    globals = unique_names (drop_empty_names names.globals);
+    tables = unique_names (drop_empty_names names.tables);
+    memories = unique_names (drop_empty_names names.memories);
+    data = unique_names (drop_empty_names names.data);
+    elem = unique_names (drop_empty_names names.elem);
+    locals = unique_names_indirect (drop_empty_names_indirect names.locals);
+    labels = unique_names_indirect (drop_empty_names_indirect names.labels);
+    fields = unique_names_indirect (drop_empty_names_indirect names.fields);
   }
 
 let split_string s =
