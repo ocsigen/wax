@@ -1944,9 +1944,17 @@ let float_un_op i0 sz (op : Src.float_un_op) =
      would place the same cast for a valid module; it is kept so that an ill-typed
      source module ([f32.convert_i64_s] of an [i32.const]) still decompiles to Wax
      the typer rejects, rather than to a different well-typed conversion. *)
+  (* [i32] is normally the re-parse default, so pinning a convert's i32 source
+     would be noise — EXCEPT over an operand that re-parses ADAPTIVELY (a hole, or
+     an untyped [select] of them). Such an operand does not default: under the
+     convert's own [as f32_u] it takes the TARGET type instead, and the conversion
+     collapses to nothing — [f32.convert_i32_u] of a dead-code select vanished
+     across the round trip (a wasm-smith width/faithful finding). Pin it there, so
+     the source width is stated and the convert survives. *)
   let pin_src ty x =
     match (e', ty) with
     | Some _, (Ast.I64 | F32 | F64) -> cast_to (Valtype ty) x
+    | Some e, Ast.I32 when reparse_adaptive e -> cast_to (Valtype ty) x
     | _ -> x
   in
   (* [neg]/[abs]/…/[sqrt] have result width = operand width, so they carry the
