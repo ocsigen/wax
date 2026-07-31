@@ -106,6 +106,14 @@ fuzz_one() {
 
   save() { mkdir -p "$FINDINGS"; saved="$FINDINGS/bottom-$n.wat"; cp "$m" "$saved"; }
 
+  # A crash classification is re-verified before it is reported: wax is
+  # deterministic, so a real crash reproduces, while a transient failure under
+  # heavy parallel load does not (run.sh and the mutation fuzzers re-verify for
+  # the same reason). Without this a load spike reported three phantom
+  # "uncaught-exception" findings on adjacent candidates, all of which exited
+  # cleanly when re-checked. Only a finding pays for the second run.
+  case "$w" in crash:*) w="$(classify_wax check "$m")" ;; esac
+
   case "$w" in
     crash:*)
       save
