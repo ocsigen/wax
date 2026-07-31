@@ -87,7 +87,9 @@ order, so the two arms must be judged together. Deciding it per exit reported an
 empty `else` (a value was already collected from the `then` arm) but accepted an
 empty `then`, whose emptiness nothing revisited once the `else` delivered a
 value: the same under-rejection as above, in the arm order the oracle happened
-not to hit first. Both orders are reported now, at the `if`'s closing token:
+not to hit first. Both orders are reported now, each at the closing token of the
+arm that delivers nothing — the arms carry their own spans, so the two reports an
+`if` with two empty arms produces do not render as one line twice:
 
   $ cat > empty-then.wax <<'WAX'
   > fn h(c: i32) -> i32 {
@@ -101,13 +103,13 @@ not to hit first. Both orders are reported now, at the `if`'s closing token:
   > WAX
   $ wax check empty-then.wax
   Error: Expecting 1 returned value(s) from the stack, but there are 0.
-   ──➤  empty-then.wax:6:9
+   ──➤  empty-then.wax:4:9
+  2 │     let b =
+  3 │         if c {
   4 │         } else {
+    ·         ^
   5 │             7;
   6 │         };
-    ·         ^
-  7 │     b
-  8 │ }
   [128]
 
   $ cat > empty-else.wax <<'WAX'

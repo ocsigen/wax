@@ -9116,15 +9116,20 @@ and check_instruction ctx expected (i : location instr) =
       let results = [| result_cell |] in
       (* Each branch reports its own fall-through re-inference (see
          [block_with_keep]); the if's is their join. *)
+      (* Each arm is anchored at ITS OWN span, not the [if]'s: an output underflow
+         is reported at the block's closing token, so two arms sharing the [if]'s
+         span rendered their two distinct reports as one [line:col: message] twice
+         over (a fuzz DIAG_DUP). *)
       let if_desc, if_reinfer =
-        block_with_keep ctx i.info label [||] results results if_block.desc
+        block_with_keep ctx if_block.info label [||] results results
+          if_block.desc
       in
       let if_block' = { if_block with desc = if_desc } in
       let else_block', else_reinfer =
         match else_block with
         | Some b ->
             let else_desc, else_reinfer =
-              block_with_keep ctx i.info label [||] results results b.desc
+              block_with_keep ctx b.info label [||] results results b.desc
             in
             (Some { b with desc = else_desc }, else_reinfer)
         | None ->
@@ -10659,10 +10664,14 @@ and infer_synthesized ?(applies = true) ctx i typ ~type_body =
 and if_inference ctx i label typ ~cond ~if_block ~else_block =
   infer_synthesized ~applies:(Option.is_some else_block) ctx i typ
     ~type_body:(fun ~cs ~r ->
-      let if_block' = collect_into ctx i.info label ~cs ~r if_block.desc in
-      let else_block' =
-        collect_into ctx i.info label ~cs ~r (Option.get else_block).desc
+      (* Each arm anchored at its own span, as on the annotated path: the exits
+         they record are reported at the block's closing token, and the [if]'s own
+         span would render two arms' reports as the same line twice. *)
+      let else_b = Option.get else_block in
+      let if_block' =
+        collect_into ctx if_block.info label ~cs ~r if_block.desc
       in
+      let else_block' = collect_into ctx else_b.info label ~cs ~r else_b.desc in
       fun typ ->
         If
           {
@@ -10670,8 +10679,7 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
             typ;
             cond;
             if_block = { if_block with desc = if_block' };
-            else_block =
-              Some { (Option.get else_block) with desc = else_block' };
+            else_block = Some { else_b with desc = else_block' };
           })
 
 (* The block's declared single result internalized to a cell, or [None] when the

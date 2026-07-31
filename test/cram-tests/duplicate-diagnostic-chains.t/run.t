@@ -95,3 +95,38 @@ arm's braces, and the try's close:
   try_arm.wax:7:15: error: Expecting 1 returned value(s) from the stack, but there are 0.
   try_arm.wax:4:5: error: An expression is expected here. This instruction returns 0 values.
   [128]
+
+An `if`'s two arms, like a `try`'s two arms above, each deliver the block's
+result and each report their own failure to. An output underflow is anchored at
+the block's CLOSING TOKEN, so arms sharing the `if`'s span rendered two distinct
+reports — one per arm — as the same `line:col: message` twice (a fuzz DIAG_DUP,
+mutant-3425.wax). Each arm carries its own span on both paths, the annotated one:
+
+  $ cat > if_arm.wax <<'WAX'
+  > fn f(x: i32) -> i32 {
+  >     if x => i32 {
+  >     } else {}
+  > }
+  > WAX
+  $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short if_arm.wax
+  if_arm.wax:3:5: error: Expecting 1 returned value(s) from the stack, but there are 0.
+  if_arm.wax:3:13: error: Expecting 1 returned value(s) from the stack, but there are 0.
+  [128]
+
+and the inferred one, where the result comes from the values reaching the exit
+(here a `br` to the `if`'s own label from each arm, whose fall-through then
+delivers nothing):
+
+  $ cat > if_infer.wax <<'WAX'
+  > fn f(x: i32) {
+  >     _ = 'l: if x {
+  >         if x { br 'l 5; }
+  >     } else {
+  >         if x { br 'l 6; }
+  >     };
+  > }
+  > WAX
+  $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short if_infer.wax
+  if_infer.wax:4:5: error: Expecting 1 returned value(s) from the stack, but there are 0.
+  if_infer.wax:6:5: error: Expecting 1 returned value(s) from the stack, but there are 0.
+  [128]
