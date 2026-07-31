@@ -2221,6 +2221,21 @@ let named_ref_null_source idx : source_type =
    to match. Without the proposal exact reference types are not expressible, so it
    falls back to the plain named source (the internal type stays exact, but that
    extra precision is unobservable there). *)
+(* Whether a value an ALLOCATION (or a [ref.func]) yields carries the EXACT type
+   allocated. It does — but exact reference types are part of custom-descriptors,
+   so without the feature it is the plain inexact reference, as before the
+   proposal. The Wax typer gates its own [construction_result]/[register_function]
+   the same way and the two must agree: ungated, the exact type made a [ref.test]
+   against any other type look impossible, so the validator reported an
+   always-false test on a downcast that can in fact succeed (two structurally
+   identical rec groups are the same canonical type) while the typer stayed
+   correctly silent — a lint-parity finding from the wax mutation fuzzer, first
+   seen on [ref.func] and true of every allocation. The [*_desc] forms below need
+   no gate: those instructions exist only under the feature. *)
+let allocation_is_exact ctx =
+  Wax_utils.Feature.is_enabled ctx.modul.types.features
+    Wax_utils.Feature.Custom_descriptors
+
 let exact_ref_source ctx idx : source_type =
   if
     Wax_utils.Feature.is_enabled ctx.modul.types.features
@@ -3073,7 +3088,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           (Ref { nullable = true; typ = Type ft })
       in
       push ~source:(exact_ref_source ctx x) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | ContBind (x, y) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       let*! yty, _, fty = lookup_cont_type ctx y in
@@ -3110,7 +3129,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
               (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
           in
           push ~source:(exact_ref_source ctx y) (Some loc)
-            (Ref { nullable = false; typ = Exact yty })
+            (Ref
+               {
+                 nullable = false;
+                 typ = (if allocation_is_exact ctx then Exact yty else Type yty);
+               })
         end
       end
   | Suspend x ->
@@ -4060,7 +4083,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
              fields)
       in
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | StructNewDefault idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
       if not (Array.for_all field_has_default fields) then
@@ -4072,7 +4099,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
         Error.descriptor_allocation_required ctx.modul.diagnostics
           ~location:i.info;
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | StructNewDesc idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
       let*! desc = type_descriptor ctx ~location:i.info ty in
@@ -4148,14 +4179,22 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           (unpack_type field)
       in
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | ArrayNewDefault idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not (field_has_default field) then
         Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
       let* () = pop_known ctx loc I32 in
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | ArrayNewFixed (idx, n) ->
       let*! ty, field = lookup_array_type ctx idx in
       let* () =
@@ -4164,7 +4203,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
           (unpack_type field) (Uint32.to_int n)
       in
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | ArrayNewData (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       ignore (get_data ctx idx');
@@ -4175,7 +4218,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | ArrayNewElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       let*! ty', _ = get_elem ctx idx' in
@@ -4188,7 +4235,11 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | ArrayGet (signage, idx) ->
       let*! ty, field = lookup_array_type ctx idx in
       (match field.typ with
@@ -4376,12 +4427,20 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       | Value _ ->
           Error.string_array_required ctx.modul.diagnostics ~location:i.info);
       push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref { nullable = false; typ = Exact ty })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+           })
   | String (None, _) ->
       let i = string_type_reference ctx.modul.types in
       let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
       push ~source:(Inline_ref comptype) (Some loc)
-        (Ref { nullable = false; typ = Exact i })
+        (Ref
+           {
+             nullable = false;
+             typ = (if allocation_is_exact ctx then Exact i else Type i);
+           })
   | Char _ -> push_known (Some loc) I32
   (* Conditional annotations are spliced out by [specialize] before a
      configuration is validated, so none can remain at this point. *)
@@ -4890,9 +4949,18 @@ let build_initial_env ctx fields =
               Sequence.register_failed ctx.functions id
           | Some ty ->
               let sign = typeuse_functype ctx.types typ in
-              (* A module-defined function has exactly its declared type. *)
+              (* A module-defined function has exactly its declared type, so a
+                 reference to it is exact — but exact reference types are part of
+                 custom-descriptors, so without the feature it is the plain
+                 inexact reference, as before the proposal. See
+                 [allocation_is_exact]: the Wax typer gates the same decision, and
+                 the two must agree. *)
+              let exact =
+                Wax_utils.Feature.is_enabled ctx.types.features
+                  Wax_utils.Feature.Custom_descriptors
+              in
               let idx = Sequence.next_index ctx.functions in
-              Sequence.register ctx.functions id (ty, fst typ, sign, true);
+              Sequence.register ctx.functions id (ty, fst typ, sign, exact);
               (* Record it as an [unused-field] candidate; an inline export makes
                  it externally reachable, so mark it used. *)
               let location =
