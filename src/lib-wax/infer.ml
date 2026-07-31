@@ -140,6 +140,13 @@ and collecting = {
       (** Set when [declared] is relied upon in a way the join cannot re-derive
           (e.g. read by a [resume] handler), forcing the annotation to be kept.
       *)
+  mutable empty_exits : Ast.location list;
+      (** Each REACHABLE exit that delivered NO value, anchored where an output
+          underflow is anchored. Whether that is an error depends on the other
+          exits — a block every exit of which delivers nothing is simply void —
+          so it cannot be decided as the exit is met, and an [if] types one arm
+          before the other. The inferer reports these once the body is typed,
+          iff [collected] turned out non-empty. *)
 }
 
 (* Render an inferred type into a styled printer (colour theme + width supplied

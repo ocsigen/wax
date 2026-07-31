@@ -120,6 +120,10 @@ and collecting = {
   mutable needed : bool;
       (** Set when [declared] is relied upon in a way the join cannot re-derive,
           forcing the annotation to be kept. *)
+  mutable empty_exits : Ast.location list;
+      (** Each REACHABLE exit that delivered NO value. Whether that is an error
+          depends on the other exits, so the inferer decides it once the body is
+          typed rather than as the exit is met. *)
 }
 
 val output_inferred_type_styled :

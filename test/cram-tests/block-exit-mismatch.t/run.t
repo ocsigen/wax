@@ -80,3 +80,53 @@ An `unreachable` fall-through needs no value: nothing reaches the exit that way.
   > }
   > WAX
   $ wax check br-diverging.wax
+
+Which exit delivers nothing cannot be decided as that exit is met — a block every
+exit of which delivers nothing is simply void — and an `if` types its arms in
+order, so the two arms must be judged together. Deciding it per exit reported an
+empty `else` (a value was already collected from the `then` arm) but accepted an
+empty `then`, whose emptiness nothing revisited once the `else` delivered a
+value: the same under-rejection as above, in the arm order the oracle happened
+not to hit first. Both orders are reported now, at the `if`'s closing token:
+
+  $ cat > empty-then.wax <<'WAX'
+  > fn h(c: i32) -> i32 {
+  >     let b =
+  >         if c {
+  >         } else {
+  >             7;
+  >         };
+  >     b
+  > }
+  > WAX
+  $ wax check empty-then.wax
+  Error: Expecting 1 returned value(s) from the stack, but there are 0.
+   ──➤  empty-then.wax:6:9
+  4 │         } else {
+  5 │             7;
+  6 │         };
+    ·         ^
+  7 │     b
+  8 │ }
+  [128]
+
+  $ cat > empty-else.wax <<'WAX'
+  > fn h(c: i32) -> i32 {
+  >     let b =
+  >         if c {
+  >             7;
+  >         } else {
+  >         };
+  >     b
+  > }
+  > WAX
+  $ wax check empty-else.wax
+  Error: Expecting 1 returned value(s) from the stack, but there are 0.
+   ──➤  empty-else.wax:6:9
+  4 │             7;
+  5 │         } else {
+  6 │         };
+    ·         ^
+  7 │     b
+  8 │ }
+  [128]

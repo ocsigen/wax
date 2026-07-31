@@ -10626,6 +10626,15 @@ and infer_synthesized ?(applies = true) ctx i typ ~type_body =
        [cs] are what the join below reads) and returns a [rebuild] closure that
        reconstructs the node from the finalized result type. *)
     let rebuild = type_body ~cs ~r in
+    (* Every exit that delivered nothing is an error once another delivered a
+       value (see [collect_into]); in source order, the list being built by
+       consing. *)
+    if cs.collected <> [] then
+      List.iter
+        (fun location ->
+          Error.short_stack ctx.diagnostics `Output ~location ~actual:0
+            ~expected:1)
+        (List.rev cs.empty_exits);
     let natural = collected_natural cs.collected in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ =
@@ -10674,7 +10683,9 @@ and declared_result ctx typ =
    annotation under test (or [None]), [needed] preset when it is already known to
    be load-bearing. *)
 and fresh_collecting ?(needed = false) declared =
-  let cs = { collected = []; exacts = []; declared; needed } in
+  let cs =
+    { collected = []; exacts = []; declared; needed; empty_exits = [] }
+  in
   (cs, Cell.make (Collecting cs))
 
 (* Type one block body against the shared [Collecting] result cell [r] (backed
@@ -10706,20 +10717,23 @@ and collect_into ctx loc label ~cs ~r instrs =
        | Cons (loc, tv, (Unreachable | Poisoned)) ->
            cs.collected <- (loc, tv) :: cs.collected;
            (Unreachable, body')
-       (* A REACHABLE fall-through delivering nothing, while a branch delivered a
-          value ([cs.collected]), leaves the block yielding a result its own exit
-          does not produce — the lowering would emit a block whose declared result
-          the body never leaves. The annotated paths ([block_with_keep],
-          [block_keep_bool]) catch this through their [pop_args ~`Output]; report
-          the same thing here, since an inferred result must be delivered by every
-          exit just as a declared one is. An [Unreachable] fall-through (the case
-          above) needs no value: nothing reaches the exit that way. *)
+       (* A REACHABLE fall-through delivering nothing, while some exit delivered a
+          value, leaves the block yielding a result its own exit does not produce
+          — the lowering would emit a block whose declared result the body never
+          leaves. The annotated paths ([block_with_keep], [block_keep_bool]) catch
+          this through their [pop_args ~`Output]; an inferred result must be
+          delivered by every exit just as a declared one is. Only RECORD it here,
+          anchored at the block's closing token as [pop] anchors every other
+          [`Output] underflow: whether it is an error depends on the exits still
+          to come, and an [if] types one arm before the other, so deciding it here
+          reported the empty arm only when it came SECOND ([cs.collected] was
+          still empty for an empty THEN arm, and nothing revisited it once the
+          else arm delivered a value — the typer then accepted a module the
+          lowering's validation rejected). [infer_synthesized] reports once the
+          whole body is typed. An [Unreachable] fall-through (the case above)
+          needs no value: nothing reaches the exit that way. *)
        | Empty ->
-           if cs.collected <> [] then
-             (* Anchored at the block's closing token, as [pop] anchors every
-                other [`Output] underflow. *)
-             Error.short_stack ctx.diagnostics `Output
-               ~location:(loc_last_char loc) ~actual:0 ~expected:1;
+           cs.empty_exits <- loc_last_char loc :: cs.empty_exits;
            (Empty, body')
        | (Unreachable | Poisoned) as st -> (st, body')
        | Cons _ -> (st, body'))
