@@ -33,6 +33,7 @@
     ; No dependency on stele: its runtime helper (stele.runtime, resolving the
     ; <N> delimiter markers) is vendored under vendor/stele/ and ships in-tree,
     ; so it is not fetched from opam.
+    (cmdliner (>= 2.0.0))
     (re (>= 1.10.0))
     (yojson (>= 2.0.0))
     (uucp (and :with-dev-setup (>= 16.0.0)))
