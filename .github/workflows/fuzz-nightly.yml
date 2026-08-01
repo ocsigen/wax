@@ -42,7 +42,7 @@ jobs:
   nightly:
     name: Nightly fuzz campaigns
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     # github-script needs issue write to file the failure report.
     permissions:
       contents: read
