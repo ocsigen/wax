@@ -66,7 +66,7 @@ jobs:
         run: opam exec -- dune build src/bin/main.exe src/bin/fuzz_mutate.exe src/bin/fuzz_gen.exe
 
       - name: Install wasm-tools
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: wasm-tools@1.254.0
 
