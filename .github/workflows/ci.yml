@@ -133,7 +133,7 @@ jobs:
       # The guards diff wax against the reference validator; one whose wasm-tools
       # dependency is absent SKIPS rather than fails, but install it so they run.
       - name: Install wasm-tools
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: wasm-tools@1.254.0
 
