@@ -62,6 +62,9 @@ run "ITERS=$((count * 25))" "WORKERS=2" recover-fuzz.sh
 run wat-cast-chain.sh
 run wat-cast-const.sh
 run comment-preserve.sh
+run atomic-width.sh
+run pin-reach.sh
+run block-exits.sh
 
 # Generator campaigns (deterministic given SEED; self-generating inputs).
 run "GEN=$gen" fold-fuzz.sh

@@ -96,6 +96,9 @@ fuzz/fold-fuzz.sh           # fold/unfold confluence on modules generated dense 
 # content-addressed, so an edit that compiles to the same artifact relinks nothing.
 fuzz/ref-width.sh           # enumerated sweep of the reference pins (ops x dead-code contexts); JOBS=N
 fuzz/adaptive-width.sh      # enumerated sweep of the ADAPTIVE-operand pins (ops x hole/select shapes); JOBS=N
+fuzz/atomic-width.sh        # every atomic mnemonic x eraser context: the width a narrow store/RMW takes from its value operand; JOBS=N
+fuzz/pin-reach.sh           # can the width repair PLACE its pin? every dead-code i64 producer x narrowing consumer; JOBS=N
+fuzz/block-exits.sh         # the five inferring block forms x every pair of exit shapes: typer and conversion must agree; JOBS=N
 fuzz/stress.sh              # resource-limit sweep: deep nesting / wide constructs never crash
 fuzz/comment-preserve.sh    # planted sentinel comments survive every text<->text conversion
 
@@ -111,7 +114,8 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh`,
 `validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`, `const-context.sh`,
 `fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh`,
-`bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh`, `adaptive-width.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh`, `adaptive-width.sh`,
+`atomic-width.sh`, `pin-reach.sh`, `block-exits.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -721,6 +725,23 @@ developer tool for locating a repair (and what
   stack, so a finding is a lost or swapped opcode, not a wrong value. It found two
   gaps on its first run (a select-of-holes operand was pinned by neither
   `pin_hierarchy` nor `ref.eq`, both since fixed).
+* **`fuzz/atomic-width.sh`** and **`fuzz/pin-reach.sh`** cover the two halves of
+  the ATOMIC/repair-reachability corner. An atomic method name carries the access
+  width only (`atomic_rmw_add8` spells both the i32 and the i64 op), so a narrow
+  store/RMW takes its family from its value operand — a hole in dead code, which
+  defaults to i32, so a NARROWING consumer reads as an identity cast and the opcode
+  drifts unless the printed form pins it. `atomic-width.sh` crosses every mnemonic
+  with the eraser contexts a result can land in; its only exemptions are an
+  instruction identity (`i32.atomic.load ; i64.extend_i32_u` IS
+  `i64.atomic.load32_u`). `pin-reach.sh` asks the more general question the same
+  finding raised: the repair can only pin a node whose shape is in `defaulting_tree`
+  — a hand-maintained list of "result width = operand width" forms — and a shape
+  missing from it makes the decompiler REFUSE a module `wax check` accepts. It
+  crosses every way to leave an i64 on the dead-code stack (the block forms, both
+  selects, binops, methods, tee, loads, global, call, lane extraction, the atomics)
+  with a narrowing consumer, and requires that consumer's opcode to survive the
+  round trip. Both calibrate against the binary before the RMW fix: 84 and 8
+  findings respectively, 0 after.
 * **`fuzz/adaptive-width.sh`** covers the third operand class: one that neither
   keeps a width of its own nor DEFAULTS, but ADAPTS — a dead-code hole, or an
   untyped `select` of holes. Every rule of the form "an i32 needs no pin, i32 is
