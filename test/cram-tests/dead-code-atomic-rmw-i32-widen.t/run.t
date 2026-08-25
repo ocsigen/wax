@@ -37,3 +37,54 @@ The decompiled Wax also type-checks and converts on its own (the soundness
 property — `check` accepting must imply a successful lowering):
 
   $ wax -i wat -f wax f.wat -o f.wax && wax check f.wax && wax -f wat f.wax > /dev/null
+
+The opposite direction — an i64 narrow RMW NARROWED by an `i32.wrap_i64` — needs
+the width repair to pin it, and could not be pinned at all. The value operand a
+narrow RMW takes its family from is a hole here, so the printed
+`m.atomic_rmw_sub8(_, _) as i32` re-parses with the operand at the i32 default,
+which makes the wrap an identity cast and narrows the opcode. Repair decides
+whether a pin can reach a node's flexible leaves (`defaulting_tree`), and a
+memory-method call was not in that set — so it reported the disagreement as
+unrepairable ("its type is fixed by context") and refused to decompile a module
+`wax check` accepts. A narrow RMW's result cell IS its value operand's, so a pin
+on the result grounds it:
+
+  $ cat > w.wat <<'WAT'
+  > (module
+  >   (memory 1 1 shared)
+  >   (func
+  >     return
+  >     i64.atomic.rmw8.sub_u
+  >     i32.wrap_i64
+  >     drop))
+  > WAT
+  $ wax -i wat -f wax w.wat
+  memory m: i32 [1, 1] shared;
+  fn f() {
+      return;
+      _ = m.atomic_rmw_sub8(_, _) as i64 as i32;
+  }
+
+The pin reaches through a width-preserving method too, and the round trip keeps
+the i64 opcode rather than the i32 one it drifted to:
+
+  $ cat > c.wat <<'WAT'
+  > (module
+  >   (memory 1 1 shared)
+  >   (func
+  >     return
+  >     i64.atomic.rmw8.sub_u
+  >     i64.ctz
+  >     i32.wrap_i64
+  >     drop))
+  > WAT
+  $ wax -i wat -f wax c.wat
+  memory m: i32 [1, 1] shared;
+  fn f() {
+      return;
+      _ = m.atomic_rmw_sub8(_, _).ctz() as i64 as i32;
+  }
+
+  $ wax -i wat -f wax c.wat -o c.wax && wax c.wax -f wat | grep -oE 'i(32|64)\.atomic\.rmw8\.sub_u|i64\.ctz'
+  i64.ctz
+  i64.atomic.rmw8.sub_u

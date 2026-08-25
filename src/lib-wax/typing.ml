@@ -4015,6 +4015,32 @@ let rec defaulting_tree ?(holes_only = false) (i : _ instr) =
   | Call ({ desc = StructGet (recv, meth); _ }, args)
     when is_width_preserving_method meth.Annot.desc ->
       defaulting_tree recv && List.for_all defaulting_tree args
+  (* A NARROW atomic RMW takes its i32/i64 family from its value operand, whose
+     cell the typer merges with the result's ([type_atomic_method_call]), so a pin
+     on the result grounds it — its method name carries the access width only
+     ([atomic_rmw_add8] spells both the i32 and the i64 op). It continues the tree
+     through the value operands and not the memory receiver or the address, which
+     fix no width of the result. A [`W64] RMW states its own width, and a narrow
+     atomic LOAD resolves through its own [as iN_u] cast, so neither belongs here.
+     Without this the width repair could not place the pin an [i64] narrow RMW in
+     dead code needs — the value it merges with is a hole, so the printed form
+     re-parsed at the i32 default and narrowed the opcode — and reported the
+     disagreement as unrepairable instead (a wat-mutation-fuzzer finding). *)
+  | Call ({ desc = StructGet (_, meth); _ }, args)
+    when match Wax_wasm.Atomics.of_method_name meth.Annot.desc with
+         | Some (Rmw (_, (`W8 | `W16 | `W32))) -> true
+         | Some (Rmw (_, `W64) | Load _ | Store _ | Wait _ | Notify) | None ->
+             false -> (
+      (* The address is the first positional argument, the value operands follow
+         (two for a [cmpxchg]); the memarg immediates are labelled. *)
+      match
+        List.filter
+          (fun (a : _ instr) ->
+            match a.desc with Labelled _ -> false | _ -> true)
+          args
+      with
+      | _addr :: (_ :: _ as values) -> List.for_all defaulting_tree values
+      | _ -> false)
   | _ -> false
 
 (* Register (once) a type definition for an anonymous function signature and
