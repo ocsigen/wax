@@ -1,0 +1,5 @@
+rec {
+  type a = open { };
+  type b: a = open descriptor b_desc { };
+  type b_desc = open describes b { };
+}

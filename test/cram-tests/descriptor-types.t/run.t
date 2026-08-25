@@ -58,3 +58,28 @@ If a supertype has a descriptor, its subtype must have one too.
   6 │ 
   [128]
 
+
+Conversely, a subtype may not add a descriptor its supertype lacks: descriptor
+presence must match along the declared subtype chain.
+
+  $ wax check -X custom-descriptors sub-added-descriptor.wax
+  Error: This type is not a valid subtype of 'a'.
+   ──➤  sub-added-descriptor.wax:3:11
+  1 │ rec {
+  2 │   type a = open { };
+  3 │   type b: a = open descriptor b_desc { };
+    ·           ^
+  4 │   type b_desc = open describes b { };
+  5 │ }
+  [128]
+  $ wax check -X custom-descriptors sub-added-descriptor.wat
+  Error: This type is not a valid subtype of its declared supertype.
+   ──➤  sub-added-descriptor.wat:4:5
+  2 │   (rec
+  3 │     (type $a (sub (struct)))
+  4 │     (type $b (sub $a (descriptor $b_desc) (struct)))
+    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 │     (type $b_desc (describes $b) (struct))))
+  6 │ 
+  [128]
+

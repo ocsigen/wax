@@ -10877,17 +10877,14 @@ let check_type_definitions ctx =
                   false
             in
             let descriptor_ok =
-              (* If the supertype has a descriptor, the subtype must too, and its
-                 descriptor must be a subtype of the supertype's. (A subtype may
-                 add a descriptor that its supertype lacks.) *)
-              match ty'.descriptor with
-              | None -> true
-              | Some dp -> (
-                  match ty.descriptor with
-                  | Some ds ->
-                      Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type ds)
-                        (Type dp)
-                  | None -> false)
+              (* A subtype has a descriptor iff its supertype does, and the
+                 subtype's descriptor must be a subtype of the supertype's. *)
+              match (ty.descriptor, ty'.descriptor) with
+              | None, None -> true
+              | Some ds, Some dp ->
+                  Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type ds)
+                    (Type dp)
+              | Some _, None | None, Some _ -> false
             in
             let describes_ok =
               (* A subtype has a described type iff its supertype does, and the

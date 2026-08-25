@@ -144,6 +144,6 @@ validation:
 - the clauses must be **reciprocal**: if `obj` names `obj_desc` as its
   descriptor, then `obj_desc` must describe `obj`;
 - a described type must be declared **before** its descriptor;
-- in a subtype hierarchy, if a supertype has a descriptor its subtypes must too
-  (with a descriptor that is itself a subtype), and a described type is inherited
-  covariantly.
+- in a subtype hierarchy, a type has a descriptor exactly when its declared
+  supertype does (with a descriptor that is itself a subtype), and a described
+  type is inherited covariantly.

@@ -5060,17 +5060,14 @@ let check_type_definitions ctx =
       | Array _, (Func _ | Struct _ | Cont _)
       | Cont _, (Func _ | Struct _ | Array _) ->
           Error.supertype_mismatch ctx.diagnostics ~location);
-      (* If the supertype has a descriptor, the subtype must too, and its
-         descriptor must be a subtype of the supertype's. (A subtype may add a
-         descriptor that its supertype lacks.) *)
-      (match ty'.descriptor with
-      | None -> ()
-      | Some dp -> (
-          match ty.descriptor with
-          | Some ds
-            when Types.heap_subtype ctx.subtyping_info (Type ds) (Type dp) ->
-              ()
-          | _ -> invalid ()));
+      (* A subtype has a descriptor iff its supertype does, and the subtype's
+         descriptor must be a subtype of the supertype's. *)
+      (match (ty.descriptor, ty'.descriptor) with
+      | None, None -> ()
+      | Some ds, Some dp ->
+          if not (Types.heap_subtype ctx.subtyping_info (Type ds) (Type dp))
+          then invalid ()
+      | Some _, None | None, Some _ -> invalid ());
       (* A subtype has a described type iff its supertype does, and the
          subtype's described type must be a subtype of the supertype's. *)
       match (ty.describes, ty'.describes) with
