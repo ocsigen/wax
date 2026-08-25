@@ -16,8 +16,8 @@ Two rules:
 
 1. **Derive unfamiliar constructs from the analogues.** Wax maps closely onto
    Rust and onto WAT: reason as "it is like this Rust, and it lowers to this
-   WAT." The full grammar, type system and mapping are in `reference.md`; read
-   it before writing Wax you are unsure of.
+   WAT." The reference files below spell out the grammar, the type system and
+   the mapping; load them before writing Wax you are unsure of.
 2. **The compiler is the source of truth.** After writing or editing Wax,
    validate it and fix every reported error before returning it:
 
@@ -27,6 +27,18 @@ Two rules:
 
    Exit 0 means valid; exit 128 means the input was rejected, with diagnostics
    on stderr. Iterate on the diagnostics until it is clean.
+
+## Reference files
+
+The language reference is split by topic. Load only what the task needs:
+
+| File | Load when |
+|------|-----------|
+| `cheatsheet.md` | Writing or editing any Wax. Read it first: ~130 lines, a terse map of the whole syntax |
+| `language.md` | The cheat sheet is not enough: the full language guide (syntax, types, semantics), plus which features are on by default and which need `-X` |
+| `examples.md` | You want complete programs to pattern-match against; each pairs Wax with its WAT equivalent |
+| `correspondence.md` | Translating between WAT/WASM and Wax, or checking how a construct lowers: the explicit construct-by-construct mapping |
+| `cli.md` | You need CLI detail beyond `check` and `convert` as shown here (warnings, defines, feature flags, formatting, exit codes) |
 
 ## Converting between formats
 
@@ -39,12 +51,6 @@ in.wat` decompiles WAT to Wax on stdout, and `wax convert -i wax -f wasm in.wax
 -o out.wasm` compiles Wax to a binary. Use this to check how a construct lowers
 (convert your Wax to `wat`) or to read existing WebAssembly as Wax. Binary
 (`wasm`) output to a terminal is blocked, so pass `-o` for it.
-
-## Reference
-
-`reference.md` is the complete language reference: grammar, types, the CLI, and
-worked examples. Load it when you need syntax detail. The examples double as a
-Rust-and-WAT correspondence you can pattern-match against.
 
 ## Requirements
 

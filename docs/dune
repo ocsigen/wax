@@ -1,7 +1,8 @@
 ; The Wax reference generator (see gen_llms.ml and ADOPTION.md Phase 6). Not
-; installed; assembles the mdbook sources (docs/src) into the flat, single-file
-; language reference served to AI assistants. The generated file is committed
-; as skills/wax/reference.md — see skills/wax/dune for the sync rule.
+; installed; assembles the mdbook sources (docs/src) into the flat language
+; reference served to AI assistants, one per-topic file per part. The generated
+; files are committed under skills/wax/ — see skills/wax/dune for the sync
+; rules.
 
 (executable
  (name gen_llms)

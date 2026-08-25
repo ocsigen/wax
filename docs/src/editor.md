@@ -93,9 +93,9 @@ Coding assistants that support the `SKILL.md` agent-skill format (Claude Code,
 Antigravity, Copilot, Codex, ...) can be taught Wax with the
 [`wax` skill](https://github.com/ocsigen/wax/tree/main/skills/wax) shipped in
 the repository. Wax has almost no presence in model training data, so the
-skill bundles the complete language reference as a single context-loadable
-file and instructs the agent to validate everything it writes with
-`wax check`. Install it with the
+skill bundles the complete language reference, split into per-topic files the
+agent loads on demand, and instructs the agent to validate everything it
+writes with `wax check`. Install it with the
 [`skills` CLI](https://github.com/vercel-labs/skills):
 
 ```sh
