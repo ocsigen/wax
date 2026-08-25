@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-52d4dcd4.js";
+            window.path_to_searchindex_js = "searchindex-acf11262.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -3775,9 +3775,9 @@ validation:</p>
 <li>the clauses must be <strong>reciprocal</strong>: if <code>obj</code> names <code>obj_desc</code> as its
 descriptor, then <code>obj_desc</code> must describe <code>obj</code>;</li>
 <li>a described type must be declared <strong>before</strong> its descriptor;</li>
-<li>in a subtype hierarchy, if a supertype has a descriptor its subtypes must too
-(with a descriptor that is itself a subtype), and a described type is inherited
-covariantly.</li>
+<li>in a subtype hierarchy, a type has a descriptor exactly when its declared
+supertype does (with a descriptor that is itself a subtype), and a described
+type is inherited covariantly.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="instructions"><a class="header" href="#instructions">Instructions</a></h1>
@@ -4907,11 +4907,16 @@ constructs are rejected during validation.</li>
 <li><code>compact-import-section</code>: write same-module imports under one module
 name in the binary import section. What the flag enables depends on the
 input, because the text form is authoritative for import layout. From a
-text input (Wax or WAT), a <code>import "m" { … }</code> block / <code>(import "m" (item …) …)</code> group is lowered to a compact entry — a name-only group
-sharing one type when the items’ types all match, else one type per
-item; a Wax block of one item flattens to a plain import, and imports
-the source left <em>separate</em> are never merged. From a WASM binary — which
-has no authorial text layout — the flag instead coalesces runs of
+text input (Wax or WAT), a <code>import "m" { … }</code> block / <code>(import "m" (item …) …)</code> group is lowered to a compact entry; a Wax block of one
+item flattens to a plain import, and imports the source left
+<em>separate</em> are never merged. The name-only shared-type text form
+(<code>(item "n") … &lt;type&gt;</code>) cannot bind identifiers, so a group whose
+items need names — every Wax block, and any binary group whose items
+carry name-section names — takes the one-type-per-item text form;
+when the binary is written, a group whose items’ types all agree
+still gets the shared-type encoding (names live in the name section
+either way), so nothing is lost. From a WASM binary — which has no
+authorial text layout — the flag instead coalesces runs of
 consecutive same-module plain imports (the “compress this binary”
 mode). Groups written explicitly, or already present in a binary, are
 preserved through WAT↔WAT and WASM↔WASM round-trips on their own, no
