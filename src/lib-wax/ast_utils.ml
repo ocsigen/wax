@@ -537,7 +537,7 @@ let rec iter_instr f (i : _ instr) =
    the [br_table] carry [block_info]; the index and case bodies keep their own. *)
 let lower_dispatch ~block_info ~index ~cases ~default ~arms =
   let mk desc : _ instr =
-    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = None }
+    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = Unset }
   in
   let void = { params = [||]; results = [||] } in
   let br = mk (Br_table (cases @ [ default ], index)) in
@@ -582,7 +582,7 @@ let synthetic_loop_label = "#loop"
    types the structured node directly). *)
 let lower_trycatch ~block_info ~join ~arm_labels ~typ ~block ~arms =
   let mk desc : _ instr =
-    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = None }
+    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = Unset }
   in
   let catches =
     List.map2
@@ -633,7 +633,7 @@ let lower_trycatch ~block_info ~join ~arm_labels ~typ ~block ~arms =
    simply appended to the body (byte-identical to a trailing-step [while]). *)
 let lower_while ~block_info ~fresh_loop ~label ~cond ~step ~block =
   let mk desc : _ instr =
-    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = None }
+    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = Unset }
   in
   let void = { params = [||]; results = [||] } in
   let if_ cond body =
@@ -702,7 +702,7 @@ let lower_while ~block_info ~fresh_loop ~label ~cond ~step ~block =
 let lower_match ~block_info ~labels ~scrutinee ~arms
     ~(default : (_ instr list, location) Ast.annotated) =
   let mk desc : _ instr =
-    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = None }
+    { desc; info = block_info; hints = Wax_wasm.Hints.none; expected = Unset }
   in
   let void = { params = [||]; results = [||] } in
   let res = function

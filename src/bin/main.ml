@@ -1073,7 +1073,10 @@ let debug_option =
     "Enable debug output for $(i,CATEGORY) (repeatable, comma-separated). \
      Categories: timing (log the wall-clock running time of each compiler \
      pass), width-check (on a wasm/wat to wax conversion, check that the \
-     decompiled Wax re-infers the widths the WebAssembly states)."
+     decompiled Wax re-infers the widths the WebAssembly states), width-record \
+     (on a wasm/wat to wax conversion, report each numeric value the \
+     conversion emitted without recording the width its opcode states — a \
+     recording gap the width check cannot see)."
   in
   let category_conv =
     Arg.Conv.make ~docv:"CATEGORY" ~parser:Wax_utils.Debug.parse
@@ -1081,7 +1084,8 @@ let debug_option =
         Format.pp_print_string ppf
           (match (c : Wax_utils.Debug.category) with
           | Timing -> "timing"
-          | Width_check -> "width-check"))
+          | Width_check -> "width-check"
+          | Width_record -> "width-record"))
       ()
   in
   (* The value is a comma-separated list, so [list category_conv]'s own

@@ -7,10 +7,18 @@ type category =
           {!Wax_lang.Typing.f}'s [~width_check]): a decompiled expression whose
           printed form Wax would re-infer at another width is reported instead
           of being printed. Extend with future debug features. *)
+  | Width_record
+      (** [Width_record] turns on the recording-gap census: on a Wasm-to-Wax
+          conversion, report (to stderr) every numeric-valued node the
+          conversion emitted without recording the type its opcode states —
+          [Ast.expectation]'s [Unset], as opposed to a deliberate [Contextual].
+          Such a node is invisible to the width check above by construction, so
+          a gap can only surface as a silent drift; this makes the class
+          enumerable instead. *)
 
 val categories : string list
 (** Known category names, for help text and error messages. Currently
-    [["timing"; "width-check"]]. *)
+    [["timing"; "width-check"; "width-record"]]. *)
 
 val parse : string -> (category, string) result
 (** Parse one category name; [Error msg] names the valid categories. *)

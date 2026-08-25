@@ -260,21 +260,39 @@ type 'info instr_desc =
 
    [expected] is the type the value this node produces MUST have, when a producer
    knows it independently of Wax inference: {!Wax_conversion.From_wasm} records
-   the type the Wasm opcode it decompiled this node from states. Nothing in the
-   source language sets it (a parsed module leaves it [None]) and nothing
-   user-visible reads it — unlike [hints] it is never printed. The typer's
-   width-check mode ({!Typing.f}'s [~width_check]) compares its own inferred type
-   for the node against it and reports a mismatch as an internal-invariant
-   failure: a decompiled expression whose printed form Wax would re-infer at
-   another width silently changes the opcode on recompile. A field rather than a
-   side table keyed by location, because a synthesized dead-code node carries no
-   real span; and rather than a wrapper node, so no match on [desc] has to see
-   through it (as for [hints]). *)
+   the type the Wasm opcode it decompiled this node from states ([Recorded]).
+   Nothing in the source language sets it (a parsed module leaves every node
+   [Unset]) and nothing user-visible reads it — unlike [hints] it is never
+   printed. The typer's width-check mode ({!Typing.f}'s [~width_check]) compares
+   its own inferred type for the node against a [Recorded] claim and reports a
+   mismatch as an internal-invariant failure: a decompiled expression whose
+   printed form Wax would re-infer at another width silently changes the opcode
+   on recompile.
+
+   The two claim-less states are distinct on purpose. [Contextual] means a
+   producer CONSIDERED the node and deliberately declined to claim: the value's
+   width comes from its context rather than its own printed form
+   ([From_wasm]'s [forget_expected]), or its type is a reference — the one class
+   outside the width channel. [Unset] means no producer ever considered it: the
+   default for parsed source and for nodes synthesized after the conversion —
+   but on a [From_wasm]-emitted node that produces a NUMERIC value it is a
+   recording gap, the one silent failure class of the width machinery (a gap is
+   invisible to the reconciliation by construction). [--debug width-record]
+   reports every such node so the gap class is auditable instead of waiting for
+   a fuzzer to hit a drift. Every reader that asks "does this node state its
+   type?" must treat [Unset] and [Contextual] identically (only [Recorded]
+   informs); only the audit distinguishes them.
+
+   A field rather than a side table keyed by location, because a synthesized
+   dead-code node carries no real span; and rather than a wrapper node, so no
+   match on [desc] has to see through it (as for [hints]). *)
+and expectation = Unset | Contextual | Recorded of valtype
+
 and 'info instr = {
   desc : 'info instr_desc;
   info : 'info;
   hints : ident Wax_wasm.Hints.t;
-  expected : valtype option;
+  expected : expectation;
 }
 
 and 'info trycatch_arm = {
@@ -292,7 +310,7 @@ let no_loc_instr desc : location instr =
     desc;
     info = Wax_utils.Ast.dummy_loc;
     hints = Wax_wasm.Hints.none;
-    expected = None;
+    expected = Unset;
   }
 
 (* An attribute is a name with an optional value expression and an optional

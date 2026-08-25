@@ -205,7 +205,7 @@ let location_of loc : location = {loc_start = fst loc; loc_end = snd loc}
 let with_loc loc desc =
   let info = location_of loc in
   Wax_utils.Trivia.record_pos Context.context info;
-  {desc; info; hints = Wax_wasm.Hints.none; expected = None}
+  {desc; info; hints = Wax_wasm.Hints.none; expected = Unset}
 
 (* Any other located node: a module field, an identifier, an instruction *list*. *)
 let annot loc desc =

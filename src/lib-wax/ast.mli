@@ -247,6 +247,23 @@ type 'info instr_desc =
       else_body : ('info instr list, location) annotated option;
     }
 
+and expectation =
+  | Unset
+      (** No producer ever considered this node: the default for parsed source
+          and for nodes synthesized after the Wasm-to-Wax conversion. On a
+          numeric-valued node the conversion emitted, it is a recording GAP —
+          invisible to the width check by construction, so only able to surface
+          as a silent drift; [--debug width-record] reports every such node. *)
+  | Contextual
+      (** A producer considered this node and deliberately made no claim: its
+          width comes from its context rather than its own printed form
+          ({!Wax_conversion.From_wasm}'s [forget_expected]), or its type is a
+          reference — the one class outside the width channel. *)
+  | Recorded of valtype
+      (** The type the value this node produces MUST have, known independently
+          of Wax inference: the type stated by the Wasm opcode this node was
+          decompiled from. *)
+
 and 'info instr = {
   desc : 'info instr_desc;
   info : 'info;
@@ -257,18 +274,22 @@ and 'info instr = {
           rather than a wrapper node, so that the matches on [desc] — which is
           nearly every match on an instruction — neither see it nor have to see
           through it. *)
-  expected : valtype option;
-      (** The type the value this node produces MUST have, when a producer knows
-          it independently of Wax inference: {!Wax_conversion.From_wasm} records
-          the type stated by the Wasm opcode this node was decompiled from.
-          Nothing in the source language sets it (a parsed module leaves it
-          [None]) and nothing user-visible reads it — unlike [hints] it is never
-          printed. The typer's width-check mode ({!Typing.f}'s [~width_check])
-          compares its own inferred type for the node against it, so a
+  expected : expectation;
+      (** What this node's producer states about the type of the value it
+          produces: {!Wax_conversion.From_wasm} records the type stated by the
+          Wasm opcode a node was decompiled from. Nothing in the source language
+          sets it (a parsed module leaves every node [Unset]) and nothing
+          user-visible reads it — unlike [hints] it is never printed. The
+          typer's width-check mode ({!Typing.f}'s [~width_check]) compares its
+          own inferred type for the node against a [Recorded] claim, so a
           decompiled expression whose printed form Wax would re-infer at another
           width — silently changing the opcode on recompile — is reported
-          instead of shipped. A field rather than a location-keyed side table,
-          because a synthesized dead-code node carries no real span. *)
+          instead of shipped. Readers asking "does this node state its type?"
+          must treat [Unset] and [Contextual] identically (only [Recorded]
+          informs); the two exist as distinct states solely so the recording-gap
+          census can tell "never considered" from "deliberately no claim". A
+          field rather than a location-keyed side table, because a synthesized
+          dead-code node carries no real span. *)
 }
 
 and 'info trycatch_arm = {

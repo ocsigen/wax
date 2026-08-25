@@ -5038,6 +5038,14 @@ server](#language-server)).
           convert the value instead of grounding it — is an error either way; that
           means the WebAssembly is invalid (a binary input is trusted, never
           validated — check it with `wax check`) or the decompiler is wrong.
+        - `width-record`: on a wasm or wat to wax conversion, report (to stderr)
+          every value node the conversion emitted without recording the type its
+          opcode states and without deliberately marking the width as coming from
+          context. Such a node is invisible to the `width-check` reconciliation by
+          construction — a recording gap is the one *silent* failure class of the
+          width machinery — so this census makes the class enumerable. Like
+          `width-check`, it is a self-check on the decompiler, not on the input; a
+          clean toolchain reports nothing.
 
 - **`--version`**
     - Print the toolchain version and exit. In a released build this is the git

@@ -1,10 +1,11 @@
-type category = Timing | Width_check
+type category = Timing | Width_check | Width_record
 
-let categories = [ "timing"; "width-check" ]
+let categories = [ "timing"; "width-check"; "width-record" ]
 
 let parse = function
   | "timing" -> Ok Timing
   | "width-check" -> Ok Width_check
+  | "width-record" -> Ok Width_record
   | s ->
       Error
         (Printf.sprintf "Unknown debug category: %s (expected one of: %s)" s

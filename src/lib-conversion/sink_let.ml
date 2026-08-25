@@ -124,7 +124,7 @@ let init_let (name, typ) e info =
     desc = Let ([ (Some name, Some typ) ], Some e);
     info;
     hints = Wax_wasm.Hints.none;
-    expected = None;
+    expected = Unset;
   }
 
 (* [name = e] is fusable into [let name = e] only when the assignment is the

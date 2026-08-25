@@ -682,19 +682,24 @@ let rectype st (t : Src.rectype) : Ast.rectype =
 
 let globaltype st = muttype valtype st
 
-(* Remember a global's numeric type under its Wax name, for the numeric-residual
-   test in [Stack.effective_backing] (see [global_valtypes]). Read off the SOURCE
-   type rather than through [globaltype]: this runs while the names are being
-   registered, before the type section is, so resolving a reference type here
-   would report an unbound name. Only the numeric scalars are wanted anyway —
-   they alone rule a residual out as a reference — and they need no resolution. *)
+(* Remember a global's non-reference type under its Wax name, for the
+   numeric-residual test in [Stack.effective_backing] (see [global_valtypes]).
+   Read off the SOURCE type rather than through [globaltype]: this runs while
+   the names are being registered, before the type section is, so resolving a
+   reference type here would report an unbound name. Only the non-reference
+   types are wanted anyway — they rule a residual out as a reference, [v128]
+   included (its record is what tells [effective_backing] a dead vector
+   residual is not the reference a bare hole reconnects to; leaving it out was
+   a recording gap the [--debug width-record] census found) — and they need no
+   resolution. *)
 let record_global_valtype ctx (typ : Src.globaltype) name =
   match typ.Wax_wasm.Ast.typ with
   | I32 -> Hashtbl.replace ctx.global_valtypes name Ast.I32
   | I64 -> Hashtbl.replace ctx.global_valtypes name Ast.I64
   | F32 -> Hashtbl.replace ctx.global_valtypes name Ast.F32
   | F64 -> Hashtbl.replace ctx.global_valtypes name Ast.F64
-  | V128 | Ref _ -> ()
+  | V128 -> Hashtbl.replace ctx.global_valtypes name Ast.V128
+  | Ref _ -> ()
 
 (*** Type lookup and arity ***)
 
@@ -1055,12 +1060,35 @@ let record_address_type ctx name (at : [ `I32 | `I64 ]) =
    reference a bare hole reconnects to — a dead v128 residual there left a
    [ref.is_null] unpinned and it re-parsed as an [i32.eqz] (a smith finding). A
    reference type is still not recorded: that is the one class outside this
-   channel. *)
-let recorded_expectation (ty : Ast.valtype) =
-  match ty with I32 | I64 | F32 | F64 | V128 -> Some ty | Ref _ -> None
+   channel — marked [Contextual] ("considered, deliberately no claim") rather
+   than left [Unset], so an [Unset] numeric node in this conversion's output
+   always means a recording GAP (see [--debug width-record]). *)
+let recorded_expectation (ty : Ast.valtype) : Ast.expectation =
+  match ty with
+  | I32 | I64 | F32 | F64 | V128 -> Recorded ty
+  | Ref _ -> Contextual
 
 let expect (ty : Ast.valtype) (i : _ Ast.instr) : _ Ast.instr =
   { i with Ast.expected = recorded_expectation ty }
+
+(* Mark [i] [Contextual]: a position whose re-parse type is fixed by the
+   construct it sits in, so it needs no claim of its own — an IMMEDIATE of the
+   printed form (a memarg label, a lane index, a vector-constructor component),
+   or the literal under a [Neg]/pin whose enclosing node carries the claim for
+   the whole (their cells are one). NOT for a value that sat on the conversion
+   stack: record what its opcode states instead. What this buys is that [Unset]
+   stays reserved for a recording GAP, which is what the census
+   ([--debug width-record]) reports. *)
+let contextual (i : _ Ast.instr) : _ Ast.instr =
+  { i with Ast.expected = Ast.Contextual }
+
+(* A deliberately BARE hole: ADAPTIVE on the re-parse — it takes whatever type
+   its context demands, which is the behaviour the emission site wants where a
+   pin would state a type the Wasm side leaves polymorphic. [Contextual]
+   because the site considered it; a hole that must state its type is built
+   with {!typed_hole} instead (and the width repair pins whichever bare hole
+   would resolve wrong — see {!Wax_lang.Typing.f}'s [~width_check]). *)
+let bare_hole () : _ Ast.instr = contextual (Ast.no_loc_instr Ast.Hole)
 
 (* Record a call's single non-reference result type on its node (see
    {!functype_value_result}); a void, multi-value or reference-returning call is
@@ -1082,11 +1110,11 @@ let valtype_of_width : [ `I32 | `I64 | `F32 | `F64 ] -> Ast.valtype = function
 
 (* The type a cast's *result* has, which is the new node's expectation — not the
    operand's. *)
-let cast_result (ty : Ast.casttype) =
+let cast_result (ty : Ast.casttype) : Ast.expectation =
   match ty with
   | Ast.Valtype ty -> recorded_expectation ty
-  | Signedtype { typ; _ } -> Some (valtype_of_width typ)
-  | Functype _ -> None
+  | Signedtype { typ; _ } -> Recorded (valtype_of_width typ)
+  | Functype _ -> Contextual
 
 (* Wrap [e] in a cast to [ty]. The single constructor for every cast this
    conversion inserts: the [{ e with … }] copy would otherwise carry [e]'s own
@@ -1140,7 +1168,7 @@ let rec forget_expected (i : _ Ast.instr) : _ Ast.instr =
     (* A nested block's own exits were cleared by its own [run]. *)
     | d -> d
   in
-  { i with Ast.desc; expected = None }
+  { i with Ast.desc; expected = Contextual }
 
 (*** The conversion stack ***)
 
@@ -1186,7 +1214,7 @@ module Stack = struct
   type 'a t = stack -> stack * 'a
 
   let rec complete n cur =
-    if n = 0 then cur else complete (n - 1) (Ast.no_loc_instr Ast.Hole :: cur)
+    if n = 0 then cur else complete (n - 1) (bare_hole () :: cur)
 
   let rec grab_rec n stack cur =
     if n = 0 then (stack, cur)
@@ -1237,9 +1265,7 @@ module Stack = struct
      was PUSHED, and the typer pins it from that record if the printed form would
      resolve elsewhere. An empty/absent stack reads as a hole (dead code). *)
   let pop stack =
-    match stack with
-    | (1, _, i) :: rem -> (rem, i)
-    | _ -> (stack, Ast.no_loc_instr Ast.Hole)
+    match stack with (1, _, i) :: rem -> (rem, i) | _ -> (stack, bare_hole ())
 
   (* Pop with the width tag, without pinning — the caller decides. Used by [drop],
      which records the tag in its [Let]'s type annotation rather than an identity
@@ -1248,7 +1274,7 @@ module Stack = struct
   let pop_tagged stack =
     match stack with
     | (1, w, i) :: rem -> (rem, (i, w))
-    | _ -> (stack, (Ast.no_loc_instr Ast.Hole, None))
+    | _ -> (stack, (bare_hole (), None))
 
   let try_pop stack =
     match stack with (1, _, i) :: rem -> (rem, Some i) | _ -> (stack, None)
@@ -1309,7 +1335,10 @@ module Stack = struct
      did not type-check (a wat-mutation-fuzzer finding). *)
   let rec carries_untyped_hole (i : _ Ast.instr) =
     match i.Ast.desc with
-    | Ast.Hole -> i.Ast.expected = None
+    | Ast.Hole -> (
+        match i.Ast.expected with
+        | Ast.Recorded _ -> false
+        | Ast.Unset | Ast.Contextual -> true)
     | _ -> List.exists carries_untyped_hole (Ast_utils.sub_instrs i)
 
   let rec effective_backing stop = function
@@ -1322,7 +1351,13 @@ module Stack = struct
        flexibility, so [f32.sqrt] of a hole is UNTAGGED while still being an f32 —
        read as a reference backing, it left a dead [ref.eq] unpinned and it
        re-parsed as an [i32.eq] (a bottom-fuzz finding). *)
-    | (a, w, i) :: rem when a >= 1 && (w <> None || i.Ast.expected <> None) ->
+    | (a, w, i) :: rem
+      when a >= 1
+           && (w <> None
+              ||
+              match i.Ast.expected with
+              | Ast.Recorded _ -> true
+              | Ast.Unset | Ast.Contextual -> false) ->
         effective_backing stop rem
     (* An ADAPTIVE value — an untyped [select] of holes, or a bare hole — is not a
        backing: its own printed form carries no hierarchy, so on a re-parse the ref
@@ -1457,10 +1492,13 @@ let op_loc (loc : Ast.location) op : (_, Ast.location) Ast.annotated =
 (* [loc] is the span of the instruction the literal was decoded from. *)
 let integer (loc : Ast.location) n : _ Ast.instr =
   let at desc : _ Ast.instr =
-    { desc; info = loc; hints = Wax_wasm.Hints.none; expected = None }
+    { desc; info = loc; hints = Wax_wasm.Hints.none; expected = Unset }
   in
   let e = at (Int (remove_sign n)) in
-  if is_negative n then at (UnOp (op_loc loc Ast.Neg, e)) else e
+  (* The literal under the [Neg] is [Contextual]: the [Neg] node is the value,
+     and whatever claim its consumer records lands there — the two share one
+     inference cell, so a claim on the literal itself would be redundant. *)
+  if is_negative n then at (UnOp (op_loc loc Ast.Neg, contextual e)) else e
 
 let float i n =
   (* Test the magnitude, not the signed string: a negative integer-valued float
@@ -1475,15 +1513,16 @@ let float i n =
         desc = Float (remove_sign n);
         info = i.Src.info;
         hints = Wax_wasm.Hints.none;
-        expected = None;
+        expected = Unset;
       }
     in
     if is_negative n then
       {
-        Ast.desc = UnOp (op_loc i.Src.info Ast.Neg, e);
+        (* As in [integer]: the claim carrier is the [Neg] node. *)
+        Ast.desc = UnOp (op_loc i.Src.info Ast.Neg, contextual e);
         info = i.Src.info;
         hints = Wax_wasm.Hints.none;
-        expected = None;
+        expected = Unset;
       }
     else e
 
@@ -1591,7 +1630,7 @@ let int_un_op ~faithful i0 sz (op : Src.int_un_op) =
       desc = i;
       info = i0.Src.info;
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
   in
   (* A no-argument instruction method [recv.meth()]. *)
@@ -1854,7 +1893,7 @@ let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
       desc = i;
       info = i0.Src.info;
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
   in
   (* An absent operand — a pop from the empty/absent stack, i.e. dead code — is a
@@ -1895,7 +1934,9 @@ let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
     let* o2 = Stack.try_pop_tagged in
     let* o1 = Stack.try_pop_tagged in
     let e1 = operand o1 and e2 = operand o2 in
-    Stack.push 1 (with_loc (BinOp (op_loc i0.info op, e1, e2)))
+    (* The i32 result carries no width TAG (it is not flexible), but the opcode
+       states it, so record it. *)
+    Stack.push 1 (expect I32 (with_loc (BinOp (op_loc i0.info op, e1, e2))))
   in
   (* [rotl]/[rotr]: result width = receiver width, so it carries the receiver's
      flexibility (the count arg is pinned by the method once the receiver fixes
@@ -1936,7 +1977,7 @@ let float_un_op i0 sz (op : Src.float_un_op) =
       desc = i;
       info = i0.Src.info;
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
   in
   (* A no-argument instruction method [recv.meth()]. *)
@@ -2012,7 +2053,7 @@ let float_bin_op i0 sz (op : Src.float_bin_op) =
       desc = i;
       info = i0.Src.info;
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
   in
   (* As for [int_bin_op]: an arithmetic operator preserves the operand width and
@@ -2039,7 +2080,9 @@ let float_bin_op i0 sz (op : Src.float_bin_op) =
     let* o2 = Stack.try_pop_tagged in
     let* o1 = Stack.try_pop_tagged in
     let e1 = operand o1 and e2 = operand o2 in
-    Stack.push 1 (with_loc (BinOp (op_loc i0.info op, e1, e2)))
+    (* The i32 result carries no width TAG (it is not flexible), but the opcode
+       states it, so record it. *)
+    Stack.push 1 (expect I32 (with_loc (BinOp (op_loc i0.info op, e1, e2))))
   in
   (* [min]/[max]/[copysign]: result width = receiver width (as [rotl]). *)
   let meth name =
@@ -2192,8 +2235,11 @@ let bottom_heap_type ctx (t : Src.heaptype) : Ast.heaptype =
       | Struct _ | Array _ -> None_
       | Func _ -> NoFunc)
 *)
-(* A labelled immediate argument [name: v] of a memory access. *)
-let labelled with_loc name v = with_loc (Ast.Labelled (Ast.no_loc name, v))
+(* A labelled immediate argument [name: v] of a memory access. Both the label
+   node and its payload are [Contextual]: an immediate's type is fixed by its
+   position in the call, not by its printed form. *)
+let labelled with_loc name v =
+  contextual (with_loc (Ast.Labelled (Ast.no_loc name, contextual v)))
 
 (* Trailing labelled [offset]/[align] arguments of a memory access: [offset]
    only when non-zero, [align] only when it differs from the natural
@@ -2389,8 +2435,16 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       Ast.desc = i';
       info = i.info;
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
+  in
+  (* A block-shaped value node ([do]/[loop]/[if]/[try]): its result type is
+     stated by its own annotation, or — when [simplify] drops a redundant one —
+     re-imposed by the context that made it redundant, so the node needs no
+     claim of its own ([Contextual]; the values INSIDE feeding its exits are
+     cleared by [forget_expected] for the same reason). *)
+  let block_node (i' : _ Ast.instr_desc) : _ Ast.instr =
+    contextual (with_loc i')
   in
   let mem_call m meth args =
     with_loc
@@ -2459,7 +2513,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
-        (with_loc
+        (block_node
            (Block
               {
                 label = label ();
@@ -2477,7 +2531,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
-        (with_loc
+        (block_node
            (Loop
               {
                 label = label ();
@@ -2517,7 +2571,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
-        (with_loc
+        (block_node
            (If
               {
                 label = label ();
@@ -2549,7 +2603,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
-        (with_loc
+        (block_node
            (TryTable
               {
                 label = labl ();
@@ -2594,7 +2648,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
-        (with_loc
+        (block_node
            (Try
               {
                 label = label ();
@@ -2629,7 +2683,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
   | Br_if i ->
       let input = label_arity ctx i in
       let* args = Stack.grab (input + 1) in
-      Stack.push input (with_loc (Br_if (label ctx i, sequence args)))
+      Stack.push input
+        (contextual (with_loc (Br_if (label ctx i, sequence args))))
   | Br_table (labels, lab) ->
       let input = label_arity ctx lab in
       let* args = Stack.grab (input + 1) in
@@ -2641,22 +2696,25 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let input = label_arity ctx i in
       let* args = Stack.grab (input + 1) in
       Stack.push (input + 1)
-        (with_loc (Br_on_null (label ctx i, sequence args)))
+        (contextual (with_loc (Br_on_null (label ctx i, sequence args))))
   | Br_on_non_null i ->
       let input = label_arity ctx i in
       let* args = Stack.grab input in
       Stack.push (input - 1)
-        (with_loc (Br_on_non_null (label ctx i, sequence args)))
+        (contextual (with_loc (Br_on_non_null (label ctx i, sequence args))))
   | Br_on_cast (i, _, t) ->
       let input = label_arity ctx i in
       let* args = Stack.grab input in
       Stack.push input
-        (with_loc (Br_on_cast (label ctx i, reftype ctx t, sequence args)))
+        (contextual
+           (with_loc (Br_on_cast (label ctx i, reftype ctx t, sequence args))))
   | Br_on_cast_fail (i, _, t) ->
       let input = label_arity ctx i in
       let* args = Stack.grab input in
       Stack.push input
-        (with_loc (Br_on_cast_fail (label ctx i, reftype ctx t, sequence args)))
+        (contextual
+           (with_loc
+              (Br_on_cast_fail (label ctx i, reftype ctx t, sequence args))))
   | Br_on_cast_desc_eq (i, _, t) ->
       (* The descriptor operand is on top of the branch operands. The target type
          and its exactness are recovered from the descriptor, so only the result
@@ -2666,16 +2724,19 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let d = pin_descriptor_reftype ctx t d in
       let* args = Stack.grab input in
       Stack.push input
-        (with_loc
-           (Br_on_cast_desc_eq (label ctx i, t.nullable, sequence args, d)))
+        (contextual
+           (with_loc
+              (Br_on_cast_desc_eq (label ctx i, t.nullable, sequence args, d))))
   | Br_on_cast_desc_eq_fail (i, _, t) ->
       let input = label_arity ctx i in
       let* d = Stack.pop in
       let d = pin_descriptor_reftype ctx t d in
       let* args = Stack.grab input in
       Stack.push input
-        (with_loc
-           (Br_on_cast_desc_eq_fail (label ctx i, t.nullable, sequence args, d)))
+        (contextual
+           (with_loc
+              (Br_on_cast_desc_eq_fail
+                 (label ctx i, t.nullable, sequence args, d))))
   | Folded (head, l) ->
       (* Carry the folded expression's full span (the [(…)]'s [$sloc]) onto its
          head instruction, so the resulting Wax node encloses its operands rather
@@ -2708,7 +2769,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
   | LocalTee x ->
       let name = idx ctx `Local x in
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (Tee (name, expect_local ctx name e)))
+      (* The tee's own result has the local's type too, so record it on the
+         node as well as on the assigned value. *)
+      Stack.push 1
+        (expect_local ctx name (with_loc (Tee (name, expect_local ctx name e))))
   | BinOp (I32 op) -> int_bin_op i `I32 op
   | BinOp (I64 op) -> int_bin_op i `I64 op
   | BinOp (F32 op) -> float_bin_op i `F32 op
@@ -2916,8 +2980,13 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | F32 f -> (float i f, Ast.F32, `F32)
         | F64 f -> (float i f, Ast.F64, `F64)
       in
+      (* [push_num] records on the pushed node; under [strict_constants] that is
+         the pin cast, so the literal beneath it carries the claim [Contextual]ly
+         (the cast ascribes its type). *)
       Stack.push_num (Some width)
-        (if ctx.strict_constants then with_loc (Cast (lit, Valtype ty)) else lit)
+        (if ctx.strict_constants then
+           with_loc (Cast (contextual lit, Valtype ty))
+         else lit)
   | RefI31 ->
       (* Source is i32; a dead-code hole is pinned [(_ as i32)] so [ref.i31]
          survives (a bare [_ as &i31] re-types the hole to a null i31 and drops the
@@ -3137,7 +3206,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* o2 = Stack.try_pop in
       let* o1 = Stack.try_pop in
       let* backing = Stack.effective_backing is_poly_terminator in
-      let bare = Ast.no_loc_instr Ast.Hole in
+      let bare = bare_hole () in
       let eq_pin e =
         Ast.no_loc_instr
           (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Eq })))
@@ -3227,9 +3296,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | Some e -> e
         | None -> (
             match backing with
-            | `Backing _ -> Ast.no_loc_instr Ast.Hole
-            | `Floor when backed_by_block_param -> Ast.no_loc_instr Ast.Hole
-            | `Floor | `Blocked -> any_pin (Ast.no_loc_instr Ast.Hole))
+            | `Backing _ -> bare_hole ()
+            | `Floor when backed_by_block_param -> bare_hole ()
+            | `Floor | `Blocked -> any_pin (bare_hole ()))
       in
       Stack.push 1 (expect I32 (with_loc (UnOp (op_loc i.info Ast.Not, e))))
   | Select tys -> (
@@ -3274,12 +3343,12 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
           let e1 =
             match o1 with
             | Some (e, _) -> if pin1_flex then cast e else e
-            | None -> if pin1_hole then pinned else Ast.no_loc_instr Ast.Hole
+            | None -> if pin1_hole then pinned else bare_hole ()
           in
           let e2 =
             match o2 with
             | Some (e, _) -> e
-            | None -> if pin2_hole then pinned else Ast.no_loc_instr Ast.Hole
+            | None -> if pin2_hole then pinned else bare_hole ()
           in
           Stack.push_num None (expect t (with_loc (Select (cond, e1, e2))))
       | _ ->
@@ -3297,7 +3366,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
              width tag ([f32.const], a small [i64.const]) is pinned directly
              ([_ ? (0x0 as f32) : _]) — otherwise the bare literal re-defaults
              (f32 -> f64, i64 -> i32) on re-parse. *)
-          let hole = Ast.no_loc_instr Ast.Hole in
+          let hole = bare_hole () in
           let e1, e2, width =
             match (o1, o2) with
             | Some (a, wa), Some (b, wb) ->
@@ -3309,7 +3378,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             | None, Some (b, _) -> (hole, b, None)
             | None, None -> (hole, hole, None)
           in
-          Stack.push_num width (with_loc (Select (cond, e1, e2))))
+          (* With no width tag ([None]) the untyped select is deliberately
+             ADAPTIVE — its arms are — so it is [Contextual], not a gap; a
+             tagged one gets the tag recorded by [push_num] itself. *)
+          Stack.push_num width (contextual (with_loc (Select (cond, e1, e2)))))
   | Throw t ->
       let input, _ = tag_arity ctx t in
       let* args = Stack.grab input in
@@ -3327,44 +3399,54 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let src = idx ctx `Type src in
       Stack.push 1
         (with_loc (ContBind (src, idx ctx `Type dst, ascribe_cont src args)))
+  (* The stack-switching results ([suspend]/[resume]/[switch]) are [Contextual]:
+     their types come from the DECLARED tag/continuation signature the printed
+     form still names (the tag or the [ct] immediate), so a re-parse re-derives
+     them from the declarations — these arms only know the result arity, not the
+     types, and need no claim of their own. *)
   | Suspend t ->
       let input, output = tag_arity ctx t in
       let* args = Stack.grab input in
-      Stack.push output (with_loc (Suspend (idx ctx `Tag t, args)))
+      Stack.push output (contextual (with_loc (Suspend (idx ctx `Tag t, args))))
   | Resume (ct, handlers) ->
       let input, output = cont_arity ctx ct in
       let* args = Stack.grab (input + 1) in
       let ct = idx ctx `Type ct in
       Stack.push output
-        (with_loc
-           (Resume (ct, List.map (on_clause ctx) handlers, ascribe_cont ct args)))
+        (contextual
+           (with_loc
+              (Resume
+                 (ct, List.map (on_clause ctx) handlers, ascribe_cont ct args))))
   | ResumeThrow (ct, tag, handlers) ->
       let tinput, _ = tag_arity ctx tag in
       let _, output = cont_arity ctx ct in
       let* args = Stack.grab (tinput + 1) in
       let ct = idx ctx `Type ct in
       Stack.push output
-        (with_loc
-           (ResumeThrow
-              ( ct,
-                idx ctx `Tag tag,
-                List.map (on_clause ctx) handlers,
-                ascribe_cont ct args )))
+        (contextual
+           (with_loc
+              (ResumeThrow
+                 ( ct,
+                   idx ctx `Tag tag,
+                   List.map (on_clause ctx) handlers,
+                   ascribe_cont ct args ))))
   | ResumeThrowRef (ct, handlers) ->
       let _, output = cont_arity ctx ct in
       let* args = Stack.grab 2 in
       let ct = idx ctx `Type ct in
       Stack.push output
-        (with_loc
-           (ResumeThrowRef
-              (ct, List.map (on_clause ctx) handlers, ascribe_cont ct args)))
+        (contextual
+           (with_loc
+              (ResumeThrowRef
+                 (ct, List.map (on_clause ctx) handlers, ascribe_cont ct args))))
   | Switch (ct, tag) ->
       let input, _ = cont_arity ctx ct in
       let output = switch_output ctx ct in
       let* args = Stack.grab input in
       let ct = idx ctx `Type ct in
       Stack.push output
-        (with_loc (Switch (ct, idx ctx `Tag tag, ascribe_cont ct args)))
+        (contextual
+           (with_loc (Switch (ct, idx ctx `Tag tag, ascribe_cont ct args))))
   | RefAsNonNull ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (NonNull e))
@@ -3418,8 +3500,12 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `I32 -> ("load32", 4)
       in
       let call = mem_call m meth (addr :: mem_extra with_loc memarg nat) in
+      (* The operand is [Contextual]: in the fused spelling ([m.load8(x) as
+         i64_s] = [i64.load8_s]) the cast is part of the load's own surface —
+         the record for the whole sits on the cast node below. *)
       let cast typ e =
-        with_loc (Ast.Cast (e, Signedtype { typ; signage; strict = false }))
+        with_loc
+          (Ast.Cast (contextual e, Signedtype { typ; signage; strict = false }))
       in
       let result =
         match (size, result_ty) with
@@ -3514,10 +3600,14 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let result =
         match op with
         | AtomicLoad (t, Some w) -> (
+            (* As for [LoadS]: in the fused spelling the cast is part of the
+               load's surface, so the operand is [Contextual] — the record for
+               the whole lands on the cast node ([push_num] below). *)
             let cast typ e =
               with_loc
                 (Ast.Cast
-                   (e, Signedtype { typ; signage = Unsigned; strict = false }))
+                   ( contextual e,
+                     Signedtype { typ; signage = Unsigned; strict = false } ))
             in
             match (w, t) with
             | _, `I32 -> cast `I32 call
@@ -3684,20 +3774,21 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1
         (expect (lane_valtype s)
            (meth_call v (Simd.extract_name s sign)
-              [ integer i.Src.info (Int.to_string lane) ]))
+              [ contextual (integer i.Src.info (Int.to_string lane)) ]))
   | VecReplace (s, lane) ->
       let* value = Stack.pop in
       let* v = Stack.pop in
       Stack.push 1
         (expect V128
            (meth_call v (Simd.replace_name s)
-              [ integer i.Src.info (Int.to_string lane); value ]))
+              [ contextual (integer i.Src.info (Int.to_string lane)); value ]))
   | VecShuffle lanes ->
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
       let imms =
         List.init 16 (fun k ->
-            integer i.Src.info (Int.to_string (Char.code lanes.[k])))
+            contextual
+              (integer i.Src.info (Int.to_string (Char.code lanes.[k]))))
       in
       Stack.push 1
         (expect V128 (meth_call e1 Simd.shuffle_name (imms @ [ e2 ])))
@@ -3711,13 +3802,18 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         (expect V128
            (path_call Simd.free_namespace
               (Simd.free_member (Simd.const_name v.shape))
-              (List.map lit v.components)))
+              (List.map (fun c -> contextual (lit c)) v.components)))
   | VecLoad (m, op, memarg) ->
       let* addr = Stack.pop in
       let nat = Simd.vec_load_nat_align op in
+      (* The loads were the gap in "every SIMD result is recorded" (found by the
+         first [--debug width-record] census run): a dead residual of one read as
+         a reference backing in {!Stack.effective_backing}, exactly the class the
+         [v128] record exists for. *)
       Stack.push 1
-        (mem_call m (Simd.vec_load_name op)
-           (addr :: mem_extra with_loc memarg nat))
+        (expect V128
+           (mem_call m (Simd.vec_load_name op)
+              (addr :: mem_extra with_loc memarg nat)))
   | VecStore (m, memarg) ->
       let* value = Stack.pop in
       let* addr = Stack.pop in
@@ -3728,17 +3824,20 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* addr = Stack.pop in
       let nat = Simd.lane_nat_align w in
       Stack.push 1
-        (mem_call m (Simd.load_splat_name w)
-           (addr :: mem_extra with_loc memarg nat))
+        (expect V128
+           (mem_call m (Simd.load_splat_name w)
+              (addr :: mem_extra with_loc memarg nat)))
   | VecLoadLane (m, w, memarg, lane) ->
       let* v = Stack.pop in
       let* addr = Stack.pop in
       let nat = Simd.lane_nat_align w in
       Stack.push 1
-        (mem_call m (Simd.load_lane_name w)
-           (addr :: v
-           :: labelled with_loc "lane" (integer i.Src.info (Int.to_string lane))
-           :: mem_extra with_loc memarg nat))
+        (expect V128
+           (mem_call m (Simd.load_lane_name w)
+              (addr :: v
+              :: labelled with_loc "lane"
+                   (integer i.Src.info (Int.to_string lane))
+              :: mem_extra with_loc memarg nat)))
   | VecStoreLane (m, w, memarg, lane) ->
       let* v = Stack.pop in
       let* addr = Stack.pop in
@@ -3788,7 +3887,7 @@ let string_of_name (nm : Src.name) : Ast.location Ast.instr =
     desc = Ast.String (None, nm.Wax_utils.Ast.desc);
     info = nm.Wax_utils.Ast.info;
     hints = Wax_wasm.Hints.none;
-    expected = None;
+    expected = Unset;
   }
 
 (* Reserve, in a function's fresh local namespace, the Wax names of the
@@ -4449,7 +4548,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                          Wax_utils.Ast.concat_desc init );
                    info = f.Ast.info;
                    hints = Wax_wasm.Hints.none;
-                   expected = None;
+                   expected = Unset;
                  };
                attributes = [];
              })
@@ -4643,13 +4742,21 @@ let register_names ctx export_tbl fields =
             in
             match desc with
             | Func _ -> ()
-            | Memory _ ->
-                Sequence.register ?hint ctx.memories export_tbl
-                  (Some (Memory : Src.exportable))
-                  id exports
-            | Table _ ->
-                Sequence.register ?hint ctx.tables export_tbl (Some Table) id
-                  exports
+            | Memory limits ->
+                (* Record the address type exactly as for a module-defined
+                   memory: an import's [size]/[grow] results state it too (an
+                   unrecorded one was a recording gap the [--debug width-record]
+                   census found). *)
+                record_address_type ctx
+                  (Sequence.register' ?hint ctx.memories export_tbl
+                     (Some (Memory : Src.exportable))
+                     id exports)
+                  limits.Ast.desc.address_type
+            | Table typ ->
+                record_address_type ctx
+                  (Sequence.register' ?hint ctx.tables export_tbl (Some Table)
+                     id exports)
+                  typ.Src.limits.Ast.desc.address_type
             | Global typ ->
                 record_global_valtype ctx typ
                   (Sequence.register' ?hint ctx.globals export_tbl (Some Global)

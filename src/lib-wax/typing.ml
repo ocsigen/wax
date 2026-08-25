@@ -1682,7 +1682,7 @@ let field_value (name : ident) = function
         desc = Get name;
         info = name.info;
         hints = Wax_wasm.Hints.none;
-        expected = None;
+        expected = Unset;
       }
 
 let lookup_array_type ?location ctx name =
@@ -2196,7 +2196,7 @@ let ( let*! ) e f =
           desc = Ast.Unreachable;
           info = ([| Cell.make Error |], (Ast.no_loc ()).info);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
 
 (* Pop the top operand's type. An [Unreachable] (polymorphic) stack yields a
@@ -3005,7 +3005,7 @@ let merge_let_tuple ctx head rest =
           desc = Let (List.rev bindings, Some head);
           info;
           hints = head.hints;
-          expected = None;
+          expected = Unset;
         }
         :: rest'
     | _ -> head :: rest
@@ -5862,7 +5862,7 @@ and type_cont_construct_call ctx i func ns (name : Ast.ident) args =
                  desc = Path (ns, name);
                  info = ([||], func.info);
                  hints = Wax_wasm.Hints.none;
-                 expected = None;
+                 expected = Unset;
                },
                args' ))
           [| Cell.make Error |]
@@ -6471,7 +6471,7 @@ and type_cast ctx i =
          operand's recorded width is then the width it settles on. *)
       let operand_pin_pending =
         match (i'.expected, natural_typ) with
-        | Some w, Some d -> w <> d
+        | Ast.Recorded w, Some d -> w <> d
         | _ -> false
       in
       (* A cast of a bare [null] to a non-[any]-hierarchy reference is also load
@@ -6801,7 +6801,7 @@ and type_aggregate_access ctx i =
                desc = Get tabname;
                info = ([||], recv.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              i2' ))
         typ
@@ -6850,7 +6850,7 @@ and type_aggregate_access ctx i =
                desc = Get tabname;
                info = ([||], recv.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              i2',
              i3' ))
@@ -6971,7 +6971,7 @@ and type_variable_access ctx i =
                       desc = Get idx;
                       info = idx.info;
                       hints = Wax_wasm.Hints.none;
-                      expected = None;
+                      expected = Unset;
                     },
                     i' );
             }
@@ -7571,12 +7571,12 @@ and type_mem_method_call ctx i func recv memname (meth : Ast.ident) args =
                    desc = Get memname;
                    info = ([||], recv.info);
                    hints = Wax_wasm.Hints.none;
-                   expected = None;
+                   expected = Unset;
                  },
                  meth );
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          args' ))
     result
@@ -7699,12 +7699,12 @@ and type_atomic_method_call ctx i func recv memname (meth : Ast.ident) family
                    desc = Get memname;
                    info = ([||], recv.info);
                    hints = Wax_wasm.Hints.none;
-                   expected = None;
+                   expected = Unset;
                  },
                  meth );
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          args' ))
     result
@@ -7780,12 +7780,12 @@ and type_simd_mem_method_call ctx i func recv memname (meth : Ast.ident) args =
                    desc = Get memname;
                    info = ([||], recv.info);
                    hints = Wax_wasm.Hints.none;
-                   expected = None;
+                   expected = Unset;
                  },
                  meth );
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          args' ))
     result
@@ -7799,7 +7799,7 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
       desc = Get name;
       info = ([||], recv.info);
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
   in
   let mk args' =
@@ -7808,7 +7808,7 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = StructGet (recv', meth);
           info = ([||], func.info);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         },
         args' )
   in
@@ -7858,7 +7858,7 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = Get src;
           info = ([||], sinfo);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
       in
       let* rest' = instructions ctx rest in
@@ -7876,7 +7876,7 @@ and type_mem_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = Get seg;
           info = ([||], sinfo);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
       in
       let* rest' = instructions ctx rest in
@@ -7902,7 +7902,7 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
       desc = Get name;
       info = ([||], recv.info);
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
   in
   let mk args' =
@@ -7911,7 +7911,7 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = StructGet (recv', meth);
           info = ([||], func.info);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         },
         args' )
   in
@@ -7967,7 +7967,7 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = Get src;
           info = ([||], sinfo);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
       in
       let* rest' = instructions ctx rest in
@@ -7986,7 +7986,7 @@ and type_table_mgmt_call ctx i func recv name (meth : Ast.ident) args =
           desc = Get seg;
           info = ([||], sinfo);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
       in
       let* rest' = instructions ctx rest in
@@ -8030,7 +8030,7 @@ and type_array_fill_call ctx i func a (meth : Ast.ident) j v n =
            desc = StructGet (a', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          [ j'; v'; n' ] ))
     [||]
@@ -8072,7 +8072,7 @@ and type_array_copy_call ctx i func a1 (meth : Ast.ident) i1 a2 i2 n =
            desc = StructGet (a1', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          [ i1'; a2'; i2'; n' ] ))
     [||]
@@ -8114,7 +8114,7 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
           desc = Get seg;
           info = ([||], sinfo);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
       in
       return_statement i
@@ -8123,7 +8123,7 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
                desc = StructGet (a', meth);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              seg' :: rest' ))
         [||]
@@ -8151,7 +8151,7 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
                desc = StructGet (a', meth);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              args' ))
         [||]
@@ -8175,7 +8175,7 @@ and type_array_method_recovery ctx i func recv (meth : Ast.ident) args =
            desc = StructGet (recv', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          args' ))
     [||]
@@ -8192,7 +8192,7 @@ and type_binary_intrinsic_call ctx i func i1 (meth : Ast.ident) op args =
           desc = StructGet (i1', meth);
           info = ([||], func.info);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         },
         args'' )
   in
@@ -8311,7 +8311,7 @@ and type_unary_intrinsic_call ctx i func recv (meth : Ast.ident) =
            desc = StructGet (recv', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          [] ))
     ty
@@ -8390,7 +8390,7 @@ and type_simd_vector_op_call ctx i func recv (meth : Ast.ident) args =
            desc = StructGet (recv', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
-           expected = None;
+           expected = Unset;
          },
          args' ))
     result
@@ -8402,7 +8402,7 @@ and type_simd_free_intrinsic_call ctx i func ns (name : Ast.ident) args =
       desc = Path (ns, name);
       info = ([||], func.info);
       hints = Wax_wasm.Hints.none;
-      expected = None;
+      expected = Unset;
     }
   in
   let* args' = instructions ctx args in
@@ -9520,7 +9520,7 @@ and type_indirect_call ctx i i' l =
                 desc = Ast.Unreachable;
                 info = ([| Cell.make Error |], (Ast.no_loc ()).info);
                 hints = Wax_wasm.Hints.none;
-                expected = None;
+                expected = Unset;
               }
         | Some typ ->
             (match param_types with
@@ -9647,7 +9647,7 @@ and call_instruction ctx i =
           desc = Get name;
           info = ([||], recv.info);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
       in
       return_statement i
@@ -9656,7 +9656,7 @@ and call_instruction ctx i =
                desc = StructGet (recv', meth);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              [] ))
         [||]
@@ -9763,7 +9763,7 @@ and type_path_intrinsic_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              args' ))
         [||]
@@ -9784,7 +9784,7 @@ and type_path_intrinsic_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              args' ))
         (Cell.make Error)
@@ -9813,7 +9813,7 @@ and type_wide_arith_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              args' ))
         [| Cell.make Error; Cell.make Error |]
@@ -9828,7 +9828,7 @@ and type_wide_arith_call ctx i func ns name args =
                desc = Path (ns, name);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               expected = Unset;
              },
              args' ))
         [| valtype_cell i64_valtype; valtype_cell i64_valtype |]
@@ -9878,7 +9878,9 @@ and mem_call_arguments ctx l : _ -> _ * _ list =
                desc = Labelled (lbl, e');
                info = (fst e'.info, i.info);
                hints = Wax_wasm.Hints.none;
-               expected = None;
+               (* Carry the producer's marker through the re-wrap (as the
+                  general path does): [From_wasm] marks the label [Contextual]. *)
+               expected = i.expected;
              }
             :: r')
       | _ ->
@@ -11071,7 +11073,7 @@ and constant_field ctx (name, i) =
           desc = Get name;
           info = ([||], name.info);
           hints = Wax_wasm.Hints.none;
-          expected = None;
+          expected = Unset;
         }
 
 (*** Globals, functions, and declarations ***)
@@ -12554,11 +12556,39 @@ let ascribed_type (t : Ast.casttype) =
 
 let rec reconcile_widths mode diagnostics ~under_cast ~ascribed (i : _ instr) :
     _ instr =
+  (* The recording-gap census ([--debug width-record]). A numeric-valued node
+     whose expectation is [Unset] — as opposed to a deliberate [Contextual] —
+     was never seen by any of [From_wasm]'s recording choke points: the one
+     class of width bug that is INVISIBLE to the reconciliation below by
+     construction (nothing recorded, nothing to disagree with), so it can only
+     drift silently. This census makes the class enumerable: run a decompile
+     under the flag and every line is either an emission path that must record
+     what its opcode states, or a node synthesized after the conversion (whose
+     width the synthesizing pass itself guarantees) to be marked [Contextual]
+     at its construction site. Reports [v128] too: a record there is what tells
+     {!Wax_conversion.From_wasm}'s [Stack.effective_backing] the value is not a
+     reference, so an unrecorded one is a gap even though no width check ever
+     fires on it. *)
+  (if Wax_utils.Debug.is_enabled Width_record then
+     match (i.expected, i.info) with
+     | Unset, ([| cell |], location) -> (
+         match resolved_storagetype (Cell.get cell) with
+         | Some (Value ((I32 | I64 | F32 | F64 | V128) as t)) ->
+             let p = location.loc_start in
+             Printf.eprintf "width-record: %s: unrecorded %s value: %s\n%!"
+               (if p.Lexing.pos_lnum = 0 then "<no loc>"
+                else
+                  Printf.sprintf "%s:%d:%d" p.Lexing.pos_fname p.Lexing.pos_lnum
+                    (p.Lexing.pos_cnum - p.Lexing.pos_bol + 1))
+               (Infer.Output.valtype_string t)
+               (width_expr i)
+         | Some (Value (Ref _)) | Some (Packed _) | None -> ())
+     | _ -> ());
   (* This node first: a repair here grounds the cell its whole flexible subtree
      shares, so the recursion below sees the settled type. *)
   let pin =
     match (i.expected, i.info) with
-    | Some required, ([| cell |], location) -> (
+    | Recorded required, ([| cell |], location) -> (
         let inferred = Cell.get cell in
         match (numeric_width required, resolved_storagetype inferred) with
         | Some required, Some resolved -> (
@@ -12680,13 +12710,15 @@ let rec reconcile_widths mode diagnostics ~under_cast ~ascribed (i : _ instr) :
   | Some (required, required_v) ->
       (* The pin takes the node's span (as [From_wasm]'s own pins do, so the source
          trivia still lands on it) and the recorded type as its own; the
-         instruction's own hints stay on the instruction. It carries no [expected]
-         of its own: the claim it was inserted for is now met. *)
+         instruction's own hints stay on the instruction. It carries no claim
+         of its own — the one it was inserted for is now met — and is
+         [Contextual], not [Unset]: this pass guarantees its width itself, so
+         the recording-gap census must not report it. *)
       {
         desc = Cast (i, Valtype required);
         info = ([| valtype_cell required_v |], snd i.info);
         hints = Wax_wasm.Hints.none;
-        expected = None;
+        expected = Contextual;
       }
 
 let reconcile_module_widths mode diagnostics
