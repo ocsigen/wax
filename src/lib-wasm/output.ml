@@ -1308,8 +1308,7 @@ let rec modulefield f =
       list ~loc
         (block [ keyword "import"; quoted_string module_ ]
          :: List.map
-              (fun (name, id) ->
-                list (keyword "item" :: (opt_id id @ [ quoted_string name ])))
+              (fun name -> list [ keyword "item"; quoted_string name ])
               items
         @ [ list [ import_desc_block None desc ] ])
   | Global { id; typ; init; exports = e } ->

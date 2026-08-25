@@ -808,11 +808,7 @@ module Text : sig
         module_ : name;
         items : (name * name option * importdesc) list;
       }
-    | Import_group2 of {
-        module_ : name;
-        desc : importdesc;
-        items : (name * name option) list;
-      }
+    | Import_group2 of { module_ : name; desc : importdesc; items : name list }
     | Func of {
         id : name option;
         typ : typeuse;

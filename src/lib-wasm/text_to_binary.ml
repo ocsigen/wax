@@ -602,7 +602,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
               acc_func_types )
         | T.Import_group2 { desc; items; _ } ->
             ( List.fold_left
-                (fun ctx (_, id) -> register_import ctx id desc)
+                (fun ctx _ -> register_import ctx None desc)
                 ctx items,
               acc_func_types )
         | T.Func { id; _ } ->
@@ -788,14 +788,12 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                        items;
                  })
         | T.Import_group2 { module_; desc; items } ->
-            (* The binary section carries only the external names; each item's id
-               (the wax extension) reaches the binary via the name section. *)
             Some
               (B.Group2
                  {
                    module_ = module_.desc;
                    desc = convert_import_desc desc;
-                   names = List.map (fun (n, _) -> n.Ast.desc) items;
+                   names = List.map (fun n -> n.Ast.desc) items;
                  })
         | _ -> None)
       fields

@@ -310,11 +310,12 @@ let check_constant f loc s =
              Wax_utils.Message.text (Printf.sprintf "Constant %s is out of range.\n" s) ))
 
 (* Build a compact import group [(import "m" (item …) …)] from its elements
-   (compact-import-section proposal). Each item is [(item $id? "name" <type>?)]:
-   the [$id] is a wax extension over the standard name-only form. Either every
-   item carries its own type ([Import_group1], id living in that type) or all
-   items are name-only and share one final type that binds no id ([Import_group2],
-   where the per-item [$id] extension applies); mixing is rejected. *)
+   (compact-import-section proposal). Either every item carries its own type
+   ([Import_group1], id living in that type) or all items are name-only and
+   share one final type that binds no id ([Import_group2]); mixing is rejected,
+   and a shared-type item may not bind an identifier at all — the grammar still
+   reads a leading [$id] so the mistake gets this message rather than a raw
+   syntax error. *)
 let compact_import loc module_ elems : _ Ast.Text.modulefield =
   let as_item = function
     | `Item it -> it
@@ -338,8 +339,12 @@ let compact_import loc module_ elems : _ Ast.Text.modulefield =
         raise (Wax_utils.Parsing.syntax_error_pair
                  (loc,
              Wax_utils.Message.text ("With a shared type, each import item names only.\n") ));
+      if List.exists (fun (id, _, _) -> Option.is_some id) items then
+        raise (Wax_utils.Parsing.syntax_error_pair
+                 (loc,
+             Wax_utils.Message.text ("An import item under a shared type may not bind an identifier; give each item its own type instead.\n") ));
       Import_group2
-        { module_; desc = tdesc; items = List.map (fun (id, name, _) -> (name, id)) items }
+        { module_; desc = tdesc; items = List.map (fun (_, name, _) -> name) items }
   | None ->
       let items =
         List.map

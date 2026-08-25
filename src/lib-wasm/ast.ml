@@ -939,14 +939,11 @@ module Text = struct
         module_ : name;
         items : (name * name option * importdesc) list;
       }
-    (* [items] is [(name, id)] per entry; the id is a wax extension — the standard
-       form writes name-only [(item "n")]. It is text-only, round-tripping through
-       the binary name section rather than the import section. *)
-    | Import_group2 of {
-        module_ : name;
-        desc : importdesc;
-        items : (name * name option) list;
-      }
+    (* The shared-type form is strictly name-only ([(item "n")]): its items
+       cannot bind an identifier, so a group whose items need ids is written (and
+       lifted from binary) as [Import_group1]; the binary encoder may still emit
+       such a group with the shared-type encoding when the types agree. *)
+    | Import_group2 of { module_ : name; desc : importdesc; items : name list }
     | Func of {
         id : name option;
         typ : typeuse;

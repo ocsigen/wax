@@ -1311,15 +1311,32 @@ let coalesce_singles entries =
   in
   go entries
 
+(* A [Group1] whose items all share one externtype is emitted with the
+   shared-type encoding instead: the text form for that encoding is strictly
+   name-only, so a group whose items bind ids reaches the encoder as [Group1]
+   (the ids ride the name section either way), and choosing the encoding here
+   keeps the binary as compact as the types allow. Writing the externtype once
+   instead of [n] times only ever shrinks the entry. *)
+let shared_type_groups entries =
+  List.map
+    (fun entry ->
+      match entry with
+      | Group1 { module_; items = (_, d0) :: _ :: _ as items }
+        when List.for_all (fun (_, d) -> d = d0) items ->
+          Group2 { module_; desc = d0; names = List.map fst items }
+      | Single _ | Group1 _ | Group2 _ -> entry)
+    entries
+
 (* Import section. A [Group1]/[Group2] entry writes its module name once,
    followed by [0x00] (empty second name), the [0x7F]/[0x7E] marker, and the
    item list — the marker sits where an externtype kind byte would, and neither
    is a valid kind, so a plain import (kind byte next) stays unambiguous. Groups
-   present in the AST are emitted verbatim (preserving a compact input); the
-   feature only drives coalescing of ungrouped [Single] imports above, and only
-   when [coalesce_imports] is set — the binary-input ("compress this binary")
-   path. Text-origin modules (wax/wat) carry authorial import layout, so their
-   groups are lowered upstream and their singles are left untouched here. *)
+   present in the AST are kept as groups (preserving a compact input), with only
+   the encoding of each chosen here ([shared_type_groups]); the feature only
+   drives coalescing of ungrouped [Single] imports above, and only when
+   [coalesce_imports] is set — the binary-input ("compress this binary") path.
+   Text-origin modules (wax/wat) carry authorial import layout, so their groups
+   are lowered upstream and their singles are left untouched here. *)
 let output_import_section ~features ~coalesce_imports out_channel imports =
   let compact =
     coalesce_imports
@@ -1347,7 +1364,7 @@ let output_import_section ~features ~coalesce_imports out_channel imports =
         Encoder.vec Encoder.name b names
   in
   output_section out_channel 2 (Encoder.vec write_entry)
-    (if compact then coalesce_singles imports else imports)
+    (shared_type_groups (if compact then coalesce_singles imports else imports))
 
 (* Branch-hinting / compilation-hints proposals: emit one [metadata.code.*] custom
    section. They all share a shape — per (absolute) function index, a vector of

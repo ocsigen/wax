@@ -667,22 +667,29 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
           | Group2 { module_; desc; names } ->
               (* The shared type is converted once (with the group's first index)
                  for the printed [Import_group2]; each name still advances the
-                 index space and picks up its name-section id (the wax [(item $id
-                 …)] extension), so a named Group2 no longer degrades to Group1. *)
+                 index space. The shared-type text form is strictly name-only, so
+                 a group whose items pick up name-section ids degrades to the
+                 per-item [Import_group1] (each item repeating the shared type,
+                 with the id living beside it); the binary encoder re-optimizes a
+                 shared-type [Group1] back to this encoding. *)
               let shared = desc_of counts desc in
               let counts, ritems =
                 List.fold_left
                   (fun (counts, r) name ->
-                    let id, _, counts = lift_one counts desc in
-                    (counts, (no_loc name, id) :: r))
+                    let id, desc, counts = lift_one counts desc in
+                    (counts, (no_loc name, id, desc) :: r))
                   (counts, []) names
               in
-              ( T.Import_group2
-                  {
-                    module_ = no_loc module_;
-                    desc = shared;
-                    items = List.rev ritems;
-                  },
+              let items = List.rev ritems in
+              ( (if List.exists (fun (_, id, _) -> Option.is_some id) items then
+                   T.Import_group1 { module_ = no_loc module_; items }
+                 else
+                   T.Import_group2
+                     {
+                       module_ = no_loc module_;
+                       desc = shared;
+                       items = List.map (fun (name, _, _) -> name) items;
+                     }),
                 counts )
         in
         (counts, field :: acc))

@@ -5951,7 +5951,7 @@ let lint_confusable ctx fields =
             List.iter (fun (n, _, _) -> check n) items
         | Import_group2 { module_; items; _ } ->
             check module_;
-            List.iter (fun (n, _) -> check n) items
+            List.iter check items
         | Func { instrs; exports; _ } ->
             List.iter check exports;
             check_body instrs
@@ -6341,7 +6341,7 @@ let check_syntax ctx lst =
       | Import_group1 { items; _ } ->
           List.iter (fun (_, id, desc) -> check_import id desc) items
       | Import_group2 { desc; items; _ } ->
-          List.iter (fun (_, id) -> check_import id desc) items
+          List.iter (fun _ -> check_import None desc) items
       | Func { id; typ; locals; instrs; _ } ->
           check_unbound functions "function" id;
           (match typ with

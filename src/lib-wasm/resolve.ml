@@ -417,6 +417,8 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
                 | Text.Tag _ -> ignore (register tags id None))
               items
         | Text.Import_group2 { desc; items; _ } ->
+            (* Shared-type items are name-only: each advances its index space
+               without binding an identifier. *)
             let sp =
               match desc with
               | Text.Func _ -> funcs
@@ -425,7 +427,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
               | Text.Memory _ -> memories
               | Text.Tag _ -> tags
             in
-            List.iter (fun (_, id) -> ignore (register sp id None)) items
+            List.iter (fun _ -> ignore (register sp None None)) items
         | Text.Func { id; _ } -> ignore (register funcs id None)
         | Text.Global { id; _ } -> ignore (register globals id None)
         | Text.Memory { id; _ } -> ignore (register memories id None)

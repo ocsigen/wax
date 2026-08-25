@@ -2087,48 +2087,6 @@ let start_fields ~loc ~field_name attributes =
       | _ -> None)
     attributes
 
-(* compact-import-section: normalise a lowered [Text.importdesc] for the Group2
-   homogeneity test — rebuild it with every source location flattened to a dummy,
-   keeping all names (param names, type ids). Two descs are compatible (can share
-   one type in a name-only [Import_group2]) exactly when their normal forms are
-   [( = )]-equal, so sharing a type never silently drops a name; anything else
-   stays a per-item [Import_group1]. *)
-let norm_idx (i : Text.idx) : Text.idx = Ast.no_loc i.desc
-
-let norm_heaptype (h : Text.heaptype) : Text.heaptype =
-  match h with
-  | Type i -> Type (norm_idx i)
-  | Exact i -> Exact (norm_idx i)
-  | h -> h
-
-let norm_reftype (r : Text.reftype) : Text.reftype =
-  { r with typ = norm_heaptype r.typ }
-
-let norm_valtype (v : Text.valtype) : Text.valtype =
-  match v with Ref r -> Ref (norm_reftype r) | v -> v
-
-let norm_functype (ft : Text.functype) : Text.functype =
-  {
-    params =
-      Array.map
-        (fun p -> Ast.no_loc (fst p.Ast.desc, norm_valtype (snd p.Ast.desc)))
-        ft.params;
-    results = Array.map norm_valtype ft.results;
-  }
-
-let norm_typeuse ((idx, ft) : Text.typeuse) : Text.typeuse =
-  (Option.map norm_idx idx, Option.map norm_functype ft)
-
-let norm_importdesc (d : Text.importdesc) : Text.importdesc =
-  match d with
-  | Func { exact; typ } -> Func { exact; typ = norm_typeuse typ }
-  | Global { mut; typ } -> Global { mut; typ = norm_valtype typ }
-  | Tag t -> Tag (norm_typeuse t)
-  | Memory l -> Memory (Ast.no_loc l.Ast.desc)
-  | Table { limits; reftype } ->
-      Table
-        { limits = Ast.no_loc limits.Ast.desc; reftype = norm_reftype reftype }
-
 (* The module name carried by a [#![module = "name"]] inner attribute, if any.
    Lowered into the binary's module-name subsection (the WAT [(module $name)]),
    not into a module field. *)
@@ -2601,10 +2559,11 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
   (* Lower an [import "m" { … }] block (≥2 items) to one compact group entry.
      A group carries no inline [exports] slot, so an item's unguarded exports
      become standalone [(export …)] fields (by the item's id) alongside its other
-     sibling fields, all emitted after the group so it stays one entry. The group
-     is a name-only [Import_group2] sharing one type when every item's lowered
-     [importdesc] is structurally equal ignoring locations (so no name is lost by
-     sharing), else a per-item [Import_group1]. *)
+     sibling fields, all emitted after the group so it stays one entry. Every
+     item binds its wax name as an id and the shared-type [Import_group2] text
+     form is strictly name-only, so the group is always a per-item
+     [Import_group1]; the binary encoder still uses the shared-type encoding
+     when every item's type agrees. *)
   let lower_import_group module_ loc decls =
     let items =
       List.map
@@ -2622,25 +2581,9 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
           (import_name, Some name, desc, siblings))
         decls
     in
-    let homogeneous =
-      match items with
-      | (_, _, d0, _) :: rest ->
-          let n0 = norm_importdesc d0 in
-          List.for_all (fun (_, _, d, _) -> norm_importdesc d = n0) rest
-      | [] -> false
-    in
     let group : _ Text.modulefield =
-      if homogeneous then
-        let _, _, shared, _ = List.hd items in
-        Import_group2
-          {
-            module_;
-            desc = shared;
-            items = List.map (fun (n, id, _, _) -> (n, id)) items;
-          }
-      else
-        Import_group1
-          { module_; items = List.map (fun (n, id, d, _) -> (n, id, d)) items }
+      Import_group1
+        { module_; items = List.map (fun (n, id, d, _) -> (n, id, d)) items }
     in
     annot loc group :: List.concat_map (fun (_, _, _, s) -> s) items
   in

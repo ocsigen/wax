@@ -732,7 +732,7 @@ let wat_field_symbols
         (fun (name, id, desc) -> import_sym module_.desc name id desc)
         items
   | Import_group2 { module_; desc; items } ->
-      List.map (fun (name, id) -> import_sym module_.desc name id desc) items
+      List.map (fun name -> import_sym module_.desc name None desc) items
   | Types rectype ->
       Array.to_list rectype
       |> List.filter_map (fun entry ->

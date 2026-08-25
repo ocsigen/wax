@@ -51,8 +51,11 @@ let expand_import_group (f : (_ modulefield, _) Ast.annotated) =
         items
   | Import_group2 { module_; desc; items } ->
       List.map
-        (fun (name, id) ->
-          { f with desc = Import { module_; name; id; desc; exports = [] } })
+        (fun name ->
+          {
+            f with
+            desc = Import { module_; name; id = None; desc; exports = [] };
+          })
         items
   | _ -> [ f ]
 

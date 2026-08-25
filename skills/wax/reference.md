@@ -4700,11 +4700,16 @@ server](#language-server)).
           name in the binary import section. What the flag enables depends on the
           input, because the text form is authoritative for import layout. From a
           text input (Wax or WAT), a `import "m" { … }` block / `(import "m"
-          (item …) …)` group is lowered to a compact entry — a name-only group
-          sharing one type when the items' types all match, else one type per
-          item; a Wax block of one item flattens to a plain import, and imports
-          the source left *separate* are never merged. From a WASM binary — which
-          has no authorial text layout — the flag instead coalesces runs of
+          (item …) …)` group is lowered to a compact entry; a Wax block of one
+          item flattens to a plain import, and imports the source left
+          *separate* are never merged. The name-only shared-type text form
+          (`(item "n") … <type>`) cannot bind identifiers, so a group whose
+          items need names — every Wax block, and any binary group whose items
+          carry name-section names — takes the one-type-per-item text form;
+          when the binary is written, a group whose items' types all agree
+          still gets the shared-type encoding (names live in the name section
+          either way), so nothing is lost. From a WASM binary — which has no
+          authorial text layout — the flag instead coalesces runs of
           consecutive same-module plain imports (the "compress this binary"
           mode). Groups written explicitly, or already present in a binary, are
           preserved through WAT↔WAT and WASM↔WASM round-trips on their own, no
