@@ -669,6 +669,11 @@ let keyword_table : (string, token) Hashtbl.t =
   List.iter (fun (k, v) -> Hashtbl.replace h k v) entries;
   h
 
+(* The table's keys, sorted — see the .mli: the fuzz harness's generated opcode
+   grid derives its operation list from this, so it tracks the lexer. *)
+let keywords () =
+  List.sort compare (Hashtbl.fold (fun k _ acc -> k :: acc) keyword_table [])
+
 let rec token_rec ctx lexbuf =
   match%sedlex lexbuf with
   | '(' -> LPAREN

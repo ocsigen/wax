@@ -10,3 +10,12 @@ val token :
     keyword. The supplier (see {!Wax_utils.Parsing}) consults it. *)
 
 val is_valid_identifier : string -> bool
+
+val keywords : unit -> string list
+(** Every keyword and instruction mnemonic this lexer recognizes (the keyword
+    table's keys — the atomic and vector registries included), sorted. This is
+    the ground truth the fuzz harness's generated opcode grid derives its
+    operation list from ([fuzz/op-width.sh], via the [dump_mnemonics] developer
+    executable), so a new proposal's mnemonics enter that grid — or its
+    acknowledged-exemption ratchet — the moment the lexer learns them, rather
+    than waiting for a hand-maintained list to be updated. *)

@@ -44,7 +44,8 @@ run() {
 }
 
 # Build the tools the guards drive (a stale binary would test old code).
-dune build src/bin/main.exe src/bin/fuzz_gen.exe src/bin/fuzz_recover.exe 2>&1 | tail -3 || {
+dune build src/bin/main.exe src/bin/fuzz_gen.exe src/bin/fuzz_recover.exe \
+  src/bin/dump_mnemonics.exe 2>&1 | tail -3 || {
   echo "check.sh: build failed" >&2; exit 3;
 }
 
@@ -67,6 +68,7 @@ run pin-reach.sh
 run block-exits.sh
 run subtype-lattice.sh
 run width-record.sh
+run op-width.sh
 
 # Generator campaigns (deterministic given SEED; self-generating inputs).
 run "GEN=$gen" fold-fuzz.sh

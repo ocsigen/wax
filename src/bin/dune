@@ -62,3 +62,10 @@
 (executables
  (names fuzz_mutate fuzz_gen fuzz_recover)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
+
+; dump_mnemonics prints the WAT lexer's keyword table (one mnemonic per line);
+; fuzz/op-width.sh derives its generated opcode grid from it.
+
+(executable
+ (name dump_mnemonics)
+ (libraries wax_wasm))

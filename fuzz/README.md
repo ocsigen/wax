@@ -98,6 +98,8 @@ fuzz/ref-width.sh           # enumerated sweep of the reference pins (ops x dead
 fuzz/adaptive-width.sh      # enumerated sweep of the ADAPTIVE-operand pins (ops x hole/select shapes); JOBS=N
 fuzz/atomic-width.sh        # every atomic mnemonic x eraser context: the width a narrow store/RMW takes from its value operand; JOBS=N
 fuzz/pin-reach.sh           # can the width repair PLACE its pin? every dead-code i64 producer x narrowing consumer; JOBS=N
+fuzz/op-width.sh            # the table-derived grid: EVERY lexer mnemonic x eraser context, with an acknowledgment ratchet; JOBS=N
+fuzz/width-record.sh        # recording-gap ratchet: --debug width-record census over the corpora must be silent (needs a corpus)
 fuzz/block-exits.sh         # the five inferring block forms x every pair of exit shapes: typer and conversion must agree; JOBS=N
 fuzz/stress.sh              # resource-limit sweep: deep nesting / wide constructs never crash
 fuzz/comment-preserve.sh    # planted sentinel comments survive every text<->text conversion
@@ -115,7 +117,8 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`, `const-context.sh`,
 `fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh`,
 `bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh`, `adaptive-width.sh`,
-`atomic-width.sh`, `pin-reach.sh`, `block-exits.sh`, `subtype-lattice.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`atomic-width.sh`, `pin-reach.sh`, `op-width.sh`, `width-record.sh`,
+`block-exits.sh`, `subtype-lattice.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -742,6 +745,33 @@ developer tool for locating a repair (and what
   with a narrowing consumer, and requires that consumer's opcode to survive the
   round trip. Both calibrate against the binary before the RMW fix: 84 and 8
   findings respectively, 0 after.
+* **`fuzz/op-width.sh`** is the same idea DERIVED FROM THE INSTRUCTION TABLE
+  instead of a hand list. Every prior grid enumerates the shapes its author
+  thought of, and each one's founding finding was an opcode family nobody's
+  list held — atomics, most recently. This grid's operation list is the WAT
+  lexer's own keyword table (`Wax_wasm.Lexer.keywords`, dumped by the
+  `dump_mnemonics` dev exe): each mnemonic gets its immediates filled from a
+  canned template and is crossed, on the dead-code stack, with the eraser
+  contexts (the drop-width set plus the reference ops and `select`); invalid
+  cells skip, valid ones must round-trip opcode-for-opcode in both modes. Two
+  strict-both-ways ratchets against `op-width.acknowledged` keep the
+  derivation honest: a keyword with no instantiation rule, and an op none of
+  whose cells validated, must each be consciously acknowledged — so a NEW
+  proposal's mnemonics fail the guard the day the lexer learns them, instead
+  of waiting for someone to extend a grid. Calibration against the binary
+  before the atomic-RMW fix: 42 findings (every narrow i64 atomic RMW, both
+  modes) with no atomic mnemonic hand-listed anywhere in the script; 0 after.
+* **`fuzz/width-record.sh`** is the RECORDING-GAP ratchet, guarding the width
+  machinery's one silent failure class from the other side: a value
+  `from_wasm` emits with no expectation recorded is invisible to the typer's
+  reconciliation by construction, so it can only surface as a drift some
+  round-trip leg happens to hit. `--debug width-record` reports every such
+  node (`Ast.expectation`'s `Unset`, as opposed to a deliberate `Contextual`),
+  and this guard sweeps the census over the harvested corpora and fails on any
+  line — a new emission path must RECORD what its opcode states or mark the
+  position `contextual`, and mere corpus coverage (not fuzzing luck) is enough
+  to catch it. Its first run found real gaps: unrecorded vector loads, v128
+  globals, imported-memory/table `size`/`grow` results, comparison results.
 * **`fuzz/adaptive-width.sh`** covers the third operand class: one that neither
   keeps a width of its own nor DEFAULTS, but ADAPTS — a dead-code hole, or an
   untyped `select` of holes. Every rule of the form "an i32 needs no pin, i32 is

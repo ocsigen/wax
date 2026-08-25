@@ -1,0 +1,155 @@
+# Acknowledged keywords of fuzz/op-width.sh — the grid derived from the WAT
+# lexer's keyword table. Each entry is a conscious decision, and the check is
+# strict BOTH ways: a keyword missing here (a new mnemonic with no
+# instantiation rule, or an op whose every cell failed validation) fails the
+# guard, and so does a stale entry the grid now handles. Keep the groups'
+# reasons with them.
+#
+# -- no-rule: not single instructions -----------------------------------------
+# Value types, heap types, shorthands and shapes (type positions, not ops);
+# structural module words; block/handler openers (pin-reach.sh owns the block
+# shapes); wast script/assertion words (the spec-suite driver's, never in a
+# module); conditional-annotation and metadata-hint words.
+no-rule always_opt
+no-rule and
+no-rule any
+no-rule anyref
+no-rule array
+no-rule arrayref
+no-rule assert_exception
+no-rule assert_exhaustion
+no-rule assert_invalid
+no-rule assert_invalid_custom
+no-rule assert_malformed
+no-rule assert_malformed_custom
+no-rule assert_return
+no-rule assert_return_arithmetic_nan
+no-rule assert_return_canonical_nan
+no-rule assert_suspension
+no-rule assert_trap
+no-rule assert_unlinkable
+no-rule binary
+no-rule block
+no-rule catch
+no-rule catch_all
+no-rule catch_all_ref
+no-rule catch_ref
+no-rule cont
+no-rule contref
+no-rule data
+no-rule declare
+no-rule definition
+no-rule describes
+no-rule descriptor
+no-rule do
+no-rule either
+no-rule elem
+no-rule else
+no-rule end
+no-rule eq
+no-rule eqref
+no-rule exact
+no-rule exn
+no-rule exnref
+no-rule export
+no-rule extern
+no-rule externref
+no-rule f32
+no-rule f32x4
+no-rule f64
+no-rule f64x2
+no-rule field
+no-rule final
+no-rule freq
+no-rule func
+no-rule funcref
+no-rule get
+no-rule global
+no-rule i16
+no-rule i16x8
+no-rule i31
+no-rule i31ref
+no-rule i32
+no-rule i32x4
+no-rule i64
+no-rule i64x2
+no-rule i8
+no-rule i8x16
+no-rule if
+no-rule import
+no-rule input
+no-rule instance
+no-rule invoke
+no-rule item
+no-rule local
+no-rule loop
+no-rule memory
+no-rule module
+no-rule mut
+no-rule nan:arithmetic
+no-rule nan:canonical
+no-rule never_opt
+no-rule nocont
+no-rule noexn
+no-rule noextern
+no-rule nofunc
+no-rule none
+no-rule not
+no-rule null
+no-rule nullcontref
+no-rule nullexnref
+no-rule nullexternref
+no-rule nullfuncref
+no-rule nullref
+no-rule offset
+no-rule on
+no-rule optimization
+no-rule or
+no-rule output
+no-rule pagesize
+no-rule param
+no-rule priority
+no-rule quote
+no-rule rec
+no-rule ref
+no-rule ref.array
+no-rule ref.extern
+no-rule ref.host
+no-rule ref.struct
+no-rule register
+no-rule result
+no-rule run_once
+no-rule script
+no-rule shared
+no-rule start
+no-rule struct
+no-rule structref
+no-rule sub
+no-rule table
+no-rule tag
+no-rule target
+no-rule then
+no-rule thread
+no-rule try
+no-rule try_table
+no-rule type
+no-rule v128
+no-rule wait
+#
+# -- no-valid-cell: instantiated, but no cell validates in this template ------
+# The br_on_* reference branches need a target label that receives the branch
+# value, and the function label here has no results; their operands are
+# references — the class that fails LOUD on a missed pin (see CLAUDE.md) and
+# whose pins ref-width.sh enumerates.
+no-valid-cell br_on_cast
+no-valid-cell br_on_cast_fail
+no-valid-cell br_on_non_null
+# The custom-descriptors instructions are feature-gated and need a
+# descriptor-carrying type; the plain template hosts neither. The descriptor
+# surface is exercised by cast-lattice.sh / subtype-lattice.sh instead.
+no-valid-cell br_on_cast_desc_eq
+no-valid-cell br_on_cast_desc_eq_fail
+no-valid-cell ref.cast_desc_eq
+no-valid-cell ref.get_desc
+no-valid-cell struct.new_default_desc
+no-valid-cell struct.new_desc
