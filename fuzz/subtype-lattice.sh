@@ -46,6 +46,18 @@ RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 freeze_wax "$RESULTS" || exit 1
 
+# wasm-tools is not optional here: it is the oracle every pair is compared
+# against, so without it [wt_verdict] answers "rejected" for all 1024 and every
+# pair wax accepts reports as a disagreement (76 phantom findings on a machine that
+# simply has not installed it). SKIP instead, the contract fuzz/check.sh reads
+# ([exit 2] = missing dependency), as wat-cast-chain.sh does for the same tool. The
+# REFERENCE interpreter IS optional — the sweep abstains from its verdict per pair
+# below and still compares wax against wasm-tools.
+if ! command -v "$WASM_TOOLS" >/dev/null 2>&1; then
+  echo "subtype-lattice: wasm-tools not found (it is the oracle here); set WASM_TOOLS or install it" >&2
+  exit 2
+fi
+
 have_ref=1
 if [ ! -x "$REF" ]; then
   echo "note: reference interpreter not found at $REF; comparing wax vs wasm-tools only" >&2

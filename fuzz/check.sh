@@ -65,6 +65,7 @@ run comment-preserve.sh
 run atomic-width.sh
 run pin-reach.sh
 run block-exits.sh
+run subtype-lattice.sh
 
 # Generator campaigns (deterministic given SEED; self-generating inputs).
 run "GEN=$gen" fold-fuzz.sh

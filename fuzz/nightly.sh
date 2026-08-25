@@ -22,7 +22,8 @@
 # unreachable-fuzz.sh, FAULT_LOCALITY_COUNT drives fault-locality.sh, and
 # CONST_CONTEXT_COUNT drives const-context.sh, BOTTOM_COUNT drives bottom-fuzz.sh
 # (its random tail; the core is exhaustive), and NULL_MUTATE_COUNT drives
-# null-mutate.sh (module count; PER mutations each).
+# null-mutate.sh (module count; PER mutations each), and MUTATE_VALIDATE_COUNT
+# drives mutate-validate.sh (the hand-written-Wax soundness oracle).
 # COUNT and SMITH are still accepted as legacy coarse
 # overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools; node
 # and the reference interpreter (REF) unlock the execution oracles (campaigns
@@ -51,6 +52,7 @@ fault_locality="${FAULT_LOCALITY_COUNT:-${legacy_count:-600}}"
 const_context="${CONST_CONTEXT_COUNT:-${legacy_count:-400}}"
 bottom_tail="${BOTTOM_COUNT:-${legacy_count:-3000}}"
 null_mutate="${NULL_MUTATE_COUNT:-${legacy_count:-200}}"
+mutate_validate="${MUTATE_VALIDATE_COUNT:-${legacy_count:-3000}}"
 if [ "${QUICK:-0}" = 1 ]; then
   smith=40
   corpus_smith=40
@@ -67,6 +69,7 @@ if [ "${QUICK:-0}" = 1 ]; then
   const_context=60
   bottom_tail=60
   null_mutate=30
+  mutate_validate=100
 fi
 
 command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
@@ -186,6 +189,13 @@ run "FUZZ=$const_context" const-context.sh
 # select/br_on_* cluster behind the recent round-trip miscompiles.
 run "COUNT=$bottom_tail" bottom-fuzz.sh
 run "COUNT=$null_mutate" null-mutate.sh
+# Soundness oracle for HAND-WRITTEN Wax: diff-validate above only ever types
+# DECOMPILED wasm, which carries the casts wax itself inserted, so it cannot
+# reach the implicit coercions and literal defaults a human writes. This mutates
+# wax seeds instead and asks the one invariant that must hold on anything wax
+# accepts — the binary it emits validates. Needs the wax seed corpus (built
+# above) and the reference interpreter, so it belongs here and not in check.sh.
+run mutate-validate.sh "$mutate_validate"
 
 echo >&2
 echo "==================== fuzz/nightly.sh summary ====================" >&2

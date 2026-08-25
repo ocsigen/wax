@@ -115,7 +115,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`, `const-context.sh`,
 `fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh`,
 `bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh`, `adaptive-width.sh`,
-`atomic-width.sh`, `pin-reach.sh`, `block-exits.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`atomic-width.sh`, `pin-reach.sh`, `block-exits.sh`, `subtype-lattice.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
