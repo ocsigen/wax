@@ -5022,30 +5022,34 @@ server](#language-server)).
           (parse, specialize, validate, type-check, convert, output) to stderr,
           one line per pass as it finishes. The normal output on stdout is
           unchanged.
-        - `width-check`: on a wasm or wat to wax conversion, *report* a width
-          disagreement instead of repairing it. The conversion records the type
-          of each value the source opcodes produce, and the type checker — which
-          already runs over the decompiled module — reconciles its own inference
-          with those records: an expression that would recompile at another width
-          (an `i64` operation re-read as `i32`, say) is PINNED with a cast at the
-          width the WebAssembly states. That is how the decompiler keeps widths
-          faithful, so a pin appearing in the output is the mechanism working, not
-          a fault. This category reports each such pin as an error instead, which
-          is what a tool developer needs to see WHERE the decompiler is relying on
-          it and why — it is a self-check on the decompiler, not a check on the
-          input, and it does nothing for any other conversion. A disagreement a pin
-          cannot fix — the value's type is fixed by its context, so a cast would
-          convert the value instead of grounding it — is an error either way; that
-          means the WebAssembly is invalid (a binary input is trusted, never
-          validated — check it with `wax check`) or the decompiler is wrong.
-        - `width-record`: on a wasm or wat to wax conversion, report (to stderr)
-          every value node the conversion emitted without recording the type its
-          opcode states and without deliberately marking the width as coming from
-          context. Such a node is invisible to the `width-check` reconciliation by
-          construction — a recording gap is the one *silent* failure class of the
-          width machinery — so this census makes the class enumerable. Like
-          `width-check`, it is a self-check on the decompiler, not on the input; a
-          clean toolchain reports nothing.
+        - `width-check` and `width-record` are self-checks on the WebAssembly
+          to Wax decompiler, meant for work on the toolchain itself. Both act
+          only on a wasm or wat to wax conversion, and both are silent when
+          the decompiler is healthy. The mechanism they inspect: Wax infers
+          numeric widths, so a decompiled expression could compile back at a
+          different width than the original WebAssembly used (an `i64`
+          operation silently turning into its `i32` sibling). To prevent
+          this, the decompiler records on every value the type its source
+          opcode states; the type checker then compares its own inference
+          against these records, and any value that would come back at the
+          wrong width gets an identity cast pinning it to the recorded type.
+        - `width-check` reports each pin as an error instead of inserting it.
+          A pin in normal output is the mechanism working, not a fault; the
+          report shows a toolchain developer where the decompiler relied on
+          it, and on what expression. One case is an error with or without
+          this flag: a disagreement no pin can fix, because the value's type
+          is forced by its context and a cast would change the value rather
+          than name its type. That means either the input is invalid (a
+          binary input is trusted, never validated, so run `wax check` on it)
+          or the decompiler has a bug.
+        - `width-record` reports, to stderr, every value the decompiler
+          emitted with neither a recorded type nor an explicit mark that its
+          width comes from context. The width check above cannot see such a
+          value, so a missed recording could only ever surface as a silent
+          width change. This listing makes the gap visible instead: each line
+          is an emission path that must either record what its opcode states
+          or declare the width contextual. A correct toolchain prints
+          nothing.
 
 - **`--version`**
     - Print the toolchain version and exit. In a released build this is the git

@@ -1072,11 +1072,12 @@ let debug_option =
   let doc =
     "Enable debug output for $(i,CATEGORY) (repeatable, comma-separated). \
      Categories: timing (log the wall-clock running time of each compiler \
-     pass), width-check (on a wasm/wat to wax conversion, check that the \
-     decompiled Wax re-infers the widths the WebAssembly states), width-record \
-     (on a wasm/wat to wax conversion, report each numeric value the \
-     conversion emitted without recording the width its opcode states — a \
-     recording gap the width check cannot see)."
+     pass); width-check (on a wasm/wat to wax conversion, report each place \
+     the decompiler had to pin a numeric width, instead of pinning it \
+     silently; a self-check on the decompiler, not on the input); width-record \
+     (on the same conversions, report each value the decompiler emitted \
+     without recording its width; such gaps are invisible to width-check). \
+     Both width categories are silent when the decompiler is healthy."
   in
   let category_conv =
     Arg.Conv.make ~docv:"CATEGORY" ~parser:Wax_utils.Debug.parse
