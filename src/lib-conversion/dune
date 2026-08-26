@@ -1,4 +1,8 @@
 (library
  (name wax_conversion)
  (public_name wax-lib.conversion)
+ ; Inert unless `dune build --instrument-with bisect_ppx` (a coverage audit of
+ ; the conversion passes; bisect_ppx is NOT a dependency of a normal build).
+ (instrumentation
+  (backend bisect_ppx))
  (libraries wax_wasm wax_lang re))

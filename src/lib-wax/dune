@@ -3,6 +3,9 @@
  (public_name wax-lib.wax)
  (preprocess
   (pps sedlex.ppx))
+ ; Inert unless `dune build --instrument-with bisect_ppx` (see lib-conversion).
+ (instrumentation
+  (backend bisect_ppx))
  (libraries wax_wasm sedlex menhirLib))
 
 (include ../lib-wasm/dune.menhir)
