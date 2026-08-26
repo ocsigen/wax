@@ -227,6 +227,15 @@ cell "ref.eq/select-resid" "" \
 cell "ref.is_null/block-param-backing" "" \
   "ref.null extern (block (param (ref null extern)) unreachable ref.is_null drop unreachable)" \
   "ref.is_null" "any.convert_extern"
+# The suppression's OTHER polarity: the scan reaches the block floor CLEANLY (no
+# terminator — this is live code), where the ref parameter genuinely backs the
+# hole, so it stays bare and the parameter types the [!_] on re-parse. The cell
+# above reaches the same parameter PAST a terminator ([`Blocked]), where the
+# bare hole would reconnect to nothing; this one is the [`Floor] arm the
+# 2026-08 coverage audit found unexercised.
+cell "ref.is_null/block-param-floor" "" \
+  "ref.null extern (block (param (ref null extern)) ref.is_null drop)" \
+  "ref.is_null" "i32.eqz,any.convert_extern"
 cell "ref.eq/v128-resid-scalar" "" \
   "unreachable v128.const i32x4 0 0 0 0 i32x4.bitmask atomic.fence drop ref.eq drop" \
   "ref.eq" "i32.eq"
