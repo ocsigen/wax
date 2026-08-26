@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-acf11262.js";
+            window.path_to_searchindex_js = "searchindex-484880c9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -268,9 +268,9 @@ are documented under <a href="cli.html#language-server"><code>wax lsp</code></a>
 Antigravity, Copilot, Codex, …) can be taught Wax with the
 <a href="https://github.com/ocsigen/wax/tree/main/skills/wax"><code>wax</code> skill</a> shipped in
 the repository. Wax has almost no presence in model training data, so the
-skill bundles the complete language reference as a single context-loadable
-file and instructs the agent to validate everything it writes with
-<code>wax check</code>. Install it with the
+skill bundles the complete language reference, split into per-topic files the
+agent loads on demand, and instructs the agent to validate everything it
+writes with <code>wax check</code>. Install it with the
 <a href="https://github.com/vercel-labs/skills"><code>skills</code> CLI</a>:</p>
 <pre><code class="language-sh">npx skills add ocsigen/wax
 </code></pre>
