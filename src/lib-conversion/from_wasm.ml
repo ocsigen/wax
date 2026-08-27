@@ -1341,9 +1341,54 @@ module Stack = struct
         | Ast.Unset | Ast.Contextual -> true)
     | _ -> List.exists carries_untyped_hole (Ast_utils.sub_instrs i)
 
-  let rec effective_backing stop = function
-    | (0, _, i) :: rem when (not (stop i)) && not (carries_untyped_hole i) ->
-        effective_backing stop rem
+  (* A conditional-compilation annotation splices its chosen body into the
+     ENCLOSING frame, and the printed form carries both bodies, so what it claims
+     from this stack is not a number: it stays the opaque blocker every
+     hole-bearing statement used to be. Nothing else is opaque. *)
+  let rec has_cond_annotation (i : _ Ast.instr) =
+    match i.Ast.desc with
+    | Ast.If_annotation _ -> true
+    | _ -> List.exists has_cond_annotation (Ast_utils.sub_instrs i)
+
+  (* How many values a statement claims from THIS stack on a re-parse: one per
+     UNTYPED hole (a hole whose recorded type is numeric claims no reference, as
+     above), plus a block's PARAMETERS, which it takes from here whether or not any
+     hole is involved. A block BODY runs on its own stack, which starts empty, so a
+     hole inside it claims nothing here — only the operands a block-shaped node
+     evaluates in the enclosing frame do: an [if]'s or [while]'s condition, a
+     [match]'s scrutinee. *)
+  let rec hole_claims (i : _ Ast.instr) =
+    match i.Ast.desc with
+    | Ast.Hole -> (
+        match i.Ast.expected with
+        | Ast.Recorded _ -> 0
+        | Ast.Unset | Ast.Contextual -> 1)
+    | Ast.Block { typ; _ }
+    | Ast.Loop { typ; _ }
+    | Ast.TryTable { typ; _ }
+    | Ast.Try { typ; _ }
+    | Ast.TryCatch { typ; _ } ->
+        Array.length typ.Ast.params
+    | Ast.If { typ; cond; _ } -> Array.length typ.Ast.params + hole_claims cond
+    | Ast.While { cond; _ } -> hole_claims cond
+    | Ast.Match { scrutinee; _ } -> hole_claims scrutinee
+    | _ ->
+        List.fold_left (fun n s -> n + hole_claims s) 0 (Ast_utils.sub_instrs i)
+
+  (* [claims] counts the values the holes ABOVE are still owed: each takes the next
+     residual, so the scan skips that many before asking whether what it reaches can
+     back this hole. Counting them is what makes a hole-bearing statement
+     TRANSPARENT rather than opaque — [_.f = _] claims the two values sitting above
+     an extern residual, so the [ref.is_null] hole below it reconnects to that
+     extern and needs no pin at all. Read as an opaque blocker, the scan stopped one
+     entry early, pinned [(_ as &?any)] as if the hole were bottom-sprung, and on a
+     re-parse that pin became an [any.convert_extern]: a hierarchy crossing, and an
+     opcode the source never had (a wasm-smith FAITHDRIFT). *)
+  let rec effective_backing stop claims = function
+    | (0, _, i) :: _ when stop i -> `Blocked
+    | (0, _, i) :: _ when has_cond_annotation i && carries_untyped_hole i ->
+        `Blocked
+    | (0, _, i) :: rem -> effective_backing stop (claims + hole_claims i) rem
     (* Numeric by its width TAG, or by the type its producer RECORDED on it
        ([Ast.instr]'s [expected], which only ever holds a numeric scalar): either
        way it cannot be the reference operand, so keep scanning. The record is what
@@ -1358,7 +1403,13 @@ module Stack = struct
               match i.Ast.expected with
               | Ast.Recorded _ -> true
               | Ast.Unset | Ast.Contextual -> false) ->
-        effective_backing stop rem
+        (* Skipped either way; if a hole above is still owed a value, this is the
+           value it takes. *)
+        effective_backing stop (max 0 (claims - 1)) rem
+    (* A value a hole above claims: not this hole's operand, so keep looking past
+       it. *)
+    | (a, None, _) :: rem when a >= 1 && claims > 0 ->
+        effective_backing stop (claims - 1) rem
     (* An ADAPTIVE value — an untyped [select] of holes, or a bare hole — is not a
        backing: its own printed form carries no hierarchy, so on a re-parse the ref
        op's hole reconnects to it and the pair re-defaults to the NUMERIC form (a
@@ -1383,7 +1434,7 @@ module Stack = struct
     | [] -> `Floor
     | _ -> `Blocked
 
-  let effective_backing stop stack = (stack, effective_backing stop stack)
+  let effective_backing stop stack = (stack, effective_backing stop 0 stack)
 
   (* [try_pop] carrying the width tag — a method-form op tags its result with its
      receiver's flexibility, so an erasing consumer pins it (and the pin, cast on

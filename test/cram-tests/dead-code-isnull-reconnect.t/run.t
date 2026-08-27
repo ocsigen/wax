@@ -150,3 +150,84 @@ transparent and `!_` is left bare to reconnect:
 
   $ wax -i wat -f wax typed.wat -o typed.wax && wax typed.wax -f wat | grep -oE 'ref.is_null|i32.eqz'
   ref.is_null
+
+A hole a statement carries need not make that statement OPAQUE either. On a
+re-parse each of its holes claims one value from the stack below, so the scan can
+count them and keep looking past what they take, rather than stopping dead. Here
+`_.f = _` claims the two values above an extern residual, so the `ref.is_null`
+hole below reconnects to that extern:
+
+  $ cat > claims.wat <<'WAT'
+  > (module
+  >   (type $s (struct (field (mut i16))))
+  >   (data "a")
+  >   (func
+  >     unreachable
+  >     ref.null none
+  >     extern.convert_any
+  >     struct.new_default $s
+  >     i32.const 1
+  >     data.drop 0
+  >     struct.set $s 0
+  >     ref.is_null
+  >     drop))
+  > WAT
+  $ wax -i wat -f wax --faithful claims.wat
+  type s = { f: mut i16 };
+  data d = "a";
+  fn f() {
+      unreachable;
+      null as &?none as &?extern;
+      {s| .. };
+      1;
+      d.drop();
+      _.f = _;
+      _ = !_;
+  }
+
+Read as an opaque blocker, the scan stopped one entry early and pinned the hole
+`(_ as &?any)` as if it were bottom-sprung — but it reconnects to an EXTERN, so
+the pin crossed hierarchies and became an `any.convert_extern`: an opcode the
+source never had, which is a `--faithful` drift rather than a rejection (a
+wasm-smith finding, smith-468). Pinning `(_ as &?extern)` instead would not do
+either — that re-lowers to a `ref.cast`, an added opcode just the same. The bare
+hole is the only spelling that re-emits exactly the source:
+
+  $ wax -i wat -f wax --faithful claims.wat -o claims.wax && wax claims.wax -f wat | grep -oE 'ref.is_null|i32.eqz|any.convert_extern|extern.convert_any'
+  extern.convert_any
+  ref.is_null
+
+A hole inside a block BODY claims nothing here — that body runs on its own stack,
+which starts empty — while a block's PARAMETERS, and an `if`'s or `while`'s
+condition, are taken from this one and counted. So an interposed block is
+transparent too, and only the hole INSIDE it is bottom-sprung and pinned:
+
+  $ cat > blocked.wat <<'WAT'
+  > (module
+  >   (func
+  >     unreachable
+  >     ref.null none
+  >     extern.convert_any
+  >     block
+  >       unreachable
+  >       ref.is_null
+  >       drop
+  >     end
+  >     ref.is_null
+  >     drop))
+  > WAT
+  $ wax -i wat -f wax --faithful blocked.wat
+  fn f() {
+      unreachable;
+      null as &?none as &?extern;
+      do {
+          unreachable;
+          _ = !(_ as &?any);
+      }
+      _ = !_;
+  }
+
+  $ wax -i wat -f wax --faithful blocked.wat -o blocked.wax && wax blocked.wax -f wat | grep -oE 'ref.is_null|i32.eqz|any.convert_extern|extern.convert_any'
+  extern.convert_any
+  ref.is_null
+  ref.is_null
