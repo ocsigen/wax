@@ -99,6 +99,7 @@ fuzz/adaptive-width.sh      # enumerated sweep of the ADAPTIVE-operand pins (ops
 fuzz/atomic-width.sh        # every atomic mnemonic x eraser context: the width a narrow store/RMW takes from its value operand; JOBS=N
 fuzz/pin-reach.sh           # can the width repair PLACE its pin? every dead-code i64 producer x narrowing consumer; JOBS=N
 fuzz/op-width.sh            # the table-derived grid: EVERY lexer mnemonic x eraser context, with an acknowledgment ratchet; JOBS=N
+fuzz/backing-scan.sh        # exhaustive small-depth stack-shape grid over effective_backing's own abstraction; JOBS=N DEPTH=3
 fuzz/width-record.sh        # recording-gap ratchet: --debug width-record census over the corpora must be silent (needs a corpus)
 fuzz/block-exits.sh         # the five inferring block forms x every pair of exit shapes: typer and conversion must agree; JOBS=N
 fuzz/stress.sh              # resource-limit sweep: deep nesting / wide constructs never crash
@@ -117,7 +118,8 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `validate-fuzz.sh`, `wat-cross-proposal.sh`, `unreachable-fuzz.sh`, `const-context.sh`,
 `fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh`,
 `bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh`, `adaptive-width.sh`,
-`atomic-width.sh`, `pin-reach.sh`, `op-width.sh`, `width-record.sh`,
+`atomic-width.sh`, `pin-reach.sh`, `op-width.sh`, `backing-scan.sh`,
+`width-record.sh`,
 `block-exits.sh`, `subtype-lattice.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
@@ -761,6 +763,25 @@ developer tool for locating a repair (and what
   of waiting for someone to extend a grid. Calibration against the binary
   before the atomic-RMW fix: 42 findings (every narrow i64 atomic RMW, both
   modes) with no atomic mnemonic hand-listed anywhere in the script; 0 after.
+* **`fuzz/backing-scan.sh`** enumerates the RECONNECTION dimension: the input
+  space of `Stack.effective_backing` + `hole_claims`, the hand-rolled
+  simulation of the Wax re-parser that decides whether a dead reference op's
+  bare hole needs a pin. Its founding bug (smith-468) was a modeling
+  divergence visible only on a three-entry statement/residual SEQUENCE — a
+  property no flat producer-x-consumer grid can see. The scan never looks at
+  opcodes, only at each entry's arity/tag/record/adaptivity/claim-count, so
+  its input is a string over a small alphabet read off its own match arms;
+  the grid instantiates one concrete representative per class (plus the
+  satisfied-claims composites the validator forces the founding shape into)
+  and exhausts every sequence up to `DEPTH` (default 3) under each
+  hierarchy-erasing reader, requiring the reader's opcode to survive both
+  round-trip modes and no crossing opcode (`ref.cast`, the converts) to be
+  introduced. Calibration: 414 findings on the pre-461d5aabea binary (the
+  founding shape among them), and its FIRST run found three fresh live
+  clusters of the same family, fixed alongside it (unconsulted convert source
+  pins, all-numeric multi-value residuals read as reference backings, the
+  block-parameter claim double-count). A new match arm in the scan must add
+  its representative symbol — a pointer comment sits on the scan.
 * **`fuzz/width-record.sh`** is the RECORDING-GAP ratchet, guarding the width
   machinery's one silent failure class from the other side: a value
   `from_wasm` emits with no expectation recorded is invisible to the typer's

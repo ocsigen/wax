@@ -69,6 +69,7 @@ run block-exits.sh
 run subtype-lattice.sh
 run width-record.sh
 run op-width.sh
+run backing-scan.sh
 
 # Generator campaigns (deterministic given SEED; self-generating inputs).
 run "GEN=$gen" fold-fuzz.sh
