@@ -494,6 +494,19 @@ type ctx = {
          [Stack.effective_backing]). Memories and tables share one table: their Wax
          names live in different index spaces but are drawn from one namespace, so
          a name identifies at most one of them. *)
+  multi_ref_results :
+    (string, [ `Any | `Extern | `Func | `Exn | `Cont ] list) Hashtbl.t;
+      (* For a function with a MULTI-value signature carrying reference results:
+         the hierarchies of those references, keyed by the Wax name (like
+         [address_types]). The expectation channel is single-valued, so a
+         multi-value call residual cannot record its composition on the node;
+         this is what lets a cross-hierarchy convert ask whether such a backing
+         CONTAINS a value of its source hierarchy — reconnection is
+         type-directed, so the convert's hole takes exactly such a value, and
+         the convert must stay bare over it (a pin materialises as a [ref.cast]
+         over the reconnected value; see [multi_backing_matches]). Filled at
+         each [Call] emission (any call node the backing scan can see was
+         emitted before the consulting convert). *)
   labels : LabelStack.t;
   tag_types : Src.typeuse CondTbl.t;
   label_arities : (string option * int) list;
@@ -920,6 +933,22 @@ let type_value_result ctx idx =
       match (lookup_type ctx Type idx).typ with
       | Func ty -> functype_value_result ctx ty
       | Struct _ | Array _ | Cont _ -> None)
+
+(* Resolve a typeuse to its function type, through an implicit or a named
+   type; [None] if the name resolves to no function type. *)
+let typeuse_functype ctx ((i, ty) : Src.typeuse) =
+  match ty with
+  | Some ft -> Some ft
+  | None -> (
+      match i with
+      | Some i -> (
+          match implicit_functype ctx i with
+          | Some ft -> Some ft
+          | None -> (
+              match (lookup_type ctx Type i).typ with
+              | Func ft -> Some ft
+              | Struct _ | Array _ | Cont _ -> None))
+      | None -> None)
 
 let typeuse_value_result ctx (i, ty) =
   match (i, ty) with
@@ -1921,6 +1950,68 @@ let rec backing_in_hierarchy src (b : _ Ast.instr) =
   | Ast.StructDefaultDesc _ | Ast.Array _ | Ast.ArrayFixed _
   | Ast.ArraySegment _ | Ast.String _ ->
       src = `Any
+  | _ -> false
+
+(* As [hierarchy_top], resolving a named type through the module's definitions
+   (a struct/array type is in the [any] hierarchy, a func type in [func], a
+   continuation type in [cont]); [None] when the name is unknown here (an
+   implicit type interned for an inline signature). *)
+let heaptype_hierarchy ctx (t : Ast.heaptype) =
+  match hierarchy_top t with
+  | Some h -> Some h
+  | None -> (
+      match t with
+      | Type n | Exact n -> (
+          match src_typedef ctx n with
+          | Some { Src.typ = Struct _ | Array _; _ } -> Some `Any
+          | Some { Src.typ = Func _; _ } -> Some `Func
+          | Some { Src.typ = Cont _; _ } -> Some `Cont
+          | None -> None)
+      | _ -> None)
+
+(* The hierarchies of the REFERENCE results in [results] — what a multi-value
+   call residual can hand a reconnecting hole (see [ctx.multi_ref_results]).
+   An unresolvable one is dropped from the list, which errs towards the pin
+   (the status quo for that value). *)
+let src_results_ref_hierarchies ctx (results : Src.valtype array) =
+  Array.to_list results
+  |> List.filter_map (fun t ->
+      match valtype ctx t with
+      | Ast.Ref { typ; _ } -> heaptype_hierarchy ctx typ
+      | _ -> None)
+
+(* Whether a MULTI-VALUE backing residual contains a value of hierarchy [src]:
+   the shape [backing_in_hierarchy] cannot classify from the node alone, since
+   a call node does not name its results. A direct call is looked up by its
+   Wax name ([ctx.multi_ref_results], filled at emission); a [call_ref]'s
+   callee cast names the function type, resolved through the module. Only a
+   POSITIVE match lets a convert leave its hole bare — anything unresolvable
+   keeps the pin. *)
+let multi_backing_matches ctx src (b : _ Ast.instr) =
+  match b.Ast.desc with
+  | Ast.Call ({ Ast.desc = Ast.Get f; _ }, _) -> (
+      match Hashtbl.find_opt ctx.multi_ref_results f.Ast.desc with
+      | Some hs -> List.mem src hs
+      | None -> false)
+  | Ast.Call
+      ( {
+          Ast.desc = Ast.Cast (_, Valtype (Ref { typ = Type tn | Exact tn; _ }));
+          _;
+        },
+        _ ) -> (
+      match src_typedef ctx tn with
+      | Some { Src.typ = Func { results; _ }; _ } ->
+          List.mem src (src_results_ref_hierarchies ctx results)
+      | _ -> false)
+  (* A [call_indirect] through an inline signature: the callee cast carries the
+     (already converted) function type itself. *)
+  | Ast.Call ({ Ast.desc = Ast.Cast (_, Functype { sign; _ }); _ }, _) ->
+      Array.exists
+        (fun (t : Ast.valtype) ->
+          match t with
+          | Ast.Ref { typ; _ } -> heaptype_hierarchy ctx typ = Some src
+          | _ -> false)
+        sign.Ast.results
   | _ -> false
 
 let rec convert_src ?(nullable = true) src e =
@@ -3047,10 +3138,22 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
   | Call f ->
       let input, output = function_arity ctx f in
       let* args = Stack.grab input in
+      let name = idx ctx `Func f in
+      let tu = lookup_type ctx Func f in
+      (* A multi-value signature with reference results cannot record its
+         composition on the node (the expectation channel is single-valued);
+         remember the reference hierarchies under the Wax name instead, for
+         the converts' backing test (see [ctx.multi_ref_results]). *)
+      (if output >= 2 then
+         match typeuse_functype ctx tu with
+         | Some { Src.results; _ } ->
+             Hashtbl.replace ctx.multi_ref_results name.Ast.desc
+               (src_results_ref_hierarchies ctx results)
+         | None -> ());
       Stack.push output
         (expect_value_result
-           (typeuse_value_result ctx (lookup_type ctx Func f))
-           (with_loc (Call (with_loc (Get (idx ctx `Func f)), args))))
+           (typeuse_value_result ctx tu)
+           (with_loc (Call (with_loc (Get name), args))))
   | CallRef t ->
       let input, output = type_arity ctx t in
       let result_ty = type_value_result ctx t in
@@ -3178,7 +3281,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         is_bare_hole e
         &&
         match backing with
-        | `Backing b -> backing_in_hierarchy `Any b
+        | `Backing b ->
+            backing_in_hierarchy `Any b || multi_backing_matches ctx `Any b
         | `Floor | `Blocked -> false
       in
       (* A bare hole is pinned NON-NULL and the convert preserves non-nullness, so
@@ -3203,7 +3307,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         is_bare_hole e
         &&
         match backing with
-        | `Backing b -> backing_in_hierarchy `Extern b
+        | `Backing b ->
+            backing_in_hierarchy `Extern b
+            || multi_backing_matches ctx `Extern b
         | `Floor | `Blocked -> false
       in
       (* As [ExternConvertAny]: a non-null pin gives a non-null result. *)
@@ -5252,6 +5358,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
         strict_constants;
         faithful;
         address_types = Hashtbl.create 8;
+        multi_ref_results = Hashtbl.create 8;
         cond_env = Cond.create ();
         cond_diag = Wax_utils.Diagnostic.collector ();
         cond_asm = Cond.true_;

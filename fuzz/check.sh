@@ -69,7 +69,10 @@ run block-exits.sh
 run subtype-lattice.sh
 run width-record.sh
 run op-width.sh
-run backing-scan.sh
+# Depth 3 exhausts ~43k stack-shape cells (worth it per-PR: its first two runs
+# each found live drift); QUICK trades the depth-3 tail for speed.
+bs_depth=3; [ "${QUICK:-0}" = 1 ] && bs_depth=2
+run "DEPTH=$bs_depth" backing-scan.sh
 
 # Generator campaigns (deterministic given SEED; self-generating inputs).
 run "GEN=$gen" fold-fuzz.sh

@@ -780,8 +780,13 @@ developer tool for locating a repair (and what
   founding shape among them), and its FIRST run found three fresh live
   clusters of the same family, fixed alongside it (unconsulted convert source
   pins, all-numeric multi-value residuals read as reference backings, the
-  block-parameter claim double-count). A new match arm in the scan must add
-  its representative symbol — a pointer comment sits on the scan.
+  block-parameter claim double-count); a THIRD round came from the alphabet
+  itself (a ref-carrying multi-value residual — a class the scan lumps with
+  the numeric one but the convert callers must distinguish — 1432 findings
+  pre-fix once the trailing `unreachable` sink let those cells validate). A
+  new match arm in the scan must add its representative symbol — a pointer
+  comment sits on the scan — and a new symbol's cells must show up in the
+  TESTED count, or they are being skipped as invalid and prove nothing.
 * **`fuzz/width-record.sh`** is the RECORDING-GAP ratchet, guarding the width
   machinery's one silent failure class from the other side: a value
   `from_wasm` emits with no expectation recorded is invisible to the typer's

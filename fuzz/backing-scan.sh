@@ -31,6 +31,10 @@
 #               Rv128 recorded vector         (v128.not)
 #               Radapt adaptive               (untyped select of holes)
 #               Vmulti multi-value residual   (call returning two i64)
+#               VmultiRE ref-carrying multi   (call returning i64 + externref)
+#               VmultiRC as VmultiRE via call_ref (the type-named callee shape)
+#               RnullX exn-hierarchy null     (ref.null exn)
+#               Rcont  cont-hierarchy ref     (cont.new)
 #   statements  S0    no claim                (atomic.fence)
 #               S0n   recorded-numeric hole   (local.set to an i64 local)
 #               S1    one claim               (drop)
@@ -74,8 +78,18 @@
 # reconnectable extern/null leftover turned the pin into an introduced
 # [ref.cast]), an all-numeric multi-value call residual read as a reference
 # [`Backing], and a block-parameter claim double-counting the value [consume]
-# had already taken. 0 findings on the fixed binary. Deterministic, parallel,
-# wax-only. Tests the binary [_build] holds — run [dune build] first.
+# had already taken. A third round came from interrogating the ALPHABET: the
+# scan's verdict feeds callers that distinguish more than the scan does, so
+# the symbols must cover the product of scan classes and caller-decision
+# classes — a REF-carrying multi-value residual (VmultiRE/VmultiRC, absent
+# from the first alphabet) predicted and confirmed a live convert drift, 1432
+# findings on the pre-fix binary once the trailing [unreachable] sink let
+# those cells validate (concrete leftovers fail the end-of-frame check even in
+# dead code — without the sink the cells were silently skipped and the
+# calibration reported a hollow 0: always confirm a new symbol's cells appear
+# in the TESTED count). 0 findings on the fixed binary. Deterministic,
+# parallel, wax-only. Tests the binary [_build] holds — run [dune build]
+# first.
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 export LC_ALL=C
@@ -98,6 +112,10 @@ sym Rmeth  "f32.sqrt"
 sym Rv128  "v128.not"
 sym Radapt "select"
 sym Vmulti "call \$f2"
+sym VmultiRE "call \$f3"
+sym VmultiRC "call_ref \$ft3"
+sym RnullX "ref.null exn"
+sym Rcont  "cont.new \$ct"
 sym S0     "atomic.fence"
 sym S0n    "local.set \$l64"
 sym S1     "drop"
@@ -137,6 +155,10 @@ template() { # $1 = |-separated instruction list
   (elem declare func \$f)
   (func \$f (result i64) (i64.const 1))
   (func \$f2 (result i64 i64) (i64.const 1) (i64.const 2))
+  (type \$ft0 (func (result i64)))
+  (type \$ct (cont \$ft0))
+  (type \$ft3 (func (result i64 externref)))
+  (func \$f3 (result i64 externref) (i64.const 1) (ref.null extern))
   (func (local \$l64 i64)
     return
 $body))
@@ -173,7 +195,12 @@ worker() {
     name="${COMBOS[$i]%%$'\t'*}"
     local rest="${COMBOS[$i]#*$'\t'}"
     ridx="${rest%%$'\t'*}"
-    codes="${rest#*$'\t'}${R_CODE[$ridx]}"
+    # The trailing [unreachable] absorbs whatever the cell leaves on the
+    # stack (concrete leftovers fail the end-of-frame check even in dead
+    # code, which silently skipped every cell whose residuals outlive the
+    # reader — the ref-multi calibration found the hole). Symmetric in the
+    # opcode comparison, after the reader, so inert to the oracle.
+    codes="${rest#*$'\t'}${R_CODE[$ridx]}|unreachable"
     template "$codes" >"$wat"
     if [ "$(classify_wax check "$wat")" != ok ]; then
       skipped=$((skipped + 1)); printf s >&2; continue

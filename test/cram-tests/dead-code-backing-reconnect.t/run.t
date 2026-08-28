@@ -77,3 +77,28 @@ source never had:
   $ wax -i wat -f wax --faithful consumed.wat -o consumed.wax && wax consumed.wax -f wat | grep -oE 'ref.is_null|i32.eqz|any.convert_extern|extern.convert_any'
   extern.convert_any
   ref.is_null
+
+4. A REFERENCE-carrying multi-value residual, unlike the all-numeric one above,
+can be exactly what the convert's hole reconnects to — reconnection is
+type-directed, so the hole under `as &?any` takes the extern out of the pair.
+The expectation channel is single-valued, so the node cannot say so itself;
+`ctx.multi_ref_results` remembers the reference hierarchies of a multi-value
+signature at each call emission (and a `call_ref`/`call_indirect` callee cast
+names its type), and the convert stays bare over a source-hierarchy match
+instead of pinning — pinned, the pin landed on the reconnected extern and
+materialised as a `ref.cast` the source never had:
+
+  $ cat > mref.wat <<'WAT'
+  > (module
+  >   (func $f3 (result i64 externref)
+  >     (i64.const 1) (ref.null extern))
+  >   (func
+  >     unreachable
+  >     call $f3
+  >     atomic.fence
+  >     any.convert_extern
+  >     drop
+  >     drop))
+  > WAT
+  $ wax -i wat -f wax --faithful mref.wat -o mref.wax && wax mref.wax -f wat | grep -oE 'ref.cast|any.convert_extern|extern.convert_any'
+  any.convert_extern
