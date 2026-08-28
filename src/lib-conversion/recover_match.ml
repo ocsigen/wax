@@ -76,7 +76,17 @@ let consume_step stmts =
       Some (decls, Some x, inner, body)
   | { desc = Let ([ (None, _) ], Some inner); _ } :: body when is_block inner ->
       Some (decls, None, inner, body)
-  | ({ desc = Block _; _ } as inner) :: body -> Some (decls, None, inner, body)
+  (* The bare-block arm is the NULL arm, which consumes nothing — so its block
+     must be void. Without the guard, a RESULT-carrying arm whose binding was
+     separated from the block (a [nop] between the [end] and the [local.set],
+     say) was folded as if it were a null arm: the binding's value vanished
+     into the rebuilt [match] and the emitted Wax no longer typed, on a module
+     the validator accepts (a recover-shapes near-miss finding). Left alone,
+     the unrecovered print of the same shape is fine — the trailing hole
+     reconnects to the block's value through the statement. *)
+  | ({ desc = Block { typ; _ }; _ } as inner) :: body
+    when typ.params = [||] && typ.results = [||] ->
+      Some (decls, None, inner, body)
   | _ -> None
 
 (* Descend the ladder from block [blk]. Returns the wrapper levels (outer→inner,
