@@ -188,6 +188,11 @@ run "FUZZ=$const_context" const-context.sh
 # type-preserving injection into corpus bodies (null-mutate) of the hole/ref.null/
 # select/br_on_* cluster behind the recent round-trip miscompiles.
 run "COUNT=$bottom_tail" bottom-fuzz.sh
+# The deeper backing-scan lane: depth 4 over the core alphabet (one symbol per
+# scan-equivalence-class) — the per-PR gate runs depth 3 over the full one.
+run "DEPTH=4" "SYMS=core" backing-scan.sh
+# The recovery near-miss sweep at full mutation budget (per-PR runs 1200).
+run "MUTS=99999" recover-shapes.sh
 run "COUNT=$null_mutate" null-mutate.sh
 # Soundness oracle for HAND-WRITTEN Wax: diff-validate above only ever types
 # DECOMPILED wasm, which carries the casts wax itself inserted, so it cannot

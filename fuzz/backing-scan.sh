@@ -51,12 +51,18 @@
 #
 # and the READERS on top are the ops whose Wax surface erases their operand's
 # hierarchy: ref.is_null (one hole), ref.eq (two), any.convert_extern (one).
-# MAINTENANCE: a new match arm in [effective_backing]/[hole_claims] must add
-# its representative here (there is no mechanical table to derive this from —
-# a pointer comment sits on the scan). The one documented omission is the
-# conditional-annotation arm ([If_annotation] stays an opaque blocker by
-# design: its printed form carries both bodies, so no single claim count
-# exists).
+# MAINTENANCE: a new match arm in [effective_backing]/[statement_claims] must
+# add its representative here (there is no mechanical table to derive this
+# from — a pointer comment sits on the scan). The ScondEq/ScondNe symbols
+# (conditional annotations) are enumerated but their cells are ACKNOWLEDGED
+# wholesale ([exempt_shape]): the (@if) x dead-code corner is a known-open
+# finding set — ~400 pre-existing conversion crashes and reconnection drift
+# under every semantics tried against this grid (the opaque pin, equal-branch
+# claims, branch-scoped zero claims) — recorded in ATIF-DEADCODE.md at the
+# repo root, which also sketches the fix direction (convert pins aimed at the
+# source hierarchy's BOTTOM). Only (@if) can build the hazard: plain wasm's
+# validator types the residual into the consumer and rejects. Remove the
+# exemption with the fix; these cells then become its calibration.
 #
 # Every sequence of entries up to DEPTH (default 3; the founding bug sits at
 # depth one via S2c, at two spelled out) is
@@ -96,6 +102,13 @@ export LC_ALL=C
 
 JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 2 ))}"
 DEPTH="${DEPTH:-3}"
+# SYMS=core keeps one representative per SCAN-equivalence-class (dropping the
+# caller-class duplicates: the extra hierarchies, the recorded-numeric
+# variants, the call_ref spelling, claim counts beyond two, the unequal
+# conditional). Depth 4 over the full alphabet is ~1.4M cells; over the core
+# it is the nightly's deeper lane.
+SYMS="${SYMS:-all}"
+CORE="Rext Rnull Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 freeze_wax "$RESULTS"
@@ -134,6 +147,22 @@ sym T      "unreachable"
 # extern residual) at depth ONE instead of the five entries it spells out to.
 sym S1c    "i64.const 1|atomic.fence|drop"
 sym S2c    "struct.new_default \$s|i64.const 1|atomic.fence|struct.set \$s 0"
+# The conditional-annotation statements. The typer scopes a branch's holes to
+# the branch and from_wasm runs the bodies on fresh stacks, so an annotation
+# claims NOTHING from this stack whatever its branches hold — one symbol with
+# an else, one without, to pin both spellings.
+sym ScondEq "(@if \$dbg (@then drop) (@else drop))"
+sym ScondNe "(@if \$dbg (@then drop))"
+
+if [ "$SYMS" = core ]; then
+  declare -a KN KC
+  for i in "${!E_NAME[@]}"; do
+    case " $CORE " in
+      *" ${E_NAME[$i]} "*) KN+=("${E_NAME[$i]}"); KC+=("${E_CODE[$i]}") ;;
+    esac
+  done
+  E_NAME=("${KN[@]}"); E_CODE=("${KC[@]}")
+fi
 
 declare -a R_NAME R_CODE R_OP
 rdr() { R_NAME+=("$1"); R_OP+=("$2"); R_CODE+=("$3"); }
@@ -144,6 +173,21 @@ rdr cvt    "any.convert_extern" "any.convert_extern|drop"
 # The crossing opcodes that must not be INTRODUCED (output count <= source
 # count, per opcode).
 CROSSERS=(any.convert_extern extern.convert_any ref.cast ref.test)
+
+# A cell EXEMPT by shape: any sequence containing a conditional annotation.
+# The (@if) x dead-code corner is a KNOWN-OPEN finding set, not a passing
+# surface — see ATIF-DEADCODE.md at the repo root: ~400 conversion CRASHES
+# (both directions) and reconnection drift under every semantics tried (the
+# scan's opaque pin, equal-branch claims, branch-scoped zero claims — each
+# refuted by a cell this grid produced). It needs a designed answer (the
+# report sketches the source-hierarchy-bottom pin direction) rather than
+# another modeled guess; only (@if) can even build the hazard, since plain
+# wasm's validator types the residual into the consumer and rejects. The
+# symbols stay enumerated so the corner is measured; REMOVE this exemption
+# with the fix, and the cells become the calibration.
+exempt_shape() { # $1 = symbol path (the cell name), $2 = reader name
+  case "$1" in *Scond*) return 0 ;; *) return 1 ;; esac
+}
 
 template() { # $1 = |-separated instruction list
   local body
@@ -187,7 +231,7 @@ count_ops() { # $1 = file, $2 = opcode; occurrences, word-anchored
 }
 
 worker() {
-  local first="$1" last="$2" i name ridx codes v mode out="" skipped=0
+  local first="$1" last="$2" i name ridx codes v mode out="" skipped=0 acked=0
   local p="$RESULTS/w$first"
   local wat="$p.wat" wax="$p.wax" back="$p.back.wat"
   ERRLOG="$p.err"
@@ -204,6 +248,11 @@ worker() {
     template "$codes" >"$wat"
     if [ "$(classify_wax check "$wat")" != ok ]; then
       skipped=$((skipped + 1)); printf s >&2; continue
+    fi
+    # The acknowledged (@if) corner: whole cell skipped, counted, owned by
+    # ATIF-DEADCODE.md (see [exempt_shape]).
+    if exempt_shape "$name" "${R_NAME[$ridx]}"; then
+      acked=$((acked + 1)); printf a >&2; continue
     fi
     for mode in "" "--faithful"; do
       v="$(classify_wax -i wat -f wax $mode --error-format short "$wat" -o "$wax")"
@@ -239,6 +288,7 @@ worker() {
   done
   [ -n "$out" ] && printf '%s' "$out" >"$RESULTS/$first"
   [ "$skipped" -gt 0 ] && printf '%s\n' "$skipped" >"$RESULTS/skip.$first"
+  [ "$acked" -gt 0 ] && printf '%s\n' "$acked" >"$RESULTS/ack.$first"
   return 0
 }
 
@@ -257,8 +307,9 @@ REPORT="$RESULTS/report"
 cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
 n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
 skipped=$(cat "$RESULTS"/skip.* 2>/dev/null | paste -sd+ | bc 2>/dev/null); skipped=${skipped:-0}
+acked=$(cat "$RESULTS"/ack.* 2>/dev/null | paste -sd+ | bc 2>/dev/null); acked=${acked:-0}
 echo "=================== backing-scan report ==================="
-echo "cells: $N  tested: $((N - skipped))  (skipped as invalid: $skipped)"
+echo "cells: $N  tested: $((N - skipped - acked))  (skipped as invalid: $skipped; acknowledged @if corner: $acked)"
 h=$(grep -c $'\tHIGH\t' "$REPORT" 2>/dev/null); h=${h:-0}
 echo "findings: $n  (HIGH: $h)"
 if [ "$n" -gt 0 ]; then
