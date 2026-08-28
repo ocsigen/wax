@@ -73,6 +73,8 @@ run op-width.sh
 # each found live drift); QUICK trades the depth-3 tail for speed.
 bs_depth=3; [ "${QUICK:-0}" = 1 ] && bs_depth=2
 run "DEPTH=$bs_depth" backing-scan.sh
+rs_muts=1200; [ "${QUICK:-0}" = 1 ] && rs_muts=200
+run "MUTS=$rs_muts" recover-shapes.sh
 
 # Generator campaigns (deterministic given SEED; self-generating inputs).
 run "GEN=$gen" fold-fuzz.sh

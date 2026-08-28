@@ -100,6 +100,7 @@ fuzz/atomic-width.sh        # every atomic mnemonic x eraser context: the width 
 fuzz/pin-reach.sh           # can the width repair PLACE its pin? every dead-code i64 producer x narrowing consumer; JOBS=N
 fuzz/op-width.sh            # the table-derived grid: EVERY lexer mnemonic x eraser context, with an acknowledgment ratchet; JOBS=N
 fuzz/backing-scan.sh        # exhaustive small-depth stack-shape grid over effective_backing's own abstraction; JOBS=N DEPTH=3
+fuzz/recover-shapes.sh      # the recovery passes fed their own food: lowered cram fixtures + near-miss mutants through oracle.sh + a branch-stream leg; MUTS=N
 fuzz/width-record.sh        # recording-gap ratchet: --debug width-record census over the corpora must be silent (needs a corpus)
 fuzz/block-exits.sh         # the five inferring block forms x every pair of exit shapes: typer and conversion must agree; JOBS=N
 fuzz/stress.sh              # resource-limit sweep: deep nesting / wide constructs never crash
@@ -119,7 +120,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `fault-locality.sh`, `num-id-fuzz.sh`, `annot-fuzz.sh`, `cond-fromwasm-fuzz.sh`,
 `bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh`, `adaptive-width.sh`,
 `atomic-width.sh`, `pin-reach.sh`, `op-width.sh`, `backing-scan.sh`,
-`width-record.sh`,
+`recover-shapes.sh`, `width-record.sh`,
 `block-exits.sh`, `subtype-lattice.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
@@ -787,6 +788,24 @@ developer tool for locating a repair (and what
   new match arm in the scan must add its representative symbol — a pointer
   comment sits on the scan — and a new symbol's cells must show up in the
   TESTED count, or they are being skipped as invalid and prove nothing.
+* **`fuzz/recover-shapes.sh`** feeds the RECOVERY passes their own food. The
+  stream reshapers (recover_loops/match/trycatch/dispatch, sink_let) trigger
+  on the idioms `to_wasm` emits, which wasm-smith and the decompiled corpora
+  almost never contain — so their bail-out arms were the least-tested code in
+  lib-conversion. Seeds are the cram-test .wax fixtures (the curated idiom
+  corpus) lowered to unfolded wat; each seed, its lowering, and a budgeted
+  sweep of one-step structural mutations (nop insertion, line deletion,
+  adjacent swap, symbolic branch RETARGETING to a neighbouring label) go
+  through fuzz/oracle.sh, plus a branch-stream leg comparing the --faithful
+  round trip as (mnemonic, de-Bruijn branch depth) — added because
+  calibration proved oracle.sh's static legs blind to a retargeted branch.
+  Its first full run found a live recover_match bug (a nop-separated ladder
+  binding folded as a null arm); a planted recover_loops bug survived three
+  calibration rounds by exposing guard defects (numeric-vs-symbolic br
+  mutation, a stride off-by-modulo, the oracle blindness) before the
+  branch-stream leg caught it: 3 BRDRIFT on the plant, 0 on the clean binary,
+  over the same full mutant sweep. A smoke assertion fails the run if the
+  decompiles stop containing recovered surface at all.
 * **`fuzz/width-record.sh`** is the RECORDING-GAP ratchet, guarding the width
   machinery's one silent failure class from the other side: a value
   `from_wasm` emits with no expectation recorded is invisible to the typer's
