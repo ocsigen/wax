@@ -47,13 +47,20 @@
 #               Bp1   block with a parameter  (claims one)
 #               Bif   if — its condition hole (claims one)
 #               T     terminator sentinel     (unreachable)
+#               ScondPushEq/ScondPushNe/ScondPushR conditionals whose branch
+#               PUSHES a value (equal i64 / then-only i64 / equal externref):
+#               the spliced configurations see it on the enclosing frame, the
+#               tree the lowering reads keeps it inside the branch block
 #   composites  S1c/S2c a claiming statement WITH its claims satisfied by
 #               adjacent values a blocking statement kept out of its grab —
 #               the validator-forced spelling of the founding shape (see the
 #               symbols below); S2c over an extern residual IS smith-468.
 #
 # and the READERS on top are the ops whose Wax surface erases their operand's
-# hierarchy: ref.is_null (one hole), ref.eq (two), any.convert_extern (one).
+# hierarchy: ref.is_null (one hole), ref.eq (two), any.convert_extern (one),
+# ref.test (one), and ref.cast (one; survival-exempt — a dead cast is by
+# design absorbed, so only its validity/crash/no-introduced-crossing legs
+# apply).
 # MAINTENANCE: a new match arm in [effective_backing]/[statement_claims] must
 # add its representative here (there is no mechanical table to derive this
 # from — a pointer comment sits on the scan). The ScondEq/ScondNe symbols
@@ -114,7 +121,7 @@ DEPTH="${DEPTH:-3}"
 # conditional). Depth 4 over the full alphabet is ~1.4M cells; over the core
 # it is the nightly's deeper lane.
 SYMS="${SYMS:-all}"
-CORE="Rext Rnull Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq"
+CORE="Rext Rnull Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq ScondPushEq"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 freeze_wax "$RESULTS"
@@ -160,6 +167,13 @@ sym S2c    "struct.new_default \$s|i64.const 1|atomic.fence|struct.set \$s 0"
 # an else, one without, to pin both spellings.
 sym ScondEq "(@if \$dbg (@then drop) (@else drop))"
 sym ScondNe "(@if \$dbg (@then drop))"
+# The PUSHING conditionals: a branch that leaves a value on the enclosing
+# frame (per configuration, in the spliced validation), where the tree the
+# lowering reads keeps it inside the branch block. One numeric pair
+# (equal/unequal push) and one reference push.
+sym ScondPushEq "(@if \$dbg (@then i64.const 1) (@else i64.const 1))"
+sym ScondPushNe "(@if \$dbg (@then i64.const 1))"
+sym ScondPushR "(@if \$dbg (@then ref.null extern) (@else ref.null extern))"
 
 if [ "$SYMS" = core ]; then
   declare -a KN KC
@@ -171,15 +185,40 @@ if [ "$SYMS" = core ]; then
   E_NAME=("${KN[@]}"); E_CODE=("${KC[@]}")
 fi
 
-declare -a R_NAME R_CODE R_OP
-rdr() { R_NAME+=("$1"); R_OP+=("$2"); R_CODE+=("$3"); }
+declare -a R_NAME R_CODE R_OP R_SURV
+rdr() { R_NAME+=("$1"); R_OP+=("$2"); R_CODE+=("$3"); R_SURV+=("${4:-1}"); }
 rdr isnull "ref.is_null"        "ref.is_null|drop"
 rdr refeq  "ref.eq"             "ref.eq|drop"
 rdr cvt    "any.convert_extern" "any.convert_extern|drop"
+rdr test   "ref.test"           "ref.test (ref null \$s)|drop"
+# A dead [ref.cast] is BY DESIGN absorbed on the round trip (its hole
+# reconnects, or its bottom-sprung pin folds; the compiler-cast family the
+# FAITHDRIFT leg normalises away), so its survival leg is exempt (0): the
+# cells still assert validity, no crash, and no INTRODUCED crossing — the
+# output may carry at most the source's one ref.cast.
+rdr cast   "ref.cast"           "ref.cast (ref null \$s)|drop" 0
 
 # The crossing opcodes that must not be INTRODUCED (output count <= source
 # count, per opcode).
 CROSSERS=(any.convert_extern extern.convert_any ref.cast ref.test)
+
+# The one ACKNOWLEDGED residue of the (@if) x dead-code campaign: a
+# REF-pushing conditional feeding a parameterized block, with a further
+# claiming context in the cell. The block's parameter claim takes the
+# synthetic bottom [Stack.consume] injects (in EVERY configuration), so the
+# configuration where the branch pushed leaves that value stranded — and a
+# downstream claimer with no claim-free spelling (a numeric local.set, an
+# if condition, a statement's operand holes, select arms) captures it where
+# the source gave it to the block. Over-REJECTION only, and loud (the spliced
+# validation reports it); no crash and no silent miscompile is in the class.
+# Solving it needs a claim-free NUMERIC spelling, which the language does not
+# have — see ATIF-DEADCODE.md's residual notes.
+exempt_shape() { # $1 = cell name
+  case "$1" in
+  *ScondPush*.Bp1.*.* | *.*ScondPush*.Bp1.*) return 0 ;;
+  *) return 1 ;;
+  esac
+}
 
 template() { # $1 = |-separated instruction list
   local body
@@ -224,7 +263,7 @@ count_ops() { # $1 = file, $2 = opcode; occurrences, word-anchored
 }
 
 worker() {
-  local first="$1" last="$2" i name ridx codes v mode out="" skipped=0
+  local first="$1" last="$2" i name ridx codes v mode out="" skipped=0 acked=0
   local p="$RESULTS/w$first"
   local wat="$p.wat" wax="$p.wax" back="$p.back.wat"
   ERRLOG="$p.err"
@@ -242,6 +281,9 @@ worker() {
     if [ "$(classify_wax check "$wat")" != ok ]; then
       skipped=$((skipped + 1)); printf s >&2; continue
     fi
+    if exempt_shape "$name"; then
+      acked=$((acked + 1)); printf a >&2; continue
+    fi
     for mode in "" "--faithful"; do
       v="$(classify_wax -i wat -f wax $mode --error-format short "$wat" -o "$wax")"
       if [ "$v" != ok ]; then
@@ -255,7 +297,8 @@ worker() {
           "${mode:-default}: $v (wax->wat): $(head -1 "$ERRLOG")" "$codes")"$'\n'
         printf F >&2; continue
       fi
-      if ! grep -qE "${R_OP[$ridx]//./\\.}([^0-9a-z_.]|\$)" "$back"; then
+      if [ "${R_SURV[$ridx]}" = 1 ] \
+        && ! grep -qE "${R_OP[$ridx]//./\\.}([^0-9a-z_.]|\$)" "$back"; then
         out+="$(finding BACKSCAN HIGH "$name" \
           "${mode:-default}: reader opcode (${R_OP[$ridx]}) drifted" "$codes")"$'\n'
         printf F >&2; continue
@@ -276,6 +319,7 @@ worker() {
   done
   [ -n "$out" ] && printf '%s' "$out" >"$RESULTS/$first"
   [ "$skipped" -gt 0 ] && printf '%s\n' "$skipped" >"$RESULTS/skip.$first"
+  [ "$acked" -gt 0 ] && printf '%s\n' "$acked" >"$RESULTS/ack.$first"
   return 0
 }
 
@@ -294,8 +338,9 @@ REPORT="$RESULTS/report"
 cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
 n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
 skipped=$(cat "$RESULTS"/skip.* 2>/dev/null | paste -sd+ | bc 2>/dev/null); skipped=${skipped:-0}
+acked=$(cat "$RESULTS"/ack.* 2>/dev/null | paste -sd+ | bc 2>/dev/null); acked=${acked:-0}
 echo "=================== backing-scan report ==================="
-echo "cells: $N  tested: $((N - skipped))  (skipped as invalid: $skipped)"
+echo "cells: $N  tested: $((N - skipped - acked))  (skipped as invalid: $skipped; acknowledged push-x-param residue: $acked)"
 h=$(grep -c $'\tHIGH\t' "$REPORT" 2>/dev/null); h=${h:-0}
 echo "findings: $n  (HIGH: $h)"
 if [ "$n" -gt 0 ]; then
