@@ -1288,11 +1288,55 @@ module Stack = struct
       | (1, _, instr) :: rem -> grab_rec (n - 1) rem (instr :: cur)
       | _ -> (stack, complete n cur)
 
-  let consume inputs stack =
+  (* Whether a statement carries a conditional annotation: only such a
+     statement can have consumed — per configuration, in the source's spliced
+     validation — a value whose printed form the tree-typing then pairs with a
+     LATER hole. The scan reports it ([`Backing]'s [crossed]) so a caller whose
+     pin cannot prove the capture sound from the node alone (the [call_ref]
+     callee type pin) can fall back to the claim-free bottom pin only where the
+     hazard exists, keeping the annotation-free behaviour untouched. *)
+  let rec has_cond_annotation (i : _ Ast.instr) =
+    match i.Ast.desc with
+    | Ast.If_annotation _ -> true
+    | _ -> List.exists has_cond_annotation (Ast_utils.sub_instrs i)
+
+  (* Mark the top value consumed: it prints as its own statement and the
+     block-shaped consumer pushed above takes it as its parameter on re-parse
+     (see [effective_backing]'s [-1] arm). When a conditional annotation stands
+     on top instead, the pairing is CONFIGURATION-dependent — the annotation's
+     branch may push the actual parameter — so the value below is not this
+     block's to mark: the block's re-parse claim would capture it and re-type
+     it (the backing-scan ScondPush cells grounded an adaptive [select] at the
+     parameter type, and the lowered module failed its own validation in the
+     configuration where the branch's push was the parameter). Inject
+     [param] — a synthetic, already-consumed claim-free bottom value of the
+     parameter's hierarchy — instead: it prints as a [_ as &?noextern;]
+     statement, lowers to nothing, satisfies the claim on re-parse, and leaves
+     the real value where the source's own consumers find it. *)
+  let consume ?param inputs stack =
     if inputs = 0 then (stack, ())
     else
       ( (match stack with
         | (1, w, instr) :: rem -> (-1, w, instr) :: rem
+        | (0, _, i) :: _ when has_cond_annotation i -> (
+            (* The synthetic sits ON TOP — printed between the annotation and
+               the block — so it is pushed AFTER the branches' own claims ran:
+               a dropping branch still eats the value below the annotation
+               (the source's own splice), and the parameter's claim lands on
+               the synthetic in every configuration. A PUSHING branch's value
+               is then stranded above it per configuration; the dead reference
+               ops' crossed machinery keeps their holes claim-free over it,
+               and a trailing terminator absorbs it. (Injecting BELOW the
+               annotation instead flips the failure to the DROPPING branches,
+               whose claims then eat the synthetic and hand the block the
+               value they consumed in the source — the value's type rarely
+               fits the parameter.) The one shape neither arrangement serves
+               is a stranded branch-push meeting a downstream NUMERIC claiming
+               sink (no claim-free numeric spelling exists); that residue is
+               acknowledged in the grid. *)
+            match param with
+            | Some p -> (-1, None, p) :: stack
+            | None -> stack)
         | _ -> stack),
         () )
 
@@ -1443,18 +1487,6 @@ module Stack = struct
     | _ ->
         List.fold_left (fun n s -> n + hole_claims s) 0 (Ast_utils.sub_instrs i)
 
-  (* Whether a statement carries a conditional annotation: only such a
-     statement can have consumed — per configuration, in the source's spliced
-     validation — a value whose printed form the tree-typing then pairs with a
-     LATER hole. The scan reports it ([`Backing]'s [crossed]) so a caller whose
-     pin cannot prove the capture sound from the node alone (the [call_ref]
-     callee type pin) can fall back to the claim-free bottom pin only where the
-     hazard exists, keeping the annotation-free behaviour untouched. *)
-  let rec has_cond_annotation (i : _ Ast.instr) =
-    match i.Ast.desc with
-    | Ast.If_annotation _ -> true
-    | _ -> List.exists has_cond_annotation (Ast_utils.sub_instrs i)
-
   (* [claims] counts the values the holes ABOVE are still owed: each takes the next
      residual, so the scan skips that many before asking whether what it reaches can
      back this hole. Counting them is what makes a hole-bearing statement
@@ -1553,9 +1585,24 @@ module Stack = struct
   (* [claims] seeds the scan with the hole count of the consulting statement's
      SIBLING operands: a receiver is its statement's deepest operand, so its
      positional capture sits below the values its shallower siblings' own holes
-     take first. *)
+     take first.
+
+     Returned alongside the verdict: whether a conditional annotation sits
+     ANYWHERE in the stack. A [`Backing]'s own [crossed] is path-precise; this
+     whole-stack flag is for the [`Floor]/[`Blocked] outcomes, where a CLAIMING
+     pin is unsafe once an annotation is in play — a branch's pushes satisfy
+     the interposed claims in the spliced configurations, so a value the scan
+     counted as absorbed is still what the pin would capture there (the
+     backing-scan ScondPush cells: [(_ as &?any)] captured a funcref an
+     interposed [drop] released to it and the module no longer type-checked).
+     Over-approximate (an annotation below the scan's stopping point counts
+     too): the downgrade it triggers — the claim-free bottom pin — is inert
+     wherever the claiming pin was. *)
   let effective_backing ?(claims = 0) stop stack =
-    (stack, effective_backing stop ~crossed:false claims stack)
+    let crossed_any =
+      List.exists (fun (_, _, i) -> has_cond_annotation i) stack
+    in
+    (stack, (effective_backing stop ~crossed:false claims stack, crossed_any))
 
   (* [try_pop] carrying the width tag — a method-form op tags its result with its
      receiver's flexibility, so an erasing consumer pins it (and the pin, cast on
@@ -2740,7 +2787,7 @@ let pin_callee ctx t (f : _ Ast.instr) =
   let pin inner = { f with Ast.desc = Ast.Cast (inner, Valtype target) } in
   match f.Ast.desc with
   | Ast.Hole ->
-      let* backing = Stack.effective_backing is_poly_terminator in
+      let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
       let wrong =
         match backing with
         | `Value -> true
@@ -2770,7 +2817,10 @@ let pin_callee ctx t (f : _ Ast.instr) =
                         | None -> true)
                     | _ -> true)
                 | _ -> true))
-        | `Floor | `Blocked -> false
+        (* With an annotation in the stack, a claiming pin can capture what a
+           branch's pushes released to it per configuration (see
+           [effective_backing]'s [crossed_any]): go claim-free. *)
+        | `Floor | `Blocked -> crossed_any
       in
       let inner =
         if wrong then
@@ -2805,6 +2855,14 @@ let backing_names_type ~from_top (b : _ Ast.instr) (type_name : Ast.ident) =
    captured value is the receiver the source instruction read, validator-typed
    there). [siblings] are the statement's shallower operands, whose own hole
    claims sit between this receiver's hole and its capture. *)
+(* The bottom heap type of a hierarchy — the claim-free pin's spelling. *)
+let hierarchy_bottom : _ -> Ast.heaptype = function
+  | Some `Func -> NoFunc
+  | Some `Extern -> NoExtern
+  | Some `Exn -> NoExn
+  | Some `Cont -> NoCont
+  | Some `Any | None -> None_
+
 let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
   let target : Ast.valtype = Ref { nullable = true; typ = Type type_name } in
   let pin inner = { recv with Ast.desc = Ast.Cast (inner, Valtype target) } in
@@ -2813,7 +2871,9 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
       let claims =
         List.fold_left (fun n e -> n + Stack.hole_claims e) 0 siblings
       in
-      let* backing = Stack.effective_backing ~claims is_poly_terminator in
+      let* backing, crossed_any =
+        Stack.effective_backing ~claims is_poly_terminator
+      in
       let wrong =
         match backing with
         | `Value -> true
@@ -2824,16 +2884,10 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
             match backing_class_of ctx ~from_top b with
             | Null_class | Unknown_class -> false
             | Value_class | Ref_class _ -> true)
-        | `Floor | `Blocked -> false
+        (* As [pin_callee]: annotation in play, claiming pin unsafe. *)
+        | `Floor | `Blocked -> crossed_any
       in
-      let bottom : Ast.heaptype =
-        match heaptype_hierarchy ctx (Type type_name) with
-        | Some `Func -> NoFunc
-        | Some `Extern -> NoExtern
-        | Some `Exn -> NoExn
-        | Some `Cont -> NoCont
-        | Some `Any | None -> None_
-      in
+      let bottom = hierarchy_bottom (heaptype_hierarchy ctx (Type type_name)) in
       let inner =
         if wrong then
           cast_to (Valtype (Ref { nullable = true; typ = bottom })) recv
@@ -2841,6 +2895,30 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
       in
       return (pin inner)
   | _ -> return (pin recv)
+
+(* The synthetic value [Stack.consume] injects when a conditional annotation
+   blocks the real parameter (see there): the block's LAST parameter — its
+   topmost stack value, the one its re-parse claim takes first — at its
+   hierarchy's claim-free bottom. [None] for a paramless block, or a numeric
+   parameter (no claim-free numeric spelling exists; the width machinery owns
+   those). One value only: a multi-parameter block interleaved with a pushing
+   annotation is a deeper corner the grid does not yet spell. *)
+let consume_param ctx (typ : Src.blocktype option) =
+  let { Ast.params; _ } = blocktype ctx typ in
+  if Array.length params = 0 then None
+  else
+    match snd params.(Array.length params - 1).Ast.desc with
+    | Ast.Ref { typ = ht; _ } ->
+        Some
+          (cast_to
+             (Valtype
+                (Ref
+                   {
+                     nullable = true;
+                     typ = hierarchy_bottom (heaptype_hierarchy ctx ht);
+                   }))
+             (bare_hole ()))
+    | _ -> None
 
 (* Pin the reference HIERARCHY of an operand that leaves it open: a hole is
    polymorphic, and [!e] ([ref.as_non_null]) only forwards its operand's type. The
@@ -2979,7 +3057,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       in
       let inputs, outputs = blocktype_arity ctx typ in
       let block = Stack.run ~results:outputs (instructions ctx block.desc) in
-      let* () = Stack.consume inputs in
+      let* () = Stack.consume ?param:(consume_param ctx typ) inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
         (block_node
@@ -2997,7 +3075,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       in
       let inputs, outputs = blocktype_arity ctx typ in
       let block = Stack.run ~results:outputs (instructions ctx block.desc) in
-      let* () = Stack.consume inputs in
+      let* () = Stack.consume ?param:(consume_param ctx typ) inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
         (block_node
@@ -3037,7 +3115,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             }
       in
       let* cond = Stack.pop in
-      let* () = Stack.consume inputs in
+      let* () = Stack.consume ?param:(consume_param ctx typ) inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
         (block_node
@@ -3069,7 +3147,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             | CatchAllRef l -> CatchAllRef (label ctx l))
           catches
       in
-      let* () = Stack.consume inputs in
+      let* () = Stack.consume ?param:(consume_param ctx typ) inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
         (block_node
@@ -3114,7 +3192,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
                  (instructions ctx block.Wax_utils.Ast.desc)))
           catch_all
       in
-      let* () = Stack.consume inputs in
+      let* () = Stack.consume ?param:(consume_param ctx typ) inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
         (block_node
@@ -3496,7 +3574,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let src : Ast.valtype = Ref { nullable = true; typ = Any } in
       let* () = pin_forwarding_source src in
       let* e = Stack.pop in
-      let* backing = Stack.effective_backing is_poly_terminator in
+      let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
       let backed =
         is_bare_hole e
         &&
@@ -3511,7 +3589,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `Backing (b, from_top, _) ->
             backing_wrong_hierarchy ctx `Any ~from_top b
         | `Value -> true
-        | `Floor | `Blocked -> false
+        (* Annotation in play: the claiming source pin can capture what a
+           branch's pushes released; the source-hierarchy BOTTOM pin is the
+           claim-free spelling and the convert lowers over it identically. *)
+        | `Floor | `Blocked -> crossed_any
       in
       (* A bare hole is pinned NON-NULL and the convert preserves non-nullness, so
          the RESULT is non-null too. State that here rather than leaving it to the
@@ -3536,7 +3617,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let src : Ast.valtype = Ref { nullable = true; typ = Extern } in
       let* () = pin_forwarding_source src in
       let* e = Stack.pop in
-      let* backing = Stack.effective_backing is_poly_terminator in
+      let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
       let backed =
         is_bare_hole e
         &&
@@ -3552,7 +3633,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `Backing (b, from_top, _) ->
             backing_wrong_hierarchy ctx `Extern ~from_top b
         | `Value -> true
-        | `Floor | `Blocked -> false
+        (* As [ExternConvertAny]: claim-free under an annotation. *)
+        | `Floor | `Blocked -> crossed_any
       in
       (* As [ExternConvertAny]: a non-null pin gives a non-null result. *)
       let nullable = backed || not (is_bare_hole e) in
@@ -3630,6 +3712,48 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
                  e)
         | _ -> e
       in
+      (* And over a backing provably outside the TARGET's hierarchy — reachable
+         only through an [(@if)], whose branches consume it per configuration —
+         a bare hole would capture it, and typing the capture compounds this
+         cast with the hierarchy crossing the re-parse needs (the backing-scan
+         [+cast] cells: an extern residual under [ref.cast (ref null $s)]
+         re-lowered with an [any.convert_extern] the source never had). Ground
+         the hole with the claim-free bottom of the target's hierarchy instead;
+         the [((_ as &?none) as &?s)] chain lowers to nothing, which is the
+         absorbed spelling a dead cast of the polymorphic bottom already
+         round-trips to. A SAME-hierarchy capture stays bare: it is either the
+         cast's own operand (no annotation in between — the validator typed it
+         there) or re-lowers as at most this cast's own [ref.cast]. *)
+      let* e =
+        match e.Ast.desc with
+        | Ast.Hole ->
+            let* backing, crossed_any =
+              Stack.effective_backing is_poly_terminator
+            in
+            let target_hier = heaptype_hierarchy ctx target.typ in
+            let wrong =
+              match backing with
+              | `Value -> true
+              | `Backing (b, from_top, crossed) -> (
+                  crossed
+                  &&
+                  match backing_class_of ctx ~from_top b with
+                  | Ref_class { hier; _ } -> Some hier <> target_hier
+                  | Value_class -> true
+                  | Null_class | Unknown_class -> false)
+              (* As [pin_callee]: annotation in play, claiming pin unsafe. *)
+              | `Floor | `Blocked -> crossed_any
+            in
+            return
+              (if wrong then
+                 cast_to
+                   (Valtype
+                      (Ref
+                         { nullable = true; typ = hierarchy_bottom target_hier }))
+                   e
+               else e)
+        | _ -> return e
+      in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref target))))
   | RefCastDescEq t ->
       (* The descriptor operand is on top of the value. The target type and its
@@ -3677,7 +3801,43 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1 (with_loc (GetDescriptor arg))
   | RefTest t ->
       let* e = Stack.pop in
-      Stack.push 1 (expect I32 (with_loc (Test (e, reftype ctx t))))
+      let target = reftype ctx t in
+      (* As [RefCast]: over a backing provably outside the target's hierarchy,
+         or with an annotation anywhere in the stack (whose branches shuffle
+         what a bare hole would capture per configuration), ground the hole
+         with the claim-free bottom of the target's hierarchy — [ref.test]
+         carries its type immediate, so the pinned [(_ as &?none) is &?s]
+         still lowers to exactly the source opcode. *)
+      let* e =
+        match e.Ast.desc with
+        | Ast.Hole ->
+            let* backing, crossed_any =
+              Stack.effective_backing is_poly_terminator
+            in
+            let target_hier = heaptype_hierarchy ctx target.typ in
+            let wrong =
+              match backing with
+              | `Value -> true
+              | `Backing (b, from_top, crossed) -> (
+                  crossed
+                  &&
+                  match backing_class_of ctx ~from_top b with
+                  | Ref_class { hier; _ } -> Some hier <> target_hier
+                  | Value_class -> true
+                  | Null_class | Unknown_class -> false)
+              | `Floor | `Blocked -> crossed_any
+            in
+            return
+              (if wrong then
+                 cast_to
+                   (Valtype
+                      (Ref
+                         { nullable = true; typ = hierarchy_bottom target_hier }))
+                   e
+               else e)
+        | _ -> return e
+      in
+      Stack.push 1 (expect I32 (with_loc (Test (e, target))))
   | RefEq ->
       (* [ref.eq] shares the Wax [==] surface with the numeric comparisons, but
          the numeric width pin ([(_ as i64)]) is an [as t] cast and cannot spell
@@ -3697,7 +3857,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          detected and left bare regardless of its hierarchy.) *)
       let* o2 = Stack.try_pop in
       let* o1 = Stack.try_pop in
-      let* backing = Stack.effective_backing is_poly_terminator in
+      let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
       let bare = bare_hole () in
       let eq_pin e =
         Ast.no_loc_instr
@@ -3730,7 +3890,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         match backing with
         | `Backing (b, from_top, _) -> backing_not_eq ctx ~from_top b
         | `Value -> true
-        | `Floor | `Blocked -> false
+        (* Annotation in play: the claiming [(_ as &?eq)] pin can capture what
+           a branch's pushes released (a funcref made it a hierarchy crossing);
+           the bottom pins are the claim-free spelling. *)
+        | `Floor | `Blocked -> crossed_any
       in
       let bottom_pin e =
         Ast.no_loc_instr
@@ -3781,7 +3944,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          load-bearing: [simplify]/[--faithful] drop it for a concrete ref operand,
          where [ty' <: &?any] holds, and keep it otherwise.) *)
       let* o = Stack.try_pop in
-      let* backing = Stack.effective_backing is_poly_terminator in
+      let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
       let any_pin e =
         Ast.no_loc_instr
           (Ast.Cast (e, Valtype (Ref { nullable = true; typ = Any })))
@@ -3832,6 +3995,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
                 ref_bottom_pin ()
             | `Backing _ -> bare_hole ()
             | `Floor when backed_by_block_param -> bare_hole ()
+            (* Annotation in play: the claiming [(_ as &?any)] pin can capture
+               what a branch's pushes released (a funcref/cont capture no
+               longer type-checked); the bottom pin is claim-free. *)
+            | (`Floor | `Blocked) when crossed_any -> ref_bottom_pin ()
             | `Floor | `Blocked -> any_pin (bare_hole ()))
       in
       Stack.push 1 (expect I32 (with_loc (UnOp (op_loc i.info Ast.Not, e))))
@@ -4165,12 +4332,22 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let s = Wax_utils.Ast.concat_desc s in
       Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
   | If_annotation { cond; then_body; else_body } ->
+      (* Each branch body runs on a fresh stack, and the annotation declares NO
+         results: a value a branch leaves is an ENCLOSING-frame value per
+         configuration (the spliced validation hands it to whatever consumer
+         follows the annotation), so only its own printed form carries its
+         width — [~results:0] keeps the leftover's recorded expectation, where
+         the default would clear it as a context-typed block result and a
+         branch-pushed [i64.const 1] re-lowered at the i32 default (a
+         backing-scan ScondPush grid finding: the lowered module failed its own
+         validation in the configuration that feeds the value to an i64
+         consumer). *)
       let then_body =
         {
           then_body with
           Ast.desc =
             with_cond ctx ~location:i.info cond true (fun () ->
-                Stack.run (instructions ctx then_body.desc));
+                Stack.run ~results:0 (instructions ctx then_body.desc));
         }
       in
       let else_body =
@@ -4180,7 +4357,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
               b with
               Ast.desc =
                 with_cond ctx ~location:i.info cond false (fun () ->
-                    Stack.run (instructions ctx b.desc));
+                    Stack.run ~results:0 (instructions ctx b.desc));
             })
           else_body
       in

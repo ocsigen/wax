@@ -237,3 +237,117 @@ setting its own cell:
     (drop (ref.is_null))
     (unreachable)
   )
+
+A branch that PUSHES a value: the spliced configurations hand it to whatever
+consumer follows the annotation, so only its own printed form carries its
+width — the branch body's leftovers are NOT context-typed block results
+(`Stack.run ~results:0`). Unpinned, the `i64.const 1` re-lowered at the i32
+default and the lowered module failed its own validation in the configuration
+that feeds it to the i64 local:
+
+  $ cat > push.wat <<'WAT'
+  > (module
+  >   (func (local $l64 i64)
+  >     return
+  >     (@if $dbg (@then i64.const 1) (@else i64.const 1))
+  >     local.set $l64
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax push.wat -o push.wax && sed -n '4,10p' push.wax
+      {
+          1 as i64;
+      }
+      #[else]
+      {
+          1 as i64;
+      }
+  $ wax push.wax -f wat
+  (func $f
+    (local $l64 i64)
+    (return)
+    (@if $dbg (@then (i64.const 1)) (@else (i64.const 1)))
+    (local.set $l64)
+    (drop (ref.is_null))
+    (unreachable)
+  )
+
+A dead `ref.cast` whose hole would capture a residual OUTSIDE its target's
+hierarchy (an extern under a cast to an any-hierarchy type): bare, typing the
+capture compounds the cast with an `any.convert_extern` the source never had.
+The claim-free bottom pin grounds it, and the chain lowers to nothing — the
+absorbed spelling a dead cast of the polymorphic bottom already round-trips
+to (a dead `ref.cast` is the one reader whose opcode is by design not
+preserved):
+
+  $ cat > deadcast.wat <<'WAT'
+  > (module
+  >   (type $s (struct (field (mut i64))))
+  >   (func
+  >     return
+  >     extern.convert_any
+  >     (@if $dbg (@then drop) (@else drop))
+  >     ref.cast (ref null $s)
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax deadcast.wat -o deadcast.wax && grep 'as' deadcast.wax
+      _ as &any as &extern;
+      _ = _ as &?none as &?s;
+  $ wax deadcast.wax -f wat | grep -cE 'ref.cast|any.convert_extern'
+  0
+  [1]
+
+A pushing branch also makes every CLAIMING pin unsafe on a `Floor`/`Blocked`
+verdict: the interposed `drop`'s claim is satisfied by the branch's push in
+the spliced configurations, so the funcref the scan counted as absorbed is
+exactly what a claiming `(_ as &?any)` would capture there (a hierarchy
+crossing). With an annotation anywhere in the stack the reader pins go
+claim-free:
+
+  $ cat > pushfn.wat <<'WAT'
+  > (module
+  >   (elem declare func $f) (func $f)
+  >   (func
+  >     return
+  >     ref.func $f
+  >     (@if $dbg (@then i64.const 1) (@else i64.const 1))
+  >     drop
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax pushfn.wat -o pushfn.wax && grep '!' pushfn.wax
+      _ = !(_ as &?none);
+  $ wax pushfn.wax -f wat | grep -c 'ref.is_null'
+  1
+
+And a parameterized block behind the annotation: marking the value below it
+consumed would let the block's re-parse claim re-type it (here grounding the
+untyped `select` at `&?extern`, so the lowered module failed its own
+validation). `Stack.consume` injects a synthetic, already-consumed claim-free
+bottom value for the claim instead — printed between the annotation and the
+block, so a dropping branch still eats the value below and the parameter's
+claim lands on the synthetic in every configuration — and the `select` stays
+untyped:
+
+  $ cat > pushblk.wat <<'WAT'
+  > (module
+  >   (func
+  >     return
+  >     select
+  >     (@if $dbg (@then ref.null extern) (@else ref.null extern))
+  >     block (param externref) drop end
+  >     ref.eq
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax pushblk.wat -o pushblk.wax && sed -n '3p;12,15p' pushblk.wax
+      _?_:_;
+      _ as &?noextern;
+      do (&?extern) {
+          _ = _;
+      }
+  $ wax pushblk.wax -f wat | grep -cE '\(select\)|ref.eq'
+  2
