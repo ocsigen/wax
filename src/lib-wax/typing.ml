@@ -275,6 +275,20 @@ module Error = struct
          "Cannot determine the type of this expression, which is needed to \
           compile this operation.")
 
+  (* A packed ([i8]/[i16]) array or field read whose signedness was never
+     resolved: WebAssembly has no unsigned-by-default read of a packed value
+     ([array.get]/[struct.get] on one is invalid — only the [_s]/[_u] forms
+     exist), so the value cannot take the [i32] default an omitted annotation
+     would give it. The Wasm validator's mirror of this is its
+     "cannot be used on packed arrays" rejection; without this the typer
+     accepted the binding and the conversion produced a module that failed
+     its own validation (a wax-mutation-fuzzer finding). *)
+  let packed_read_needs_signedness context ~location =
+    report context ~location
+      (text
+         "This value is read from a packed (i8/i16) array or field; specify \
+          the sign extension with 'as i32_s' or 'as i32_u'.")
+
   (* A struct literal omitted its type name in a position where the expected
      type does not pin an exact struct type, so the type cannot be inferred. *)
   let cannot_infer_struct_type context ~location =
@@ -2951,7 +2965,22 @@ let report_uninitialized ctx idx =
    [simplify] finds redundant (it equals what the value would infer to on its
    own) is dropped, so Wax printed back from Wasm omits it. Used for both the
    single-value form and each name of a multi-value [let]. *)
-let bind_let_value ctx ~location result_ty (name, typ) =
+(* Whether the value's own printed form is a packed AGGREGATE read — an
+   array/struct access on an [i8]/[i16] element or field. Only those require an
+   explicit signedness ([as i32_s]/[as i32_u], see the language docs: "no
+   implicit widening"); a narrow MEMORY load ([mem.load8], the atomic loads)
+   carries the same [Int8]/[Int16] cell but legitimately defaults to the
+   unsigned read when the cast is omitted, so the CELL alone cannot make the
+   distinction. Shallow on purpose: a [Labelled] wrapper is looked through, an
+   exotic join that keeps a packed type is left to the compiled module's own
+   validation. *)
+let rec packed_aggregate_source (i : _ instr) =
+  match i.desc with
+  | ArrayGet _ | StructGet _ -> true
+  | Labelled (_, e) -> packed_aggregate_source e
+  | _ -> false
+
+let bind_let_value ?init ctx ~location result_ty (name, typ) =
   match typ with
   | Some typ ->
       (* The type the value would take on its own, captured before
@@ -2977,6 +3006,17 @@ let bind_let_value ctx ~location result_ty (name, typ) =
       in
       ((name, if ctx.simplify && redundant then None else Some typ), redundant)
   | None ->
+      (* A packed AGGREGATE read bound (or dropped: [name] may be anonymous)
+         without a signedness: WebAssembly has no unsigned-by-default
+         [array.get]/[struct.get] on a packed element or field, so the i32
+         default the omitted annotation gives it below has no lowering — the
+         typer used to accept it and the conversion failed its own output
+         validation (a wax-mutation-fuzzer under-reject finding). The cell is
+         still resolved below so the report does not cascade. *)
+      (match (init, Cell.get result_ty) with
+      | Some init, (Int8 | Int16) when packed_aggregate_source init ->
+          Error.packed_read_needs_signedness ctx.diagnostics ~location
+      | _ -> ());
       Option.iter
         (fun name ->
           (* The local takes its initializer's type; an [Unknown]/[Error]
@@ -7188,7 +7228,7 @@ and type_let ctx i =
                here is absent — no redundancy to suggest. *)
             [
               fst
-                (bind_let_value ctx ~location:(snd i'.info)
+                (bind_let_value ~init:i' ctx ~location:(snd i'.info)
                    (expression_type ctx i') binding);
             ]
         | _ ->
