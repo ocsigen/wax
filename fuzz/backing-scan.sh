@@ -202,20 +202,19 @@ rdr cast   "ref.cast"           "ref.cast (ref null \$s)|drop" 0
 # count, per opcode).
 CROSSERS=(any.convert_extern extern.convert_any ref.cast ref.test)
 
-# The one ACKNOWLEDGED residue of the (@if) x dead-code campaign: a
-# REF-pushing conditional feeding a parameterized block, with a further
-# claiming context in the cell. The block's parameter claim takes the
-# synthetic bottom [Stack.consume] injects (in EVERY configuration), so the
-# configuration where the branch pushed leaves that value stranded — and a
-# downstream claimer with no claim-free spelling (a numeric local.set, an
-# if condition, a statement's operand holes, select arms) captures it where
-# the source gave it to the block. Over-REJECTION only, and loud (the spliced
-# validation reports it); no crash and no silent miscompile is in the class.
-# Solving it needs a claim-free NUMERIC spelling, which the language does not
-# have — see ATIF-DEADCODE.md's residual notes.
+# The one ACKNOWLEDGED residue of the (@if) x dead-code campaign: a value
+# residual BELOW a REF-pushing conditional that feeds a parameterized block.
+# There [Stack.consume] must inject its synthetic (else the tree the lowering
+# reads captures and re-types the residual through the parameter claim), the
+# parameter then takes the synthetic in every configuration, and the branch's
+# push is left stranded onto whatever claimer follows — including ones with no
+# claim-free spelling. Over-REJECTION only, and loud (the spliced validation
+# reports it); no crash and no silent miscompile is in the class. With NOTHING
+# below the annotation the synthetic is no longer injected and those cells are
+# ordinary calibration — see ATIF-DEADCODE.md's residual notes.
 exempt_shape() { # $1 = cell name
   case "$1" in
-  *ScondPush*.Bp1.*.* | *.*ScondPush*.Bp1.*) return 0 ;;
+  *.*ScondPush*.Bp1.*) return 0 ;;
   *) return 1 ;;
   esac
 }
