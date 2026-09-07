@@ -1318,22 +1318,35 @@ module Stack = struct
     else
       ( (match stack with
         | (1, w, instr) :: rem -> (-1, w, instr) :: rem
-        | (0, _, i) :: _ when has_cond_annotation i -> (
-            (* The synthetic sits ON TOP — printed between the annotation and
-               the block — so it is pushed AFTER the branches' own claims ran:
-               a dropping branch still eats the value below the annotation
-               (the source's own splice), and the parameter's claim lands on
-               the synthetic in every configuration. A PUSHING branch's value
-               is then stranded above it per configuration; the dead reference
-               ops' crossed machinery keeps their holes claim-free over it,
-               and a trailing terminator absorbs it. (Injecting BELOW the
-               annotation instead flips the failure to the DROPPING branches,
-               whose claims then eat the synthetic and hand the block the
-               value they consumed in the source — the value's type rarely
-               fits the parameter.) The one shape neither arrangement serves
-               is a stranded branch-push meeting a downstream NUMERIC claiming
-               sink (no claim-free numeric spelling exists); that residue is
-               acknowledged in the grid. *)
+        | (0, _, i) :: _
+          when has_cond_annotation i
+               && List.exists (fun (a, _, _) -> a <> 0) stack -> (
+            (* The synthetic exists to keep the parameter's claim OFF a value
+               deeper in the frame, which the tree the lowering reads would
+               otherwise capture and re-type (the annotation's branch owns it
+               per configuration) — so it is injected only when such a value
+               EXISTS below the statement run. With nothing underneath, every
+               pass already agrees (the parameter draws from the polymorphic
+               floor in the preserved tree, and from the branch's own push in
+               the spliced configurations — the source's exact pairing), and a
+               synthetic would only strand the push onto a later claimer (the
+               formerly-acknowledged ScondPush x Bp1 x numeric-sink cells).
+
+               It sits ON TOP — printed between the annotation and the block —
+               so it is pushed AFTER the branches' own claims ran: a dropping
+               branch still eats the value below the annotation (the source's
+               own splice), and the parameter's claim lands on the synthetic in
+               every configuration. A PUSHING branch's value is then stranded
+               above it per configuration; the dead reference ops' crossed
+               machinery keeps their holes claim-free over it, and a trailing
+               terminator absorbs it. (Injecting BELOW the annotation instead
+               flips the failure to the DROPPING branches, whose claims then
+               eat the synthetic and hand the block the value they consumed in
+               the source — the value's type rarely fits the parameter.) The
+               one shape neither arrangement serves is a value below a PUSHING
+               annotation whose strand meets a downstream claimer with no
+               claim-free spelling; that residue is acknowledged in the
+               grid. *)
             match param with
             | Some p -> (-1, None, p) :: stack
             | None -> stack)

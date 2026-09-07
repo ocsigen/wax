@@ -351,3 +351,34 @@ untyped:
       }
   $ wax pushblk.wax -f wat | grep -cE '\(select\)|ref.eq'
   2
+
+With NOTHING below the annotation, the synthetic is not injected at all:
+every pass already agrees (the parameter draws from the polymorphic floor in
+the lowered tree, and from the branch's own push in the spliced
+configurations — the source's exact pairing), and a synthetic would only
+strand the push onto the numeric sink:
+
+  $ cat > pushsink.wat <<'WAT'
+  > (module
+  >   (func (local $l64 i64)
+  >     return
+  >     (@if $dbg (@then ref.null extern) (@else ref.null extern))
+  >     block (param externref) drop end
+  >     local.set $l64
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax pushsink.wat -o pushsink.wax && grep -cE 'noextern' pushsink.wax
+  0
+  [1]
+  $ wax pushsink.wax -f wat
+  (func $f
+    (local $l64 i64)
+    (return)
+    (@if $dbg (@then (ref.null extern)) (@else (ref.null extern)))
+    (block (param externref) (drop))
+    (local.set $l64)
+    (drop (ref.is_null))
+    (unreachable)
+  )
