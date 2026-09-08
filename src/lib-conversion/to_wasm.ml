@@ -1450,6 +1450,18 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
               (* Cast to an inline function type: ref.cast to the anonymous
                  function type minted for the cast's result. *)
               | _, Functype _ -> RefCast (reftype (expr_reftype i))
+              (* A REFERENCE under a plain numeric cast has no instruction, and
+                 the pair is only reachable when a poisoned operand's [Error]
+                 was ERASED by an arithmetic recovery merge (the BinOp arms
+                 unify an [Error] operand cell onto the other operand's type,
+                 see [Typing]), sidestepping the poisoned-node guard above —
+                 the conditional-annotation tree pass again, whose diagnostics
+                 the configuration checks own; a hand-written ref-to-numeric
+                 cast exits on its own diagnostic before lowering. Nothing to
+                 emit: the mis-captured value's opcodes come from its own
+                 residual statement, so eliding keeps the stream
+                 source-shaped. *)
+              | Ref _, Valtype (I32 | I64 | F32 | F64 | V128) -> Nop
               | _ ->
                   print_valtype in_ty;
                   print_instr i;
@@ -1707,13 +1719,48 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
   | BinOp ({ desc = op; _ }, a, b) -> (
       let code_a = instruction ret ctx a in
       let code_b = instruction ret ctx b in
-      let operand_type = expr_valtype a in
+      (* A POISONED operand — its cell resolved to no type. Only the
+         conditional-annotation tree pass can hand one to the lowering (its
+         per-configuration checks own the diagnostics; every other path exits
+         on the error): the operand's hole positionally captured a value an
+         [(@if)] branch consumes in its own configuration and the pairing did
+         not type. Fall back to the width the SOURCE opcode recorded (the
+         operand's own record, else this node's), so an [i64.add] whose hole
+         mis-captured still lowers as [i64.add] and the per-statement stream
+         stays source-shaped — as the poisoned-cast fallback below does. *)
+      let operand_type = expr_opt_valtype a in
       match (op, operand_type) with
-      | Eq, Ref _ -> folded loc RefEq (code_a @ code_b)
-      | Ne, Ref _ ->
+      | Eq, Some (Ref _) -> folded loc RefEq (code_a @ code_b)
+      | Ne, Some (Ref _) ->
           (* There is no [ref.ne]; [a != b] on references is [!(a == b)]. *)
           folded loc (Text.UnOp (I32 Eqz)) (folded loc RefEq (code_a @ code_b))
       | _ ->
+          let operand_type =
+            match operand_type with
+            | Some ((I32 | I64 | F32 | F64 | V128) as t) -> t
+            (* A POISONED operand: no type ([None] — the cell resolved to
+               [Error]) or a REFERENCE under an arithmetic operator (the
+               operand's hole positionally captured a value an [(@if)] branch
+               consumes in its own configuration; the mismatch was reported by
+               the per-configuration checks, which own the diagnostics — every
+               other path exits on the error before lowering). There is no
+               instruction for the pair; fall back to a recorded width when one
+               survives (the freshly-parsed re-parse has none), else i32, so
+               the statement still lowers an add/compare of the source's shape
+               instead of asserting — as the poisoned-cast fallback does. *)
+            | Some (Ref _) | None -> (
+                match a.desc with
+                (* The operand's own printed ascription survives a re-parse
+                   where a record cannot ([(_ as i64) + _], the crossed-capture
+                   pin [From_wasm]'s [int_bin_op] places). *)
+                | Cast (_, Valtype ((I32 | I64 | F32 | F64) as t)) -> t
+                | _ -> (
+                    match (a.expected, i.expected) with
+                    | Recorded ((I32 | I64 | F32 | F64) as t), _
+                    | _, Recorded ((I32 | I64 | F32 | F64) as t) ->
+                        t
+                    | _ -> I32))
+          in
           let opcode = binop i op operand_type in
           folded loc opcode (code_a @ code_b))
   (* Fold [-literal] into a single signed constant, but only when the negation
