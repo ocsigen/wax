@@ -1524,8 +1524,18 @@ module Stack = struct
        down and the scan pinned over a residual the hole in fact reconnects to
        (the backing-scan grid's Bp1 cluster: the pin materialised as an
        [any.convert_extern]). Spoken for, it can back nothing itself. *)
-    | (-1, _, _) :: rem ->
-        effective_backing stop ~crossed (max 0 (claims - 1)) rem
+    | (-1, _, i) :: rem ->
+        (* Its own tree may CARRY holes (a consumed [select] of holes): those
+           claim from this frame exactly like a statement's — the consumed
+           value prints as its own statement, whose holes run BEFORE the
+           consumer's parameter claim — so they are charged like [hole_claims]
+           of any other statement (a depth-4 grid finding: uncharged, the scan
+           read the extern the select's arm captures as the reader's backing,
+           and the bare [!_] re-defaulted to [i32.eqz]). *)
+        effective_backing stop
+          ~crossed:(crossed || has_cond_annotation i)
+          (max 0 (claims - 1) + hole_claims i)
+          rem
     | (0, _, i) :: _ when stop i -> `Blocked
     | (0, _, i) :: rem ->
         effective_backing stop
@@ -2268,90 +2278,6 @@ let is_anchor = function
   | Some (e, None) -> not (reparse_adaptive e)
   | _ -> false
 
-let int_bin_op (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
-  (* A Wax instruction at the source instruction's span. Built fresh rather than
-     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
-     their call-target hints, so one cannot be reinterpreted as the other. *)
-  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
-    {
-      desc = i;
-      info = i0.Src.info;
-      hints = Wax_wasm.Hints.none;
-      expected = Unset;
-    }
-  in
-  (* An absent operand — a pop from the empty/absent stack, i.e. dead code — is a
-     hole carrying the operator's operand type as its recorded width, which is what
-     the typer grounds it from if the printed form would resolve elsewhere. A
-     PRESENT operand already carries its own record from where it was pushed, so
-     nothing distinguishes the two here any more (no anchor analysis, no pin
-     placement: the reconciliation decides all of that from the records). *)
-  let bare () = expect (inttype sz) (Ast.no_loc_instr Ast.Hole) in
-  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
-  let operand o = match o with Some (e, _) -> e | None -> bare () in
-  (* An arithmetic operator yields the operand width, so [a + b] round-trips to
-     that width via the sum's own type. Its result stays a flexible literal tree
-     (tagged) only when BOTH operands are; if either is grounded the sum is
-     grounded too ([x + 1] re-parses to [x]'s width on its own) and takes no tag,
-     so a downstream eraser does not read it as flexible. *)
-  let symbol width op =
-    let* o2 = Stack.try_pop_tagged in
-    let* o1 = Stack.try_pop_tagged in
-    let e1 = operand o1 and e2 = operand o2 in
-    let both_flexible =
-      match (o1, o2) with
-      | Some (_, Some _), Some (_, Some _) -> true
-      | _ -> false
-    in
-    let width = if both_flexible then width else None in
-    (* The sum's own type is the operand width whether or not the tag above keeps
-       it flexible. *)
-    Stack.push_num width
-      (expect (inttype sz) (with_loc (BinOp (op_loc i0.info op, e1, e2))))
-  in
-  (* A comparison yields i32 whatever its operands' width, so its surface *erases*
-     that width ([(4096 >>u 40) == 0] would re-default the shift to i32 and flip
-     true->false). Nothing is inserted for it: each operand carries its own
-     recorded width, and the typer pins whichever one would resolve elsewhere. The
-     i32 result carries no tag. *)
-  let compare op =
-    let* o2 = Stack.try_pop_tagged in
-    let* o1 = Stack.try_pop_tagged in
-    let e1 = operand o1 and e2 = operand o2 in
-    (* The i32 result carries no width TAG (it is not flexible), but the opcode
-       states it, so record it. *)
-    Stack.push 1 (expect I32 (with_loc (BinOp (op_loc i0.info op, e1, e2))))
-  in
-  (* [rotl]/[rotr]: result width = receiver width, so it carries the receiver's
-     flexibility (the count arg is pinned by the method once the receiver fixes
-     it). Like [clz], an erasing consumer then pins it back to the receiver. *)
-  let meth name =
-    let* e2 = pop_typed (inttype sz) in
-    let* e1, w1 = pop_typed_tagged (inttype sz) in
-    Stack.push_num w1
-      (expect (inttype sz)
-         (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ]))))
-  in
-  match op with
-  | Add -> symbol arith Add
-  | Sub -> symbol arith Sub
-  | Mul -> symbol arith Mul
-  | Div s -> symbol arith (Div (Some s))
-  | Rem s -> symbol arith (Rem s)
-  | And -> symbol arith And
-  | Or -> symbol arith Or
-  | Xor -> symbol arith Xor
-  | Shl -> symbol arith Shl
-  | Shr s -> symbol arith (Shr s)
-  | Rotl -> meth "rotl"
-  | Rotr -> meth "rotr"
-  | Eq -> compare Eq
-  | Ne -> compare Ne
-  | Lt s -> compare (Lt (Some s))
-  | Gt s -> compare (Gt (Some s))
-  | Le s -> compare (Le (Some s))
-  | Ge s -> compare (Ge (Some s))
-
 let float_un_op i0 sz (op : Src.float_un_op) =
   (* A Wax instruction at the source instruction's span. Built fresh rather than
      with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
@@ -2427,69 +2353,6 @@ let float_un_op i0 sz (op : Src.float_un_op) =
              (let e = e (inttype sz) in
               if e' = None then e else cast_to (Valtype (inttype sz)) e)
              "from_bits")
-
-let float_bin_op i0 sz (op : Src.float_bin_op) =
-  (* A Wax instruction at the source instruction's span. Built fresh rather than
-     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
-     their call-target hints, so one cannot be reinterpreted as the other. *)
-  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
-    {
-      desc = i;
-      info = i0.Src.info;
-      hints = Wax_wasm.Hints.none;
-      expected = Unset;
-    }
-  in
-  (* As for [int_bin_op]: an arithmetic operator preserves the operand width and
-     its result stays flexible only when both operands are; an absent operand is a
-     hole carrying the operator's type as its record, and nothing else is
-     inserted — the typer grounds whatever would resolve elsewhere. *)
-  let bare () = expect (floattype sz) (Ast.no_loc_instr Ast.Hole) in
-  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
-  let operand o = match o with Some (e, _) -> e | None -> bare () in
-  let symbol width op =
-    let* o2 = Stack.try_pop_tagged in
-    let* o1 = Stack.try_pop_tagged in
-    let e1 = operand o1 and e2 = operand o2 in
-    let both_flexible =
-      match (o1, o2) with
-      | Some (_, Some _), Some (_, Some _) -> true
-      | _ -> false
-    in
-    let width = if both_flexible then width else None in
-    Stack.push_num width
-      (expect (floattype sz) (with_loc (BinOp (op_loc i0.info op, e1, e2))))
-  in
-  let compare op =
-    let* o2 = Stack.try_pop_tagged in
-    let* o1 = Stack.try_pop_tagged in
-    let e1 = operand o1 and e2 = operand o2 in
-    (* The i32 result carries no width TAG (it is not flexible), but the opcode
-       states it, so record it. *)
-    Stack.push 1 (expect I32 (with_loc (BinOp (op_loc i0.info op, e1, e2))))
-  in
-  (* [min]/[max]/[copysign]: result width = receiver width (as [rotl]). *)
-  let meth name =
-    let* e2 = pop_typed (floattype sz) in
-    let* e1, w1 = pop_typed_tagged (floattype sz) in
-    Stack.push_num w1
-      (expect (floattype sz)
-         (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ]))))
-  in
-  match op with
-  | Add -> symbol arith Add
-  | Sub -> symbol arith Sub
-  | Mul -> symbol arith Mul
-  | Div -> symbol arith (Div None)
-  | Min -> meth "min"
-  | Max -> meth "max"
-  | CopySign -> meth "copysign"
-  | Eq -> compare Eq
-  | Ne -> compare Ne
-  | Lt -> compare (Lt None)
-  | Gt -> compare (Gt None)
-  | Le -> compare (Le None)
-  | Ge -> compare (Ge None)
 
 let blocktype ctx (typ : Src.blocktype option) =
   match typ with
@@ -2949,6 +2812,183 @@ let consume_param ctx (typ : Src.blocktype option) =
    dropped as redundant rather than turning into a convert. That is the
    documented best-effort cast fidelity, and pinning an arm would trade it for a
    typed-[select] immediate, itself a documented residual. *)
+(* An absent numeric-operator operand whose positional claim would capture a
+   REFERENCE (or null) residual across a conditional annotation — whose branch
+   consumes it per configuration; the depth-4 grid's [R*.Scond*.Rnum.*] cells:
+   the record alone cannot help there (the mis-typed tree resolves the cell as
+   the reference and the width machinery skips it), so the hole gets the
+   SYNTACTIC pin [(_ as i64)] too. The capture still mis-types in the
+   discarded-diagnostics tree pass, but the printed target survives the
+   re-parse and the lowering's poisoned-operand fallback reads it, keeping the
+   opcode at its source width. [bare] everywhere else (no output churn):
+   without an annotation, a capturable reference here means invalid input. *)
+let pin_crossed_ref_hole ctx ty ~bare o =
+  match o with
+  | Some (e, _) -> return e
+  | None ->
+      let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
+      return
+        (if
+           crossed_any
+           &&
+           match backing with
+           | `Backing (b, from_top, _) -> (
+               match backing_class_of ctx ~from_top b with
+               | Ref_class _ | Null_class -> true
+               | Value_class | Unknown_class -> false)
+           | `Value | `Floor | `Blocked -> false
+         then typed_hole ty
+         else bare ())
+
+let float_bin_op ctx (i0 : _ Src.instr) sz (op : Src.float_bin_op) =
+  (* A Wax instruction at the source instruction's span. Built fresh rather than
+     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
+     their call-target hints, so one cannot be reinterpreted as the other. *)
+  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
+    {
+      desc = i;
+      info = i0.Src.info;
+      hints = Wax_wasm.Hints.none;
+      expected = Unset;
+    }
+  in
+  (* As for [int_bin_op]: an arithmetic operator preserves the operand width and
+     its result stays flexible only when both operands are; an absent operand is a
+     hole carrying the operator's type as its record, and nothing else is
+     inserted — the typer grounds whatever would resolve elsewhere. *)
+  let bare () = expect (floattype sz) (Ast.no_loc_instr Ast.Hole) in
+  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
+  let symbol width op =
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let* e1 = pin_crossed_ref_hole ctx (floattype sz) ~bare o1 in
+    let* e2 = pin_crossed_ref_hole ctx (floattype sz) ~bare o2 in
+    let both_flexible =
+      match (o1, o2) with
+      | Some (_, Some _), Some (_, Some _) -> true
+      | _ -> false
+    in
+    let width = if both_flexible then width else None in
+    Stack.push_num width
+      (expect (floattype sz) (with_loc (BinOp (op_loc i0.info op, e1, e2))))
+  in
+  let compare op =
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let* e1 = pin_crossed_ref_hole ctx (floattype sz) ~bare o1 in
+    let* e2 = pin_crossed_ref_hole ctx (floattype sz) ~bare o2 in
+    (* The i32 result carries no width TAG (it is not flexible), but the opcode
+       states it, so record it. *)
+    Stack.push 1 (expect I32 (with_loc (BinOp (op_loc i0.info op, e1, e2))))
+  in
+  (* [min]/[max]/[copysign]: result width = receiver width (as [rotl]). *)
+  let meth name =
+    let* e2 = pop_typed (floattype sz) in
+    let* e1, w1 = pop_typed_tagged (floattype sz) in
+    Stack.push_num w1
+      (expect (floattype sz)
+         (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ]))))
+  in
+  match op with
+  | Add -> symbol arith Add
+  | Sub -> symbol arith Sub
+  | Mul -> symbol arith Mul
+  | Div -> symbol arith (Div None)
+  | Min -> meth "min"
+  | Max -> meth "max"
+  | CopySign -> meth "copysign"
+  | Eq -> compare Eq
+  | Ne -> compare Ne
+  | Lt -> compare (Lt None)
+  | Gt -> compare (Gt None)
+  | Le -> compare (Le None)
+  | Ge -> compare (Ge None)
+
+let int_bin_op ctx (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
+  (* A Wax instruction at the source instruction's span. Built fresh rather than
+     with [{ i0 with desc }]: a Wasm and a Wax instruction differ in the type of
+     their call-target hints, so one cannot be reinterpreted as the other. *)
+  let with_loc (i : _ Ast.instr_desc) : _ Ast.instr =
+    {
+      desc = i;
+      info = i0.Src.info;
+      hints = Wax_wasm.Hints.none;
+      expected = Unset;
+    }
+  in
+  (* An absent operand — a pop from the empty/absent stack, i.e. dead code — is a
+     hole carrying the operator's operand type as its recorded width, which is what
+     the typer grounds it from if the printed form would resolve elsewhere. A
+     PRESENT operand already carries its own record from where it was pushed, so
+     nothing distinguishes the two here any more (no anchor analysis, no pin
+     placement: the reconciliation decides all of that from the records). *)
+  let bare () = expect (inttype sz) (Ast.no_loc_instr Ast.Hole) in
+  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
+  (* An arithmetic operator yields the operand width, so [a + b] round-trips to
+     that width via the sum's own type. Its result stays a flexible literal tree
+     (tagged) only when BOTH operands are; if either is grounded the sum is
+     grounded too ([x + 1] re-parses to [x]'s width on its own) and takes no tag,
+     so a downstream eraser does not read it as flexible. *)
+  let symbol width op =
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let* e1 = pin_crossed_ref_hole ctx (inttype sz) ~bare o1 in
+    let* e2 = pin_crossed_ref_hole ctx (inttype sz) ~bare o2 in
+    let both_flexible =
+      match (o1, o2) with
+      | Some (_, Some _), Some (_, Some _) -> true
+      | _ -> false
+    in
+    let width = if both_flexible then width else None in
+    (* The sum's own type is the operand width whether or not the tag above keeps
+       it flexible. *)
+    Stack.push_num width
+      (expect (inttype sz) (with_loc (BinOp (op_loc i0.info op, e1, e2))))
+  in
+  (* A comparison yields i32 whatever its operands' width, so its surface *erases*
+     that width ([(4096 >>u 40) == 0] would re-default the shift to i32 and flip
+     true->false). Nothing is inserted for it: each operand carries its own
+     recorded width, and the typer pins whichever one would resolve elsewhere. The
+     i32 result carries no tag. *)
+  let compare op =
+    let* o2 = Stack.try_pop_tagged in
+    let* o1 = Stack.try_pop_tagged in
+    let* e1 = pin_crossed_ref_hole ctx (inttype sz) ~bare o1 in
+    let* e2 = pin_crossed_ref_hole ctx (inttype sz) ~bare o2 in
+    (* The i32 result carries no width TAG (it is not flexible), but the opcode
+       states it, so record it. *)
+    Stack.push 1 (expect I32 (with_loc (BinOp (op_loc i0.info op, e1, e2))))
+  in
+  (* [rotl]/[rotr]: result width = receiver width, so it carries the receiver's
+     flexibility (the count arg is pinned by the method once the receiver fixes
+     it). Like [clz], an erasing consumer then pins it back to the receiver. *)
+  let meth name =
+    let* e2 = pop_typed (inttype sz) in
+    let* e1, w1 = pop_typed_tagged (inttype sz) in
+    Stack.push_num w1
+      (expect (inttype sz)
+         (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ]))))
+  in
+  match op with
+  | Add -> symbol arith Add
+  | Sub -> symbol arith Sub
+  | Mul -> symbol arith Mul
+  | Div s -> symbol arith (Div (Some s))
+  | Rem s -> symbol arith (Rem s)
+  | And -> symbol arith And
+  | Or -> symbol arith Or
+  | Xor -> symbol arith Xor
+  | Shl -> symbol arith Shl
+  | Shr s -> symbol arith (Shr s)
+  | Rotl -> meth "rotl"
+  | Rotr -> meth "rotr"
+  | Eq -> compare Eq
+  | Ne -> compare Ne
+  | Lt s -> compare (Lt (Some s))
+  | Gt s -> compare (Gt (Some s))
+  | Le s -> compare (Le (Some s))
+  | Ge s -> compare (Ge (Some s))
+
 let rec pin_hierarchy pin (e : _ Ast.instr) =
   match e.Ast.desc with
   (* A hole, or an untyped [select] of holes: both re-parse type-adaptively (the
@@ -3333,10 +3373,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          node as well as on the assigned value. *)
       Stack.push 1
         (expect_local ctx name (with_loc (Tee (name, expect_local ctx name e))))
-  | BinOp (I32 op) -> int_bin_op i `I32 op
-  | BinOp (I64 op) -> int_bin_op i `I64 op
-  | BinOp (F32 op) -> float_bin_op i `F32 op
-  | BinOp (F64 op) -> float_bin_op i `F64 op
+  | BinOp (I32 op) -> int_bin_op ctx i `I32 op
+  | BinOp (I64 op) -> int_bin_op ctx i `I64 op
+  | BinOp (F32 op) -> float_bin_op ctx i `F32 op
+  | BinOp (F64 op) -> float_bin_op ctx i `F64 op
   | Add128 | Sub128 | MulWide _ ->
       (* Wide arithmetic decompiles to the [i64::...] path intrinsics, whose two
          i64 results are consumed by a multi-value [let]. *)

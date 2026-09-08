@@ -382,3 +382,49 @@ strand the push onto the numeric sink:
     (drop (ref.is_null))
     (unreachable)
   )
+
+Depth-4 shapes (the nightly lane's depth) — a numeric operator right after the
+annotation, its operand holes reaching a REFERENCE residual below: the record
+alone cannot keep the width (the mis-typed tree resolves the cell as the
+reference and the width machinery skips it), so the holes get the syntactic
+pin, whose printed target survives the re-parse and keeps `i64.add` an
+`i64.add`:
+
+  $ cat > numref.wat <<'WAT'
+  > (module
+  >   (func (local $l64 i64)
+  >     return
+  >     extern.convert_any
+  >     (@if $dbg (@then drop) (@else drop))
+  >     i64.add
+  >     local.set $l64
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax numref.wat -o numref.wax && grep 'as i64' numref.wax
+      let l64: i64 = _ as i64 + _ as i64;
+  $ wax numref.wax -f wat | grep -cE 'i64.add|ref.is_null'
+  2
+
+And a consumed adaptive select: the select's own arm holes claim BEFORE the
+parameterized block's claim (the consumed entry prints as its own statement),
+so the scan charges them — unaccounted, the extern below looked like the
+reader's backing and the bare `!_` re-defaulted to `i32.eqz`:
+
+  $ cat > selpar.wat <<'WAT'
+  > (module
+  >   (func
+  >     return
+  >     extern.convert_any
+  >     (@if $dbg (@then drop) (@else drop))
+  >     select
+  >     block (param externref) drop end
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax selpar.wat -o selpar.wax && grep '!' selpar.wax
+      _ = !(_ as &?none);
+  $ wax selpar.wax -f wat | grep -cE 'ref.is_null'
+  1
