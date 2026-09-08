@@ -428,3 +428,26 @@ reader's backing and the bare `!_` re-defaulted to `i32.eqz`:
       _ = !(_ as &?none);
   $ wax selpar.wax -f wat | grep -cE 'ref.is_null'
   1
+
+A hole-initialized binding keeps its annotation in a conditional module: the
+hole's claim differs per configuration (here the branch owns the i64 in the
+spliced world), so the annotation the lowered tree finds redundant is the only
+thing that types the binding in the other configuration:
+
+  $ cat > holelet.wat <<'WAT'
+  > (module
+  >   (func $f3 (result i64 externref) (i64.const 1) (ref.null extern))
+  >   (func (local $l64 i64)
+  >     return
+  >     call $f3
+  >     drop
+  >     (@if $dbg (@then drop) (@else drop))
+  >     local.set $l64
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax holelet.wat -o holelet.wax && grep 'let l64' holelet.wax
+      let l64: i64 = _;
+  $ wax holelet.wax -f wat | grep -cE 'local.set|ref.is_null'
+  2

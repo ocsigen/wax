@@ -7185,7 +7185,19 @@ and type_let ctx i =
               ctx.local_decls := name :: !(ctx.local_decls);
               mark_initialized ctx name.desc)
             name_opt;
-          let drop = ctx.simplify && not needed in
+          (* A bare-HOLE initializer that claimed a pending from BEFORE a
+             conditional annotation ([ctx.crossed_pendings]): the pairing that
+             makes this annotation look redundant holds only in this
+             annotation-preserving pass; per configuration the (@if) branch
+             may own the value, leaving the unannotated binding with no
+             determinable type (a depth-4 grid finding: [let l64 = _]). Keep
+             the annotation for such a hole. *)
+          let crossed_hole_init =
+            match i'.desc with
+            | Hole -> List.memq (expression_type ctx i') !(ctx.crossed_pendings)
+            | _ -> false
+          in
+          let drop = ctx.simplify && (not needed) && not crossed_hole_init in
           (* The same redundancy, offered as a quick fix for hand-written Wax:
              delete the ': t', underlining just the type. The name's end anchors
              the deletion; for the anonymous [_: t = e] drop the name is the
@@ -10453,6 +10465,22 @@ and block_contents ctx results l =
   | i :: r ->
       fun st ->
         let st_after, i' = toplevel_instruction ctx i st in
+        (* A conditional-annotation statement makes every value now pending
+           configuration-DEPENDENT for later holes: per configuration its
+           branch may consume one (the spliced checking passes do), while this
+           annotation-preserving pass types the branches as isolated blocks
+           that claim nothing. Record the pending cells (physically) so a
+           later hole claiming one is recognised (see [type_let]). *)
+        (match i.desc with
+        | If_annotation _ ->
+            let rec taint = function
+              | Cons (_, cell, rest) ->
+                  ctx.crossed_pendings := cell :: !(ctx.crossed_pendings);
+                  taint rest
+              | Empty | Unreachable | Poisoned -> ()
+            in
+            taint st_after
+        | _ -> ());
         (* Dead code: the stack was reachable before [i], typing [i] left it
            polymorphic ([Unreachable] — [i] is a [br]/[return]/[unreachable] or
            the like), and a statement still follows. Report the first such
@@ -12030,6 +12058,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       member_completions;
       simplify;
       suggest;
+      crossed_pendings = ref [];
       faithful;
     }
   in
