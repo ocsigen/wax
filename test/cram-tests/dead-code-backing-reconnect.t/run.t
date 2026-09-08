@@ -102,3 +102,30 @@ materialised as a `ref.cast` the source never had:
   > WAT
   $ wax -i wat -f wax --faithful mref.wat -o mref.wax && wax mref.wax -f wat | grep -oE 'ref.cast|any.convert_extern|extern.convert_any'
   any.convert_extern
+
+5. A forwarding `br_on_null` residual reached THROUGH an interposed
+`ref.as_non_null`. The residual (label value + fall-through non-null ref,
+arity 2) cannot be split, so `ref.as_non_null`'s pop reads a fresh hole and
+leaves `NonNull (hole)` on top; the following convert's source pin must still
+ground the residual's tested ref — `pin_forwarding_source` runs after the
+convert's own pop, so the interposed hole-valued tree is out of the way and
+the pin lands where the inner hole reconnects. Pinning the fresh hole instead
+captured the any-hierarchy forwarded ref and materialised an
+`extern.convert_any` the source never had:
+
+  $ cat > fwd.wat <<'WAT'
+  > (module
+  >   (func
+  >     (block $b (result anyref)
+  >       unreachable
+  >       atomic.fence
+  >       br_on_null $b
+  >       ref.as_non_null
+  >       any.convert_extern
+  >       unreachable)
+  >     drop))
+  > WAT
+  $ wax -i wat -f wax --faithful fwd.wat -o fwd.wax && wax fwd.wax -f wat --unfold | grep -oE 'br_on_null|ref.as_non_null|any.convert_extern|extern.convert_any'
+  br_on_null
+  ref.as_non_null
+  any.convert_extern
