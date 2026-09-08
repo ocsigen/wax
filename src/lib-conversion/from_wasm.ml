@@ -2245,7 +2245,15 @@ let rec convert_src ?(nullable = true) src e =
    SOURCE instead grounds the fall-through ref at the source hierarchy, so the
    hole reconnects there and the convert lowers to exactly one opcode. A no-op
    unless the top is such a residual; the arity-1 (no-result-block) case is a
-   directly-popped [br_on_null] operand already handled by [convert_src]. *)
+   directly-popped [br_on_null] operand already handled by [convert_src].
+
+   Called AFTER the convert's own pop (which leaves an unsplittable residual in
+   place), so an interposed hole-valued consumer — a [ref.as_non_null] whose own
+   pop read a fresh hole off the residual, leaving [NonNull (hole)] on top — is
+   popped out of the way first and its inner hole reconnects to the pinned
+   tested ref just the same; [hole_reconnects] is the gate that says the popped
+   operand IS such a reconnecting tree (a real value in between means no
+   stranded hole, so nothing to ground). *)
 let pin_forwarding_source src stack =
   match stack with
   | (a, w, ({ Ast.desc = Ast.Br_on_null (l, inner); _ } as node)) :: rem
@@ -2256,6 +2264,15 @@ let pin_forwarding_source src stack =
         :: rem,
         () )
   | _ -> (stack, ())
+
+(* Whether a popped operand's value slot is an unclaimed hole — the shapes
+   [convert_src] recurses through — so its re-parse claims the next pending
+   value and [pin_forwarding_source]'s grounding matters. *)
+let rec hole_reconnects (e : _ Ast.instr) =
+  match e.Ast.desc with
+  | Ast.Hole -> true
+  | Ast.NonNull inner -> hole_reconnects inner
+  | _ -> false
 
 (* [pop_typed] carrying the receiver's width tag, for a method-form op that
    inherits its receiver's flexibility (a rotate, a float method). A hole is
@@ -3625,8 +3642,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          claim-free pin that grounds the hole and leaves the residual to the
          branch that consumes it (see [backing_wrong_hierarchy]). *)
       let src : Ast.valtype = Ref { nullable = true; typ = Any } in
-      let* () = pin_forwarding_source src in
       let* e = Stack.pop in
+      let* () =
+        if hole_reconnects e then pin_forwarding_source src else return ()
+      in
       let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
       let backed =
         is_bare_hole e
@@ -3668,8 +3687,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          [ExternConvertAny] above. A forwarding [br_on_null] residual on top has
          its tested ref pinned to the source. *)
       let src : Ast.valtype = Ref { nullable = true; typ = Extern } in
-      let* () = pin_forwarding_source src in
       let* e = Stack.pop in
+      let* () =
+        if hole_reconnects e then pin_forwarding_source src else return ()
+      in
       let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
       let backed =
         is_bare_hole e
