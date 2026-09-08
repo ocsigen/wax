@@ -217,6 +217,14 @@ type module_context = {
          hand-written Wax (formatting, or compiling to Wasm) casts are kept as
          written. *)
   suggest : bool;
+  crossed_pendings : Infer.inferred_type Infer.Cell.t list ref;
+  (* The stack values that were pending when a conditional annotation
+         STATEMENT was typed (physical cells, appended per annotation): a hole
+         claiming one of them pairs configuration-DEPENDENTLY — the (@if)
+         branch may own the value in its own configuration — so the simplify
+         rewrites that reason from the claimed type (a fused [let]'s annotation
+         drop) must not fire on such a hole. Filled by [block_contents], read
+         by [type_let]. *)
   (* Whether to emit [Suggestion] diagnostics carrying machine-applicable
          rewrites (redundant-cast removal, compound assignment, field punning, a
          redundant [let] annotation), for editor quick fixes and [wax check].
