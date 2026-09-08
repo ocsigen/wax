@@ -212,9 +212,13 @@ CROSSERS=(any.convert_extern extern.convert_any ref.cast ref.test)
 # reports it); no crash and no silent miscompile is in the class. With NOTHING
 # below the annotation the synthetic is no longer injected and those cells are
 # ordinary calibration — see ATIF-DEADCODE.md's residual notes.
+# And the adaptive analog: an untyped SELECT right after an annotation, with a
+# reference residual below — the select's own arm holes capture the residual in
+# the tree the lowering reads, and a select arm has no claim-free spelling
+# either (grounding pins are themselves claims). Over-rejection only, loud.
 exempt_shape() { # $1 = cell name
   case "$1" in
-  *.*ScondPush*.Bp1.*) return 0 ;;
+  *.*ScondPush*.Bp1.* | *.*Scond*.Radapt.*) return 0 ;;
   *) return 1 ;;
   esac
 }
@@ -264,23 +268,74 @@ count_ops() { # $1 = file, $2 = opcode; occurrences, word-anchored
 worker() {
   local first="$1" last="$2" i name ridx codes v mode out="" skipped=0 acked=0
   local p="$RESULTS/w$first"
-  local wat="$p.wat" wax="$p.wax" back="$p.back.wat"
+  local wax="$p.wax" back="$p.back.wat"
+  local dir="$p.cells"
+  mkdir -p "$dir"
   ERRLOG="$p.err"
+  # ---- Batched validity pre-filter. Two thirds of the cells are invalid and
+  # exist only to be skipped, and discovering that cost one process spawn per
+  # cell — the dominant share of a run's wall clock. [wax check] takes many
+  # files at once and prefixes each [--error-format short] diagnostic with its
+  # path, so one process filters a whole chunk. Two fallbacks keep the
+  # per-cell classification's guarantees: a batch that CRASHES (a cell that
+  # kills the checker would take its chunkmates' verdicts with it), and the
+  # SYNTAX-abort signature — a parse error stops a multi-file check midway,
+  # with exit 0, leaving the rest unchecked (template output is never
+  # syntactically invalid, so this is belt-and-braces) — both re-check that
+  # chunk file by file.
+  declare -A BAD
+  local -a chunk=()
+  flush_chunk() {
+    [ ${#chunk[@]} -eq 0 ] && return 0
+    local bout rc f errs=0
+    bout=$(NO_COLOR=1 timeout -k 5 $((TIMEOUT * 10)) \
+      "$WAX" check --error-format short "${chunk[@]}" 2>&1)
+    rc=$?
+    while IFS= read -r line; do
+      case "$line" in
+        "$dir"/*.wat:*" error: "*)
+          errs=1
+          f="${line%%.wat:*}.wat"
+          BAD["$f"]=1
+          ;;
+      esac
+    done <<<"$bout"
+    if { [ "$rc" -ne 0 ] && [ "$rc" -ne 128 ]; } \
+      || { [ "$rc" -eq 0 ] && [ "$errs" -eq 1 ]; }; then
+      for f in "${chunk[@]}"; do
+        unset "BAD[$f]"
+        [ "$(classify_wax check "$f")" != ok ] && BAD["$f"]=1
+      done
+    fi
+    chunk=()
+    return 0
+  }
+  for ((i = first; i <= last; i++)); do
+    local rest="${COMBOS[$i]#*$'\t'}"
+    ridx="${rest%%$'\t'*}"
+    codes="${rest#*$'\t'}${R_CODE[$ridx]}|unreachable"
+    template "$codes" >"$dir/$i.wat"
+    chunk+=("$dir/$i.wat")
+    [ ${#chunk[@]} -ge 200 ] && flush_chunk
+  done
+  flush_chunk
   for ((i = first; i <= last; i++)); do
     name="${COMBOS[$i]%%$'\t'*}"
     local rest="${COMBOS[$i]#*$'\t'}"
     ridx="${rest%%$'\t'*}"
+    local wat="$dir/$i.wat"
     # The trailing [unreachable] absorbs whatever the cell leaves on the
     # stack (concrete leftovers fail the end-of-frame check even in dead
     # code, which silently skipped every cell whose residuals outlive the
     # reader — the ref-multi calibration found the hole). Symmetric in the
     # opcode comparison, after the reader, so inert to the oracle.
     codes="${rest#*$'\t'}${R_CODE[$ridx]}|unreachable"
-    template "$codes" >"$wat"
-    if [ "$(classify_wax check "$wat")" != ok ]; then
+    if [ -n "${BAD[$wat]:-}" ]; then
+      rm -f "$wat"
       skipped=$((skipped + 1)); printf s >&2; continue
     fi
     if exempt_shape "$name"; then
+      rm -f "$wat"
       acked=$((acked + 1)); printf a >&2; continue
     fi
     for mode in "" "--faithful"; do
@@ -314,6 +369,7 @@ worker() {
         printf F >&2; continue
       fi
     done
+    rm -f "$wat"
     printf . >&2
   done
   [ -n "$out" ] && printf '%s' "$out" >"$RESULTS/$first"
