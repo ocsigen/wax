@@ -1290,6 +1290,8 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
       | F32 -> folded loc (Const (F32 s)) []
       | F64 -> folded loc (Const (F64 s)) []
       | _ -> assert false)
+  (* A type ascription [(e : t)] is a static assertion: no instruction. *)
+  | Cast (expr, Ascribed _) -> instruction ret ctx expr
   | Cast (expr, cast_ty) when cont_cast_target ctx cast_ty ->
       instruction ret ctx expr
   | Cast (expr, cast_ty) -> (

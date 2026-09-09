@@ -1109,7 +1109,11 @@ braced_block:
 | "{" l = statement_list "}"
   { annot $sloc l }
 
-parenthesized_expression: e = expression { e }
+parenthesized_expression:
+| e = expression { e }
+(* The type ascription [(e : t)]: assertion only — [Ascribed] never lowers to
+   an instruction and an ascribed bare hole claims nothing. *)
+| e = expression ":" t = value_type { with_loc $sloc (Cast (e, Ascribed t)) }
 (* The [descriptor(d)] clause shared by the custom-descriptors instructions
    ([struct.new_desc], [ref.cast_desc_eq], [br_on_cast_desc_eq]): the target type
    is recovered from [d]'s (descriptor) type, so only the operand is written. *)

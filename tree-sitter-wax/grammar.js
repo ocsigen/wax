@@ -320,7 +320,8 @@ module.exports = grammar({
       field('member', $.identifier),
     )),
 
-    parenthesized_expression: $ => seq('(', $._expression, ')'),
+    parenthesized_expression: $ => seq('(', $._expression,
+      optional(seq(':', field('type', $._value_type))), ')'),
 
     sequence_expression: $ => seq(
       '(',

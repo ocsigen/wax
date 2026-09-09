@@ -1165,6 +1165,7 @@ let valtype_of_width : [ `I32 | `I64 | `F32 | `F64 ] -> Ast.valtype = function
 let cast_result (ty : Ast.casttype) : Ast.expectation =
   match ty with
   | Ast.Valtype ty -> recorded_expectation ty
+  | Ast.Ascribed ty -> recorded_expectation ty
   | Signedtype { typ; _ } -> Recorded (valtype_of_width typ)
   | Functype _ -> Contextual
 

@@ -496,6 +496,10 @@ let casttype pp ty =
       functype pp sign
   | Signedtype { typ; signage; strict } ->
       type_ pp (Ast.format_signed_type typ signage strict)
+  | Ascribed _ ->
+      (* Printed by the [Cast] case itself: the ascription is the
+         parenthesized [(e : t)] form, not an [as]. *)
+      assert false
 
 let branch_instr instr pp name label i =
   box pp ~indent:indent_level (fun () ->
@@ -1142,6 +1146,16 @@ let rec instr prec pp (i : _ instr) =
       string pp ~len:(Some len) s;
       string pp "\""
   | Int s | Float s -> constant pp s
+  | Cast (i, Ascribed t) ->
+      (* The ascription's own parentheses ARE its syntax, so it never needs the
+         precedence-driven pair the [Cast] level would add. *)
+      box pp ~indent:indent_level (fun () ->
+          punctuation pp "(";
+          instr Instruction pp i;
+          punctuation pp " :";
+          space pp ();
+          box pp (fun () -> valtype pp t);
+          punctuation pp ")")
   | Cast (i, t) ->
       box pp ~indent:indent_level (fun () ->
           instr Cast pp i;

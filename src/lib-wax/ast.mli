@@ -87,6 +87,12 @@ type casttype =
       signage : signage;
       strict : bool;
     }
+  | Ascribed of valtype
+      (** The parenthesized type ascription [(e : t)]: a static assertion that
+          [e]'s type is a subtype of [t], with result type [t]. Never lowers to
+          an instruction, and — unlike a cast — an ascribed bare hole claims no
+          pending value: it GROUNDS a value of type [t] off the polymorphic
+          floor. *)
 
 val format_signed_type :
   [ `F32 | `F64 | `I32 | `I64 ] -> signage -> bool -> string

@@ -1035,6 +1035,10 @@ parse: FN IDENT LBRACE LOOP WHILE
 
 Expecting a block, or a block type.
 
+parse: FN IDENT LBRACE LPAREN CHAR COLON WHILE
+
+Expecting a value type.
+
 parse: FN IDENT LBRACE LPAREN CHAR COMMA CHAR SHARP
 
 Assuming that the expression list is complete, expecting ')'.

@@ -477,6 +477,20 @@ x.to_bits()     // Reinterpret float as int
 x.from_bits()   // Reinterpret int as float
 ```
 
+### Type Ascription
+
+The parenthesized form `(e : t)` *asserts* a type instead of converting to it:
+`e`'s type must already be a subtype of `t`, and the expression has type `t`.
+It compiles to nothing. Use it to pin a literal's width or to widen a
+reference without the runtime machinery of a cast; where `as` would insert an
+instruction (or a runtime `ref.cast`), an ascription that does not hold is a
+compile-time error instead.
+
+```wax
+let x = (1 : i64);        // pin the literal's width
+(make_point() : &?any);   // widen the reference, no instruction
+```
+
 ### Conditional Expression
 
 ```wax

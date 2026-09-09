@@ -34,6 +34,35 @@ fn multiply(x: i32, y: i32) -> i32 {
   i32.mul)
 ```
 
+## Type Ascription
+
+`(e : t)` asserts a type without converting: the widening compiles to nothing,
+and the literal takes the ascribed width.
+
+### Wax
+
+```wax
+type point = { x: i32, y: i32 };
+
+#[export = "origin_key"]
+fn origin_key() -> i64 {
+    let p: &?any = ({point| x: 0, y: 0 } : &?any);
+    _ = p;
+    (1 : i64);
+}
+```
+
+### Equivalent WAT
+
+```wat,check
+(type $point (struct (field $x i32) (field $y i32)))
+(func $origin_key (export "origin_key") (result i64)
+  (local $p anyref)
+  (local.set $p (struct.new $point (i32.const 0) (i32.const 0)))
+  (drop (local.get $p))
+  (i64.const 1))
+```
+
 ## Factorial with Recursion
 
 ### Wax

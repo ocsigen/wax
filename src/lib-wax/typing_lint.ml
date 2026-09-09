@@ -139,6 +139,8 @@ let cast_is_total = function
       match typ with `F32 | `F64 -> true | `I32 | `I64 -> not strict)
   | Valtype (I32 | I64 | F32 | F64) -> true
   | Valtype (V128 | Ref _) | Functype _ -> false
+  (* An ascription is a static assertion; nothing to trap. *)
+  | Ascribed _ -> true
 
 let rec is_effectless (e : _ Ast.instr) =
   (* A field value; the punning shorthand [{x}] reads a local/global. *)

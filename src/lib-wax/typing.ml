@@ -3379,6 +3379,8 @@ let rec is_claim_free_pin (node : _ Ast.instr) =
         Valtype (Ref { typ = None_ | NoFunc | NoExtern | NoExn | NoCont; _ }) )
     ->
       true
+  (* An ascribed bare hole grounds off the polymorphic floor at any type. *)
+  | Cast ({ desc = Hole; _ }, Ascribed _) -> true
   | Cast (inner, _) -> is_claim_free_pin inner
   | _ -> false
 
@@ -4552,6 +4554,10 @@ let rec count_holes i =
   | Cast ({ desc = Hole; _ }, Valtype (Ref { typ; _ }))
     when is_bottom_heaptype typ ->
       0
+  (* An ASCRIBED bare hole [(_ : t)] claims no pending value at ANY [t]: the
+     operator asserts a type, it does not operate on a value — the syntactic,
+     type-independent generalization of the bottom-cast rule above. *)
+  | Cast ({ desc = Hole; _ }, Ascribed _) -> 0
   | BinOp (_, l, r)
   | Array (_, l, r)
   | ArraySegment (_, _, l, r)
@@ -6234,6 +6240,25 @@ and type_arith ctx i =
 and type_cast ctx i =
   (* Type casts ([e as t]) and type tests ([e is t]). *)
   match i.desc with
+  | Cast (i', (Ascribed t as typ)) ->
+      (* The parenthesized ascription [(e : t)]: a static assertion, not an
+         operation — the operand must already be a subtype of [t] (subsumption
+         only, never a conversion or a [ref.cast]) and the expression takes
+         type [t]. It lowers to no instruction ([To_wasm] emits the operand
+         alone) and is never simplified away. A bare hole is typed directly at
+         the polymorphic [Unknown] instead of through [pop_parameter]:
+         ascription claims no pending value — the operator itself is
+         claim-free, at ANY type (the bottom-cast pin's type-directed rule,
+         generalized), so it grounds a dead-code value's type without
+         capturing a residual another consumer reconnects to. *)
+      let* i' =
+        match i'.desc with
+        | Hole -> return_expression i' Hole (Cell.make Unknown)
+        | _ -> instruction ctx i'
+      in
+      let*! ty = internalize ctx t in
+      check_type ctx i' ty;
+      return_expression i (Cast (i', typ)) ty
   | Cast (i', typ) ->
       (* An inner cast [(e as t) as u] that [simplify]/[--faithful] would drop as
          redundant, but which is load-bearing: dropping the NODE collapses the
@@ -6431,6 +6456,8 @@ and type_cast ctx i =
         | Functype { nullable; sign } ->
             Some (Ref { nullable; typ = Type (anon_function_type ctx sign) })
         | Signedtype _ -> None
+        (* Intercepted by the dedicated arm above. *)
+        | Ascribed _ -> assert false
       in
       (* A continuation carries no RTT, so there is no [ref.cast] into a
          continuation type: [as &k] with a continuation target is a
@@ -6457,7 +6484,7 @@ and type_cast ctx i =
               | Signedtype { typ = `I64; _ } -> I64
               | Signedtype { typ = `F32; _ } -> F32
               | Signedtype { typ = `F64; _ } -> F64
-              | Valtype _ | Functype _ -> assert false))
+              | Valtype _ | Functype _ | Ascribed _ -> assert false))
       in
       let cast_failed =
         match target_valtype with
@@ -6505,7 +6532,7 @@ and type_cast ctx i =
                         ty';
                       true
                     end)
-            | Valtype _ | Functype _ -> assert false)
+            | Valtype _ | Functype _ | Ascribed _ -> assert false)
       in
       (* Poison the result of a failed cast (or one whose operand a prior failed
          cast already poisoned) with [Error]. A chain of casts each anchors its
@@ -12610,9 +12637,11 @@ let numeric_family (t : Ast.valtype) =
 let cast_operand_family (t : Ast.casttype) =
   match t with
   | Valtype ((I32 | I64 | F32 | F64) as t) -> Some (numeric_family t)
+  (* An ascription converts nothing: its operand is in its own type's family. *)
+  | Ascribed ((I32 | I64 | F32 | F64) as t) -> Some (numeric_family t)
   | Signedtype { typ = `I32 | `I64; _ } -> Some `Float
   | Signedtype { typ = `F32 | `F64; _ } -> Some `Int
-  | Valtype (Ref _ | V128) | Functype _ -> None
+  | Valtype (Ref _ | V128) | Functype _ | Ascribed _ -> None
 
 (* Whether a pin to [required] keeps the value in the family its own inferred type
    commits it to. A literal still free of a family ([Number], or the float-capable

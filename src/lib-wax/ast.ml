@@ -90,6 +90,12 @@ type casttype =
       signage : signage;
       strict : bool;
     }
+  | Ascribed of valtype
+      (** The parenthesized type ascription [(e : t)]: a static assertion that
+          [e]'s type is a subtype of [t], with result type [t]. Never lowers to
+          an instruction, and — unlike a cast — an ascribed bare hole claims no
+          pending value: it GROUNDS a value of type [t] off the polymorphic
+          floor. *)
 
 let format_signed_type typ signage strict =
   Printf.sprintf "%s_%s%s"
