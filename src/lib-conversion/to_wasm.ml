@@ -1386,27 +1386,6 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
               | ( Ref { typ = Extern | NoExtern; _ },
                   Valtype (Ref { typ = Any; _ }) ) ->
                   AnyConvertExtern
-              (* The claim-free bottom pin under a same-hierarchy type pin
-                 ([((_ as &?nofunc) as &?t)], the [call_ref] callee shape): the
-                 whole chain is a compile-time ascription of the polymorphic
-                 bottom, so there is no [ref.cast] to emit — the general arm
-                 below would materialise an opcode the source never had. The
-                 cross-hierarchy converts (matched above) still fire. *)
-              | ( Ref { typ = None_ | NoFunc | NoExtern | NoExn | NoCont; _ },
-                  Valtype (Ref _) )
-                when match expr.desc with
-                     | Cast
-                         ( { desc = Hole; _ },
-                           Valtype
-                             (Ref
-                                {
-                                  typ =
-                                    None_ | NoFunc | NoExtern | NoExn | NoCont;
-                                  _;
-                                }) ) ->
-                         true
-                     | _ -> false ->
-                  Nop
               (* RefCast *)
               | Ref _, Valtype (Ref r) -> RefCast (reftype r)
               (* Numeric conversions *)
@@ -1472,20 +1451,6 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
             match instr with Nop -> code | _ -> folded loc instr code)
       in
       match expr.desc with
-      (* A bare hole under a BOTTOM reference ascription ([_ as &?none] and
-         kin) is the decompiler's claim-free dead-code pin (see [Typing]'s
-         [count_holes]): it stands for a value off the polymorphic stack
-         bottom, so the ascription is compile-time only — nothing to emit
-         (lowering it as the general ref-to-ref case's [ref.cast] would
-         materialise an opcode the source never had). *)
-      | Hole
-        when match cast_ty with
-             | Valtype
-                 (Ref { typ = None_ | NoFunc | NoExtern | NoExn | NoCont; _ })
-               ->
-                 true
-             | _ -> false ->
-          []
       (* (i64 as i32) as i64_s  ->  i64.extend32_s. There is no dedicated Wax
          spelling for [i64.extend32_s], so the decompiler renders it as this
          wrap-then-sign-extend pair; re-fuse it back into the single instruction

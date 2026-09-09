@@ -1,9 +1,12 @@
-corpus/
-corpus-wax/
+/corpus
+/corpus/
+/corpus-wax
+/corpus-wax/
 smith-findings/
 run-findings/
 mutate-findings/
-corpus-wat/
+/corpus-wat
+/corpus-wat/
 mutate-wat-findings/
 mutate-wasm-findings/
 diff-findings/

@@ -7,8 +7,9 @@ plain wasm can never build (its validator types the residual into the consumer
 and rejects). The tree the lowering reads instead types each branch as an
 isolated void block: `From_wasm`'s backing scan models THAT rule (an annotation
 claims nothing), and a backing the reader's pin could not ascribe gets the
-claim-free BOTTOM pin (`_ as &?none` and kin), which the typer gives no pending
-value — it grounds the hole without capturing the residual a branch consumes.
+CLAIM-FREE type ascription (`(_ : &?none)` and kin), which the typer gives no
+pending value — ascription asserts, it does not operate, so it grounds the
+hole without capturing the residual a branch consumes, and lowers to nothing.
 
 A funcref residual under the annotation backs the `ref.is_null` hole bare (any
 reference recovers `ref.is_null`); the extern residual deeper is what the
@@ -61,8 +62,7 @@ funcref):
 An extern residual the branches consume, under `ref.eq`: extern is no
 `eq`-subtype, so a bare `_ == _` capturing it would not type-check and an
 `(_ as &?eq)` pin capturing it would cross hierarchies. Both holes take the
-claim-free bottom pin, which must lower to NOTHING (not the general ref-to-ref
-`ref.cast`):
+claim-free ascription, which lowers to nothing:
 
   $ cat > refeq.wat <<'WAT'
   > (module
@@ -86,7 +86,7 @@ claim-free bottom pin, which must lower to NOTHING (not the general ref-to-ref
       {
           _ = _;
       }
-      _ = _ as &?none == _ as &?none;
+      _ = (_ : &?none) == (_ : &?none);
       unreachable;
   }
   $ wax refeq.wax -f wat
@@ -127,7 +127,7 @@ the poisoned i64-to-reference cast):
       {
           _ = _;
       }
-      _ = !(_ as &?none);
+      _ = !(_ : &?none);
       unreachable;
   }
   $ wax num.wax -f wat
@@ -167,7 +167,7 @@ a top-of-hierarchy pin would capture the extern residual and lower to the very
       {
           _ = _;
       }
-      _ = _ as &noextern as &any;
+      _ = (_ : &extern) as &any;
       unreachable;
   }
   fn f_2() {}
@@ -186,8 +186,9 @@ A member-access RECEIVER pin capturing across the annotation (the grid's
 `Vmulti.ScondEq.S2` cells): the struct.set receiver hole's positional capture
 is the call residual's FIRST result (its sibling value hole eats the second),
 a non-reference the `&?s` pin cannot absorb — and the lowering reads the
-struct type off the receiver, so the poisoned capture crashed it. The pin
-nests the claim-free bottom inside the type pin, which still names the type:
+struct type off the receiver, so the poisoned capture crashed it. The
+claim-free ascription of the receiver type grounds the hole and still names
+the type:
 
   $ cat > recv.wat <<'WAT'
   > (module
@@ -202,9 +203,9 @@ nests the claim-free bottom inside the type pin, which still names the type:
   >     drop
   >     unreachable))
   > WAT
-  $ wax -i wat -f wax recv.wat -o recv.wax && grep -A1 'if(dbg)' -m1 recv.wax >/dev/null && sed -n '/}$/,$p' recv.wax | grep -E 'as &|!'
-      (_ as &?none as &?s).f = _;
-      _ = !(_ as &?none);
+  $ wax -i wat -f wax recv.wat -o recv.wax && grep -A1 'if(dbg)' -m1 recv.wax >/dev/null && sed -n '/}$/,$p' recv.wax | grep -E 'as &|: &|!'
+      (_ : &?s).f = _;
+      _ = !(_ : &?none);
   $ wax recv.wax -f wat | grep -cE 'struct.set \$s|ref.is_null|ref.cast'
   2
 
@@ -276,10 +277,9 @@ that feeds it to the i64 local:
 A dead `ref.cast` whose hole would capture a residual OUTSIDE its target's
 hierarchy (an extern under a cast to an any-hierarchy type): bare, typing the
 capture compounds the cast with an `any.convert_extern` the source never had.
-The claim-free bottom pin grounds it, and the chain lowers to nothing — the
-absorbed spelling a dead cast of the polymorphic bottom already round-trips
-to (a dead `ref.cast` is the one reader whose opcode is by design not
-preserved):
+The claim-free ascription grounds it — and over the ascribed bottom the cast
+itself survives the round trip (one `ref.cast`, the source's own count; the
+old bottom-CAST spelling could only lower the whole chain to nothing):
 
   $ cat > deadcast.wat <<'WAT'
   > (module
@@ -294,10 +294,9 @@ preserved):
   > WAT
   $ wax -i wat -f wax deadcast.wat -o deadcast.wax && grep 'as' deadcast.wax
       _ as &any as &extern;
-      _ = _ as &?none as &?s;
+      _ = (_ : &?none) as &?s;
   $ wax deadcast.wax -f wat | grep -cE 'ref.cast|any.convert_extern'
-  0
-  [1]
+  1
 
 A pushing branch also makes every CLAIMING pin unsafe on a `Floor`/`Blocked`
 verdict: the interposed `drop`'s claim is satisfied by the branch's push in
@@ -319,7 +318,7 @@ claim-free:
   >     unreachable))
   > WAT
   $ wax -i wat -f wax pushfn.wat -o pushfn.wax && grep '!' pushfn.wax
-      _ = !(_ as &?none);
+      _ = !(_ : &?none);
   $ wax pushfn.wax -f wat | grep -c 'ref.is_null'
   1
 
@@ -345,7 +344,7 @@ untyped:
   > WAT
   $ wax -i wat -f wax pushblk.wat -o pushblk.wax && sed -n '3p;12,15p' pushblk.wax
       _?_:_;
-      _ as &?noextern;
+      (_ : &?noextern);
       do (&?extern) {
           _ = _;
       }
@@ -425,7 +424,7 @@ reader's backing and the bare `!_` re-defaulted to `i32.eqz`:
   >     unreachable))
   > WAT
   $ wax -i wat -f wax selpar.wat -o selpar.wax && grep '!' selpar.wax
-      _ = !(_ as &?none);
+      _ = !(_ : &?none);
   $ wax selpar.wax -f wat | grep -cE 'ref.is_null'
   1
 

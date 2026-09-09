@@ -1175,21 +1175,23 @@ let cast_result (ty : Ast.casttype) : Ast.expectation =
 let cast_to (ty : Ast.casttype) (e : _ Ast.instr) : _ Ast.instr =
   { e with Ast.desc = Ast.Cast (e, ty); expected = cast_result ty }
 
+(* Wrap [e] in the parenthesized type ascription [(e : ty)] — the CLAIM-FREE
+   grounding: an ascribed bare hole claims no pending value, at any type, and
+   the node lowers to no instruction (see [Typing]'s [count_holes] and
+   [To_wasm]'s [Ascribed] arm). This is what every "leave the residual to the
+   branch that consumes it" pin below is spelled with. *)
+let ascribe_to (ty : Ast.valtype) (e : _ Ast.instr) : _ Ast.instr =
+  {
+    e with
+    Ast.desc = Ast.Cast (e, Ascribed ty);
+    expected = cast_result (Ascribed ty);
+  }
+
 (* The typed hole [(_ as ty)] the conversions give an absent operand — a pop from
    the polymorphic stack of dead code. Both nodes record [ty]: the opcode's
    signature states the operand type whether or not a value was there to take. *)
 let typed_hole (ty : Ast.valtype) =
   cast_to (Valtype ty) (expect ty (Ast.no_loc_instr Ast.Hole))
-
-(* The bottom heap types. A bare hole ascribed one — [(_ as &?none)] and kin —
-   is the CLAIM-FREE pin: the typer's [count_holes] gives that shape no pending
-   value (nothing but a null or a value off the polymorphic bottom inhabits the
-   type), so unlike a top-of-hierarchy pin it can never capture a stranded
-   residual that an [(@if)] branch, in its own configuration, consumes instead.
-   The dead-code pins below use it wherever a wrong-hierarchy residual is what
-   the printed hole would otherwise reconnect to. *)
-let is_bottom_heaptype (t : Ast.heaptype) =
-  match t with None_ | NoExtern | NoFunc | NoExn | NoCont -> true | _ -> false
 
 (* Drop the expectation recorded on [i] and on everything under it. Used where a
    value's width comes from its CONTEXT rather than from its own printed form — a
@@ -1473,12 +1475,10 @@ module Stack = struct
        numeric residual unconditionally; the two cancelled only while the
        pairing was type-consistent, which an [(@if)] breaks.) *)
     | Ast.Hole -> 1
-    (* A bare hole under a BOTTOM reference ascription is the claim-free pin:
-       the typer's [count_holes] gives it no pending value (see
-       [is_bottom_heaptype]), so it claims nothing here either. *)
-    | Ast.Cast ({ Ast.desc = Ast.Hole; _ }, Ast.Valtype (Ast.Ref { typ; _ }))
-      when is_bottom_heaptype typ ->
-        0
+    (* An ASCRIBED bare hole [(_ : t)] is the claim-free pin: the typer's
+       [count_holes] gives it no pending value (ascription asserts, it does
+       not operate), so it claims nothing here either. *)
+    | Ast.Cast ({ Ast.desc = Ast.Hole; _ }, Ast.Ascribed _) -> 0
     (* A conditional annotation claims NOTHING from the tree-typing stack this
        scan models: the typer that builds the tree the lowering reads types each
        branch as an isolated void block, so a branch's holes take no enclosing
@@ -2669,11 +2669,11 @@ let same_signature ctx (a : Src.functype) (b : Src.functype) =
    may be anything the branches consume per configuration: a wrong-hierarchy or
    non-reference capture poisons the cast, and a func capture of a DIFFERENT
    signature materialises the pin as a [ref.cast] the source never had. Ground
-   such a hole with the claim-free func-hierarchy bottom INSIDE the type pin —
-   [((_ as &?nofunc) as &?t)] claims nothing, still names [t], and lowers to no
-   instruction — and keep the plain pin everywhere else: with no annotation in
-   between, a captured value is the very callee the source popped (the
-   validator typed it there), so the claim is load-bearing and sound. *)
+   such a hole with the claim-free ASCRIPTION of the type itself — [(_ : &?t)]
+   claims nothing, still names [t], and lowers to no instruction — and keep
+   the plain pin everywhere else: with no annotation in between, a captured
+   value is the very callee the source popped (the validator typed it there),
+   so the claim is load-bearing and sound. *)
 let pin_callee ctx t (f : _ Ast.instr) =
   let target : Ast.valtype =
     Ref { nullable = true; typ = Type (idx ctx `Type t) }
@@ -2716,12 +2716,7 @@ let pin_callee ctx t (f : _ Ast.instr) =
            [effective_backing]'s [crossed_any]): go claim-free. *)
         | `Floor | `Blocked -> crossed_any
       in
-      let inner =
-        if wrong then
-          cast_to (Valtype (Ref { nullable = true; typ = NoFunc })) f
-        else f
-      in
-      return (pin inner)
+      return (if wrong then ascribe_to target f else pin f)
   | _ -> return (pin f)
 
 (* Whether the residual's own printed form names exactly the type [type_name] —
@@ -2781,13 +2776,7 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
         (* As [pin_callee]: annotation in play, claiming pin unsafe. *)
         | `Floor | `Blocked -> crossed_any
       in
-      let bottom = hierarchy_bottom (heaptype_hierarchy ctx (Type type_name)) in
-      let inner =
-        if wrong then
-          cast_to (Valtype (Ref { nullable = true; typ = bottom })) recv
-        else recv
-      in
-      return (pin inner)
+      return (if wrong then ascribe_to target recv else pin recv)
   | _ -> return (pin recv)
 
 (* The synthetic value [Stack.consume] injects when a conditional annotation
@@ -2804,13 +2793,12 @@ let consume_param ctx (typ : Src.blocktype option) =
     match snd params.(Array.length params - 1).Ast.desc with
     | Ast.Ref { typ = ht; _ } ->
         Some
-          (cast_to
-             (Valtype
-                (Ref
-                   {
-                     nullable = true;
-                     typ = hierarchy_bottom (heaptype_hierarchy ctx ht);
-                   }))
+          (ascribe_to
+             (Ref
+                {
+                  nullable = true;
+                  typ = hierarchy_bottom (heaptype_hierarchy ctx ht);
+                })
              (bare_hole ()))
     | _ -> None
 
@@ -3675,8 +3663,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let nullable = backed || not (is_bare_hole e) in
       let operand =
         if backed then e
-        else if wrong then
-          cast_to (Valtype (Ref { nullable = false; typ = None_ })) e
+        else if wrong then ascribe_to (Ref { nullable = false; typ = Any }) e
         else convert_src ~nullable src e
       in
       Stack.push 1
@@ -3715,8 +3702,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let nullable = backed || not (is_bare_hole e) in
       let operand =
         if backed then e
-        else if wrong then
-          cast_to (Valtype (Ref { nullable = false; typ = NoExtern })) e
+        else if wrong then ascribe_to (Ref { nullable = false; typ = Extern }) e
         else convert_src ~nullable src e
       in
       Stack.push 1
@@ -3821,10 +3807,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             in
             return
               (if wrong then
-                 cast_to
-                   (Valtype
-                      (Ref
-                         { nullable = true; typ = hierarchy_bottom target_hier }))
+                 ascribe_to
+                   (Ref { nullable = true; typ = hierarchy_bottom target_hier })
                    e
                else e)
         | _ -> return e
@@ -3904,10 +3888,8 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             in
             return
               (if wrong then
-                 cast_to
-                   (Valtype
-                      (Ref
-                         { nullable = true; typ = hierarchy_bottom target_hier }))
+                 ascribe_to
+                   (Ref { nullable = true; typ = hierarchy_bottom target_hier })
                    e
                else e)
         | _ -> return e
@@ -3970,10 +3952,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
            the bottom pins are the claim-free spelling. *)
         | `Floor | `Blocked -> crossed_any
       in
-      let bottom_pin e =
-        Ast.no_loc_instr
-          (Ast.Cast (e, Valtype (Ref { nullable = true; typ = None_ })))
-      in
+      let bottom_pin e = ascribe_to (Ref { nullable = true; typ = None_ }) e in
       let e1 =
         match o1 with
         | Some ({ Ast.desc = Ast.Select _; _ } as e) -> eq_pin e
@@ -4030,9 +4009,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          pending value, so the numeric residual stays for the [(@if)] branch
          that consumes it. *)
       let ref_bottom_pin () =
-        Ast.no_loc_instr
-          (Ast.Cast
-             (bare_hole (), Valtype (Ref { nullable = true; typ = None_ })))
+        ascribe_to (Ref { nullable = true; typ = None_ }) (bare_hole ())
       in
       (* The innermost enclosing block's own parameters are its first stack
          values, so a REFERENCE among them backs this hole exactly as a value

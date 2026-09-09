@@ -692,6 +692,8 @@ let get_prec (i : _ Ast.instr) =
     | Resume (_, h, _) | ResumeThrow (_, _, h, _) | ResumeThrowRef (_, h, _) ->
         if h = [] then CallAndFieldAccess else Cast
     | On _ -> Cast
+    (* The ascription's own parentheses are its syntax: never re-wrapped. *)
+    | Cast (_, Ascribed _) -> Atom
     | Cast _ | CastDesc _ | Test _ -> Cast
     | NonNull _ -> UnaryPostfix
     | UnOp _ -> UnaryPrefix
@@ -737,6 +739,7 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Call (i, _) | ArrayGet (i, _) ->
         starts_with_block_prec CallAndFieldAccess i
     | ArraySet (i, _, _) -> starts_with_block_prec Assignement i
+    | Cast (_, Ascribed _) -> false
     | Cast (i, _) | CastDesc (i, _, _) | Test (i, _) ->
         starts_with_block_prec Cast i
     | NonNull i -> starts_with_block_prec UnaryPostfix i
