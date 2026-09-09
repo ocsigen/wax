@@ -121,6 +121,18 @@ DEPTH="${DEPTH:-3}"
 # conditional). Depth 4 over the full alphabet is ~1.4M cells; over the core
 # it is the nightly's deeper lane.
 SYMS="${SYMS:-all}"
+# The acknowledged-net ratchet (see exempt_shape below): the measured
+# over-rejection count inside the net for each standard lane, counted per
+# conversion MODE (one red cell = two findings, default + --faithful). Growth
+# past the baseline fails the run — the net is a name PATTERN, wider than its
+# red cells, and must not silently absorb new ones. An ad-hoc lane runs
+# unratcheted (-1 = report only); override with ACK_RED_MAX=n.
+case "$DEPTH/$SYMS" in
+3/all) ACK_DEF=4 ;;
+4/core) ACK_DEF=0 ;;
+*) ACK_DEF=-1 ;;
+esac
+ACK_RED_MAX="${ACK_RED_MAX:-$ACK_DEF}"
 CORE="Rext Rnull Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq ScondPushEq"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
@@ -207,18 +219,19 @@ CROSSERS=(any.convert_extern extern.convert_any ref.cast ref.test)
 # There [Stack.consume] must inject its synthetic (else the tree the lowering
 # reads captures and re-types the residual through the parameter claim), the
 # parameter then takes the synthetic in every configuration, and the branch's
-# push is left stranded onto whatever claimer follows — including ones with no
-# claim-free spelling. Over-REJECTION only, and loud (the spliced validation
-# reports it); no crash and no silent miscompile is in the class. With NOTHING
-# below the annotation the synthetic is no longer injected and those cells are
-# ordinary calibration — see ATIF-DEADCODE.md's residual notes.
-# And the adaptive analog: an untyped SELECT right after an annotation, with a
-# reference residual below — the select's own arm holes capture the residual in
-# the tree the lowering reads, and a select arm has no claim-free spelling
-# either (grounding pins are themselves claims). Over-rejection only, loud.
+# push is left stranded onto whatever claimer follows. When the claimer's
+# hierarchy cannot absorb the push, the spliced validation rejects —
+# over-REJECTION only, and loud; no crash and no silent miscompile is in the
+# class. With NOTHING below the annotation the synthetic is no longer injected
+# and those cells are ordinary calibration — see ATIF-DEADCODE.md.
+# (The former Radapt exemption — a select's arm holes claiming across the
+# annotation — was retired when the arms gained claim-free type ascriptions.)
+# The net is CALIBRATED, not skipped: exempt cells are tested like any other,
+# a clean wat->wax over-rejection there is expected (severity ACK, ratcheted
+# by ACK_RED_MAX above), and every other outcome stays HIGH.
 exempt_shape() { # $1 = cell name
   case "$1" in
-  *.*ScondPush*.Bp1.* | *.*Scond*.Radapt.*) return 0 ;;
+  *.*ScondPush*.Bp1.*) return 0 ;;
   *) return 1 ;;
   esac
 }
@@ -334,13 +347,25 @@ worker() {
       rm -f "$wat"
       skipped=$((skipped + 1)); printf s >&2; continue
     fi
+    local sev=HIGH
     if exempt_shape "$name"; then
-      rm -f "$wat"
-      acked=$((acked + 1)); printf a >&2; continue
+      # The calibration leg over the acknowledged net: a clean wat->wax
+      # over-rejection is the class's one documented failure, so it reports
+      # at ACK and counts against the ratchet instead of failing outright.
+      # Anything else on an exempt cell — a crash, output that fails to
+      # recompile, reader drift, an introduced crossing — stays HIGH: the
+      # name-pattern net must not hide a regression that lands inside it.
+      sev=ACK
+      acked=$((acked + 1))
     fi
     for mode in "" "--faithful"; do
       v="$(classify_wax -i wat -f wax $mode --error-format short "$wat" -o "$wax")"
       if [ "$v" != ok ]; then
+        if [ "$sev" = ACK ] && [ "$v" = rejected ]; then
+          out+="$(finding BACKSCAN ACK "$name" \
+            "${mode:-default}: $v (wat->wax): $(head -1 "$ERRLOG")" "$codes")"$'\n'
+          printf x >&2; continue
+        fi
         out+="$(finding BACKSCAN HIGH "$name" \
           "${mode:-default}: $v (wat->wax): $(head -1 "$ERRLOG")" "$codes")"$'\n'
         printf F >&2; continue
@@ -391,15 +416,18 @@ echo >&2
 
 REPORT="$RESULTS/report"
 cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
-n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
+n=$(grep -c $'\tHIGH\t' "$REPORT" 2>/dev/null); n=${n:-0}
+ackr=$(grep -c $'\tACK\t' "$REPORT" 2>/dev/null); ackr=${ackr:-0}
 skipped=$(cat "$RESULTS"/skip.* 2>/dev/null | paste -sd+ | bc 2>/dev/null); skipped=${skipped:-0}
 acked=$(cat "$RESULTS"/ack.* 2>/dev/null | paste -sd+ | bc 2>/dev/null); acked=${acked:-0}
+if [ "$ACK_RED_MAX" -ge 0 ]; then ackmsg="$ackr of max $ACK_RED_MAX"; else ackmsg="$ackr, unratcheted"; fi
 echo "=================== backing-scan report ==================="
-echo "cells: $N  tested: $((N - skipped - acked))  (skipped as invalid: $skipped; acknowledged push-x-param residue: $acked)"
-h=$(grep -c $'\tHIGH\t' "$REPORT" 2>/dev/null); h=${h:-0}
-echo "findings: $n  (HIGH: $h)"
-if [ "$n" -gt 0 ]; then
+echo "cells: $N  tested: $((N - skipped))  (skipped as invalid: $skipped; acknowledged net: $acked cells, over-rejections: $ackmsg)"
+echo "findings: $n  (HIGH: $n)"
+if [ "$n" -gt 0 ] || { [ "$ACK_RED_MAX" -ge 0 ] && [ "$ackr" -gt "$ACK_RED_MAX" ]; }; then
   cat "$REPORT"
+  [ "$ACK_RED_MAX" -ge 0 ] && [ "$ackr" -gt "$ACK_RED_MAX" ] \
+    && echo "acknowledged net grew: $ackr over-rejections > baseline $ACK_RED_MAX"
   exit 1
 fi
 exit 0
