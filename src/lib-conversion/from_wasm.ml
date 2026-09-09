@@ -2143,7 +2143,11 @@ let rec backing_class_of ctx ~from_top (b : _ Ast.instr) =
       | None -> Unknown_class)
   | Ast.Call
       ( {
-          Ast.desc = Ast.Cast (_, Valtype (Ref { typ = Type tn | Exact tn; _ }));
+          Ast.desc =
+            Ast.Cast
+              ( _,
+                ( Valtype (Ref { typ = Type tn | Exact tn; _ })
+                | Ascribed (Ref { typ = Type tn | Exact tn; _ }) ) );
           _;
         },
         _ ) -> (
@@ -2156,7 +2160,8 @@ let rec backing_class_of ctx ~from_top (b : _ Ast.instr) =
   | _ when from_top > 0 -> Unknown_class
   | Ast.Null -> Null_class
   | Ast.NonNull e -> backing_class_of ctx ~from_top e
-  | Ast.Cast (_, Valtype (Ref { typ; _ })) -> heaptype_class ctx typ
+  | Ast.Cast (_, (Valtype (Ref { typ; _ }) | Ascribed (Ref { typ; _ }))) ->
+      heaptype_class ctx typ
   | Ast.Cast (_, Functype _) -> Ref_class { hier = `Func; eq = false }
   | Ast.Struct _ | Ast.StructDefault _ | Ast.StructDesc _
   | Ast.StructDefaultDesc _ | Ast.Array _ | Ast.ArrayFixed _
@@ -2602,7 +2607,8 @@ let pin_descriptor ctx ~exact x d =
       in
       match d.Ast.desc with
       | Ast.Hole | Ast.Null -> cast_to pin d
-      | Ast.Cast (inner, Ast.Valtype (Ast.Ref { typ; _ })) when is_bottom typ ->
+      | Ast.Cast (inner, Ast.Ascribed (Ast.Ref { typ; _ })) when is_bottom typ
+        ->
           (* Rebuilt on [d] to keep the outer node's span; its expectation is the
              new cast's target, not the replaced cast's operand. *)
           {
@@ -2749,7 +2755,10 @@ let backing_names_type ~from_top (b : _ Ast.instr) (type_name : Ast.ident) =
   from_top = 0
   &&
   match b.Ast.desc with
-  | Ast.Cast (_, Valtype (Ref { typ = Type n | Exact n; _ })) ->
+  | Ast.Cast
+      ( _,
+        ( Valtype (Ref { typ = Type n | Exact n; _ })
+        | Ascribed (Ref { typ = Type n | Exact n; _ }) ) ) ->
       String.equal n.Ast.desc type_name.Ast.desc
   | _ -> false
 
@@ -2812,8 +2821,8 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
    blocks the real parameter (see there): the block's LAST parameter — its
    topmost stack value, the one its re-parse claim takes first — at its
    hierarchy's claim-free bottom. [None] for a paramless block, or a numeric
-   parameter (no claim-free numeric spelling exists; the width machinery owns
-   those). One value only: a multi-parameter block interleaved with a pushing
+   parameter (the numeric residual shapes are owned by the width machinery;
+   extending the synthetic there has not been measured). One value only: a multi-parameter block interleaved with a pushing
    annotation is a deeper corner the grid does not yet spell. *)
 let consume_param ctx (typ : Src.blocktype option) =
   let { Ast.params; _ } = blocktype ctx typ in
@@ -3905,7 +3914,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let arg =
         match arg.Ast.desc with
         | Ast.Hole | Ast.Null -> cast_to exact_pin arg
-        | Ast.Cast (inner, Valtype (Ref { typ; _ })) when is_bottom typ ->
+        | Ast.Cast (inner, Ascribed (Ref { typ; _ })) when is_bottom typ ->
             {
               arg with
               desc = Ast.Cast (inner, exact_pin);

@@ -12701,7 +12701,11 @@ let width_expr (i : _ instr) =
    ([_ as i64_s] is a truncation of a float), so it ascribes nothing to the operand
    and a value under it still needs its own record honoured. *)
 let ascribed_type (t : Ast.casttype) =
-  match t with Valtype ((I32 | I64 | F32 | F64) as t) -> Some t | _ -> None
+  match t with
+  | Valtype ((I32 | I64 | F32 | F64) as t)
+  | Ascribed ((I32 | I64 | F32 | F64) as t) ->
+      Some t
+  | _ -> None
 
 let rec reconcile_widths mode diagnostics ~under_cast ~ascribed (i : _ instr) :
     _ instr =
