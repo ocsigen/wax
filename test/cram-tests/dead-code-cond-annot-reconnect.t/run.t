@@ -450,3 +450,60 @@ thing that types the binding in the other configuration:
       let l64: i64 = _;
   $ wax holelet.wax -f wat | grep -cE 'local.set|ref.is_null'
   2
+
+A select-of-holes READER OPERAND under a crossed annotation (the depth-4
+`*.Scond*.Radapt.*` cells, formerly exempted as unfixable): the select's own
+arm holes claim across the annotation in the tree the lowering reads — here
+the two i64s of a multi-value call the branches drop per configuration — so
+the select mis-typed and the reader's pin either crashed the lowering
+(`ref.eq`), dropped the reader (`ref.is_null` to `i32.eqz`), introduced the
+reverse crossing (`any.convert_extern`), or left the module untypeable
+(`ref.test`). The arms are now grounded CLAIM-FREE with ascriptions — they
+carry the reader's operand type, claim nothing, and lower to nothing:
+
+  $ cat > radeq.wat <<'WAT'
+  > (module
+  >   (func $f2 (result i64 i64) (i64.const 1) (i64.const 2))
+  >   (func
+  >     return
+  >     call $f2
+  >     (@if $dbg (@then drop) (@else drop))
+  >     (@if $dbg (@then drop) (@else drop))
+  >     select
+  >     ref.eq
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax radeq.wat -o radeq.wax && grep '==' radeq.wax
+      _ = (_ : &?none) == ((_ : i32)?(_ : &?eq):(_ : &?eq));
+  $ wax radeq.wax -f wat | grep -coE 'ref.eq'; wax radeq.wax -f wat | grep -c 'i32.eq\b'
+  1
+  0
+  [1]
+
+  $ sed 's/ref.eq/ref.is_null/' radeq.wat > radnull.wat
+  $ wax -i wat -f wax radnull.wat -o radnull.wax && wax radnull.wax -f wat | grep -oE 'ref.is_null|i32.eqz'
+  ref.is_null
+
+  $ sed 's/ref.eq/any.convert_extern/' radeq.wat > radcvt.wat
+  $ wax -i wat -f wax radcvt.wat -o radcvt.wax && wax radcvt.wax -f wat | grep -oE 'any.convert_extern|extern.convert_any'
+  any.convert_extern
+
+And `ref.test` on a struct type, the arms grounded at the target hierarchy's
+top:
+
+  $ cat > radtest.wat <<'WAT'
+  > (module
+  >   (type $s (struct (field (mut i64))))
+  >   (func (local $l64 i64)
+  >     return
+  >     select
+  >     ref.null extern
+  >     (@if $dbg (@then drop) (@else drop))
+  >     select
+  >     ref.test (ref null $s)
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax radtest.wat -o radtest.wax && wax radtest.wax -f wat | grep -coE 'ref.test'
+  1

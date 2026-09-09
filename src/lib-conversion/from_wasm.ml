@@ -1187,6 +1187,28 @@ let ascribe_to (ty : Ast.valtype) (e : _ Ast.instr) : _ Ast.instr =
     expected = cast_result (Ascribed ty);
   }
 
+(* Rebuild an adaptive [select]'s bare-hole operands CLAIM-FREE: each hole arm
+   takes the ascription [(_ : ty)] and a hole condition [(_ : i32)]. For a
+   select standing where a conditional annotation separates it from the
+   residuals its holes would positionally capture — the branches consume those
+   per configuration, so the claims exist only in the tree the lowering reads,
+   where they mis-type the select (the depth-4 grid's [*.Scond*.Radapt.*]
+   cells: an i64-typed select under [as &?eq] crashed the lowering; a claimed
+   extern turned a reader into a crossing; an unclaimable pair left the module
+   untypeable). A non-hole operand keeps its own claims; the ascribed arms
+   carry the reader's operand type, so no outer claiming pin is needed. *)
+let ascribe_select_holes (ty : Ast.valtype) (e : _ Ast.instr) : _ Ast.instr =
+  match e.Ast.desc with
+  | Ast.Select (c, a, b) ->
+      let ground ty (o : _ Ast.instr) =
+        match o.Ast.desc with Ast.Hole -> ascribe_to ty o | _ -> o
+      in
+      {
+        e with
+        Ast.desc = Ast.Select (ground Ast.I32 c, ground ty a, ground ty b);
+      }
+  | _ -> e
+
 (* The typed hole [(_ as ty)] the conversions give an absent operand — a pop from
    the polymorphic stack of dead code. Both nodes record [ty]: the opcode's
    signature states the operand type whether or not a value was there to take. *)
@@ -2752,6 +2774,13 @@ let hierarchy_bottom : _ -> Ast.heaptype = function
   | Some `Cont -> NoCont
   | Some `Any | None -> None_
 
+let hierarchy_top : _ -> Ast.heaptype = function
+  | Some `Func -> Func
+  | Some `Extern -> Extern
+  | Some `Exn -> Exn
+  | Some `Cont -> Cont
+  | Some `Any | None -> Any
+
 let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
   let target : Ast.valtype = Ref { nullable = true; typ = Type type_name } in
   let pin inner = { recv with Ast.desc = Ast.Cast (inner, Valtype target) } in
@@ -3664,7 +3693,15 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let operand =
         if backed then e
         else if wrong then ascribe_to (Ref { nullable = false; typ = Any }) e
-        else convert_src ~nullable src e
+        else
+          match e.Ast.desc with
+          (* A select-of-holes under a crossed annotation: its arm claims
+             exist only in the tree the lowering reads and mis-typed the
+             select (a claimed extern compounded the convert with the reverse
+             crossing) — ground the arms at the SOURCE type instead; the
+             convert lowers over the typed select as over any real operand. *)
+          | Ast.Select _ when crossed_any -> ascribe_select_holes src e
+          | _ -> convert_src ~nullable src e
       in
       Stack.push 1
         (with_loc (Cast (operand, Valtype (Ref { nullable; typ = Extern }))))
@@ -3703,7 +3740,11 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let operand =
         if backed then e
         else if wrong then ascribe_to (Ref { nullable = false; typ = Extern }) e
-        else convert_src ~nullable src e
+        else
+          match e.Ast.desc with
+          (* As [ExternConvertAny]: crossed arm claims mis-type the select. *)
+          | Ast.Select _ when crossed_any -> ascribe_select_holes src e
+          | _ -> convert_src ~nullable src e
       in
       Stack.push 1
         (with_loc (Cast (operand, Valtype (Ref { nullable; typ = Any }))))
@@ -3811,6 +3852,21 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
                    (Ref { nullable = true; typ = hierarchy_bottom target_hier })
                    e
                else e)
+        (* A select-of-holes under a crossed annotation: ground its arms at
+           the TARGET hierarchy's top — the arm claims exist only in the tree
+           the lowering reads, and a claimed pair left it untypeable. *)
+        | Ast.Select _ ->
+            let* _, crossed_any = Stack.effective_backing is_poly_terminator in
+            return
+              (if crossed_any then
+                 ascribe_select_holes
+                   (Ref
+                      {
+                        nullable = true;
+                        typ = hierarchy_top (heaptype_hierarchy ctx target.typ);
+                      })
+                   e
+               else e)
         | _ -> return e
       in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref target))))
@@ -3892,6 +3948,21 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
                    (Ref { nullable = true; typ = hierarchy_bottom target_hier })
                    e
                else e)
+        (* A select-of-holes under a crossed annotation: ground its arms at
+           the TARGET hierarchy's top — the arm claims exist only in the tree
+           the lowering reads, and a claimed pair left it untypeable. *)
+        | Ast.Select _ ->
+            let* _, crossed_any = Stack.effective_backing is_poly_terminator in
+            return
+              (if crossed_any then
+                 ascribe_select_holes
+                   (Ref
+                      {
+                        nullable = true;
+                        typ = hierarchy_top (heaptype_hierarchy ctx target.typ);
+                      })
+                   e
+               else e)
         | _ -> return e
       in
       Stack.push 1 (expect I32 (with_loc (Test (e, target))))
@@ -3953,9 +4024,19 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `Floor | `Blocked -> crossed_any
       in
       let bottom_pin e = ascribe_to (Ref { nullable = true; typ = None_ }) e in
+      (* A select-of-holes operand under a crossed annotation: the select's own
+         arm holes claim across it in the tree the lowering reads (an i64 pair
+         mis-typed the select and the [as &?eq] pin crashed the lowering) —
+         ground the arms claim-free instead; they carry the type, so no outer
+         pin. *)
+      let sel_pin e =
+        if crossed_any then
+          ascribe_select_holes (Ref { nullable = true; typ = Eq }) e
+        else eq_pin e
+      in
       let e1 =
         match o1 with
-        | Some ({ Ast.desc = Ast.Select _; _ } as e) -> eq_pin e
+        | Some ({ Ast.desc = Ast.Select _; _ } as e) -> sel_pin e
         | Some e -> e
         | None ->
             if wrong then bottom_pin bare
@@ -3964,7 +4045,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       in
       let e2 =
         match o2 with
-        | Some ({ Ast.desc = Ast.Select _; _ } as e) -> eq_pin e
+        | Some ({ Ast.desc = Ast.Select _; _ } as e) -> sel_pin e
         | Some e -> e
         | None -> if wrong then bottom_pin (bare_hole ()) else bare
       in
@@ -4038,6 +4119,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          claim-free bottom [(_ as &?none)] instead (see [backing_not_ref]). *)
       let e =
         match o with
+        (* As [RefEq]'s [sel_pin]: crossed arm claims mis-type the select. *)
+        | Some ({ Ast.desc = Ast.Select _; _ } as e) when crossed_any ->
+            ascribe_select_holes (Ref { nullable = true; typ = Any }) e
         | Some ({ Ast.desc = Ast.Select _; _ } as e) -> any_pin e
         | Some e -> e
         | None -> (
