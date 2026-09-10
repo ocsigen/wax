@@ -2607,8 +2607,14 @@ let pin_descriptor ctx ~exact x d =
       in
       match d.Ast.desc with
       | Ast.Hole | Ast.Null -> cast_to pin d
-      | Ast.Cast (inner, Ast.Ascribed (Ast.Ref { typ; _ })) when is_bottom typ
-        ->
+      (* Both bottom spellings: a null literal's own [Valtype] cast (the
+         [RefNull] emission, [null as &?none]) and the claim-free [Ascribed]
+         hole pin. *)
+      | Ast.Cast
+          ( inner,
+            ( Ast.Valtype (Ast.Ref { typ; _ })
+            | Ast.Ascribed (Ast.Ref { typ; _ }) ) )
+        when is_bottom typ ->
           (* Rebuilt on [d] to keep the outer node's span; its expectation is the
              new cast's target, not the replaced cast's operand. *)
           {
@@ -3914,7 +3920,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let arg =
         match arg.Ast.desc with
         | Ast.Hole | Ast.Null -> cast_to exact_pin arg
-        | Ast.Cast (inner, Ascribed (Ref { typ; _ })) when is_bottom typ ->
+        (* Both bottom spellings, as above. *)
+        | Ast.Cast
+            (inner, (Valtype (Ref { typ; _ }) | Ascribed (Ref { typ; _ })))
+          when is_bottom typ ->
             {
               arg with
               desc = Ast.Cast (inner, exact_pin);
