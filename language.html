@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fa1de00c.js";
+            window.path_to_searchindex_js = "searchindex-30719940.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -537,6 +537,16 @@ x <span class="hljs-keyword">as</span> <span class="hljs-type">i32_s</span>     
 x <span class="hljs-keyword">as</span> <span class="hljs-type">f32_s</span>      <span class="hljs-comment">// Convert signed int to float</span>
 x.<span class="hljs-title">to_bits</span>()     <span class="hljs-comment">// Reinterpret float as int</span>
 x.<span class="hljs-title">from_bits</span>()   <span class="hljs-comment">// Reinterpret int as float</span></span></pre>
+
+<h3 id="type-ascription"><a class="header" href="#type-ascription">Type Ascription</a></h3>
+<p>The parenthesized form <code>(e : t)</code> <em>asserts</em> a type instead of converting to it:
+<code>e</code>’s type must already be a subtype of <code>t</code>, and the expression has type <code>t</code>.
+It compiles to nothing. Use it to pin a literal’s width or to widen a
+reference without the runtime machinery of a cast; where <code>as</code> would insert an
+instruction (or a runtime <code>ref.cast</code>), an ascription that does not hold is a
+compile-time error instead.</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> x = (<span class="hljs-number">1</span> : <span class="hljs-type">i64</span>);        <span class="hljs-comment">// pin the literal's width</span>
+(<span class="hljs-title">make_point</span>() : &amp;?<span class="hljs-type">any</span>);   <span class="hljs-comment">// widen the reference, no instruction</span></span></pre>
 
 <h3 id="conditional-expression"><a class="header" href="#conditional-expression">Conditional Expression</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">cond ? val_true : val_false</span></pre>

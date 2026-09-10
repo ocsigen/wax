@@ -1,5 +1,6 @@
 [
   {"title": "Arithmetic Functions", "code": "#[export = \"add\"]\nfn add(x: i32, y: i32) -> i32 {\n    x + y;\n}\n\n#[export = \"multiply\"]\nfn multiply(x: i32, y: i32) -> i32 {\n    x * y;\n}"},
+  {"title": "Type Ascription", "code": "type point = { x: i32, y: i32 };\n\n#[export = \"origin_key\"]\nfn origin_key() -> i64 {\n    let p: &?any = ({point| x: 0, y: 0 } : &?any);\n    _ = p;\n    (1 : i64);\n}"},
   {"title": "Factorial with Recursion", "code": "#[export = \"factorial\"]\nfn factorial(n: i32) -> i32 {\n    if n <=s 1 => i32 {\n        1;\n    } else {\n        n * factorial(n - 1);\n    }\n}"},
   {"title": "Factorial with Tail Call", "code": "#[export = \"factorial\"]\nfn factorial(n: i32) -> i32 {\n    become factorial_helper(n, 1);\n}\n\nfn factorial_helper(n: i32, acc: i32) -> i32 {\n    if n <=s 1 => i32 {\n        acc;\n    } else {\n        become factorial_helper(n - 1, n * acc);\n    }\n}"},
   {"title": "Loop with Early Exit", "code": "type ints = [i32];\n\n#[export = \"find_first_zero\"]\nfn find_first_zero(arr: &ints) -> i32 {\n    let len = arr.length();\n    let i = 0;\n    'search: loop {\n        if i >=s len {\n            return -1;\n        }\n        if arr[i] == 0 {\n            return i;\n        }\n        i += 1;\n        br 'search;\n    }\n    unreachable;\n}"},
