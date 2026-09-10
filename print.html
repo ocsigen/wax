@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-484880c9.js";
+            window.path_to_searchindex_js = "searchindex-fa1de00c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -2354,8 +2354,8 @@ descriptor is a given one: <code>o as descriptor(d)</code>, or <code>as ?descrip
 null. The <a href="#labels-and-branches"><code>br_on_cast</code> and <code>br_on_cast_fail</code></a> branches
 accept the same <code>descriptor(d)</code> operand in place of a type
 (<code>br_on_cast 'l descriptor(d) val</code>, with an optional <code>?</code> for the nullable form),
-branching on that descriptor check. The reciprocity and rec-group rules the two
-types must satisfy are listed under
+branching on that descriptor check. The reciprocity, finality and rec-group
+rules the two types must satisfy are listed under
 <a href="#custom-descriptors-1">Types → Custom Descriptors</a>.</p>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
 <p>A string literal builds a new array and lowers to an <code>array.new_fixed</code>. The
@@ -3775,6 +3775,10 @@ validation:</p>
 <li>the clauses must be <strong>reciprocal</strong>: if <code>obj</code> names <code>obj_desc</code> as its
 descriptor, then <code>obj_desc</code> must describe <code>obj</code>;</li>
 <li>a described type must be declared <strong>before</strong> its descriptor;</li>
+<li>the two must <strong>agree on finality</strong>: both <code>open</code>, or neither. An open type with
+a final descriptor could never be extended, since a subtype of it would need a
+descriptor extending a final type, and a final type with an open descriptor
+leaves that descriptor with no possible subtypes either;</li>
 <li>in a subtype hierarchy, a type has a descriptor exactly when its declared
 supertype does (with a descriptor that is itself a subtype), and a described
 type is inherited covariantly.</li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-484880c9.js";
+            window.path_to_searchindex_js = "../searchindex-fa1de00c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-15e75985.js"></script>
@@ -308,6 +308,10 @@ validation:</p>
 <li>the clauses must be <strong>reciprocal</strong>: if <code>obj</code> names <code>obj_desc</code> as its
 descriptor, then <code>obj_desc</code> must describe <code>obj</code>;</li>
 <li>a described type must be declared <strong>before</strong> its descriptor;</li>
+<li>the two must <strong>agree on finality</strong>: both <code>open</code>, or neither. An open type with
+a final descriptor could never be extended, since a subtype of it would need a
+descriptor extending a final type, and a final type with an open descriptor
+leaves that descriptor with no possible subtypes either;</li>
 <li>in a subtype hierarchy, a type has a descriptor exactly when its declared
 supertype does (with a descriptor that is itself a subtype), and a described
 type is inherited covariantly.</li>
