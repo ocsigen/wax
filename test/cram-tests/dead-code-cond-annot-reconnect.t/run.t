@@ -318,7 +318,7 @@ claim-free:
   >     unreachable))
   > WAT
   $ wax -i wat -f wax pushfn.wat -o pushfn.wax && grep '!' pushfn.wax
-      _ = !(_ : &?none);
+      _ = !_;
   $ wax pushfn.wax -f wat | grep -c 'ref.is_null'
   1
 
@@ -344,10 +344,10 @@ untyped:
   > WAT
   $ wax -i wat -f wax pushblk.wat -o pushblk.wax && sed -n '3p;12,15p' pushblk.wax
       _?_:_;
-      (_ : &?noextern);
       do (&?extern) {
           _ = _;
       }
+      _ = (_ : &?none) == (_ : &?none);
   $ wax pushblk.wax -f wat | grep -cE '\(select\)|ref.eq'
   2
 
@@ -383,11 +383,10 @@ strand the push onto the numeric sink:
   )
 
 Depth-4 shapes (the nightly lane's depth) — a numeric operator right after the
-annotation, its operand holes reaching a REFERENCE residual below: the record
-alone cannot keep the width (the mis-typed tree resolves the cell as the
-reference and the width machinery skips it), so the holes get the syntactic
-pin, whose printed target survives the re-parse and keeps `i64.add` an
-`i64.add`:
+annotation, its operand holes reaching a REFERENCE residual below. Under the
+primary-spliced model the branch consumes the residual, the operator's holes
+claim the polymorphic floor, and the binding's annotation alone carries the
+width (no operand pins needed — the annotation is load-bearing and kept):
 
   $ cat > numref.wat <<'WAT'
   > (module
@@ -401,8 +400,8 @@ pin, whose printed target survives the re-parse and keeps `i64.add` an
   >     drop
   >     unreachable))
   > WAT
-  $ wax -i wat -f wax numref.wat -o numref.wax && grep 'as i64' numref.wax
-      let l64 = _ as i64 + _ as i64;
+  $ wax -i wat -f wax numref.wat -o numref.wax && grep 'let l64' numref.wax
+      let l64: i64 = _ + _;
   $ wax numref.wax -f wat | grep -cE 'i64.add|ref.is_null'
   2
 

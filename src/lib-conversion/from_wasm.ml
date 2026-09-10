@@ -546,6 +546,13 @@ type ctx = {
          [br_on_cast_fail]-chain arm. *)
   diagnostics : Wax_utils.Diagnostic.context;
   cond_env : Cond.env;
+  mutable primary : Cond.t;
+      (* The PRIMARY configuration, accumulated greedily at each emitted
+         conditional annotation in stream order — the EXACT mirror of the
+         typer's tree-building pass ([Typing]'s [ctx.primary]): the selected
+         branch's claims and leftovers are applied to the enclosing stack
+         model, so the scan predicts the claims of the world the typer
+         types. *)
   cond_diag : Wax_utils.Diagnostic.context;
   mutable cond_asm : Cond.t;
       (* Assumption for the conditional branch currently being registered or
@@ -1338,11 +1345,34 @@ module Stack = struct
      parameter's hierarchy — instead: it prints as a [_ as &?noextern;]
      statement, lowers to nothing, satisfies the claim on re-parse, and leaves
      the real value where the source's own consumers find it. *)
+  (* The net CLAIMS of the PRIMARY-selected branch of a conditional
+     annotation, keyed physically by the emitted [If_annotation] node (set at
+     emission, where the greedy primary selection is made; [hole_claims] reads
+     it when a scan walks past the annotation entry — the mirror of the
+     typer's spliced-branch typing, whose branch holes claim the enclosing
+     pendings positionally). Structural hash with PHYSICAL equality: two
+     structurally equal annotations at different stream points may select
+     different branches. *)
+  let annotation_claims : (Obj.t, int) Hashtbl.t = Hashtbl.create 16
+
+  let set_annotation_claims (i : _ Ast.instr) n =
+    Hashtbl.replace annotation_claims (Obj.repr i) n
+
+  let get_annotation_claims (i : _ Ast.instr) =
+    match Hashtbl.find_opt annotation_claims (Obj.repr i) with
+    | Some n -> n
+    | None -> 0
+
   let consume ?param inputs stack =
     if inputs = 0 then (stack, ())
     else
       ( (match stack with
         | (1, w, instr) :: rem -> (-1, w, instr) :: rem
+        (* A GHOST (a primary-selected branch's leftover, arity [-2]): already
+           printed inside the branch, so nothing is flushed later — the claim
+           is spent and the entry simply leaves the stack (the typer's block
+           parameter claims the branch's pending the same way). *)
+        | (-2, _, _) :: rem -> rem
         | (0, _, i) :: _
           when has_cond_annotation i
                && List.exists (fun (a, _, _) -> a <> 0) stack -> (
@@ -1510,7 +1540,7 @@ module Stack = struct
        the source's own pops per configuration; the emission already mirrors that
        by construction, one hole per branch pop. What the scan must predict is
        the reconnection in the PRESERVED tree, whose types drive [To_wasm].) *)
-    | Ast.If_annotation _ -> 0
+    | Ast.If_annotation _ -> get_annotation_claims i
     | Ast.Block { typ; _ }
     | Ast.Loop { typ; _ }
     | Ast.TryTable { typ; _ }
@@ -1547,6 +1577,14 @@ module Stack = struct
        down and the scan pinned over a residual the hole in fact reconnects to
        (the backing-scan grid's Bp1 cluster: the pin materialised as an
        [any.convert_extern]). Spoken for, it can back nothing itself. *)
+    (* A GHOST — a primary-selected branch's leftover value, printed inside
+       the branch: positionally it IS a pending of the enclosing frame (the
+       typer's spliced branch leaves it pending), so it absorbs a claim, backs
+       a reconnection, and stops the scan when adaptive, exactly like a
+       single-value entry — re-dispatched as one. Its own holes are NOT
+       charged here: they were counted as the annotation's branch claims. *)
+    | (-2, w, i) :: rem ->
+        effective_backing stop ~crossed claims ((1, w, i) :: rem)
     | (-1, _, i) :: rem ->
         (* Its own tree may CARRY holes (a consumed [select] of holes): those
            claim from this frame exactly like a statement's — the consumed
@@ -1686,10 +1724,12 @@ module Stack = struct
      ([f64.trunc]) narrows on re-parse. Callers that cannot state an arity default
      to the old leading-present-run heuristic ([max_int] = every leading present
      entry is a result); the control constructs pass their real output count. *)
-  let run ?(results = max_int) f =
-    let st, () = f [] in
+  let run_stack ?(results = max_int) st =
     let rec pin_stranded results_left below_stmt = function
       | [] -> []
+      (* A ghost is already printed inside its branch — nothing to flush; it
+         still marks everything deeper as below a statement. *)
+      | (-2, _, _) :: rem -> pin_stranded results_left true rem
       | (arity, _, i) :: rem ->
           (* Only a single-value entry ([arity = 1]) is a pinnable leftover; a
              statement ([0]) or multi-value residual is left as is and, like a
@@ -1710,6 +1750,10 @@ module Stack = struct
           i :: pin_stranded results_left (below_stmt || not present) rem
     in
     List.rev (pin_stranded results false st)
+
+  let run ?results f =
+    let st, () = f [] in
+    run_stack ?results st
 end
 
 let ( let* ) e f st =
@@ -4495,27 +4539,59 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          branch-pushed [i64.const 1] re-lowered at the i32 default (a
          backing-scan ScondPush grid finding: the lowered module failed its own
          validation in the configuration that feeds the value to an i64
-         consumer). *)
-      let then_body =
-        {
-          then_body with
-          Ast.desc =
-            with_cond ctx ~location:i.info cond true (fun () ->
-                Stack.run ~results:0 (instructions ctx then_body.desc));
-        }
+         consumer).
+
+         The typer's tree-building pass types the branch a greedy PRIMARY
+         configuration selects SPLICED against the enclosing pending stack
+         ([Typing]'s [toplevel_instruction] arm); mirror the same walk here so
+         the scan predicts that world's claims: the selection is made with the
+         identical greedy rule, the selected branch's printed statements'
+         hole count is recorded as the annotation's claims (charged when a
+         scan walks past the entry, absorbed by the value entries below —
+         positionally, as the typer pairs them), and each of its leftover
+         VALUES is pushed above the annotation as a GHOST entry (arity [-2]:
+         already printed inside the branch, so never flushed or folded, but
+         claim-absorbing, reconnection-backing, and classifiable). *)
+      let f_cond =
+        Cond.of_cond ctx.cond_env ctx.cond_diag ~location:i.info cond
       in
-      let else_body =
-        Option.map
-          (fun (b : (_ Src.instr list, Ast.location) Ast.Annot.annotated) ->
-            {
-              b with
-              Ast.desc =
-                with_cond ctx ~location:i.info cond false (fun () ->
-                    Stack.run ~results:0 (instructions ctx b.desc));
-            })
-          else_body
+      let sel_then = Cond.is_satisfiable (Cond.and_ ctx.primary f_cond) in
+      ctx.primary <-
+        Cond.and_ ctx.primary (if sel_then then f_cond else Cond.not_ f_cond);
+      let convert positive (body : _ list) =
+        with_cond ctx ~location:i.info cond positive (fun () ->
+            let st, () = instructions ctx body [] in
+            (Stack.run_stack ~results:0 st, st))
       in
-      Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
+      let then_stmts, then_st = convert true then_body.desc in
+      let then_body = { then_body with Ast.desc = then_stmts } in
+      let else_body, else_st =
+        match else_body with
+        | Some (b : (_ Src.instr list, Ast.location) Ast.Annot.annotated) ->
+            let stmts, st = convert false b.desc in
+            (Some { b with Ast.desc = stmts }, st)
+        | None -> (None, [])
+      in
+      let sel_stmts, sel_st =
+        if sel_then then (then_body.Ast.desc, then_st)
+        else
+          ( (match else_body with Some b -> b.Ast.desc | None -> []),
+            if sel_then then then_st else else_st )
+      in
+      let node = with_loc (If_annotation { cond; then_body; else_body }) in
+      Stack.set_annotation_claims node
+        (List.fold_left (fun n s -> n + Stack.hole_claims s) 0 sel_stmts);
+      let* () = Stack.push 0 node in
+      (* The selected branch's leftover values, bottom-most first so the stack
+         order matches the branch's own. *)
+      let ghosts =
+        List.rev
+          (List.filter_map
+             (fun (a, w, t) -> if a >= 1 then Some (w, t) else None)
+             sel_st)
+      in
+      fun st ->
+        (List.fold_left (fun st (w, t) -> (-2, w, t) :: st) st ghosts, ())
   (* [size]/[grow] return the memory's ADDRESS type (i64 under memory64); record
      it (see [ctx.address_types]). *)
   | MemorySize m ->
@@ -5982,6 +6058,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
         address_types = Hashtbl.create 8;
         multi_ref_results = Hashtbl.create 8;
         cond_env = Cond.create ();
+        primary = Cond.true_;
         cond_diag = Wax_utils.Diagnostic.collector ();
         cond_asm = Cond.true_;
       }
