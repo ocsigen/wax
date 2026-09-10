@@ -7552,7 +7552,10 @@ and type_block_construct ctx i =
   | If_annotation { cond; then_body; else_body } ->
       (* Type each branch as an isolated block, under the branch's assumption so
          names resolve per branch (a name may be declared only in, or with a
-         different type in, the matching configuration). *)
+         different type in, the matching configuration). The tree-building
+         pass's statement path intercepts this node BEFORE the expression
+         bridge ([toplevel_instruction]'s primary-spliced arm), so this arm
+         serves the checking passes and the inside of a non-selected branch. *)
       let then_body' =
         {
           then_body with
@@ -10036,6 +10039,64 @@ and match_recover_scrutinee ctx scrutinee = function
 and toplevel_instruction ctx i : stack -> stack * 'b =
   if debug then Wax_utils.Printer.run_err (fun p -> Printer_output.instr p i);
   match i.desc with
+  (* The tree-building pass types the branch a greedily-built PRIMARY
+     configuration selects SPLICED against the enclosing pending stack,
+     exactly as the source's own validation and the checking passes do: its
+     holes claim the enclosing values and its leftovers stay pending for later
+     claimers, so the types this pass resolves for the ENCLOSING statements —
+     the ones [To_wasm] lowers — are those of a configuration that exists, not
+     of a fictional world where the annotation contributes nothing. The
+     primary picks the then-branch whenever its condition is consistent with
+     the assumptions accumulated so far (stream order; [From_wasm]'s backing
+     scan mirrors the same greedy walk) and refines the formula either way.
+     The non-selected branch keeps the isolated typing (the expression-monad
+     arm), with the primary suppressed inside so a nested annotation there
+     cannot pollute the assumptions. Checking passes have no primary and fall
+     through. *)
+  | If_annotation { cond; then_body; else_body } when Option.is_some ctx.primary
+    ->
+      let prim = Option.get ctx.primary in
+      let f = Cond.of_cond ctx.cond_env ctx.diagnostics ~location:i.info cond in
+      let sel_then = Cond.is_satisfiable (Cond.and_ !prim f) in
+      prim := Cond.and_ !prim (if sel_then then f else Cond.not_ f);
+      let iso (body : _ Annot.annotated) positive =
+        {
+          body with
+          Annot.desc =
+            with_cond ctx ~location:i.info cond positive (fun () ->
+                block
+                  { ctx with primary = None }
+                  i.info None [||] [||] [||] body.Annot.desc);
+        }
+      in
+      let spliced body positive st =
+        with_cond ctx ~location:i.info cond positive (fun () ->
+            block_contents ctx [||] body st)
+      in
+      fun st ->
+        if sel_then then
+          let st, (then_typed, _) = spliced then_body.Annot.desc true st in
+          return_statement i
+            (If_annotation
+               {
+                 cond;
+                 then_body = { then_body with Annot.desc = then_typed };
+                 else_body = Option.map (fun b -> iso b false) else_body;
+               })
+            [||] st
+        else
+          let then_body' = iso then_body true in
+          let st, else_body' =
+            match else_body with
+            | Some b ->
+                let st, (else_typed, _) = spliced b.Annot.desc false st in
+                (st, Some { b with Annot.desc = else_typed })
+            | None -> (st, None)
+          in
+          return_statement i
+            (If_annotation
+               { cond; then_body = then_body'; else_body = else_body' })
+            [||] st
   | Block { label; typ; block = { desc = instrs; _ } as blkloc } ->
       let*! params =
         array_map_opt
@@ -12078,6 +12139,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       member_completions;
       simplify;
       suggest;
+      primary = (if build then Some (ref Cond.true_) else None);
       crossed_pendings = ref [];
       faithful;
     }

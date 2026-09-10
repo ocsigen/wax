@@ -258,7 +258,7 @@ that feeds it to the i64 local:
   > WAT
   $ wax -i wat -f wax push.wat -o push.wax && sed -n '4,10p' push.wax
       {
-          1 as i64;
+          1;
       }
       #[else]
       {
@@ -402,7 +402,7 @@ pin, whose printed target survives the re-parse and keeps `i64.add` an
   >     unreachable))
   > WAT
   $ wax -i wat -f wax numref.wat -o numref.wax && grep 'as i64' numref.wax
-      let l64: i64 = _ as i64 + _ as i64;
+      let l64 = _ as i64 + _ as i64;
   $ wax numref.wax -f wat | grep -cE 'i64.add|ref.is_null'
   2
 

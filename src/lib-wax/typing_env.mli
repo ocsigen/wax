@@ -151,6 +151,18 @@ type module_context = {
   warn_unused : bool;
   simplify : bool;
   suggest : bool;
+  primary : Cond.t ref option;
+      (* The PRIMARY configuration accumulated by the tree-building pass (the
+         one whose typed tree [To_wasm] lowers): at each conditional-annotation
+         statement, in stream order, the pass selects the then-branch whenever
+         its condition is consistent with the assumptions accumulated so far
+         (else the else-branch), refines the formula, and types the SELECTED
+         branch spliced against the enclosing pending stack — so the enclosing
+         statements' claims and types are those of a configuration that
+         EXISTS. [From_wasm]'s backing scan mirrors the same greedy walk.
+         [None] in the checking passes ([~build:false]) and inside a
+         NON-selected branch (whose nested annotations must not pollute the
+         accumulated assumptions). *)
   crossed_pendings : Infer.inferred_type Infer.Cell.t list ref;
       (* The stack values that were pending when a conditional annotation
          STATEMENT was typed (physical cells, appended per annotation): a hole
