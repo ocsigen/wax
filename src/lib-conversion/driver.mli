@@ -50,8 +50,11 @@ val wat_to_binary :
     [name_functions] is set (default [false]), each anonymous exported function
     is named after its export (see
     {!Wax_wasm.Naming.name_functions_from_exports}) so it appears in the binary
-    "name" section. Raises {!Wax_wasm.Text_to_binary.Conditional_in_binary} if a
-    conditional annotation survived specialization, or
+    "name" section. A function reached by [ref.func] only from a function body
+    is added to a declarative element segment (see {!Wax_wasm.Declare_refs}), so
+    the binary passes strict reference validation. Raises
+    {!Wax_wasm.Text_to_binary.Conditional_in_binary} if a conditional annotation
+    survived specialization, or
     {!Wax_wasm.Text_to_binary.Unresolved_reference} if a named index or label
     reference resolves to nothing. *)
 

@@ -31,7 +31,10 @@ val wat_to_binary :
     its [(@if ...)] annotations against [defines] (default empty), optionally
     [validate]s it (default [false]), and lowers it to the binary format. When
     [name_functions] is set (default [false]), each anonymous exported function
-    is named after its export so it appears in the binary "name" section.
+    is named after its export so it appears in the binary "name" section. A
+    function reached by [ref.func] only from a function body is added to a
+    declarative element segment, so the binary passes strict reference
+    validation.
 
     All conditional annotations must be resolved (binary cannot represent them);
     an exception is raised if one survives specialization, so [defines] should

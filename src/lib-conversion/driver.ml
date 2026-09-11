@@ -47,6 +47,10 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
   let ast =
     if name_functions then Naming.name_functions_from_exports ast else ast
   in
+  (* Declare any function referenced by [ref.func] only inside a body, so the
+     emitted binary passes strict reference validation (as [wat_to_wasm] does in
+     the CLI). *)
+  let ast = Wax_wasm.Declare_refs.module_ ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d -> Wax_wasm.Validation.f d ast);
