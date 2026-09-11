@@ -6241,13 +6241,28 @@ and type_cast ctx i =
          claim-free, at ANY type (the bottom-cast pin's type-directed rule,
          generalized), so it grounds a dead-code value's type without
          capturing a residual another consumer reconnects to. *)
+      let*! ty = internalize ctx t in
       let* i' =
         match i'.desc with
-        | Hole -> return_expression i' Hole (Cell.make Unknown)
-        | _ -> instruction ctx i'
+        | Hole ->
+            (* No [pop_parameter]: an ascribed hole claims no pending value
+               ([count_holes] gives it 0), so there is no slot to take and
+               [instruction] would recover with an [Error] cell. Ground it at
+               the ascribed type directly ([check_type] settles the [Unknown]
+               cell), rather than through [check_instruction]. *)
+            let* i' = return_expression i' Hole (Cell.make Unknown) in
+            check_type ctx i' ty;
+            return i'
+        | _ ->
+            (* [check_instruction] IS the ascription's rule: its fallback arm
+               is exactly [instruction] then [check_type], and for a
+               construction / [null] / nested block / [?:] it flows the
+               ascribed type inward, which is what asserting that type should
+               do. Its re-inference snapshot is for a binding's join; an
+               ascription states the type itself, so it is dropped. *)
+            let* i', _ = check_instruction ctx ty i' in
+            return i'
       in
-      let*! ty = internalize ctx t in
-      check_type ctx i' ty;
       return_expression i (Cast (i', typ)) ty
   | Cast (i', typ) ->
       (* An inner cast [(e as t) as u] that [simplify]/[--faithful] would drop as
