@@ -163,14 +163,6 @@ type module_context = {
          [None] in the checking passes ([~build:false]) and inside a
          NON-selected branch (whose nested annotations must not pollute the
          accumulated assumptions). *)
-  crossed_pendings : Infer.inferred_type Infer.Cell.t list ref;
-      (* The stack values that were pending when a conditional annotation
-         STATEMENT was typed (physical cells, appended per annotation): a hole
-         claiming one of them pairs configuration-DEPENDENTLY — the (@if)
-         branch may own the value in its own configuration — so the simplify
-         rewrites that reason from the claimed type (a fused [let]'s annotation
-         drop) must not fire on such a hole. Filled by [block_contents], read
-         by [type_let]. *)
   faithful : bool;
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;

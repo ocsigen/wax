@@ -451,14 +451,15 @@ thing that types the binding in the other configuration:
   2
 
 A select-of-holes READER OPERAND under a crossed annotation (the depth-4
-`*.Scond*.Radapt.*` cells, formerly exempted as unfixable): the select's own
-arm holes claim across the annotation in the tree the lowering reads — here
-the two i64s of a multi-value call the branches drop per configuration — so
-the select mis-typed and the reader's pin either crashed the lowering
+`*.Scond*.Radapt.*` cells, once exempted as unfixable): the select's own arm
+holes used to claim across the annotation in the tree the lowering read —
+here the two i64s of a multi-value call the branches drop per configuration —
+so the select mis-typed and the reader's pin either crashed the lowering
 (`ref.eq`), dropped the reader (`ref.is_null` to `i32.eqz`), introduced the
 reverse crossing (`any.convert_extern`), or left the module untypeable
-(`ref.test`). The arms are now grounded CLAIM-FREE with ascriptions — they
-carry the reader's operand type, claim nothing, and lower to nothing:
+(`ref.test`). Under the primary-spliced model the branch owns those values in
+the tree the lowering reads too, so the arms claim nothing to begin with and
+the reader's ordinary pin is sound:
 
   $ cat > radeq.wat <<'WAT'
   > (module
@@ -474,7 +475,7 @@ carry the reader's operand type, claim nothing, and lower to nothing:
   >     unreachable))
   > WAT
   $ wax -i wat -f wax radeq.wat -o radeq.wax && grep '==' radeq.wax
-      _ = (_ : &?none) == ((_ : i32)?(_ : &?eq):(_ : &?eq));
+      _ = (_ : &?none) == (_?_:_) as &?eq;
   $ wax radeq.wax -f wat | grep -coE 'ref.eq'; wax radeq.wax -f wat | grep -c 'i32.eq\b'
   1
   0
