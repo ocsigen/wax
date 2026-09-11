@@ -113,7 +113,14 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 export LC_ALL=C
 
-JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 2 ))}"
+# Oversubscribed on purpose. A worker spends most of its time waiting on the
+# fork/exec of the four short [wax] runs a cell needs, not computing: the CPU
+# work per cell is a few milliseconds, so the wall clock is latency, and more
+# workers hide it. Measured on the 641-tested-cell core lane (8 cores), where
+# the CPU total stayed flat at ~45s throughout: JOBS=1 277s, 4 92s, 8 50s,
+# 16 25s, 24 21s, 32 18s — still improving at 4x the core count, which is why
+# the default is nproc*4 rather than the usual nproc or nproc*2.
+JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
 DEPTH="${DEPTH:-3}"
 # SYMS=core keeps one representative per SCAN-equivalence-class (dropping the
 # caller-class duplicates: the extra hierarchies, the recorded-numeric
