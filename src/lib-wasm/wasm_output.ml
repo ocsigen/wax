@@ -1507,9 +1507,17 @@ let module_ ~out_channel ?output_file ?(source_map = false)
                     exprs)
              with Exit -> None
            in
+           (* The funcidx encodings (flags 0x00-0x03) carry [elemkind], which
+              denotes [(ref func)] — the elements are [ref.func], so none is
+              null — while flags 0x04 leaves the type implicit as the nullable
+              [funcref]. The two therefore key off opposite nullabilities: only
+              a [(ref func)] segment may use the compact index list, and only a
+              [funcref] one may drop its reftype at flags 0x04. Anything else
+              spells the reftype out (flags 0x05-0x07). *)
+           let is_ref_func = (not e.typ.nullable) && e.typ.typ = Func in
            let is_funcref = e.typ.nullable && e.typ.typ = Func in
            let indices_opt =
-             if is_funcref then get_func_indices e.init else None
+             if is_ref_func then get_func_indices e.init else None
            in
            match (e.mode, indices_opt) with
            | Active (0, offset), Some idxs ->
