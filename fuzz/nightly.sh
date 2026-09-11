@@ -102,6 +102,13 @@ run() {
   esac
 }
 
+# Lane-gated forms of [run]: a campaign runs only in the [campaigns] lane, a
+# grid only in [grids] (and both under [all]). Per-call rather than wrapping
+# blocks, so the gating cannot mis-nest with the conditionals some campaigns
+# already sit inside.
+run_campaign() { in_lane campaigns && run "$@"; }
+run_grid() { in_lane grids && run "$@"; }
+
 # Pick a deterministic pseudo-random slice of the core .wast suite keyed by
 # $SEED, so the nightly execution oracle explores different files over time while
 # still replaying from one seed. The score is a stable checksum of "$SEED:$path".
@@ -117,94 +124,120 @@ pick_exec_wasts() {
     | cut -f2-
 }
 
+# LANES selects which subset of the tier to run, so a scheduler can put the
+# subsets on separate machines in parallel (the whole tier no longer fits one
+# CI job's time budget):
+#   campaigns - the stochastic, corpus-fed campaigns (most of the tier);
+#   grids     - the deterministic exhaustive sweeps, which generate their own
+#               inputs and so need none of the corpora (skipping that build);
+#   all       - both, in one sequential run. The default, and what a local
+#               invocation wants.
+LANES="${LANES:-all}"
+case "$LANES" in
+all | campaigns | grids) ;;
+*)
+  echo "nightly: unknown LANES='$LANES' (all|campaigns|grids)" >&2
+  exit 3
+  ;;
+esac
+in_lane() { [ "$LANES" = all ] || [ "$LANES" = "$1" ]; }
+
 # Build the tools and the corpora the campaigns feed on.
 dune build src/bin/main.exe src/bin/fuzz_mutate.exe src/bin/fuzz_gen.exe 2>&1 | tail -3 \
   || { echo "nightly: build failed" >&2; exit 3; }
-echo "building the wasm corpus (spec suite + curated sources)…" >&2
-bash "$ROOT/fuzz/build-corpus.sh" >&2 || { echo "nightly: build-corpus failed" >&2; exit 3; }
-echo "building the wax and wat seed corpora (spec + $corpus_smith smith modules each)…" >&2
-wax_log="$(mktemp)"
-wat_log="$(mktemp)"
-bash "$ROOT/fuzz/wax-corpus.sh" "$corpus_smith" >"$wax_log" 2>&1 &
-wax_pid=$!
-bash "$ROOT/fuzz/wat-corpus.sh" "$corpus_smith" >"$wat_log" 2>&1 &
-wat_pid=$!
-wait "$wax_pid" || true
-wait "$wat_pid" || true
-cat "$wax_log" >&2
-cat "$wat_log" >&2
-rm -f "$wax_log" "$wat_log"
+if in_lane campaigns; then
+  echo "building the wasm corpus (spec suite + curated sources)…" >&2
+  bash "$ROOT/fuzz/build-corpus.sh" >&2 || { echo "nightly: build-corpus failed" >&2; exit 3; }
+  echo "building the wax and wat seed corpora (spec + $corpus_smith smith modules each)…" >&2
+  wax_log="$(mktemp)"
+  wat_log="$(mktemp)"
+  bash "$ROOT/fuzz/wax-corpus.sh" "$corpus_smith" >"$wax_log" 2>&1 &
+  wax_pid=$!
+  bash "$ROOT/fuzz/wat-corpus.sh" "$corpus_smith" >"$wat_log" 2>&1 &
+  wat_pid=$!
+  wait "$wax_pid" || true
+  wait "$wat_pid" || true
+  cat "$wax_log" >&2
+  cat "$wat_log" >&2
+  rm -f "$wax_log" "$wat_log"
+fi
 
 # The campaigns (each is deterministic given SEED and self-reports its replay).
-run run.sh
-run smith.sh "$smith"
-run mutate-wax.sh "$mutate_wax"
-run mutate-wat.sh "$mutate_wat"
-run mutate-wasm.sh "$mutate_wasm"
-run "MODE=struct" mutate-wasm.sh "$mutate_wasm_struct"
-if [ "$exec_wast" -gt 0 ]; then
+run_campaign run.sh
+run_campaign smith.sh "$smith"
+run_campaign mutate-wax.sh "$mutate_wax"
+run_campaign mutate-wat.sh "$mutate_wat"
+run_campaign mutate-wasm.sh "$mutate_wasm"
+run_campaign "MODE=struct" mutate-wasm.sh "$mutate_wasm_struct"
+if in_lane campaigns && [ "$exec_wast" -gt 0 ]; then
   mapfile -t exec_wasts < <(pick_exec_wasts "$exec_wast")
   if [ ${#exec_wasts[@]} -gt 0 ]; then
     # exec.sh runs the slice under Node; the reference-interpreter oracles cover
     # the proposals Node cannot (GC, SIMD, EH, multi-memory) and the mutation
     # oracle lifts the fixed-suite ceiling. All three skip (exit 2) without their
     # engine, so a machine with neither REF nor node loses only coverage.
-    run exec.sh "${exec_wasts[@]}"
-    run "MODE=wax" exec-ref.sh "${exec_wasts[@]}"
+    run_campaign exec.sh "${exec_wasts[@]}"
+    run_campaign "MODE=wax" exec-ref.sh "${exec_wasts[@]}"
     # wax-text feeds each module's TEXT to wax (wat->wax->wasm), behaviourally
     # covering from_wasm's WAT reader — the input pipeline the binary modes
     # above cannot reach (text-only miscompiles: symbolic-vs-numeric refs,
     # unsanitizable identifiers, width re-inference).
-    run "MODE=wax-text" exec-ref.sh "${exec_wasts[@]}"
+    run_campaign "MODE=wax-text" exec-ref.sh "${exec_wasts[@]}"
     # Same pipeline, but one identifier per module renamed to a Wax-hostile
     # spelling first (semantics-preserving), so a name-hygiene miscompile — an
     # unsanitizable label colliding with a generated one and retargeting a
     # branch — shows up as a behavioural regression against the assertions.
-    run "MODE=wax-text" "HOSTILE_SEED=$SEED" exec-ref.sh "${exec_wasts[@]}"
-    run exec-mutate.sh "${exec_wasts[@]}"
+    run_campaign "MODE=wax-text" "HOSTILE_SEED=$SEED" exec-ref.sh "${exec_wasts[@]}"
+    run_campaign exec-mutate.sh "${exec_wasts[@]}"
   fi
 fi
-run diff-validate.sh "$diff_validate"
+run_campaign diff-validate.sh "$diff_validate"
 # Type-mutation oracle over the wasm corpus (built above): flips one valtype in
 # a valid module to exercise validation.ml's rejection arms, differentially
 # against wasm-tools. Corpus-dependent, so it runs here (nightly builds the
 # corpus) rather than in the per-PR check.sh, where it always skips.
-run "COUNT=$validate_fuzz" validate-fuzz.sh
+run_campaign "COUNT=$validate_fuzz" validate-fuzz.sh
 # Cross-proposal mutation (exact/cont/descriptor grafts) over the corpus —
 # including the cross-*.wat seeds build-corpus harvested above — hunting for
 # crashes in the proposal-intersection arms no generator reaches.
-run "COUNT=$cross_proposal" wat-cross-proposal.sh
+run_campaign "COUNT=$cross_proposal" wat-cross-proposal.sh
 # Metamorphic dead-code oracle: inserting `unreachable` at an instruction
 # boundary must preserve validity (the validator's Bot/principal-typing arms).
-run "COUNT=$unreachable" unreachable-fuzz.sh
+run_campaign "COUNT=$unreachable" unreachable-fuzz.sh
 # Single-fault locality: one retargeted use-site reference must yield exactly
 # the local unbound error — the index-space poisoning regression guard.
-run "COUNT=$fault_locality" fault-locality.sh
+run_campaign "COUNT=$fault_locality" fault-locality.sh
 # Constant-expression checkers: hoist const-candidate expressions into global /
 # elem initializers to sweep the arm-by-arm constant_instruction surface both
 # frontends validate independently.
-run "FUZZ=$const_context" const-context.sh
+run_campaign "FUZZ=$const_context" const-context.sh
 # Bottom-typed compositions: exhaustive small-depth enumeration (bottom-fuzz) and
 # type-preserving injection into corpus bodies (null-mutate) of the hole/ref.null/
 # select/br_on_* cluster behind the recent round-trip miscompiles.
-run "COUNT=$bottom_tail" bottom-fuzz.sh
-# The deeper backing-scan lane: depth 4 over the core alphabet (one symbol per
-# scan-equivalence-class) — the per-PR gate runs depth 3 over the full one.
-run "DEPTH=4" "SYMS=core" backing-scan.sh
-# The recovery near-miss sweep at full mutation budget (per-PR runs 1200).
-run "MUTS=99999" recover-shapes.sh
-run "COUNT=$null_mutate" null-mutate.sh
+run_campaign "COUNT=$bottom_tail" bottom-fuzz.sh
+run_campaign "COUNT=$null_mutate" null-mutate.sh
 # Soundness oracle for HAND-WRITTEN Wax: diff-validate above only ever types
 # DECOMPILED wasm, which carries the casts wax itself inserted, so it cannot
 # reach the implicit coercions and literal defaults a human writes. This mutates
 # wax seeds instead and asks the one invariant that must hold on anything wax
 # accepts — the binary it emits validates. Needs the wax seed corpus (built
 # above) and the reference interpreter, so it belongs here and not in check.sh.
-run mutate-validate.sh "$mutate_validate"
+run_campaign mutate-validate.sh "$mutate_validate"
+
+# The GRIDS lane: deterministic exhaustive sweeps. They enumerate their own
+# inputs (backing-scan builds each cell from a template; recover-shapes lowers
+# the committed cram fixtures), so they need none of the corpora above — which
+# is why they can run on a separate machine that skips that build entirely.
+# They are also the slowest single items in the tier, hence the split.
+# Depth 4 over the core alphabet (one symbol per scan-equivalence-class) — the
+# per-PR gate runs depth 3 over the full one.
+run_grid "DEPTH=4" "SYMS=core" backing-scan.sh
+# The recovery near-miss sweep at full mutation budget (per-PR runs 1200).
+run_grid "MUTS=99999" recover-shapes.sh
 
 echo >&2
 echo "==================== fuzz/nightly.sh summary ====================" >&2
-echo "SEED=$SEED   passed: $passed   skipped: $skipped   failed: $fail" >&2
+echo "SEED=$SEED   lanes: $LANES   passed: $passed   skipped: $skipped   failed: $fail" >&2
 if [ "$fail" -gt 0 ]; then
   echo "FAILED:$failed_list" >&2
   echo "findings saved under fuzz/*-findings/; replay with SEED=$SEED fuzz/<name> <count>" >&2

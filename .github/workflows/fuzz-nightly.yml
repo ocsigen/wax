@@ -40,7 +40,18 @@ on:
 
 jobs:
   nightly:
-    name: Nightly fuzz campaigns
+    # The tier is split across parallel jobs because it no longer fits one
+    # job's time budget: the `grids` lane (the deterministic exhaustive sweeps
+    # — a depth-4 backing-scan and the full-budget recovery near-miss sweep)
+    # is the slowest single item, and it needs none of the corpora the
+    # stochastic `campaigns` lane spends several minutes building. Splitting on
+    # that line costs no coverage: fuzz/nightly.sh runs the same campaigns with
+    # the same per-lane budgets, and each lane fails independently.
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [campaigns, grids]
+    name: Nightly fuzz (${{ matrix.lane }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
     # github-script needs issue write to file the failure report.
@@ -75,7 +86,10 @@ jobs:
       # instead of skipping. Sparse, blobless checkout of just interpreter/; it is
       # stdlib-only, so dune builds it with no extra dependencies. Keep the pinned
       # commit in sync with .github/workflows/ci.yml.
+      # The grids lane drives neither the differential nor the execution
+      # oracles, so it needs no interpreter — skip the clone and build there.
       - name: Build the WebAssembly reference interpreter
+        if: matrix.lane != 'grids'
         run: |
           git clone --filter=blob:none --sparse --no-checkout \
             https://github.com/WebAssembly/spec.git "$HOME/wasm-spec"
@@ -92,6 +106,7 @@ jobs:
         id: campaign
         run: opam exec -- bash fuzz/nightly.sh
         env:
+          LANES: ${{ matrix.lane }}
           SMITH_COUNT: ${{ github.event.inputs.smith_count || '1000' }}
           CORPUS_SMITH_COUNT: ${{ github.event.inputs.corpus_smith_count || '500' }}
           MUTATE_WAX_COUNT: ${{ github.event.inputs.mutate_wax_count || '4000' }}
@@ -107,7 +122,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: fuzz-findings
+          name: fuzz-findings-${{ matrix.lane }}
           path: fuzz/*-findings/
           if-no-files-found: ignore
 
@@ -123,12 +138,14 @@ jobs:
         with:
           script: |
             const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const lane = ${{ toJSON(matrix.lane) }};
             const body = [
-              `The scheduled fuzz campaign failed.`,
+              `The scheduled fuzz campaign failed (\`${lane}\` lane).`,
               ``,
               `- Run log: ${run}`,
-              `- Failing inputs: the run's \`fuzz-findings\` artifact.`,
-              `- Replay locally with the SEED printed near the top of the log: \`SEED=<n> fuzz/nightly.sh\`.`,
+              `- Failing inputs: the run's \`fuzz-findings-${lane}\` artifact.`,
+              `- Replay locally with the SEED printed near the top of the log:`,
+              `  \`SEED=<n> LANES=${lane} fuzz/nightly.sh\` (omit \`LANES\` for the whole tier).`,
             ].join('\n');
             const q = { owner: context.repo.owner, repo: context.repo.repo };
             const issues = await github.rest.issues.listForRepo({ ...q, state: 'all', labels: 'nightly-fuzz' });
