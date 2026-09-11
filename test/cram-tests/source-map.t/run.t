@@ -2,8 +2,8 @@ Compiling to Wasm with --source-map emits a Source Map v3 alongside the
 binary: valid JSON, base64-VLQ `mappings`, quoted `sources`, and a `file` field
 naming the generated binary (not the map). A generated position is a byte offset
 from the start of the whole binary, so mappings from different sections sort into
-file order — here the `const` initializer (global section), then the synthesized
-declare element, then `f`'s body (code section).
+file order — here the `const` initializer (global section), then `f`'s body (code
+section).
 
 Each closing `end` opcode also gets a mapping, to the end of the construct it
 terminates rather than inheriting the previous instruction's location: the
@@ -11,9 +11,10 @@ global's `end` maps to its `;`, and each function body's `end` to that function'
 closing `}` (`g`'s on its own line, `f`'s on the last line).
 
 `f` refers to `g` only inside its body, so the compiler synthesizes an
-`(elem declare func $g)`. That `ref.func` has no source location, so it is
-recorded as an absent mapping (a 1-field segment) that resets the mapping,
-keeping the preceding `end`'s location from bleeding onto it.
+`(elem declare func $g)`. Nothing in the element section is mapped: a
+`(ref func)` segment whose elements are all `ref.func` encodes as a funcidx
+list, which holds indices rather than expressions, so there is no instruction
+there to carry a location.
 
   $ wax decl.wax -f wasm -o decl.wasm --source-map
   $ cat decl.wasm.map
@@ -24,8 +25,21 @@ keeping the preceding `end`'s location from bleeding onto it.
     "sources": ["decl.wax"],
     "sourcesContent": [],
     "names": [],
-    "mappings": "6BAAoB,EAAE,Q,QAEb,GAGL,EACH"
+    "mappings": "6BAAoB,EAAE,aAEb,GAGL,EACH"
   }
+
+A `funcref` segment does encode its elements as expressions, and those are const
+expressions mapped like any other. `declared.wat` writes one of them and leaves
+the other to be synthesized: `$h` is named in the segment, while `$g`, referenced
+only from `$f`'s body, is appended to it so the `ref.func` is declared. The
+written element maps to its own text and its `end` to the segment's closing
+paren; the appended one has no source location, so it is recorded as an absent
+mapping (the 1-field segment `C`) that resets the mapping, keeping the preceding
+`end`'s location from bleeding onto it.
+
+  $ wax declared.wat -f wasm -o declared.wasm --source-map
+  $ grep mappings declared.wasm.map
+    "mappings": "+BAGyB,EAAY,C,QAF1B,GACA,GAGN,EAAa"
 
 The binary also carries a `sourceMappingURL` custom section pointing at the
 map by its basename, so a tool given only the binary finds the map next to it:

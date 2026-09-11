@@ -36,12 +36,12 @@ from the name section:
     (@metadata.code.instr_freq (freq 16))
     (@metadata.code.call_targets (target $a 0.73) (target $b 0.21))
 
-Re-encoding the decompiled module reproduces both sections byte for byte:
+Re-encoding the decompiled module reproduces the binary byte for byte, both
+metadata sections included:
 
   $ wax -i wasm -f wat hints.wasm > back.wat
   $ wax -i wat -f wasm back.wat -o again.wasm
-  $ cmp -s hints.wasm again.wasm || echo "(only the elem section is re-encoded)"
-  (only the elem section is re-encoded)
+  $ cmp -s hints.wasm again.wasm || echo "(differs)"
 
 The two reserved frequency values print as their keywords rather than as a byte:
 
