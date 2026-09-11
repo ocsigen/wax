@@ -6220,21 +6220,24 @@ and type_cast ctx i =
          operation — the operand must already be a subtype of [t] (subsumption
          only, never a conversion or a [ref.cast]) and the expression takes
          type [t]. It lowers to no instruction ([To_wasm] emits the operand
-         alone) and is never simplified away. A bare hole is typed directly at
-         the polymorphic [Unknown] instead of through [pop_parameter]:
-         ascription claims no pending value — the operator itself is
-         claim-free, at ANY type (the bottom-cast pin's type-directed rule,
-         generalized), so it grounds a dead-code value's type without
-         capturing a residual another consumer reconnects to. *)
+         alone) and is never simplified away. *)
       let*! ty = internalize ctx t in
       let* i' =
         match i'.desc with
         | Hole ->
-            (* No [pop_parameter]: an ascribed hole claims no pending value
-               ([count_holes] gives it 0), so there is no slot to take and
-               [instruction] would recover with an [Error] cell. Ground it at
-               the ascribed type directly ([check_type] settles the [Unknown]
-               cell), rather than through [check_instruction]. *)
+            (* A bare hole is GROUNDED at the ascribed type ([check_type]
+               settles the [Unknown] cell) instead of going through
+               [pop_parameter]. It is counted by [count_holes] like any other
+               hole, so a pending value is reserved for it — but consuming
+               that value would also TYPE it, and the value is a residual some
+               other consumer reconnects to on the re-parse: an untyped
+               [select] captured this way is grounded at the ascribed type and
+               re-emits with a declared one ([(select (result nullref))] where
+               the source had a bare [(select)]), which the
+               dead-code-cond-annot-reconnect [pushblk] cell pins. So the hole
+               takes its type from the ascription and leaves the value alone.
+               (The reserved-but-unconsumed pending is the leftover
+               [with_holes] tolerates.) *)
             let* i' = return_expression i' Hole (Cell.make Unknown) in
             check_type ctx i' ty;
             return i'
