@@ -526,8 +526,10 @@ let run_channel ?(width = 78) oc f =
   (* Lay out straight into the channel — no intermediate string, no Format
      buffering. The hot output path. *)
   let feed, finish_stream =
-    Doc.make_engine ~width ~add_string:(output_string oc)
-      ~add_char:(output_char oc) ~add_substring:(output_substring oc)
+    Doc.make_engine ~width
+      ~add_string:(fun s -> output_string oc s)
+      ~add_char:(fun c -> output_char oc c)
+      ~add_substring:(fun s pos len -> output_substring oc s pos len)
   in
   let c = Doc.create ~feed ~finish_stream in
   f c;
@@ -537,8 +539,10 @@ let run_string ?(width = 78) f =
   (* Lay out straight into a buffer and return its contents. *)
   let b = Buffer.create 256 in
   let feed, finish_stream =
-    Doc.make_engine ~width ~add_string:(Buffer.add_string b)
-      ~add_char:(Buffer.add_char b) ~add_substring:(Buffer.add_substring b)
+    Doc.make_engine ~width
+      ~add_string:(fun s -> Buffer.add_string b s)
+      ~add_char:(fun c -> Buffer.add_char b c)
+      ~add_substring:(fun s pos len -> Buffer.add_substring b s pos len)
   in
   let c = Doc.create ~feed ~finish_stream in
   f c;

@@ -45,8 +45,11 @@ let get_theme ?(color = Colors.Auto) ?(palette = Colors.wax_theme) () =
    stdout). *)
 type sink = { write : string -> unit; flush : unit -> unit }
 
-let channel_sink oc = { write = output_string oc; flush = (fun () -> flush oc) }
-let buffer_sink b = { write = Buffer.add_string b; flush = (fun () -> ()) }
+let channel_sink oc =
+  { write = (fun s -> output_string oc s); flush = (fun () -> flush oc) }
+
+let buffer_sink b =
+  { write = (fun s -> Buffer.add_string b s); flush = (fun () -> ()) }
 
 (* Emit one physical line and flush. The old renderer ended every [Format.fprintf]
    in [@.] (newline + flush); flushing per line here preserves that granularity,
