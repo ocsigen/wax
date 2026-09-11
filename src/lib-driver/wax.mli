@@ -24,6 +24,7 @@ val wat_to_binary :
   ?defines:Define.t ->
   ?name_functions:bool ->
   ?validate:bool ->
+  ?warn_unused:bool ->
   filename:string ->
   string ->
   binary_module
@@ -38,7 +39,13 @@ val wat_to_binary :
 
     All conditional annotations must be resolved (binary cannot represent them);
     an exception is raised if one survives specialization, so [defines] should
-    determine every [(@if ...)] reached. *)
+    determine every [(@if ...)] reached.
+
+    [warn_unused] (default [true]) governs the warnings [validate] reports about
+    an unused local, field or import. Set it to [false] in a build that
+    assembles the same sources under several sets of [defines]: a declaration
+    whose only uses are conditional is legitimately unused in the configurations
+    that compile them out. *)
 
 val wax_to_binary :
   ?defines:Define.t ->

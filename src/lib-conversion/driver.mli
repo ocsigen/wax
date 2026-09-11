@@ -41,6 +41,7 @@ val wat_to_binary :
   ?defines:Wax_wasm.Cond_specialize.bindings ->
   ?name_functions:bool ->
   ?validate:bool ->
+  ?warn_unused:bool ->
   filename:string ->
   string ->
   binary_module
@@ -54,9 +55,14 @@ val wat_to_binary :
     is added to a declarative element segment (see {!Wax_wasm.Declare_refs}), so
     the binary passes strict reference validation. Raises
     {!Wax_wasm.Text_to_binary.Conditional_in_binary} if a conditional annotation
-    survived specialization, or
-    {!Wax_wasm.Text_to_binary.Unresolved_reference} if a named index or label
-    reference resolves to nothing. *)
+    survived specialization, or {!Wax_wasm.Text_to_binary.Unresolved_reference}
+    if a named index or label reference resolves to nothing.
+
+    [warn_unused] (default [true]) is passed on to {!Wax_wasm.Validation.f},
+    which warns about an unused local, field or import. Set it to [false] in a
+    build that assembles the same sources under several sets of [defines]: a
+    declaration whose only uses are conditional is legitimately unused in the
+    configurations that compile them out. *)
 
 val wax_to_binary :
   ?color:Wax_utils.Colors.flag ->
