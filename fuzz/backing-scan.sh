@@ -244,8 +244,11 @@ exempt_shape() { # $1 = cell name
 }
 
 template() { # $1 = |-separated instruction list
+  # Pure parameter expansion: every '|' becomes a newline plus the indent. A
+  # pipeline here ran three processes for each of the grid's cells, the ~two
+  # thirds that are skipped included.
   local body
-  body="$(printf '%s' "$1" | tr '|' '\n' | sed 's/^/    /')"
+  body="    ${1//|/$'\n'    }"
   cat <<EOF
 (module
   (type \$s (struct (field (mut i64))))
@@ -281,8 +284,23 @@ gen() { # $1 = remaining depth, $2 = name path, $3 = code path
 gen "$DEPTH" "" ""
 N=${#COMBOS[@]}
 
-count_ops() { # $1 = file, $2 = opcode; occurrences, word-anchored
-  grep -oE "${2//./\\.}([^0-9a-z_.]|\$)" "$1" 2>/dev/null | wc -l
+# Occurrences of opcode $2 in the text $1, word-anchored (so [ref.cast] does
+# not match [ref.cast_desc_eq]) — the anchor the [grep -oE '…([^0-9a-z_.]|$)']
+# this replaces provided. Pure parameter expansion: the grep-and-wc pair ran
+# 32 processes for every tested cell (four crossers x two files x two modes),
+# which dominated the run at depth 4.
+# Sets OPS_N rather than printing it: a command substitution would fork a
+# subshell per call, which is most of what this replacement is here to avoid.
+count_ops_in() { # $1 = text, $2 = opcode -> OPS_N
+  local rest="$1" n=0
+  while [ "${rest#*"$2"}" != "$rest" ]; do
+    rest="${rest#*"$2"}"
+    case "${rest:0:1}" in
+    [0-9a-z_.]) ;;
+    *) n=$((n + 1)) ;;
+    esac
+  done
+  OPS_N=$n
 }
 
 worker() {
@@ -339,6 +357,17 @@ worker() {
     [ ${#chunk[@]} -ge 200 ] && flush_chunk
   done
   flush_chunk
+  # Deleting each cell file cost a process per cell (the grid writes one for
+  # every cell, skipped ones included). Batch the removals: disk stays bounded
+  # the same way, the forks drop by two orders of magnitude.
+  local -a doomed=()
+  drop_cell() {
+    doomed+=("$1")
+    if [ ${#doomed[@]} -ge 200 ]; then
+      rm -f "${doomed[@]}"
+      doomed=()
+    fi
+  }
   for ((i = first; i <= last; i++)); do
     name="${COMBOS[$i]%%$'\t'*}"
     local rest="${COMBOS[$i]#*$'\t'}"
@@ -351,7 +380,7 @@ worker() {
     # opcode comparison, after the reader, so inert to the oracle.
     codes="${rest#*$'\t'}${R_CODE[$ridx]}|unreachable"
     if [ -n "${BAD[$wat]:-}" ]; then
-      rm -f "$wat"
+      drop_cell "$wat"
       skipped=$((skipped + 1)); printf s >&2; continue
     fi
     local sev=HIGH
@@ -383,15 +412,23 @@ worker() {
           "${mode:-default}: $v (wax->wat): $(head -1 "$ERRLOG")" "$codes")"$'\n'
         printf F >&2; continue
       fi
-      if [ "${R_SURV[$ridx]}" = 1 ] \
-        && ! grep -qE "${R_OP[$ridx]//./\\.}([^0-9a-z_.]|\$)" "$back"; then
+      local back_txt src_txt
+      back_txt="$(<"$back")"
+      src_txt="$(<"$wat")"
+      count_ops_in "$back_txt" "${R_OP[$ridx]}"
+      if [ "${R_SURV[$ridx]}" = 1 ] && [ "$OPS_N" -eq 0 ]; then
         out+="$(finding BACKSCAN HIGH "$name" \
           "${mode:-default}: reader opcode (${R_OP[$ridx]}) drifted" "$codes")"$'\n'
         printf F >&2; continue
       fi
       local x bad=""
       for x in "${CROSSERS[@]}"; do
-        if [ "$(count_ops "$back" "$x")" -gt "$(count_ops "$wat" "$x")" ]; then
+        local n_back n_src
+        count_ops_in "$back_txt" "$x"
+        n_back=$OPS_N
+        count_ops_in "$src_txt" "$x"
+        n_src=$OPS_N
+        if [ "$n_back" -gt "$n_src" ]; then
           bad="$x"; break
         fi
       done
@@ -401,9 +438,10 @@ worker() {
         printf F >&2; continue
       fi
     done
-    rm -f "$wat"
+    drop_cell "$wat"
     printf . >&2
   done
+  [ ${#doomed[@]} -gt 0 ] && rm -f "${doomed[@]}"
   [ -n "$out" ] && printf '%s' "$out" >"$RESULTS/$first"
   [ "$skipped" -gt 0 ] && printf '%s\n' "$skipped" >"$RESULTS/skip.$first"
   [ "$acked" -gt 0 ] && printf '%s\n' "$acked" >"$RESULTS/ack.$first"
