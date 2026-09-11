@@ -11,3 +11,16 @@ docs/src/playground/wax_format_js.bc.wasm.assets/
 docs/src/playground/examples.json
 docs/src/playground/keywords.json
 docs/src/playground/wax-editor.bundle.js
+
+# Scratch and build leftovers at the repo root: patch/merge leftovers,
+# profiler and coverage output, captured tool output. Listed because a
+# `git add -A` once swept the lot into a commit.
+*.orig
+*.rej
+*.coverage
+perf.data
+perf.data.old
+a.out
+err.txt
+fuzz_results.txt
+skills-lock.json
