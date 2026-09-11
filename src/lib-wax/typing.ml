@@ -3368,24 +3368,20 @@ let rec list_split n l =
    operand does; every other operand emits at least one value-producing
    instruction. Static receivers (memory/table/segment names, a [tab[..]] table)
    are immediates, not operands, and never reach here. *)
-(* A bare hole under a BOTTOM reference ascription — possibly under a further
-   type pin, as in the [((_ as &?none) as &?t)] receiver/callee shape: the
-   whole chain is the claim-free pin (see [count_holes]) and lowers to no
-   instruction. *)
-let rec is_claim_free_pin (node : _ Ast.instr) =
+(* An ASCRIBED bare hole, possibly under further casts: the ascription is a
+   static assertion, so the chain lowers to no instruction. *)
+let rec is_ascribed_hole (node : _ Ast.instr) =
   match node.desc with
-  (* An ascribed bare hole grounds off the polymorphic floor at any type. *)
   | Cast ({ desc = Hole; _ }, Ascribed _) -> true
-  | Cast (inner, _) -> is_claim_free_pin inner
+  | Cast (inner, _) -> is_ascribed_hole inner
   | _ -> false
 
 let rec emits_value ctx (node : _ Ast.instr) =
   match node.desc with
   | Hole -> false
-  (* The claim-free pin names a value off the polymorphic bottom and lowers to
-     no instruction, so — like the bare hole — it emits nothing a following
-     hole's value could hide behind. *)
-  | Cast _ when is_claim_free_pin node -> false
+  (* An ascribed hole lowers to no instruction, so — like the bare hole — it
+     emits nothing a following hole's value could hide behind. *)
+  | Cast _ when is_ascribed_hole node -> false
   | Cast (inner, _) when cast_is_transparent ctx ~cast:node ~operand:inner ->
       emits_value ctx inner
   | _ -> true
@@ -4537,17 +4533,6 @@ let bump_value_loc ctx st node =
 let rec count_holes i =
   match i.desc with
   | Hole -> 1
-  (* An ASCRIBED bare hole [(_ : t)] claims no pending value at ANY [t]: the
-     operator asserts a type, it does not operate on a value, so it denotes a
-     value off the polymorphic stack bottom of dead code rather than standing
-     for a stranded enclosing value. This is what makes it [From_wasm]'s
-     claim-free dead-code pin: the ascription grounds its hole's type without
-     capturing a residual that another consumer (or an [(@if)] branch, in its
-     own configuration) reconnects to. Typed without a pending value in
-     [type_cast]'s ascription arm. (A bottom-CAST hole [_ as &?none] once
-     carried this rule as a type-directed special case; a cast now claims
-     uniformly whatever its target.) *)
-  | Cast ({ desc = Hole; _ }, Ascribed _) -> 0
   | BinOp (_, l, r)
   | Array (_, l, r)
   | ArraySegment (_, _, l, r)

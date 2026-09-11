@@ -1473,10 +1473,6 @@ module Stack = struct
        numeric residual unconditionally; the two cancelled only while the
        pairing was type-consistent, which an [(@if)] breaks.) *)
     | Ast.Hole -> 1
-    (* An ASCRIBED bare hole [(_ : t)] is the claim-free pin: the typer's
-       [count_holes] gives it no pending value (ascription asserts, it does
-       not operate), so it claims nothing here either. *)
-    | Ast.Cast ({ Ast.desc = Ast.Hole; _ }, Ast.Ascribed _) -> 0
     (* A conditional annotation claims NOTHING from the tree-typing stack this
        scan models: the typer that builds the tree the lowering reads types each
        branch as an isolated void block, so a branch's holes take no enclosing
