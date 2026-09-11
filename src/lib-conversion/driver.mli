@@ -58,23 +58,29 @@ val wat_to_binary :
     survived specialization, or {!Wax_wasm.Text_to_binary.Unresolved_reference}
     if a named index or label reference resolves to nothing.
 
-    [warn_unused] (default [true]) is passed on to {!Wax_wasm.Validation.f},
-    which warns about an unused local, field or import. Set it to [false] in a
-    build that assembles the same sources under several sets of [defines]: a
-    declaration whose only uses are conditional is legitimately unused in the
-    configurations that compile them out. *)
+    [warn_unused] (default: [validate]) is passed on to
+    {!Wax_wasm.Validation.f}, which warns about an unused local, field or
+    import. Set it to [false] in a build that assembles the same sources under
+    several sets of [defines]: a declaration whose only uses are conditional is
+    legitimately unused in the configurations that compile them out. *)
 
 val wax_to_binary :
   ?color:Wax_utils.Colors.flag ->
   ?defines:Wax_wasm.Cond_specialize.bindings ->
   ?validate:bool ->
+  ?warn_unused:bool ->
   filename:string ->
   string ->
   binary_module
 (** As {!wat_to_binary}, but the [contents] are in the Wax language: the module
     is type-checked and compiled to a WebAssembly text module before being
     lowered to binary. (Wax functions always carry a name, so there is no
-    [name_functions] option.) *)
+    [name_functions] option.)
+
+    [warn_unused] (default: [validate]) governs the Wax type checker's report of
+    an unused local. Unlike the WAT path it applies whatever [validate] is,
+    because the type checker runs either way; the Wasm-level pass over the
+    lowered output never repeats these. *)
 
 val output_binary :
   out_channel:out_channel ->

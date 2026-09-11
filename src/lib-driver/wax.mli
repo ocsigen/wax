@@ -41,22 +41,27 @@ val wat_to_binary :
     an exception is raised if one survives specialization, so [defines] should
     determine every [(@if ...)] reached.
 
-    [warn_unused] (default [true]) governs the warnings [validate] reports about
-    an unused local, field or import. Set it to [false] in a build that
-    assembles the same sources under several sets of [defines]: a declaration
-    whose only uses are conditional is legitimately unused in the configurations
-    that compile them out. *)
+    [warn_unused] (default: [validate]) governs the warnings about an unused
+    local, field or import. Set it to [false] in a build that assembles the same
+    sources under several sets of [defines]: a declaration whose only uses are
+    conditional is legitimately unused in the configurations that compile them
+    out. *)
 
 val wax_to_binary :
   ?defines:Define.t ->
   ?validate:bool ->
+  ?warn_unused:bool ->
   filename:string ->
   string ->
   binary_module
 (** As {!wat_to_binary}, but the [contents] are in the Wax language: the module
     is type-checked and compiled to a WebAssembly text module before being
     lowered to binary. (Wax functions always carry a name, so there is no
-    [name_functions] option.) *)
+    [name_functions] option.)
+
+    [warn_unused] (default: [validate]) governs the Wax type checker's report of
+    an unused local. Unlike the WAT path it applies whatever [validate] is,
+    because the type checker runs either way. *)
 
 val output_binary :
   out_channel:out_channel -> ?source_map:bool -> binary_module -> unit

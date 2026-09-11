@@ -35,7 +35,7 @@ let wat_parse_recover ~filename text =
 
 let wat_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(name_functions = false)
-    ?(validate = false) ?(warn_unused = true) ~filename text =
+    ?(validate = false) ?(warn_unused = validate) ~filename text =
   let ast, _ctx = Wat_parser.parse_from_string ~color ~filename text in
   let ast =
     if Wax_wasm.Cond_specialize.is_empty defines then ast
@@ -58,7 +58,7 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
 
 let wax_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(validate = false)
-    ~filename text =
+    ?(warn_unused = validate) ~filename text =
   let ast, _ctx = Wax_parser.parse_from_string ~color ~filename text in
   let ast =
     if Wax_wasm.Cond_specialize.is_empty defines then ast
@@ -69,8 +69,7 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
   in
   let types, ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-      ~source:(Some text) (fun d ->
-        Wax_lang.Typing.f ~warn_unused:validate d ast)
+      ~source:(Some text) (fun d -> Wax_lang.Typing.f ~warn_unused d ast)
   in
   let wasm_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
