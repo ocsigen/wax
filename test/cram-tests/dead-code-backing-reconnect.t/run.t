@@ -129,3 +129,28 @@ captured the any-hierarchy forwarded ref and materialised an
   br_on_null
   ref.as_non_null
   any.convert_extern
+
+6. An ADAPTIVE-null backing, where leaving the convert's hole bare loses the
+opcode. Exactly one null type is shed on the way out — `&?any`, the type a
+bare `null` re-parses to — so the typer prunes that annotation from a
+standalone leftover and the printed `null` ADAPTS to whatever is ascribed to
+it next. The convert's own `as` surface then types that null instead of
+converting it (`null as &?extern` is `ref.null extern`) and the
+`extern.convert_any` vanished. The hole keeps the source type as an
+ASCRIPTION — which lowers to nothing, where the source CAST would survive
+`--faithful` as a `ref.cast` over the reconnected value:
+
+  $ cat > anull.wat <<'WAT'
+  > (module
+  >   (func (export "f") (result externref)
+  >     ref.null any
+  >     block
+  >     end
+  >     extern.convert_any))
+  > WAT
+  $ wax -i wat -f wax --faithful anull.wat -o anull.wax && grep ':' anull.wax
+      (_ : &?any) as &?extern;
+  $ wax anull.wax -f wat | grep -coE 'extern.convert_any'; wax anull.wax -f wat | grep -c 'ref.cast'
+  1
+  0
+  [1]

@@ -2189,6 +2189,42 @@ let backing_in_hierarchy ctx src ~from_top (b : _ Ast.instr) =
    captures is right-hierarchy (the validator typed it into the consumer), so
    the pin is inert after unification — while a claim-free pin would strand
    the residual the source consumed. *)
+(* Whether [b]'s PRINTED form re-parses as a bare, ADAPTIVE null. Exactly one
+   null type is shed on the way out: [&?any], the type a bare [null]
+   re-parses to, so the typer prunes that annotation from a standalone
+   leftover statement as redundant (measured — [&?none], [&?extern], [&?eq],
+   [&?i31] and [&?func] all survive, since each states something the default
+   does not). A convert that leaves its hole bare over such a backing loses
+   its opcode: the hole reconnects to the null and the convert's own [as]
+   surface types that adaptive null instead of converting it
+   ([null as &?extern] is [ref.null extern]). The hole keeps its SOURCE pin
+   instead, so the null types at the source hierarchy first and the outer cast
+   is a genuine crossing — [(null as &?any) as &?extern], the shape [Typing]'s
+   [restore_inner] exists to preserve. That rule cannot help here: it fires on
+   a null that is the cast's OWN operand, while this pair is joined only by
+   the re-parse (a wasm-smith FAITHDRIFT finding: [ref.null any ; block end ;
+   extern.convert_any], the void block blocking the convert's pop).
+
+   The pin over such a backing must be the ASCRIPTION [(_ : &?any)], not the
+   source CAST: a cast is an instruction, and with [simplify] off under
+   [--faithful] it survives as a [ref.cast] over the value the hole
+   reconnects to (measured). The ascription lowers to nothing while still
+   stating the source type, so the convert alone remains.
+
+   Every OTHER null backing keeps its printed type and so is concrete: pinning
+   over one would land on an already-typed value and, with [simplify] off
+   under [--faithful], materialise the [ref.cast] the founding convert cluster
+   exists to avoid ([null as &?none as &?extern], and the plain
+   [null as &?extern] of the grid's [Rnull.S2c] cell). *)
+let backing_adaptive_null (b : _ Ast.instr) =
+  match b.Ast.desc with
+  | Ast.Null -> true
+  | Ast.Cast
+      ({ desc = Ast.Null; _ }, Ast.Valtype (Ast.Ref { typ = Any; nullable = _ }))
+    ->
+      true
+  | _ -> false
+
 let backing_wrong_hierarchy ctx src ~from_top (b : _ Ast.instr) =
   match backing_class_of ctx ~from_top b with
   | Ref_class { hier; _ } -> hier <> src
@@ -3636,8 +3672,15 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         if hole_reconnects e then pin_forwarding_source src else return ()
       in
       let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
-      let backed =
+      let adaptive_null =
         is_bare_hole e
+        &&
+        match backing with
+        | `Backing (b, _, _) -> backing_adaptive_null b
+        | `Value | `Floor | `Blocked -> false
+      in
+      let backed =
+        is_bare_hole e && (not adaptive_null)
         &&
         match backing with
         | `Backing (b, from_top, _) -> backing_in_hierarchy ctx `Any ~from_top b
@@ -3660,9 +3703,12 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          typer's refinement, which is gated on [simplify] and so does not happen
          under [--faithful] — there the nullable target made the decompiled Wax
          ill-typed against a non-null consumer. *)
-      let nullable = backed || not (is_bare_hole e) in
+      (* An adaptive-null backing keeps the pin NULLABLE: the value the printed
+         hole reconnects to is a null, which a non-null pin could not type. *)
+      let nullable = backed || adaptive_null || not (is_bare_hole e) in
       let operand =
         if backed then e
+        else if adaptive_null then ascribe_to src e
         else if wrong then ascribe_to (Ref { nullable = false; typ = Any }) e
         else convert_src ~nullable src e
       in
@@ -3680,8 +3726,15 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         if hole_reconnects e then pin_forwarding_source src else return ()
       in
       let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
-      let backed =
+      let adaptive_null =
         is_bare_hole e
+        &&
+        match backing with
+        | `Backing (b, _, _) -> backing_adaptive_null b
+        | `Value | `Floor | `Blocked -> false
+      in
+      let backed =
+        is_bare_hole e && (not adaptive_null)
         &&
         match backing with
         | `Backing (b, from_top, _) ->
@@ -3699,9 +3752,12 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `Floor | `Blocked -> crossed_any
       in
       (* As [ExternConvertAny]: a non-null pin gives a non-null result. *)
-      let nullable = backed || not (is_bare_hole e) in
+      (* An adaptive-null backing keeps the pin NULLABLE: the value the printed
+         hole reconnects to is a null, which a non-null pin could not type. *)
+      let nullable = backed || adaptive_null || not (is_bare_hole e) in
       let operand =
         if backed then e
+        else if adaptive_null then ascribe_to src e
         else if wrong then ascribe_to (Ref { nullable = false; typ = Extern }) e
         else convert_src ~nullable src e
       in
