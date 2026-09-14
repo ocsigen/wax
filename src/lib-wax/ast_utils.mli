@@ -22,7 +22,9 @@ val map_desc :
 
 val sub_instrs : 'info Ast.instr -> 'info Ast.instr list
 (** [sub_instrs i] is the instructions immediately nested within [i] (its
-    operands and block bodies), in no particular order. *)
+    operands and block bodies), in source order — the order the typer visits
+    them, which the conditional-compilation plan ([Typing.plan_shape]) relies
+    on. *)
 
 val iter_instr : ('info Ast.instr -> unit) -> 'info Ast.instr -> unit
 (** [iter_instr f i] applies [f] to [i] and, recursively, to every instruction
@@ -115,6 +117,12 @@ val iter_fields :
   (('info Ast.modulefield, Ast.location) Ast.annotated -> unit) ->
   'info Ast.module_ ->
   unit
+
+val field_roots : 'info Ast.modulefield -> 'info Ast.instr list
+(** The instruction roots a field holds, in source order: a function body's
+    statements, an initializer, a segment or table init and its offset. A
+    [Conditional] has none of its own (its nested fields are reached through the
+    field walk). *)
 
 val iter_module_instr : ('info Ast.instr -> unit) -> 'info Ast.module_ -> unit
 (** [iter_module_instr f m] applies [f] to every instruction in [m] — each

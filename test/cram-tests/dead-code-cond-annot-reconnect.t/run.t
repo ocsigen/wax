@@ -262,7 +262,7 @@ that feeds it to the i64 local:
       }
       #[else]
       {
-          1 as i64;
+          1;
       }
   $ wax push.wax -f wat
   (func $f

@@ -1,0 +1,12 @@
+#[if(A)]
+{
+    type base = open { a: i32 };
+    type ext: base = { .., b: i32 };
+    fn mk() -> &ext { {ext| a: 1, b: 2} }
+}
+#[else]
+{
+    type base = open { a: i64 };
+    type ext: base = { .., b: i32 };
+    fn mk() -> &ext { {ext| a: 1, b: 2} }
+}

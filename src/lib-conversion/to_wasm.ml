@@ -2012,16 +2012,23 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
         (String (Option.map index idx, [ { desc = s; info = loc } ]))
         []
   | If_annotation { cond; then_body; else_body } ->
-      let conv body = List.concat_map (instruction ret ctx) body in
+      (* Each branch is converted with its own type table in force: a name
+         declared in two branches has a different definition in each (see
+         [Wax_lang.Typing.in_branch]). *)
+      let conv side body =
+        Wax_lang.Typing.in_branch ctx.types loc side (fun () ->
+            List.concat_map (instruction ret ctx) body)
+      in
       [
         with_loc loc
           (Text.If_annotation
              {
                cond;
-               then_body = { then_body with Ast.desc = conv then_body.desc };
+               then_body =
+                 { then_body with Ast.desc = conv true then_body.desc };
                else_body =
                  Option.map
-                   (fun b -> { b with Ast.desc = conv b.Annot.desc })
+                   (fun b -> { b with Ast.desc = conv false b.Annot.desc })
                    else_body;
              });
       ]
@@ -2461,46 +2468,59 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
         Hashtbl.replace ctx.tables decl.id.desc rt
     | Import_tag _ -> ()
   in
-  Wax_lang.Ast_utils.iter_fields
-    (fun field ->
-      match field.desc with
-      | Type rectype ->
-          Array.iter
-            (fun rt ->
-              let idx, subtype = rt.Annot.desc in
-              let subtype = resolve_subtype idx subtype in
-              let kind =
-                match subtype.typ with
-                | Func _ -> `Func
-                | Cont _ ->
-                    Hashtbl.replace ctx.cont_types idx.desc ();
-                    `Func
-                | Array _ -> `Array
-                | Struct fields ->
-                    let field_names =
-                      Array.to_list
-                        (Array.map
-                           (fun field -> (field_name field).desc)
-                           fields)
-                    in
-                    Hashtbl.add ctx.struct_fields idx.desc field_names;
-                    `Struct
-              in
-              Hashtbl.add ctx.type_kinds idx.desc kind)
-            rectype
-      | Func { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
-      | Global { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
-      | Import { decl; _ } -> register_import decl.desc
-      | Import_group { decls; _ } ->
-          List.iter (fun d -> register_import d.Annot.desc) decls
-      | Memory { name; _ } -> Hashtbl.replace ctx.memories name.desc ()
-      | Table { name; reftype = rt; _ } ->
-          Hashtbl.replace ctx.tables name.desc rt
-      | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
-      | Data { name; _ } ->
-          Option.iter (fun n -> Hashtbl.replace ctx.datas n.Annot.desc ()) name
-      | Tag _ | Conditional _ | Module_annotation _ -> ())
-    fields;
+  (* Descend into both branches of a conditional, each with its own type table
+     in force (a type declared in both has a different definition in each). *)
+  let rec walk_fields fields =
+    List.iter
+      (fun (field : (_ modulefield, _) Ast.Annot.annotated) ->
+        match field.desc with
+        | Conditional { then_fields; else_fields; _ } ->
+            Wax_lang.Typing.in_branch ctx.types field.info true (fun () ->
+                walk_fields then_fields.desc);
+            Option.iter
+              (fun (b : _ Ast.Annot.annotated) ->
+                Wax_lang.Typing.in_branch ctx.types field.info false (fun () ->
+                    walk_fields b.desc))
+              else_fields
+        | _ -> register_field field)
+      fields
+  and register_field field =
+    match field.desc with
+    | Type rectype ->
+        Array.iter
+          (fun rt ->
+            let idx, subtype = rt.Annot.desc in
+            let subtype = resolve_subtype idx subtype in
+            let kind =
+              match subtype.typ with
+              | Func _ -> `Func
+              | Cont _ ->
+                  Hashtbl.replace ctx.cont_types idx.desc ();
+                  `Func
+              | Array _ -> `Array
+              | Struct fields ->
+                  let field_names =
+                    Array.to_list
+                      (Array.map (fun field -> (field_name field).desc) fields)
+                  in
+                  Hashtbl.add ctx.struct_fields idx.desc field_names;
+                  `Struct
+            in
+            Hashtbl.add ctx.type_kinds idx.desc kind)
+          rectype
+    | Func { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
+    | Global { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
+    | Import { decl; _ } -> register_import decl.desc
+    | Import_group { decls; _ } ->
+        List.iter (fun d -> register_import d.Annot.desc) decls
+    | Memory { name; _ } -> Hashtbl.replace ctx.memories name.desc ()
+    | Table { name; reftype = rt; _ } -> Hashtbl.replace ctx.tables name.desc rt
+    | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
+    | Data { name; _ } ->
+        Option.iter (fun n -> Hashtbl.replace ctx.datas n.Annot.desc ()) name
+    | Tag _ | Conditional _ | Module_annotation _ -> ()
+  in
+  walk_fields fields;
   (* Record unconditionally-declared types as reuse targets for synthesized
      types. Descend into [Group] (always present) but not [Conditional]: a type
      guarded by [#[if]] is not available everywhere a synthesized type like
@@ -2800,8 +2820,9 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
             (* A branch's declared types are in scope only within it, so add
                them while converting it (see [scoped]); a synthesized type
                referenced there can then reuse a conditionally-declared one. *)
-            let conv_branch flds =
-              scoped flds (fun () -> convert_fields flds)
+            let conv_branch side flds =
+              Wax_lang.Typing.in_branch ctx.types field.info side (fun () ->
+                  scoped flds (fun () -> convert_fields flds))
             in
             [
               {
@@ -2813,12 +2834,12 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                       then_fields =
                         {
                           then_fields with
-                          Ast.desc = conv_branch then_fields.desc;
+                          Ast.desc = conv_branch true then_fields.desc;
                         };
                       else_fields =
                         Option.map
                           (fun b ->
-                            { b with Ast.desc = conv_branch b.Annot.desc })
+                            { b with Ast.desc = conv_branch false b.Annot.desc })
                           else_fields;
                     };
               };

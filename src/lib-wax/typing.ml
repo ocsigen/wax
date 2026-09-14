@@ -1056,29 +1056,18 @@ end
 module Namespace = struct
   include Typing_env.Namespace
 
-  let make ?(links = None) cond = { cond; tbl = Hashtbl.create 16; links }
+  let make ?(links = None) () = { tbl = Hashtbl.create 16; links }
 
-  let entries ns (x : Ast.ident) =
-    try Hashtbl.find ns.tbl x.desc with Not_found -> []
-
-  (* A name conflicts with an earlier declaration only if their assumptions can
-     both hold; declarations in mutually-exclusive branches do not conflict. *)
-  let conflict ns x =
-    let c = !(ns.cond) in
-    List.find_opt
-      (fun (_, _, c') -> Cond.is_satisfiable (Cond.and_ c c'))
-      (entries ns x)
-
-  let register d ns kind x =
-    (match conflict ns x with
-    | Some (kind', prev_loc, _) ->
+  let register d ns kind (x : Ast.ident) =
+    (match Hashtbl.find_opt ns.tbl x.desc with
+    | Some (kind', prev_loc) ->
         Error.name_already_bound d ~location:x.info ~prev_loc kind' x
     | None -> ());
-    Hashtbl.replace ns.tbl x.desc ((kind, x.info, !(ns.cond)) :: entries ns x)
+    Hashtbl.replace ns.tbl x.desc (kind, x.info)
 
-  let exists d ns x =
-    match conflict ns x with
-    | Some (kind', prev_loc, _) ->
+  let exists d ns (x : Ast.ident) =
+    match Hashtbl.find_opt ns.tbl x.desc with
+    | Some (kind', prev_loc) ->
         Error.name_already_bound d ~location:x.info ~prev_loc kind' x;
         true
     | None -> false
@@ -1117,53 +1106,23 @@ module Tbl = struct
     then Hashtbl.add env.used name referrer
 
   (* [f name value] for every declaration in this table. *)
-  let iter_entries env f =
-    Hashtbl.iter
-      (fun name entries -> List.iter (fun (_, v) -> f name v) entries)
-      env.tbl
+  let iter_entries env f = Hashtbl.iter f env.tbl
 
-  let cur env = !(env.namespace.cond)
-
-  let entries env (x : Ast.ident) =
-    try Hashtbl.find env.tbl x.desc with Not_found -> []
-
-  let add d env x v =
+  let add d env (x : Ast.ident) v =
     Namespace.register d env.namespace env.kind x;
-    Hashtbl.replace env.tbl x.desc ((cur env, v) :: entries env x)
+    Hashtbl.replace env.tbl x.desc v
 
   let exists d env x = Namespace.exists d env.namespace x
 
-  (* Replace the most recently added entry (added by [add] under the current
-     assumption); used by [add_type] to fix up rectype indices in place. *)
-  let override env x v =
-    match entries env x with
-    | _ :: tl -> Hashtbl.replace env.tbl x.desc ((cur env, v) :: tl)
-    | [] -> Hashtbl.replace env.tbl x.desc [ (cur env, v) ]
+  (* Replace a name's binding (added by [add]); used by [add_type] to fix up
+     rectype indices in place. *)
+  let override env (x : Ast.ident) v = Hashtbl.replace env.tbl x.desc v
 
-  (* Pick the declaration whose assumption is entailed by the current one,
-     falling back to one merely compatible with it, then to the most recent.
-     A successful lookup marks the name referenced (for the unused-field lint);
-     [resolve] is only ever called to look up a reference, never for a
-     declaration (which goes through [add]). *)
-  (* Pick the declaration whose assumption best matches the current one, without
-     recording a use. Shared by [resolve] (which then marks the name used) and
-     [find_no_mark] (which does not). *)
-  let select env x =
-    match entries env x with
-    | [] -> None
-    | [ (_, v) ] -> Some v
-    | l -> (
-        let c = cur env in
-        let pick p = Option.map snd (List.find_opt (fun (c', _) -> p c') l) in
-        match pick (fun c' -> Cond.logical_implies c c') with
-        | Some _ as r -> r
-        | None -> (
-            match pick (fun c' -> Cond.is_satisfiable (Cond.and_ c c')) with
-            | Some _ as r -> r
-            | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
-
-  let resolve env x =
-    let r = select env x in
+  (* Look a reference up. A successful lookup marks the name referenced (for
+     the unused-field lint); [resolve] is only ever called to look up a
+     reference, never for a declaration (which goes through [add]). *)
+  let resolve env (x : Ast.ident) =
+    let r = Hashtbl.find_opt env.tbl x.desc in
     (match r with
     | Some v ->
         (* One entry per (name, origin) pair, not per reference: a helper called
@@ -1174,13 +1133,13 @@ module Tbl = struct
           referrer <> Ignored
           && not (List.mem referrer (Hashtbl.find_all env.used x.desc))
         then Hashtbl.add env.used x.desc referrer;
-        (* Link this use to every definition of the name (several only across
-           conditional branches); [resolve] handles only references, so [x.info]
-           is a use site. The resolved value's summary rides along for hover. *)
+        (* Link this use to the definition of the name; [resolve] handles only
+           references, so [x.info] is a use site. The resolved value's summary
+           rides along for hover. *)
         record_reference ~hover:(env.hover v) env.namespace.links x.info
-          (List.map
-             (fun (_, loc, _) -> loc)
-             (Namespace.entries env.namespace x))
+          (match Hashtbl.find_opt env.namespace.tbl x.desc with
+          | Some (_, loc) -> [ loc ]
+          | None -> [])
     | None -> ());
     r
 
@@ -1202,22 +1161,37 @@ module Tbl = struct
      typer's own internal lookups (e.g. a function resolving its own declared
      type while it is being checked) that must not mark the name used, so the
      unused-field lint still fires on a defined-but-unreferenced function. *)
-  let find_no_mark env x = select env x
+  let find_no_mark env (x : Ast.ident) = Hashtbl.find_opt env.tbl x.desc
+  let iter env f = Hashtbl.iter f env.tbl
 
-  let iter env f =
-    Hashtbl.iter (fun k l -> List.iter (fun (_, v) -> f k v) l) env.tbl
-
-  (* Drop the most recently added entry (the temporary [add_type] placeholder),
-     keeping any declaration of the same name from another branch. *)
-  let remove env x =
-    match entries env x with
-    | _ :: (_ :: _ as tl) -> Hashtbl.replace env.tbl x.desc tl
-    | _ -> Hashtbl.remove env.tbl x.desc
+  (* Drop a binding (the temporary [add_type] placeholder). *)
+  let remove env (x : Ast.ident) = Hashtbl.remove env.tbl x.desc
 end
 
-type types = Typing_env.types
+type type_table = Typing_env.types
 
-let get_type_definition d types nm = Option.map snd (Tbl.find d types nm)
+(* The type tables the lowering resolves names through: [current] is the table
+   in force — the primary run's at the top level and, inside a conditional
+   branch, the table of the run that owns it (see [in_branch]), since a name
+   declared in two branches has a different definition in each. *)
+type types = {
+  mutable current : type_table;
+  by_branch : (int * int * bool, type_table) Hashtbl.t;
+}
+
+let get_type_definition d types nm =
+  Option.map snd (Tbl.find d types.current nm)
+
+let in_branch types (location : location) side f =
+  match
+    Hashtbl.find_opt types.by_branch
+      (location.loc_start.pos_cnum, location.loc_end.pos_cnum, side)
+  with
+  | None -> f ()
+  | Some t ->
+      let saved = types.current in
+      types.current <- t;
+      Fun.protect ~finally:(fun () -> types.current <- saved) f
 
 (* The canonical index of an already-defined type; a [Rec] would mean a group
    still under construction, which the type-definition builders never look up. *)
@@ -1647,16 +1621,21 @@ let subtyping_info ctx =
 
 (*** Name resolution and subtyping ***)
 
-(* Type [f] under the assumption of a conditional branch ([positive] for
-   [@then], negative for [@else]), restoring the previous assumption after. *)
-let with_cond_ref cond_ref cond_env diagnostics ~location cond positive f =
-  let saved = !cond_ref in
-  let c = Cond.of_cond cond_env diagnostics ~location cond in
-  cond_ref := Cond.and_ saved (if positive then c else Cond.not_ c);
-  Fun.protect ~finally:(fun () -> cond_ref := saved) f
+(* The typed form of a conditional branch this run does not select: the source
+   as written, each node carrying no cells. [f_infer]'s stitching replaces it
+   with the branch as typed by the run that owns it, so none survives into the
+   tree a consumer reads. *)
+let placeholder_instrs l =
+  List.map (Ast_utils.map_instr (fun loc -> ([||], loc))) l
 
-let with_cond ctx ~location cond positive f =
-  with_cond_ref ctx.cond ctx.cond_env ctx.diagnostics ~location cond positive f
+let placeholder_fields fields =
+  List.map
+    (fun (f : (_ modulefield, location) annotated) ->
+      {
+        f with
+        desc = Ast_utils.map_modulefield (fun loc -> ([||], loc)) f.desc;
+      })
+    fields
 
 (* The [lookup_*_type] family resolves a type NAME to its composite type of the
    expected kind. An unbound name is REPORTED (at the reference, with
@@ -3279,9 +3258,9 @@ let receiver_is_ref ctx recv =
       match StringMap.find_opt name.desc ctx.locals with
       | Some (ity, _) -> is_ref ity
       | None -> (
-          match Tbl.entries ctx.globals name with
-          | (_, (_, ity)) :: _ -> is_ref ity
-          | [] -> false))
+          match Tbl.find_no_mark ctx.globals name with
+          | Some (_, ity) -> is_ref ity
+          | None -> false))
   | _ -> false
 
 (* Whether the receiver of an array-op method call ([a.fill(..)]) names a value
@@ -3303,18 +3282,17 @@ let receiver_is_array_ref ctx recv =
         match StringMap.find_opt name.desc ctx.locals with
         | Some (ity, _) -> ref_name ity
         | None -> (
-            match Tbl.entries ctx.globals name with
-            | (_, (_, ity)) :: _ -> ref_name ity
-            | [] -> None))
+            match Tbl.find_no_mark ctx.globals name with
+            | Some (_, ity) -> ref_name ity
+            | None -> None))
     | _ -> None
   in
   match arrname with
   | None -> false
   | Some n -> (
-      match Tbl.entries ctx.type_context.types n with
-      | (_, (_, sub)) :: _ -> (
-          match sub.typ with Array _ -> true | _ -> false)
-      | [] -> false)
+      match Tbl.find_no_mark ctx.type_context.types n with
+      | Some (_, sub) -> ( match sub.typ with Array _ -> true | _ -> false)
+      | None -> false)
 
 (* A cast is transparent to the hole-order check exactly when [to_wasm] lowers it
    to no instruction (so it occupies its operand's position and produces nothing):
@@ -7541,33 +7519,27 @@ and type_block_construct ctx i =
                })
             results)
   | If_annotation { cond; then_body; else_body } ->
-      (* Type each branch as an isolated block, under the branch's assumption so
-         names resolve per branch (a name may be declared only in, or with a
-         different type in, the matching configuration). The tree-building
-         pass's statement path intercepts this node BEFORE the expression
-         bridge ([toplevel_instruction]'s primary-spliced arm), so this arm
-         serves the checking passes and the inside of a non-selected branch. *)
-      let then_body' =
+      (* A conditional annotation in expression position (the statement path,
+         [toplevel_instruction], intercepts the statement-level ones and types
+         the selected branch spliced): the selected branch is typed as an
+         isolated block, the other left for the run that owns it. *)
+      let sel_then = ctx.select i.info in
+      let branch selected (body : _ Annot.annotated) =
         {
-          then_body with
-          desc =
-            with_cond ctx ~location:i.info cond true (fun () ->
-                block ctx i.info None [||] [||] [||] then_body.desc);
+          body with
+          Annot.desc =
+            (if selected then
+               block ctx i.info None [||] [||] [||] body.Annot.desc
+             else placeholder_instrs body.Annot.desc);
         }
       in
-      let else_body' =
-        Option.map
-          (fun b ->
-            {
-              b with
-              Annot.desc =
-                with_cond ctx ~location:i.info cond false (fun () ->
-                    block ctx i.info None [||] [||] [||] b.Annot.desc);
-            })
-          else_body
-      in
       return_statement i
-        (If_annotation { cond; then_body = then_body'; else_body = else_body' })
+        (If_annotation
+           {
+             cond;
+             then_body = branch sel_then then_body;
+             else_body = Option.map (branch (not sel_then)) else_body;
+           })
         [||]
   | TryTable { label; typ; block = { desc = body; _ } as blkloc; catches } -> (
       if Array.length typ.params > 0 then
@@ -10036,64 +10008,37 @@ and match_recover_scrutinee ctx scrutinee = function
 and toplevel_instruction ctx i : stack -> stack * 'b =
   if debug then Wax_utils.Printer.run_err (fun p -> Printer_output.instr p i);
   match i.desc with
-  (* The tree-building pass types the branch a greedily-built PRIMARY
-     configuration selects SPLICED against the enclosing pending stack,
-     exactly as the source's own validation and the checking passes do: its
-     holes claim the enclosing values and its leftovers stay pending for later
-     claimers, so the types this pass resolves for the ENCLOSING statements —
-     the ones [To_wasm] lowers — are those of a configuration that exists, not
-     of a fictional world where the annotation contributes nothing. The
-     primary picks the then-branch whenever its condition is consistent with
-     the assumptions accumulated so far (stream order; [From_wasm]'s backing
-     scan mirrors the same greedy walk) and refines the formula either way.
-     The non-selected branch keeps the isolated typing (the expression-monad
-     arm), with the primary suppressed inside so a nested annotation there
-     cannot pollute the assumptions. Checking passes have no primary and fall
-     through. *)
-  | If_annotation { cond; then_body; else_body } when Option.is_some ctx.primary
-    ->
-      let prim = Option.get ctx.primary in
-      let f = Cond.of_cond ctx.cond_env ctx.diagnostics ~location:i.info cond in
-      let sel_then = Cond.is_satisfiable (Cond.and_ !prim f) in
-      prim := Cond.and_ !prim (if sel_then then f else Cond.not_ f);
-      let iso (body : _ Annot.annotated) positive =
-        {
-          body with
-          Annot.desc =
-            with_cond ctx ~location:i.info cond positive (fun () ->
-                block
-                  { ctx with primary = None }
-                  i.info None [||] [||] [||] body.Annot.desc);
-        }
+  (* A conditional annotation: the branch this run selects (fixed ahead of
+     typing by the module's [Cond_plan], see [ctx.select]) is typed SPLICED
+     against the enclosing pending stack, exactly as the source's own validation
+     and the checking passes pair them: its holes claim the enclosing values and
+     its leftovers stay pending for later claimers, so the types this run
+     resolves for the ENCLOSING statements are those of a configuration that
+     exists. The other branch is not typed here at all: [f_infer]'s stitching
+     fills it from the run that owns it. *)
+  | If_annotation { cond; then_body; else_body } ->
+      let sel_then = ctx.select i.info in
+      let spliced (body : _ Annot.annotated) st =
+        let st, (typed, _) = block_contents ctx [||] body.Annot.desc st in
+        (st, { body with Annot.desc = typed })
       in
-      let spliced body positive st =
-        with_cond ctx ~location:i.info cond positive (fun () ->
-            block_contents ctx [||] body st)
+      let skipped (body : _ Annot.annotated) =
+        { body with Annot.desc = placeholder_instrs body.Annot.desc }
       in
       fun st ->
-        if sel_then then
-          let st, (then_typed, _) = spliced then_body.Annot.desc true st in
-          return_statement i
-            (If_annotation
-               {
-                 cond;
-                 then_body = { then_body with Annot.desc = then_typed };
-                 else_body = Option.map (fun b -> iso b false) else_body;
-               })
-            [||] st
-        else
-          let then_body' = iso then_body true in
-          let st, else_body' =
-            match else_body with
-            | Some b ->
-                let st, (else_typed, _) = spliced b.Annot.desc false st in
-                (st, Some { b with Annot.desc = else_typed })
-            | None -> (st, None)
-          in
-          return_statement i
-            (If_annotation
-               { cond; then_body = then_body'; else_body = else_body' })
-            [||] st
+        let st, then_body, else_body =
+          match (sel_then, else_body) with
+          | true, _ ->
+              let st, then_body = spliced then_body st in
+              (st, then_body, Option.map skipped else_body)
+          | false, Some b ->
+              let st, b = spliced b st in
+              (st, skipped then_body, Some b)
+          | false, None -> (st, skipped then_body, None)
+        in
+        return_statement i
+          (If_annotation { cond; then_body; else_body })
+          [||] st
   | Block { label; typ; block = { desc = instrs; _ } as blkloc } ->
       let*! params =
         array_map_opt
@@ -11525,18 +11470,24 @@ let rec globals ctx fields =
           in
           check_constant_instruction ctx def';
           After { field with desc = Global { g with typ; def = def' } }
-      | Conditional { cond; then_fields; else_fields } ->
+      | Conditional { then_fields; else_fields; _ } ->
+          (* Only the branch this run selects is typed; the other is a
+             placeholder [f_infer]'s stitching replaces. *)
+          let sel_then = ctx.select field.info in
+          let skipped fields =
+            List.map (fun f -> After f) (placeholder_fields fields)
+          in
           PhasedConditional
             {
               before = field;
               then_ =
-                with_cond ctx ~location:field.info cond true (fun () ->
-                    globals ctx then_fields.desc);
+                (if sel_then then globals ctx then_fields.desc
+                 else skipped then_fields.desc);
               else_ =
                 Option.map
                   (fun e ->
-                    with_cond ctx ~location:field.info cond false (fun () ->
-                        globals ctx e.Annot.desc))
+                    if sel_then then skipped e.Annot.desc
+                    else globals ctx e.Annot.desc)
                   else_fields;
             }
       | _ -> Before field)
@@ -11726,23 +11677,11 @@ let rec functions ctx fields =
                 Conditional
                   {
                     cond;
-                    then_fields =
-                      {
-                        tf with
-                        desc =
-                          with_cond ctx ~location:info cond true (fun () ->
-                              functions ctx then_);
-                      };
+                    then_fields = { tf with desc = functions ctx then_ };
                     else_fields =
                       (match (ef, else_) with
                       | Some ef, Some e ->
-                          Some
-                            {
-                              ef with
-                              desc =
-                                with_cond ctx ~location:info cond false
-                                  (fun () -> functions ctx e);
-                            }
+                          Some { ef with desc = functions ctx e }
                       | None, None -> None
                       | _ -> assert false);
                   };
@@ -12008,16 +11947,16 @@ let check_attributes diagnostics
 
 let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
-    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) ~simplify
-    diagnostics fields =
+    ?(faithful = false) ?(features = Wax_utils.Feature.default ())
+    ?(select =
+      fun (_ : location) -> invalid_arg "Typing: unplanned conditional")
+    ~simplify diagnostics fields =
   (* [simplify] (the Wasm->Wax rewrite that drops redundant annotations) and
      [suggest] (offering those same drops as editor quick fixes on hand-written
      Wax) are mutually exclusive: [simplify] removes the very nodes [suggest]
      would flag. The [suggest_*] helpers rely on this. *)
   if simplify && suggest then
     invalid_arg "Typing: simplify and suggest are exclusive";
-  let cond = ref Cond.true_ in
-  let cond_env = Cond.create () in
   let links = resolve_links in
   (* Shared by every table below, so a name resolution is attributed to the
      function whose body made it (see [Tbl.current]). *)
@@ -12026,28 +11965,20 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     {
       internal_types = Wax_wasm.Types.create ();
       types =
-        Tbl.make ~hover:hover_of_type ~current
-          (Namespace.make ~links cond)
-          "type";
+        Tbl.make ~hover:hover_of_type ~current (Namespace.make ~links ()) "type";
       features;
       subtyping_info_cache = None;
     }
   in
-  (* Walk module fields, recursing into groups and threading the branch
-     assumption through conditionals so each [Type]/declaration is registered
-     under the assumption of the branch it appears in. *)
+  (* Walk module fields, descending at each conditional into the branch this
+     run selects, so only that branch's declarations are registered. *)
   let rec walk_fields f fields =
     List.iter
       (fun (field : (_ modulefield, _) annotated) ->
         match field.desc with
-        | Conditional { cond = c; then_fields; else_fields } ->
-            with_cond_ref cond cond_env diagnostics ~location:field.info c true
-              (fun () -> walk_fields f then_fields.desc);
-            Option.iter
-              (fun e ->
-                with_cond_ref cond cond_env diagnostics ~location:field.info c
-                  false (fun () -> walk_fields f e.Annot.desc))
-              else_fields
+        | Conditional { then_fields; else_fields; _ } ->
+            if select field.info then walk_fields f then_fields.desc
+            else Option.iter (fun e -> walk_fields f e.Annot.desc) else_fields
         | _ -> f field)
       fields
   in
@@ -12064,7 +11995,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   (* Index the struct types by their field set, so a literal whose name is
      omitted can be resolved from its fields. All types are registered above, so
      this is complete; a later distinct name for the same key marks it ambiguous
-     ([None]), while a conditional variant of the same name does not. *)
+     ([None]). *)
   let structs_by_fields = Hashtbl.create 16 in
   Tbl.iter type_context.types (fun name (_, (st : subtype)) ->
       match st.typ with
@@ -12080,7 +12011,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
           | Some _ -> Hashtbl.replace structs_by_fields key None)
       | Func _ | Array _ | Cont _ -> ());
   let ctx =
-    let namespace = Namespace.make ~links cond in
+    let namespace = Namespace.make ~links () in
     {
       diagnostics;
       type_context;
@@ -12096,10 +12027,10 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       canonical_type_references = ref [];
       origin = current;
       memories = Tbl.make ~current namespace "memory";
-      datas = Tbl.make ~current (Namespace.make ~links cond) "data segment";
+      datas = Tbl.make ~current (Namespace.make ~links ()) "data segment";
       tables = Tbl.make ~current namespace "table";
-      elems = Tbl.make ~current (Namespace.make ~links cond) "element segment";
-      tags = Tbl.make ~current (Namespace.make ~links cond) "tag";
+      elems = Tbl.make ~current (Namespace.make ~links ()) "element segment";
+      tags = Tbl.make ~current (Namespace.make ~links ()) "tag";
       locals = StringMap.empty;
       warn_unused;
       missing_holes = ref [];
@@ -12114,14 +12045,12 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       deferred_uninit = [];
       control_types = [];
       return_types = [||];
-      cond;
-      cond_env;
       resolve_links = links;
       pun_spans;
       member_completions;
       simplify;
       suggest;
-      primary = (if build then Some (ref Cond.true_) else None);
+      select;
       faithful;
     }
   in
@@ -12208,13 +12137,13 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       | Conditional _ | Type _ | Global _ | Module_annotation _ -> ())
     fields;
   (* A module may not export the same name twice. Each [#[export = "..."]]
-     attribute is one export; [walk_fields] descends into groups and resolves
-     conditionals per branch, so exports in mutually exclusive branches do not
-     clash. *)
+     attribute is one export; [walk_fields] descends only into the branch this
+     run selects, so exports in mutually exclusive branches do not clash. A
+     guarded export ([#[export = "nm", if(c)]]) counts as present here: a module
+     with guards has its clashes checked per configuration by
+     [check_configurations], where the guards are resolved. *)
   let exports = Hashtbl.create 16 in
-  (* The conditions under which a [#[start]] has been seen; like [exports], a
-     second start clashes only when its condition can hold at the same time. *)
-  let starts = ref [] in
+  let starts = ref None in
   let module_seen = ref None in
   (* The Wax name a bare [#[export]] reuses as its export name. *)
   let field_name (field : (_ modulefield, location) Ast.annotated) =
@@ -12234,18 +12163,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      [location] blames the entity when an attribute carries no value. *)
   let process_attrs ~default_name ~location attributes =
     List.iter
-      (fun ({ attr_name = key; attr_value = v; attr_guard = guard; _ } :
-             Ast.attribute) ->
-        (* The condition under which this attribute is actually present: the
-           field's own branch assumption ([!cond]) narrowed by an optional
-           per-attribute [if <cond>] guard (only [export]/[start] carry one). *)
-        let cond =
-          match guard with
-          | None -> !cond
-          | Some g ->
-              Cond.and_ !cond
-                (Cond.of_cond cond_env diagnostics ~location:g.info g.desc)
-        in
+      (fun ({ attr_name = key; attr_value = v; _ } : Ast.attribute) ->
         match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
         | "export", ((Some (String _) | None) as value) ->
             (* The export name and the location to blame: the explicit string
@@ -12261,35 +12179,19 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
             in
             Option.iter
               (fun (name, location) ->
-                (* Two exports of the same name clash only when the conditions
-                   guarding them can hold at once; the same name in mutually
-                   exclusive branches is fine. Each remembered guard is the
-                   condition under which an export was seen. *)
-                let guards =
-                  Option.value ~default:[] (Hashtbl.find_opt exports name)
-                in
-                (match
-                   List.find_opt
-                     (fun (g, _) -> Cond.is_satisfiable (Cond.and_ g cond))
-                     guards
-                 with
-                | Some (_, prev_loc) ->
+                (match Hashtbl.find_opt exports name with
+                | Some prev_loc ->
                     Error.duplicated_export diagnostics ~location ~prev_loc name
                 | None -> ());
-                Hashtbl.replace exports name ((cond, location) :: guards))
+                Hashtbl.replace exports name location)
               entry
         | "start", _ ->
-            (* A module may name at most one start function per configuration;
-               starts in mutually exclusive branches are fine. *)
-            (match
-               List.find_opt
-                 (fun (g, _) -> Cond.is_satisfiable (Cond.and_ g cond))
-                 !starts
-             with
-            | Some (_, prev_loc) ->
+            (* A module may name at most one start function per configuration. *)
+            (match !starts with
+            | Some prev_loc ->
                 Error.multiple_start diagnostics ~location ~prev_loc
             | None -> ());
-            starts := (cond, location) :: !starts
+            starts := Some location
         | "module", _ -> (
             (* A module may carry at most one name annotation. *)
             match !module_seen with
@@ -13030,12 +12932,24 @@ let rec instr_has_conditional (i : _ instr) =
 and ihc_list l = List.exists instr_has_conditional l
 and ihc_opt o = Option.fold ~none:false ~some:instr_has_conditional o
 
+(* Whether an attribute list carries a per-attribute [if <cond>] guard, which
+   partitions the configuration space like an [#[if]] block does. *)
+let attrs_have_guard (attrs : attributes) =
+  List.exists (fun (a : Ast.attribute) -> a.attr_guard <> None) attrs
+
 let field_has_conditional (f : (_ modulefield, _) annotated) =
-  match f.desc with
-  | Conditional _ -> true
-  | Func { body = _, instrs; _ } -> List.exists instr_has_conditional instrs
-  | Global { def; _ } -> instr_has_conditional def
-  | _ -> false
+  (match f.desc with
+    | Conditional _ -> true
+    | Func { body = _, instrs; _ } -> List.exists instr_has_conditional instrs
+    | Global { def; _ } -> instr_has_conditional def
+    | Import { decl; _ } -> attrs_have_guard decl.desc.attributes
+    | Import_group { decls; _ } ->
+        List.exists
+          (fun (d : (import_decl, _) annotated) ->
+            attrs_have_guard d.desc.attributes)
+          decls
+    | _ -> false)
+  || attrs_have_guard (field_attributes f.desc)
 
 (* Resolve every conditional against the assumption [asm], inlining the selected
    branch to produce a conditional-free module (groups are kept and recursed
@@ -13349,6 +13263,33 @@ let check_let_bindings diagnostics fields =
       | _ -> ())
     fields
 
+(* Report a per-attribute [if <cond>] guard on anything but [export]/[start].
+   [check_attribute_list] reports the same on the module it types, but a module
+   with conditionals (a guard counts as one) is checked per configuration with
+   its guards resolved away ([specialize_fields]'s [sattrs]), so the misplaced
+   guard has to be caught on the unspecialized module. *)
+let check_guards diagnostics fields =
+  let check (attrs : attributes) =
+    List.iter
+      (fun (a : Ast.attribute) ->
+        match a.attr_guard with
+        | Some g when a.attr_name <> "export" && a.attr_name <> "start" ->
+            Error.guard_not_allowed diagnostics ~location:g.info a.attr_name
+        | _ -> ())
+      attrs
+  in
+  Ast_utils.iter_fields
+    (fun (field : (_ modulefield, _) annotated) ->
+      check (field_attributes field.desc);
+      match field.desc with
+      | Import { decl; _ } -> check decl.desc.attributes
+      | Import_group { decls; _ } ->
+          List.iter
+            (fun (d : (import_decl, _) annotated) -> check d.desc.attributes)
+            decls
+      | _ -> ())
+    fields
+
 (* Apply the module's [#![feature = "…"]] declarations to [features]: each
    declared feature is enabled, in union with the command-line configuration —
    unless the command line explicitly disabled it, which is a conflict reported
@@ -13430,6 +13371,219 @@ let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
           : _ * _))
     ()
 
+(* The shape of the module's conditionals for {!Wax_wasm.Cond_plan}: the
+   field-level conditionals in order, each holding its nested ones, and the
+   bodies holding statement-level ones — every initializer (which
+   [type_configuration]'s [globals] pass types first) at rank 0, function
+   bodies at rank 1. The statement order is the typing order,
+   [Ast_utils.sub_instrs] listing operands and block bodies in source order.
+   Mirrored over the source text by [From_wasm.plan_shape]. *)
+let plan_shape (fields : location module_) : Wax_wasm.Cond_plan.item list =
+  let module P = Wax_wasm.Cond_plan in
+  let rec instrs l = List.concat_map instr l
+  and instr (i : _ instr) =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } ->
+        [
+          P.Cond
+            {
+              key = i.info;
+              cond;
+              then_ = instrs then_body.desc;
+              else_ = Option.map (fun b -> instrs b.Annot.desc) else_body;
+            };
+        ]
+    | _ -> instrs (Ast_utils.sub_instrs i)
+  in
+  let body rank l =
+    match instrs l with [] -> [] | items -> [ P.Body { rank; items } ]
+  in
+  let rec fields_ l =
+    List.concat_map
+      (fun (field : (_ modulefield, location) annotated) ->
+        match field.desc with
+        | Conditional { cond; then_fields; else_fields } ->
+            [
+              P.Cond
+                {
+                  key = field.info;
+                  cond;
+                  then_ = fields_ then_fields.desc;
+                  else_ = Option.map (fun e -> fields_ e.Annot.desc) else_fields;
+                };
+            ]
+        | Func { body = _, l; _ } -> body 1 l
+        | desc -> body 0 (Ast_utils.field_roots desc))
+      l
+  in
+  fields_ fields
+
+(* Stitch the runs' typed trees into one: the primary run's tree, each branch it
+   did not select replaced by that branch as typed by the run that owns it
+   (recursively — that copy has holes of its own). Also assembles the lowering's
+   type tables: the primary's, plus each branch's owner's. *)
+let stitch plan results =
+  let module P = Wax_wasm.Cond_plan in
+  let key (l : location) side =
+    (l.loc_start.pos_cnum, l.loc_end.pos_cnum, side)
+  in
+  let fills = Hashtbl.create 16 in
+  let by_branch = Hashtbl.create 16 in
+  let else_desc = function
+    | Some (b : _ Annot.annotated) -> b.Annot.desc
+    | None -> []
+  in
+  (* Collect, from each run's tree, the branches it owns; only the branch a run
+     selects is typed in its tree, so only that one is descended. *)
+  List.iter
+    (fun (run, (table, tree)) ->
+      let own location side fill =
+        if P.owner plan location side = Some run then begin
+          Hashtbl.replace fills (key location side) fill;
+          Hashtbl.replace by_branch (key location side) table
+        end
+      in
+      let rec instr (i : _ instr) =
+        match i.desc with
+        | If_annotation { then_body; else_body; _ } ->
+            let location = snd i.info in
+            let sel = P.select plan run location in
+            let body = if sel then then_body.desc else else_desc else_body in
+            own location sel (`Instrs body);
+            List.iter instr body
+        | _ -> List.iter instr (Ast_utils.sub_instrs i)
+      in
+      let rec field (f : (_ modulefield, location) annotated) =
+        match f.desc with
+        | Conditional { then_fields; else_fields; _ } ->
+            let sel = P.select plan run f.info in
+            let side =
+              if sel then then_fields.desc else else_desc else_fields
+            in
+            own f.info sel (`Fields side);
+            List.iter field side
+        | desc ->
+            ignore
+              (Ast_utils.map_modulefield_instr
+                 (fun root ->
+                   instr root;
+                   root)
+                 desc
+                : _ modulefield)
+      in
+      List.iter field tree)
+    results;
+  let missing (location : location) =
+    failwith
+      (Printf.sprintf
+         "Typing: no typed form for the conditional branch at %d-%d"
+         location.loc_start.pos_cnum location.loc_end.pos_cnum)
+  in
+  let rec instrs run l = List.map (instr run) l
+  and instr run (i : _ instr) =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } ->
+        let location = snd i.info in
+        let sel = P.select plan run location in
+        let branch side (body : _ Annot.annotated) =
+          if side = sel then
+            { body with Annot.desc = instrs run body.Annot.desc }
+          else
+            match
+              ( P.owner plan location side,
+                Hashtbl.find_opt fills (key location side) )
+            with
+            | Some owner, Some (`Instrs l) ->
+                { body with Annot.desc = instrs owner l }
+            | _ -> missing location
+        in
+        {
+          i with
+          desc =
+            If_annotation
+              {
+                cond;
+                then_body = branch true then_body;
+                else_body = Option.map (branch false) else_body;
+              };
+        }
+    | desc ->
+        {
+          i with
+          desc = Ast_utils.map_desc ~instr:(instr run) ~block:(instrs run) desc;
+        }
+  and fields run l = List.map (field run) l
+  and field run (f : (_ modulefield, location) annotated) =
+    match f.desc with
+    | Conditional { cond; then_fields; else_fields } ->
+        let sel = P.select plan run f.info in
+        let branch side (b : _ Annot.annotated) =
+          if side = sel then { b with Annot.desc = fields run b.Annot.desc }
+          else
+            match
+              ( P.owner plan f.info side,
+                Hashtbl.find_opt fills (key f.info side) )
+            with
+            | Some owner, Some (`Fields l) ->
+                { b with Annot.desc = fields owner l }
+            | _ -> missing f.info
+        in
+        {
+          f with
+          desc =
+            Conditional
+              {
+                cond;
+                then_fields = branch true then_fields;
+                else_fields = Option.map (branch false) else_fields;
+              };
+        }
+    | desc -> { f with desc = Ast_utils.map_modulefield_instr (instr run) desc }
+  in
+  match results with
+  | (primary, (table, tree)) :: _ ->
+      ({ current = table; by_branch }, fields primary tree)
+  | [] -> assert false
+
+(* The editor sinks were filled by every run, so a use in code common to several
+   runs was recorded once per run. Keep one entry per use span, a reference's
+   definitions merged (a name declared in two branches resolves to a different
+   definition per run). *)
+let dedupe_sinks ~resolve_links ~pun_spans ~member_completions =
+  let span (l : location) = (l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
+  Option.iter
+    (fun (links : reference list ref) ->
+      let tbl = Hashtbl.create 16 in
+      let order = ref [] in
+      List.iter
+        (fun (r : reference) ->
+          let k = span r.use in
+          match Hashtbl.find_opt tbl k with
+          | None ->
+              Hashtbl.replace tbl k r;
+              order := k :: !order
+          | Some r' ->
+              let fresh =
+                List.filter
+                  (fun d ->
+                    not
+                      (List.exists (fun d' -> span d' = span d) r'.definitions))
+                  r.definitions
+              in
+              Hashtbl.replace tbl k
+                { r' with definitions = r'.definitions @ fresh })
+        !links;
+      links := List.rev_map (Hashtbl.find tbl) !order)
+    resolve_links;
+  Option.iter
+    (fun (l : location list ref) ->
+      l := List.sort_uniq (fun a b -> compare (span a) (span b)) !l)
+    pun_spans;
+  Option.iter
+    (fun (l : (location * Members.member_receiver) list ref) ->
+      l := List.sort_uniq (fun (a, _) (b, _) -> compare (span a) (span b)) !l)
+    member_completions
+
 let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
     ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
@@ -13441,24 +13595,46 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
      conditional-free module (the common case) skips a whole-module walk. The
      same predicate then selects the type-checking path. *)
   let has_conditional = List.exists field_has_conditional fields in
-  if has_conditional then check_let_bindings diagnostics fields;
+  if has_conditional then begin
+    check_let_bindings diagnostics fields;
+    check_guards diagnostics fields
+  end;
   if not has_conditional then
-    type_configuration ~warn_unused ~suggest ~resolve_links ~pun_spans
-      ~member_completions ~faithful ~features ~simplify diagnostics fields
+    let types, typed =
+      type_configuration ~warn_unused ~suggest ~resolve_links ~pun_spans
+        ~member_completions ~faithful ~features ~simplify diagnostics fields
+    in
+    ({ current = types; by_branch = Hashtbl.create 0 }, typed)
   else begin
     check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
       diagnostics fields;
     (* Build the typed module (consumed only by the deferred WAT conversion and
-       the editor; validation-only paths use [check] and never reach here) by
-       typing the module with conditionals preserved. [type_configuration]
-       resolves names per branch (condition-aware tables), so each branch is
-       typed under its own assumption. Diagnostics are discarded —
-       [check_configurations] above did the real checking; references are
-       recorded here, off the single tree the editor consumes. *)
-    type_configuration ~resolve_links ~pun_spans ~member_completions ~faithful
-      ~features ~simplify
-      (Wax_utils.Diagnostic.collector ())
-      fields
+       the editor; validation-only paths use [check] and never reach here) with
+       the conditionals preserved: one run per configuration the module's
+       [Cond_plan] needs, each typing the branches it selects spliced into a
+       world that exists, then stitched so every branch comes from the run that
+       owns it. Diagnostics are discarded — [check_configurations] above did
+       the real checking; references are recorded here, off the runs' trees,
+       and deduplicated across them. *)
+    let plan =
+      Wax_wasm.Cond_plan.make
+        (Wax_utils.Diagnostic.collector ())
+        (plan_shape fields)
+    in
+    let results =
+      List.map
+        (fun run ->
+          ( run,
+            type_configuration
+              ~select:(Wax_wasm.Cond_plan.select plan run)
+              ~resolve_links ~pun_spans ~member_completions ~faithful ~features
+              ~simplify
+              (Wax_utils.Diagnostic.collector ())
+              fields ))
+        (Wax_wasm.Cond_plan.runs plan)
+    in
+    dedupe_sinks ~resolve_links ~pun_spans ~member_completions;
+    stitch plan results
   end
 
 (* Report a "Trojan Source" bidirectional control character in any string the
@@ -13572,7 +13748,10 @@ let check ?(warn_unused = false) ?(suggest = false)
   apply_declared_features diagnostics features fields;
   if warn_unused then lint_confusable diagnostics fields;
   let has_conditional = List.exists field_has_conditional fields in
-  if has_conditional then check_let_bindings diagnostics fields;
+  if has_conditional then begin
+    check_let_bindings diagnostics fields;
+    check_guards diagnostics fields
+  end;
   if not has_conditional then
     ignore
       (type_configuration ~build:false ~warn_unused ~suggest ~features

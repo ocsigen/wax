@@ -152,3 +152,12 @@ val get_type_definition :
   Ast.subtype option
 (** [get_type_definition context types id] returns the subtype definition for
     the given identifier, if it exists. *)
+
+val in_branch : types -> Ast.location -> bool -> (unit -> 'a) -> 'a
+(** [in_branch types location side f] runs [f] with the type table in force
+    inside the branch [side] ([true]: then) of the conditional annotation at
+    [location] — a field-level [#[if]] block or a statement-level one. A name
+    declared in two branches has a different definition in each; the lowering
+    wraps its conversion of each branch in this so {!get_type_definition}
+    resolves the branch's own. Outside any conditional the primary
+    configuration's table is in force. *)

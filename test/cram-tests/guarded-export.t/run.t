@@ -72,6 +72,7 @@ but a guarded export overlapping an unconditional one does:
     ·            ^^^
   4 │ fn b(v: &eq) -> &eq { v; }
   5 │ 
+  Hint: reachable when portable
   [128]
 
 Defining the guard variable resolves it: the export is kept when the guard holds

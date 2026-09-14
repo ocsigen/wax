@@ -127,18 +127,15 @@ let ( let*@ ) = Option.bind
 let ( let+@ ) o f = Option.map f o
 let ( let>@ ) o f = Option.iter f o
 
-(* Names are resolved relative to a "current assumption" — the conjunction of
-   the conditional-branch conditions enclosing the point being typed. The cell
-   is shared by every namespace and table of one module typing, and updated as
-   the passes descend into [#[if]]/[#[else]] branches. When no conditionals are
-   present (or when checking a single specialized configuration) it stays
-   [true_] and these structures behave like plain name-keyed tables. *)
+(* A namespace holds one binding per name: a run of the typer is one
+   configuration, so the declarations of a branch it does not select are never
+   registered, and a name cannot be declared twice in mutually exclusive
+   branches within one run. *)
 module Namespace = struct
   type t = {
-    cond : Cond.t ref;
-    tbl : (string, (string * location * Cond.t) list) Hashtbl.t;
+    tbl : (string, string * location) Hashtbl.t;
     links : resolve_sink;
-        (* Where [Tbl.resolve] records a use -> definition(s) reference, shared
+        (* Where [Tbl.resolve] records a use -> definition reference, shared
            across the namespaces of one module; [None] disables recording. *)
   }
 end
@@ -158,7 +155,7 @@ module Tbl = struct
   type 'a t = {
     kind : string;
     namespace : Namespace.t;
-    tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
+    tbl : (string, 'a) Hashtbl.t;
     (* Names referenced (looked up) through this table, each paired with where the
        reference was made from (see {!origin}). So the unused-field lint can ask
        not merely whether a declaration is referenced, but whether anything that
@@ -168,7 +165,7 @@ module Tbl = struct
        distinct name/origin pair); queried by [referrers] / [iter_references]. *)
     used : (string, origin) Hashtbl.t;
     (* Where references are currently being made from. Shared by every table of
-       the module context (like [cond]), so [resolve] can attribute a reference
+       the module context, so [resolve] can attribute a reference
        without the context being threaded into [Tbl]. *)
     current : origin ref;
     hover : 'a -> hover_target option;
@@ -217,18 +214,16 @@ type module_context = {
          hand-written Wax (formatting, or compiling to Wasm) casts are kept as
          written. *)
   suggest : bool;
-  primary : Cond.t ref option;
-  (* The PRIMARY configuration accumulated by the tree-building pass (the
-         one whose typed tree [To_wasm] lowers): at each conditional-annotation
-         statement, in stream order, the pass selects the then-branch whenever
-         its condition is consistent with the assumptions accumulated so far
-         (else the else-branch), refines the formula, and types the SELECTED
-         branch spliced against the enclosing pending stack — so the enclosing
-         statements' claims and types are those of a configuration that
-         EXISTS. [From_wasm]'s backing scan mirrors the same greedy walk.
-         [None] in the checking passes ([~build:false]) and inside a
-         NON-selected branch (whose nested annotations must not pollute the
-         accumulated assumptions). *)
+  select : location -> bool;
+  (* The branch this run types at each conditional annotation (a field-level
+         [#[if]] block or a statement-level one), by the conditional's own span:
+         [true] for the then-branch. Fixed ahead of typing by the module's
+         {!Wax_wasm.Cond_plan}, so the run is one configuration that EXISTS —
+         the selected branch is typed SPLICED against the enclosing pending
+         stack (its holes claim the enclosing values, its leftovers stay pending
+         for later claimers) and the other branch is not typed at all in this
+         run; the stitching in [Typing.f_infer] fills it from the run that owns
+         it. *)
   (* Whether to emit [Suggestion] diagnostics carrying machine-applicable
          rewrites (redundant-cast removal, compound assignment, field punning, a
          redundant [let] annotation), for editor quick fixes and [wax check].
@@ -381,11 +376,6 @@ type module_context = {
          can be linked to the labelled construct for go-to-definition) and the
          types it delivers. *)
   return_types : inferred_type Cell.t array;
-  (* --- Conditional-compilation branch assumption --- *)
-  cond : Cond.t ref;
-      (* Current branch assumption (shared with every namespace/table above);
-         set while typing a conditional branch so names resolve per branch. *)
-  cond_env : Cond.env;
   resolve_links : resolve_sink;
       (* Where use -> definition references are recorded (locals via
          [resolve_variable], labels via [branch_target]; module fields via

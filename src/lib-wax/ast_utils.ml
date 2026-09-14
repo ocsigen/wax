@@ -853,28 +853,24 @@ let rec iter_fields f l =
       | _ -> ())
     l
 
+let field_roots (field : _ modulefield) =
+  match field with
+  | Func { body = _, instrs; _ } -> instrs
+  | Global { def; _ } -> [ def ]
+  | Memory { data; _ } -> List.map (fun d -> d.offset) data
+  | Data { mode = Active (_, off); _ } -> [ off ]
+  | Table { init; _ } -> Option.to_list init
+  | Elem { mode; init; _ } -> (
+      init @ match mode with EActive (_, off) -> [ off ] | EPassive -> [])
+  (* No instructions of their own; a [Conditional]'s nested fields are reached
+     through the field walk, not through its roots. *)
+  | Data { mode = Passive; _ }
+  | Type _ | Tag _ | Import _ | Import_group _ | Module_annotation _
+  | Conditional _ ->
+      []
+
 let iter_module_instr f m =
-  iter_fields
-    (fun field ->
-      let roots =
-        match field.desc with
-        | Func { body = _, instrs; _ } -> instrs
-        | Global { def; _ } -> [ def ]
-        | Memory { data; _ } -> List.map (fun d -> d.offset) data
-        | Data { mode = Active (_, off); _ } -> [ off ]
-        | Table { init; _ } -> Option.to_list init
-        | Elem { mode; init; _ } -> (
-            init
-            @ match mode with EActive (_, off) -> [ off ] | EPassive -> [])
-        (* No instructions of their own; a [Conditional]'s nested fields reach
-           [f] via [iter_fields]' own recursion. *)
-        | Data { mode = Passive; _ }
-        | Type _ | Tag _ | Import _ | Import_group _ | Module_annotation _
-        | Conditional _ ->
-            []
-      in
-      List.iter (iter_instr f) roots)
-    m
+  iter_fields (fun field -> List.iter (iter_instr f) (field_roots field.desc)) m
 
 (* The precedence class of a binary operator. Shared by the [precedence] lint
    (see [Typing.lint_precedence]) and the Wax printer (see [Output]), so the

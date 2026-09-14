@@ -1,11 +1,11 @@
 (** The naming/context layer shared by the type checker and its extracted passes
     ({!Typing_lint}, {!Typing_suggest}): the typed-tree annotation types, the
-    resolved-reference and member-completion sinks, the conditional-branch-aware
-    name tables ({!Namespace} / {!Tbl}), the type and module contexts, the
-    error-free accessor variants the lint/suggest code reads through, and the
-    source-slice utilities the quick fixes build edits from. Its concrete types
-    are re-exported by {!Typing} through type equations, so external consumers
-    keep seeing them as [Wax_lang.Typing.reference] etc. *)
+    resolved-reference and member-completion sinks, the name tables
+    ({!Namespace} / {!Tbl}), the type and module contexts, the error-free
+    accessor variants the lint/suggest code reads through, and the source-slice
+    utilities the quick fixes build edits from. Its concrete types are
+    re-exported by {!Typing} through type equations, so external consumers keep
+    seeing them as [Wax_lang.Typing.reference] etc. *)
 
 module Cond = Wax_wasm.Cond_solver
 
@@ -94,14 +94,13 @@ val ( let>@ ) : 'a option -> ('a -> unit) -> unit
 (** The option let-operators: bind through [Some] / map the payload / run an
     effect only when [Some]. *)
 
-(** A conditional-branch-aware name table: declarations carry the assumption
-    under which they hold, so mutually-exclusive branches do not conflict. Only
-    the type is exposed here; the operations live in {!Typing}'s [Namespace]
-    (they emit diagnostics through its [Error]). *)
+(** A name table holding one binding per name: a run of the typer is one
+    configuration, so a branch it does not select registers nothing. Only the
+    type is exposed here; the operations live in {!Typing}'s [Namespace] (they
+    emit diagnostics through its [Error]). *)
 module Namespace : sig
   type t = {
-    cond : Cond.t ref;
-    tbl : (string, (string * Ast.location * Cond.t) list) Hashtbl.t;
+    tbl : (string, string * Ast.location) Hashtbl.t;
     links : resolve_sink;
   }
 end
@@ -121,7 +120,7 @@ module Tbl : sig
   type 'a t = {
     kind : string;
     namespace : Namespace.t;
-    tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
+    tbl : (string, 'a) Hashtbl.t;
     used : (string, origin) Hashtbl.t;
     current : origin ref;
     hover : 'a -> hover_target option;
@@ -151,18 +150,13 @@ type module_context = {
   warn_unused : bool;
   simplify : bool;
   suggest : bool;
-  primary : Cond.t ref option;
-      (* The PRIMARY configuration accumulated by the tree-building pass (the
-         one whose typed tree [To_wasm] lowers): at each conditional-annotation
-         statement, in stream order, the pass selects the then-branch whenever
-         its condition is consistent with the assumptions accumulated so far
-         (else the else-branch), refines the formula, and types the SELECTED
-         branch spliced against the enclosing pending stack — so the enclosing
-         statements' claims and types are those of a configuration that
-         EXISTS. [From_wasm]'s backing scan mirrors the same greedy walk.
-         [None] in the checking passes ([~build:false]) and inside a
-         NON-selected branch (whose nested annotations must not pollute the
-         accumulated assumptions). *)
+  select : Ast.location -> bool;
+      (* The branch this run types at each conditional annotation, by the
+         conditional's own span ([true] = then). Fixed ahead of typing by the
+         module's {!Wax_wasm.Cond_plan}, so the run is one configuration that
+         EXISTS: the selected branch is typed spliced against the enclosing
+         pending stack, the other is left for the run that owns it and stitched
+         in by [Typing.f_infer]. *)
   faithful : bool;
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
@@ -194,16 +188,14 @@ type module_context = {
   control_types :
     (Ast.label option * Infer.inferred_type Infer.Cell.t array) list;
   return_types : Infer.inferred_type Infer.Cell.t array;
-  cond : Cond.t ref;
-  cond_env : Cond.env;
   resolve_links : resolve_sink;
   pun_spans : Ast.location list ref option;
   member_completions : (Ast.location * Members.member_receiver) list ref option;
 }
 (** The per-module type-checking context: diagnostics and run configuration, the
     module-wide type and name tables, the per-function state (reset on entry to
-    each function), the conditional-branch assumption, and the editor sinks. See
-    the field comments in [typing_env.ml]. *)
+    each function), the run's branch selection, and the editor sinks. See the
+    field comments in [typing_env.ml]. *)
 
 val source_slice : module_context -> Ast.location -> string option
 (** The source text a location spans, or [None] when unavailable / out of range.
