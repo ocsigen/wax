@@ -140,7 +140,10 @@ case "$DEPTH/$SYMS" in
 *) ACK_DEF=-1 ;;
 esac
 ACK_RED_MAX="${ACK_RED_MAX:-$ACK_DEF}"
-CORE="Rext Rnull Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq ScondPushEq"
+# [Rnullany] earns its core slot: the core set had no ANY-hierarchy reference
+# producer at all (its [Rext] consumes one), and the adaptive-vs-concrete
+# re-parse split it represents is exactly what the scan reasons about.
+CORE="Rext Rnull Rnullany Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq ScondPushEq"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 freeze_wax "$RESULTS"
@@ -150,6 +153,15 @@ declare -a E_NAME E_CODE
 sym() { E_NAME+=("$1"); E_CODE+=("$2"); }
 sym Rext   "extern.convert_any"
 sym Rnull  "ref.null extern"
+# The ANY-hierarchy null, a DISTINCT class from [Rnull] for reasons that are
+# not about the hierarchy: [&?any] is the one null type whose printed
+# annotation the typer prunes (it is what a bare [null] re-parses to), so this
+# is the only null whose leftover re-parses ADAPTIVELY. A convert reading it
+# must keep its source pin or lose its opcode — the wasm-smith FAITHDRIFT
+# finding smith-615, which no cell could express: the alphabet had only
+# load-bearing-annotation nulls, and no reader whose source is the any
+# hierarchy (see [cvtx]).
+sym Rnullany "ref.null any"
 sym Rfunc  "ref.func \$f"
 sym Rany   "struct.new_default \$s"
 sym Rnum   "i64.add"
@@ -168,6 +180,12 @@ sym S1     "drop"
 sym S2     "struct.set \$s 0"
 sym S3     "memory.copy"
 sym Bp0    "block|drop|end"
+# An EMPTY void block. [Bp0] carries a [drop], which makes it invalid wherever
+# it sits on a value (the inner drop has nothing to pop — a block's frame
+# starts empty), so the grid skipped every such cell: it had no symbol for a
+# block boundary that is VALID on top of a value and claims nothing. That is
+# what interposed the null and the convert in smith-615.
+sym Bp0e   "block|end"
 sym Bp1    "block (param externref)|drop|end"
 sym Bif    "if|end"
 sym T      "unreachable"
@@ -209,6 +227,11 @@ rdr() { R_NAME+=("$1"); R_OP+=("$2"); R_CODE+=("$3"); R_SURV+=("${4:-1}"); }
 rdr isnull "ref.is_null"        "ref.is_null|drop"
 rdr refeq  "ref.eq"             "ref.eq|drop"
 rdr cvt    "any.convert_extern" "any.convert_extern|drop"
+# The MIRROR convert: source in the any hierarchy, not the extern one. Only
+# [any.convert_extern] was a reader, so every convert cell read an extern
+# source and the any-source direction — the one an adaptive [&?any] null
+# backs — went untested.
+rdr cvtx   "extern.convert_any"  "extern.convert_any|drop"
 rdr test   "ref.test"           "ref.test (ref null \$s)|drop"
 # A dead [ref.cast] is BY DESIGN absorbed on the round trip (its hole
 # reconnects, or its bottom-sprung pin folds; the compiler-cast family the
