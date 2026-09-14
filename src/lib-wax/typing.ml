@@ -9618,7 +9618,13 @@ and type_indirect_call ctx i i' l =
   let functype =
     match Cell.get callee_type with
     | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
-        lookup_func_type ctx ty
+        (* At the CALLEE's own location, not [ty]'s: [ty] is the type
+           reference the callee's declared type points at (a local's
+           annotation, say), so every call of that local reported "Expected
+           function type" at the SAME spot — indistinguishable duplicates when
+           there are two such calls, and never pointing at the call that is
+           wrong (a mutate-wax DIAG_DUP finding). *)
+        lookup_func_type ~location:(snd i'.info) ctx ty
     | _ -> None
   in
   let param_types =

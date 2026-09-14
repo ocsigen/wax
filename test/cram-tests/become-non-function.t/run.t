@@ -10,9 +10,9 @@ instead. Found by fuzz/mutate-wax.sh.)
   > WAX
   $ wax check m.wax
   Error: Expected function type.
-   ──➤  m.wax:2:18
+   ──➤  m.wax:2:17
   1 │ type S = { x: i32 };
   2 │ fn f() { become {S| x: 0}(); }
-    ·                  ^
+    ·                 ^^^^^^^^^
   3 │ 
   [128]
