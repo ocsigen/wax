@@ -1566,7 +1566,15 @@ let name_assoc ch =
   let i = uint ch in
   (i, name ch)
 
-let name_map ch = name_map' name_assoc ch
+(* An EMPTY name is dropped. The name section may carry one (it is a custom
+   section of arbitrary byte strings), but no text identifier denotes it: [$]
+   is not an identifier and the quoted form [$""] is rejected outright ("an
+   identifier cannot be the empty string"), so emitting it produced WAT wax
+   could not read back — a mutate-wasm FALSE_ACCEPT/VALIDATION_PARITY finding,
+   wax accepting the binary and then rejecting its own rendering. Dropping
+   leaves the entity anonymous (printed by index), which is what the name
+   conveyed anyway, and matches wasm-tools, which also prints no name for it. *)
+let name_map ch = IntMap.filter (fun _ n -> n <> "") (name_map' name_assoc ch)
 
 let indirect_name_map ch =
   name_map'
@@ -1782,12 +1790,15 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
                       let updated_names =
                         match subsection_id with
                         | 0 ->
-                            (* Module name *)
+                            (* Module name; empty means anonymous (see
+                               [name_map]). *)
                             let module_name = name ch in
-                            {
-                              current_names with
-                              Ast.Binary.module_ = Some module_name;
-                            }
+                            if module_name = "" then current_names
+                            else
+                              {
+                                current_names with
+                                Ast.Binary.module_ = Some module_name;
+                              }
                         | 1 ->
                             (* Function names *)
                             { current_names with functions = name_map ch }
