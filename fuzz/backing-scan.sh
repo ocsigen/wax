@@ -135,7 +135,7 @@ SYMS="${SYMS:-all}"
 # red cells, and must not silently absorb new ones. An ad-hoc lane runs
 # unratcheted (-1 = report only); override with ACK_RED_MAX=n.
 case "$DEPTH/$SYMS" in
-3/all) ACK_DEF=4 ;;
+3/all) ACK_DEF=0 ;;
 4/core) ACK_DEF=0 ;;
 *) ACK_DEF=-1 ;;
 esac
