@@ -546,13 +546,13 @@ type ctx = {
          [br_on_cast_fail]-chain arm. *)
   diagnostics : Wax_utils.Diagnostic.context;
   cond_env : Cond.env;
-  mutable primary : Cond.t;
-      (* The PRIMARY configuration, accumulated greedily at each emitted
-         conditional annotation in stream order — the EXACT mirror of the
-         typer's tree-building pass ([Typing]'s [ctx.primary]): the selected
-         branch's claims and leftovers are applied to the enclosing stack
-         model, so the scan predicts the claims of the world the typer
-         types. *)
+  plan : Wax_wasm.Cond_plan.t;
+      (* The configuration plan the typer will build for the emitted module
+         (computed here over the source, which has the same conditionals at the
+         same spans): at each emitted conditional annotation, the branch the
+         typer's run owning the enclosing branch selects is the one whose
+         claims and leftovers are applied to the enclosing stack model, so the
+         scan predicts the claims of the world the typer types. *)
   cond_diag : Wax_utils.Diagnostic.context;
   mutable cond_asm : Cond.t;
       (* Assumption for the conditional branch currently being registered or
@@ -1323,9 +1323,9 @@ module Stack = struct
      parameter's hierarchy — instead: it prints as a [_ as &?noextern;]
      statement, lowers to nothing, satisfies the claim on re-parse, and leaves
      the real value where the source's own consumers find it. *)
-  (* The net CLAIMS of the PRIMARY-selected branch of a conditional
-     annotation, keyed physically by the emitted [If_annotation] node (set at
-     emission, where the greedy primary selection is made; [hole_claims] reads
+  (* The net CLAIMS of the plan-selected branch of a conditional annotation,
+     keyed physically by the emitted [If_annotation] node (set at emission,
+     where the plan's selection is read ([ctx.plan]); [hole_claims] reads
      it when a scan walks past the annotation entry — the mirror of the
      typer's spliced-branch typing, whose branch holes claim the enclosing
      pendings positionally). Structural hash with PHYSICAL equality: two
@@ -1346,7 +1346,7 @@ module Stack = struct
     else
       ( (match stack with
         | (1, w, instr) :: rem -> (-1, w, instr) :: rem
-        (* A GHOST (a primary-selected branch's leftover, arity [-2]): already
+        (* A GHOST (a plan-selected branch's leftover, arity [-2]): already
            printed inside the branch, so nothing is flushed later — the claim
            is spent and the entry simply leaves the stack (the typer's block
            parameter claims the branch's pending the same way). *)
@@ -1519,7 +1519,7 @@ module Stack = struct
        down and the scan pinned over a residual the hole in fact reconnects to
        (the backing-scan grid's Bp1 cluster: the pin materialised as an
        [any.convert_extern]). Spoken for, it can back nothing itself. *)
-    (* A GHOST — a primary-selected branch's leftover value, printed inside
+    (* A GHOST — a plan-selected branch's leftover value, printed inside
        the branch: positionally it IS a pending of the enclosing frame (the
        typer's spliced branch leaves it pending), so it absorbs a claim, backs
        a reconnection, and stops the scan when adaptive, exactly like a
@@ -4454,23 +4454,18 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          validation in the configuration that feeds the value to an i64
          consumer).
 
-         The typer's tree-building pass types the branch a greedy PRIMARY
-         configuration selects SPLICED against the enclosing pending stack
-         ([Typing]'s [toplevel_instruction] arm); mirror the same walk here so
-         the scan predicts that world's claims: the selection is made with the
-         identical greedy rule, the selected branch's printed statements'
-         hole count is recorded as the annotation's claims (charged when a
-         scan walks past the entry, absorbed by the value entries below —
-         positionally, as the typer pairs them), and each of its leftover
-         VALUES is pushed above the annotation as a GHOST entry (arity [-2]:
-         already printed inside the branch, so never flushed or folded, but
-         claim-absorbing, reconnection-backing, and classifiable). *)
-      let f_cond =
-        Cond.of_cond ctx.cond_env ctx.cond_diag ~location:i.info cond
-      in
-      let sel_then = Cond.is_satisfiable (Cond.and_ ctx.primary f_cond) in
-      ctx.primary <-
-        Cond.and_ ctx.primary (if sel_then then f_cond else Cond.not_ f_cond);
+         The typer types the branch its configuration plan selects SPLICED
+         against the enclosing pending stack ([Typing]'s [toplevel_instruction]
+         arm); mirror that world here so the scan predicts its claims: the
+         selection is read off the same plan ([ctx.plan]), the selected
+         branch's printed statements' hole count is recorded as the
+         annotation's claims (charged when a scan walks past the entry,
+         absorbed by the value entries below — positionally, as the typer pairs
+         them), and each of its leftover VALUES is pushed above the annotation
+         as a GHOST entry (arity [-2]: already printed inside the branch, so
+         never flushed or folded, but claim-absorbing, reconnection-backing,
+         and classifiable). *)
+      let sel_then = Wax_wasm.Cond_plan.select_owned ctx.plan i.info in
       let convert positive (body : _ list) =
         with_cond ctx ~location:i.info cond positive (fun () ->
             let st, () = instructions ctx body [] in
@@ -5812,6 +5807,83 @@ let rec count_memories fields =
     0
     (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
+(* The shape of the module's conditionals for {!Wax_wasm.Cond_plan} — the
+   source-side mirror of [Typing.plan_shape] over the Wax tree this conversion
+   emits: the same conditionals at the same spans (each emitted node keeps its
+   source location), the field-level ones in order with their nested ones, the
+   bodies (global initializers at rank 0, function bodies at rank 1) holding
+   the statement-level ones in stream order — a folded instruction's operands
+   before its head, as they unfold. *)
+let plan_shape fields =
+  let module P = Wax_wasm.Cond_plan in
+  let rec instrs l = List.concat_map instr l
+  and instr (i : _ Src.instr) =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } ->
+        [
+          P.Cond
+            {
+              key = i.info;
+              cond;
+              then_ = instrs then_body.desc;
+              else_ =
+                Option.map
+                  (fun (b : (_ list, _) Ast.annotated) -> instrs b.desc)
+                  else_body;
+            };
+        ]
+    | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+        instrs block.desc
+    | If { if_block; else_block; _ } ->
+        instrs if_block.desc @ instrs else_block.desc
+    | Try { block; catches; catch_all; _ } ->
+        instrs block.desc
+        @ List.concat_map
+            (fun (_, (b : (_ list, _) Ast.annotated)) -> instrs b.desc)
+            catches
+        @ Option.fold ~none:[]
+            ~some:(fun (b : (_ list, _) Ast.annotated) -> instrs b.desc)
+            catch_all
+    | Folded (h, operands) -> instrs operands @ instr h
+    | _ -> []
+  in
+  let body rank l =
+    match instrs l with [] -> [] | items -> [ P.Body { rank; items } ]
+  in
+  let rec fields_ l =
+    List.concat_map
+      (fun (f : (_ Src.modulefield, _) Ast.annotated) ->
+        match f.desc with
+        | Module_if_annotation { cond; then_fields; else_fields } ->
+            [
+              P.Cond
+                {
+                  key = f.info;
+                  cond;
+                  then_ = fields_ then_fields.desc;
+                  else_ =
+                    Option.map
+                      (fun (e : (_ list, _) Ast.annotated) -> fields_ e.desc)
+                      else_fields;
+                };
+            ]
+        | Func { instrs = l; _ } -> body 1 l
+        | Global { init; _ } -> body 0 init
+        | Data { mode = Active (_, off); _ } -> body 0 off
+        | Elem { init; mode; _ } ->
+            body 0
+              (List.concat init
+              @
+              match mode with
+              | Active (_, off) -> off
+              | Passive | Declare -> [])
+        | Table { init = Init_expr e; _ } -> body 0 e
+        | Table { init = Init_segment exprs; _ } -> body 0 (List.concat exprs)
+        | _ -> [])
+      l
+  in
+  fields_ fields
+
 let rec count_tables fields =
   List.fold_left
     (fun n (f : (_ Src.modulefield, _) Ast.annotated) ->
@@ -5930,6 +6002,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
     let forbid_numeric_table = forbid_numeric && count_tables fields > 1 in
     let ctx =
       let common_namespace = Namespace.make () in
+      let cond_diag = Wax_utils.Diagnostic.collector () in
       {
         diagnostics;
         types =
@@ -5971,8 +6044,8 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
         address_types = Hashtbl.create 8;
         multi_ref_results = Hashtbl.create 8;
         cond_env = Cond.create ();
-        primary = Cond.true_;
-        cond_diag = Wax_utils.Diagnostic.collector ();
+        plan = Wax_wasm.Cond_plan.make cond_diag (plan_shape fields);
+        cond_diag;
         cond_asm = Cond.true_;
       }
     in
