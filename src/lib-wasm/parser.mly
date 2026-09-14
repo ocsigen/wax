@@ -884,7 +884,10 @@ block_type:
 | tu = type_use_without_bindings
   { match tu with
     | None, Some {params = [||]; results = [|typ|]} -> Some (Valtype typ)
-    | None, None -> None
+    (* An absent type use parses as an empty functype; both denote the empty
+       blocktype, which must stay [None] so that it encodes as the 0x40
+       shorthand instead of interning a [(func)] type to point at. *)
+    | None, (None | Some {params = [||]; results = [||]}) -> None
     | _ -> Some (Typeuse tu) }
 
 %inline memindex:

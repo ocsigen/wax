@@ -17,10 +17,9 @@ A folded block/loop keeps its labels through wasm:
   $ wax -i wat -f wasm folded.wat -o folded.wasm
   $ wax -i wasm -f wat folded.wasm
   (type (func (result i32)))
-  (type (func))
   (func $f (result i32)
     block $outer (result i32)
-      loop $inner (type 1)
+      loop $inner
         i32.const 42
         br $outer
       end
@@ -46,11 +45,11 @@ A function mixing unfolded and folded blocks keeps every label on the right one
   $ wax -i wasm -f wat mixed.wasm
   (type (func))
   (func $f
-    block $a (type 0)
+    block $a
     end
-    block $b (type 0)
+    block $b
     end
-    block $c (type 0)
+    block $c
     end
   )
 
@@ -69,10 +68,9 @@ label too:
   $ wax -i wat -f wasm hinted.wat -o hinted.wasm
   $ wax -i wasm -f wat hinted.wasm
   (type (func (param i32)))
-  (type (func))
   (func $f (param i32)
     local.get 0
     (@metadata.code.branch_hint "\01")
-    if $lbl (type 1)
+    if $lbl
     end
   )
