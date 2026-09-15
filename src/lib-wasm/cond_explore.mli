@@ -8,6 +8,22 @@
 
     Used by both the WAT validator and the Wax type-checker. *)
 
+val report :
+  Wax_utils.Diagnostic.context ->
+  ?truncation_location:Ast.location ->
+  explain:(Cond_solver.t -> string option) ->
+  truncated:bool ->
+  (Wax_utils.Diagnostic.entry list * Cond_solver.t) list ->
+  unit
+(** [report diagnostics ?truncation_location ~explain ~truncated configurations]
+    is the reporting half of {!check_all}, for a caller that enumerates the
+    configurations itself (the Wax type-checker, over a {!Cond_plan}): each
+    configuration's collected diagnostics paired with its full assumption. A
+    distinct diagnostic is reported once, with a "reachable when …" hint from
+    [explain] applied to the union of the assumptions it arose under; a
+    [universal] one only if that union covers the whole feasible space; a
+    [truncated] exploration adds the truncation warning. *)
+
 val check_all :
   Wax_utils.Diagnostic.context ->
   ?truncation_location:Ast.location ->

@@ -29,8 +29,15 @@ type t = {
   node_owner : (key, run) Hashtbl.t;
       (* The run owning the branch a conditional sits directly in; the primary
          run for a top-level one. *)
+  assumptions : (run, Cond_solver.t) Hashtbl.t;
+      (* Each run's full assumption: the conjunction of the literals of every
+         decision it made ([false_] for a forced run). *)
+  env : Cond_solver.env;
   n_runs : int;
+  truncated : bool;
 }
+
+let max_runs = 4096
 
 (* The conditionals directly inside a branch, through the bodies it holds. *)
 let rec direct items =
@@ -50,7 +57,7 @@ let rec branches items =
       | Body { items; _ } -> branches items)
     items
 
-let make diagnostics items =
+let make ?(exhaustive = false) diagnostics items =
   let env = Cond_solver.create () in
   (* Translate each condition once. *)
   let formulas = Hashtbl.create 16 in
@@ -66,7 +73,9 @@ let make diagnostics items =
   let decisions = Hashtbl.create 16 in
   let owners = Hashtbl.create 16 in
   let node_owner = Hashtbl.create 16 in
+  let assumptions = Hashtbl.create 16 in
   let n_runs = ref 0 in
+  let truncated = ref false in
   List.iter (fun k -> Hashtbl.replace node_owner k 0) (direct items);
   (* One run: [decide] is called at each conditional reached, in stream order,
      and returns the selected side; [asm] accumulates the assumption. *)
@@ -101,48 +110,59 @@ let make diagnostics items =
     let bodies =
       List.stable_sort (fun (a, _) (b, _) -> compare a b) (List.rev !bodies)
     in
-    List.iter (fun (_, items) -> conds items) bodies
+    List.iter (fun (_, items) -> conds items) bodies;
+    Hashtbl.replace assumptions r !asm
   in
   (* Phase A: the worlds that exist. Each unselected branch nobody owns or has a
      run queued for gets a run seeded with the assumption that selects it; the
      queued run replays the same path (its seed entails every decision on it)
      and so selects that branch. Seeds are deduplicated by formula: an equal
-     seed makes equal decisions. *)
+     seed makes equal decisions. An [exhaustive] plan queues EVERY reachable
+     other side, ownership or not, so it visits every reachable configuration
+     (up to [max_runs]). *)
   let queue = Queue.create () in
   Queue.push Cond_solver.true_ queue;
   let seen = Bdd_tbl.create 16 in
   let pending = Hashtbl.create 16 in
-  while not (Queue.is_empty queue) do
+  while (not (Queue.is_empty queue)) && not !truncated do
     let seed = Queue.pop queue in
-    if not (Bdd_tbl.mem seen seed) then begin
-      Bdd_tbl.add seen seed ();
-      let r = !n_runs in
-      incr n_runs;
-      walk r ~seed ~decide:(fun k ~asm f ~has_else ->
-          let d = Cond_solver.is_satisfiable (Cond_solver.and_ asm f) in
-          let other = not d in
-          if
-            (other || has_else)
-            && (not (Hashtbl.mem owners (k, other)))
-            && not (Hashtbl.mem pending (k, other))
-          then begin
-            let seed' =
-              Cond_solver.and_ asm (if other then f else Cond_solver.not_ f)
-            in
-            if Cond_solver.is_satisfiable seed' then begin
-              Hashtbl.replace pending (k, other) ();
-              Queue.push seed' queue
-            end
-          end;
-          d)
-    end
+    if not (Bdd_tbl.mem seen seed) then
+      if !n_runs >= max_runs then truncated := true
+      else begin
+        Bdd_tbl.add seen seed ();
+        let r = !n_runs in
+        incr n_runs;
+        walk r ~seed ~decide:(fun k ~asm f ~has_else ->
+            let d = Cond_solver.is_satisfiable (Cond_solver.and_ asm f) in
+            let other = not d in
+            (* An exhaustive plan explores the other side even when it is no
+               branch at all (a conditional without [else]): the world where
+               the then-branch is absent is a configuration to check too. A
+               covering plan needs only the branches that exist typed. *)
+            if
+              exhaustive
+              || (other || has_else)
+                 && (not (Hashtbl.mem owners (k, other)))
+                 && not (Hashtbl.mem pending (k, other))
+            then begin
+              let seed' =
+                Cond_solver.and_ asm (if other then f else Cond_solver.not_ f)
+              in
+              if Cond_solver.is_satisfiable seed' then begin
+                Hashtbl.replace pending (k, other) ();
+                Queue.push seed' queue
+              end
+            end;
+            d)
+      end
   done;
   (* Phase B: the branches no world reaches. Outermost first (a dead branch's
      own nested branches become forceable once it is owned): replay the owner
      of the enclosing branch and force the selection; under the resulting
      inconsistent assumption every further conditional takes its else-branch,
-     the one side that always exists. *)
-  let all = branches items in
+     the one side that always exists. An exhaustive plan explores only what is
+     reachable, as the checking it serves reports nothing about dead code. *)
+  let all = if exhaustive then [] else branches items in
   let progress = ref true in
   while !progress do
     progress := false;
@@ -164,9 +184,20 @@ let make diagnostics items =
                     | None -> false))
       all
   done;
-  { decisions; owners; node_owner; n_runs = !n_runs }
+  {
+    decisions;
+    owners;
+    node_owner;
+    assumptions;
+    env;
+    n_runs = !n_runs;
+    truncated = !truncated;
+  }
 
 let runs t = List.init t.n_runs Fun.id
+let truncated t = t.truncated
+let assumption t r = Hashtbl.find t.assumptions r
+let explain t ?style f = Cond_solver.explain t.env ?style f
 let primary _ = 0
 
 let select t r (location : Ast.location) =

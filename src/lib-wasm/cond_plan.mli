@@ -42,15 +42,35 @@ type item =
 type t
 type run = int
 
-val make : Wax_utils.Diagnostic.context -> item list -> t
+val make : ?exhaustive:bool -> Wax_utils.Diagnostic.context -> item list -> t
 (** Build the plan for a module whose conditionals have the given shape: the
     field-level conditionals in order, each holding its nested conditionals and
     bodies. Ill-formed conditions are reported to the diagnostic context (see
     {!Cond_solver.of_cond}). A shape without conditionals yields the single
-    primary run. *)
+    primary run.
+
+    By default the plan is a {e covering} one — enough runs for every branch to
+    be owned, dead branches forced — the plan a build stitches from. With
+    [exhaustive], every reachable configuration gets a run (a run for each
+    reachable side of each conditional it meets — the absent side of an
+    else-less one included — deduplicated by seed) and no branch is forced: the
+    plan a path-sensitive check explores, each configuration's diagnostics
+    qualified by {!assumption}. An exhaustive plan stops after 4096 runs; see
+    {!truncated}. *)
 
 val runs : t -> run list
 (** Every run, the primary first. *)
+
+val truncated : t -> bool
+(** Whether an exhaustive plan hit its run cap before covering every reachable
+    configuration. *)
+
+val assumption : t -> run -> Cond_solver.t
+(** A run's full assumption: the conjunction of the literals of every decision
+    it made. [Cond_solver.false_] for a forced run. *)
+
+val explain : t -> ?style:[ `Wat | `Wax ] -> Cond_solver.t -> string option
+(** {!Cond_solver.explain} in the plan's variable environment. *)
 
 val primary : t -> run
 

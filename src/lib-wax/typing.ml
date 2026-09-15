@@ -11950,7 +11950,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     ?(faithful = false) ?(features = Wax_utils.Feature.default ())
     ?(select =
       fun (_ : location) -> invalid_arg "Typing: unplanned conditional")
-    ~simplify diagnostics fields =
+    ?(guard = fun (_ : location) -> true) ~simplify diagnostics fields =
   (* [simplify] (the Wasm->Wax rewrite that drops redundant annotations) and
      [suggest] (offering those same drops as editor quick fixes on hand-written
      Wax) are mutually exclusive: [simplify] removes the very nodes [suggest]
@@ -12139,9 +12139,9 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   (* A module may not export the same name twice. Each [#[export = "..."]]
      attribute is one export; [walk_fields] descends only into the branch this
      run selects, so exports in mutually exclusive branches do not clash. A
-     guarded export ([#[export = "nm", if(c)]]) counts as present here: a module
-     with guards has its clashes checked per configuration by
-     [check_configurations], where the guards are resolved. *)
+     guarded export ([#[export = "nm", if(c)]]) is present in the configurations
+     [guard] selects: a checking run resolves it from its plan, a build run
+     counts it present (its diagnostics are discarded). *)
   let exports = Hashtbl.create 16 in
   let starts = ref None in
   let module_seen = ref None in
@@ -12163,42 +12163,48 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      [location] blames the entity when an attribute carries no value. *)
   let process_attrs ~default_name ~location attributes =
     List.iter
-      (fun ({ attr_name = key; attr_value = v; _ } : Ast.attribute) ->
-        match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
-        | "export", ((Some (String _) | None) as value) ->
-            (* The export name and the location to blame: the explicit string
+      (fun ({ attr_name = key; attr_value = v; attr_guard; _ } : Ast.attribute)
+         ->
+        let present =
+          match attr_guard with None -> true | Some g -> guard g.info
+        in
+        if present then
+          match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
+          | "export", ((Some (String _) | None) as value) ->
+              (* The export name and the location to blame: the explicit string
                for [#[export = "nm"]], the entity's own name for a bare
                [#[export]]. *)
-            let entry =
-              match value with
-              | Some (String (_, name)) -> Some (name, (Option.get v).info)
-              | _ -> (
-                  match default_name with
-                  | Some (id : ident) -> Some (id.desc, id.info)
-                  | None -> None)
-            in
-            Option.iter
-              (fun (name, location) ->
-                (match Hashtbl.find_opt exports name with
-                | Some prev_loc ->
-                    Error.duplicated_export diagnostics ~location ~prev_loc name
-                | None -> ());
-                Hashtbl.replace exports name location)
-              entry
-        | "start", _ ->
-            (* A module may name at most one start function per configuration. *)
-            (match !starts with
-            | Some prev_loc ->
-                Error.multiple_start diagnostics ~location ~prev_loc
-            | None -> ());
-            starts := Some location
-        | "module", _ -> (
-            (* A module may carry at most one name annotation. *)
-            match !module_seen with
-            | Some prev_loc ->
-                Error.multiple_module diagnostics ~location ~prev_loc
-            | None -> module_seen := Some location)
-        | _ -> ())
+              let entry =
+                match value with
+                | Some (String (_, name)) -> Some (name, (Option.get v).info)
+                | _ -> (
+                    match default_name with
+                    | Some (id : ident) -> Some (id.desc, id.info)
+                    | None -> None)
+              in
+              Option.iter
+                (fun (name, location) ->
+                  (match Hashtbl.find_opt exports name with
+                  | Some prev_loc ->
+                      Error.duplicated_export diagnostics ~location ~prev_loc
+                        name
+                  | None -> ());
+                  Hashtbl.replace exports name location)
+                entry
+          | "start", _ ->
+              (* A module may name at most one start function per configuration. *)
+              (match !starts with
+              | Some prev_loc ->
+                  Error.multiple_start diagnostics ~location ~prev_loc
+              | None -> ());
+              starts := Some location
+          | "module", _ -> (
+              (* A module may carry at most one name annotation. *)
+              match !module_seen with
+              | Some prev_loc ->
+                  Error.multiple_module diagnostics ~location ~prev_loc
+              | None -> module_seen := Some location)
+          | _ -> ())
       attributes
   in
   (* Validate and process the attributes on one imported declaration: a
@@ -12325,7 +12331,8 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
     let exempt field =
       List.exists
         (fun (a : Ast.attribute) ->
-          a.attr_name = "export" || a.attr_name = "start")
+          (a.attr_name = "export" || a.attr_name = "start")
+          && match a.attr_guard with None -> true | Some g -> guard g.info)
         (field_attributes field)
     in
     (* A leading [_] marks a declaration as deliberately unused (and, for a
@@ -12840,397 +12847,6 @@ let reconcile_module_widths mode diagnostics
 
 (*** Conditional compilation and entry points ***)
 
-let rec instr_has_conditional (i : _ instr) =
-  match i.desc with
-  | If_annotation _ -> true
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      ihc_list block.desc
-  | While { cond; step; block; _ } ->
-      instr_has_conditional cond
-      || Option.fold ~none:false ~some:instr_has_conditional step
-      || ihc_list block.desc
-  | If { cond; if_block; else_block; _ } ->
-      instr_has_conditional cond || ihc_list if_block.desc
-      || Option.fold ~none:false
-           ~some:(fun b -> ihc_list b.Annot.desc)
-           else_block
-  | Try { block; catches; catch_all; _ } ->
-      ihc_list block.desc
-      || List.exists (fun (_, l) -> ihc_list l.Annot.desc) catches
-      || Option.fold ~none:false
-           ~some:(fun b -> ihc_list b.Annot.desc)
-           catch_all
-  | TryCatch { block; arms; _ } ->
-      ihc_list block.desc
-      || List.exists (fun a -> ihc_list a.arm_body.desc) arms
-  | Sequence l -> ihc_list l
-  | ArrayFixed (_, l) -> ihc_list l
-  | Dispatch { index; arms; _ } ->
-      instr_has_conditional index
-      || List.exists (fun (_, body) -> ihc_list body.Annot.desc) arms
-  | Match { scrutinee; arms; default } ->
-      instr_has_conditional scrutinee
-      || List.exists (fun (_, body) -> ihc_list body.Annot.desc) arms
-      || ihc_list default.desc
-  | ContBind (_, _, l)
-  | Suspend (_, l)
-  | Resume (_, _, l)
-  | ResumeThrow (_, _, _, l)
-  | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l)
-  | Throw (_, l) ->
-      ihc_list l
-  | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || ihc_list l
-  (* A punned field ([None]) is a [Get] and carries no conditional. *)
-  | Struct (_, l) ->
-      List.exists
-        (fun (_, i) -> Option.fold ~none:false ~some:instr_has_conditional i)
-        l
-  | StructDesc (d, l) ->
-      instr_has_conditional d
-      || List.exists
-           (fun (_, i) -> Option.fold ~none:false ~some:instr_has_conditional i)
-           l
-  | CastDesc (a, _, b)
-  | Br_on_cast_desc_eq (_, _, a, b)
-  | Br_on_cast_desc_eq_fail (_, _, a, b)
-  | BinOp (_, a, b)
-  | Array (_, a, b)
-  | ArraySegment (_, _, a, b)
-  | ArrayGet (a, b)
-  | StructSet (a, _, b) ->
-      instr_has_conditional a || instr_has_conditional b
-  | ArraySet (a, b, c) | Select (a, b, c) ->
-      instr_has_conditional a || instr_has_conditional b
-      || instr_has_conditional c
-  | Set (_, _, i)
-  | Tee (_, i)
-  | Labelled (_, i)
-  | Cast (i, _)
-  | Test (i, _)
-  | NonNull i
-  | UnOp (_, i)
-  | StructGet (i, _)
-  | GetDescriptor i
-  | StructDefaultDesc i
-  | ArrayDefault (_, i)
-  | Br_if (_, i)
-  | On (i, _)
-  | Br_table (_, i)
-  | Br_on_null (_, i)
-  | Br_on_non_null (_, i)
-  | Br_on_cast (_, _, i)
-  | Br_on_cast_fail (_, _, i)
-  | ThrowRef i
-  | ContNew (_, i) ->
-      instr_has_conditional i
-  | Let (_, i) | Br (_, i) | Return i -> ihc_opt i
-  | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
-  | Float _ | StructDefault _ ->
-      false
-
-and ihc_list l = List.exists instr_has_conditional l
-and ihc_opt o = Option.fold ~none:false ~some:instr_has_conditional o
-
-(* Whether an attribute list carries a per-attribute [if <cond>] guard, which
-   partitions the configuration space like an [#[if]] block does. *)
-let attrs_have_guard (attrs : attributes) =
-  List.exists (fun (a : Ast.attribute) -> a.attr_guard <> None) attrs
-
-let field_has_conditional (f : (_ modulefield, _) annotated) =
-  (match f.desc with
-    | Conditional _ -> true
-    | Func { body = _, instrs; _ } -> List.exists instr_has_conditional instrs
-    | Global { def; _ } -> instr_has_conditional def
-    | Import { decl; _ } -> attrs_have_guard decl.desc.attributes
-    | Import_group { decls; _ } ->
-        List.exists
-          (fun (d : (import_decl, _) annotated) ->
-            attrs_have_guard d.desc.attributes)
-          decls
-    | _ -> false)
-  || attrs_have_guard (field_attributes f.desc)
-
-(* Resolve every conditional against the assumption [asm], inlining the selected
-   branch to produce a conditional-free module (groups are kept and recursed
-   into). For an undetermined conditional, select [then], [enqueue] the [else]
-   configuration, and [record] the chosen literal. *)
-let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
-  let module S = Wax_wasm.Cond_solver in
-  (* Resolve one conditional and return both the specialized branch and the
-     assumption that holds afterwards. Each branch is taken only if it is
-     reachable under [asm] (its conjunction with the branch condition is
-     satisfiable); an unreachable branch is pruned, so we never explore an
-     infeasible configuration. The surviving assumption is threaded into the
-     following siblings, so e.g. once [cond1] forces [$wasi], a sibling
-     [#[if(not wasi)]] has its [@then] pruned. *)
-  let choose asm cond ~location ~then_branch ~else_branch =
-    let c = S.of_cond env diagnostics ~location cond in
-    let then_asm = S.and_ asm c and else_asm = S.and_ asm (S.not_ c) in
-    if not (S.is_satisfiable then_asm) then (
-      record (S.not_ c);
-      (else_branch else_asm, else_asm))
-    else if not (S.is_satisfiable else_asm) then (
-      record c;
-      (then_branch then_asm, then_asm))
-    else (
-      enqueue else_asm;
-      record c;
-      (then_branch then_asm, then_asm))
-  in
-  (* Instruction-level specializer: resolve each [If_annotation] by splicing the
-     selected branch into the enclosing list; recurse into every sub-instruction
-     and nested block body. [sone] is for single-instruction positions, where an
-     [If_annotation] cannot appear (it is statement-only). *)
-  let rec sinstrs asm l =
-    match l with
-    | [] -> []
-    | i :: rest ->
-        let instrs, asm = sinstr asm i in
-        instrs @ sinstrs asm rest
-  and sinstr asm (i : _ instr) =
-    match i.desc with
-    | If_annotation { cond; then_body; else_body } ->
-        choose asm cond ~location:i.info
-          ~then_branch:(fun asm' -> sinstrs asm' then_body.desc)
-          ~else_branch:(fun asm' ->
-            match else_body with Some e -> sinstrs asm' e.desc | None -> [])
-    | desc -> ([ { i with desc = sdesc asm desc } ], asm)
-  and sone asm i = match sinstr asm i with [ x ], _ -> x | _ -> assert false
-  and sdesc asm (desc : _ instr_desc) : _ instr_desc =
-    match desc with
-    | Block { label; typ; block } ->
-        Block
-          { label; typ; block = { block with desc = sinstrs asm block.desc } }
-    | Loop { label; typ; block } ->
-        Loop
-          { label; typ; block = { block with desc = sinstrs asm block.desc } }
-    | While { label; cond; step; block } ->
-        While
-          {
-            label;
-            cond = sone asm cond;
-            step = Option.map (sone asm) step;
-            block = { block with desc = sinstrs asm block.desc };
-          }
-    | If { label; typ; cond; if_block; else_block } ->
-        If
-          {
-            label;
-            typ;
-            cond = sone asm cond;
-            if_block = { if_block with desc = sinstrs asm if_block.desc };
-            else_block =
-              Option.map
-                (fun (b : (_ instr list, location) Ast.annotated) ->
-                  { b with desc = sinstrs asm b.desc })
-                else_block;
-          }
-    | TryTable { label; typ; catches; block } ->
-        TryTable
-          {
-            label;
-            typ;
-            catches;
-            block = { block with desc = sinstrs asm block.desc };
-          }
-    | Try { label; typ; block; catches; catch_all } ->
-        Try
-          {
-            label;
-            typ;
-            block = { block with desc = sinstrs asm block.desc };
-            catches =
-              List.map
-                (fun (t, l) ->
-                  (t, { l with Annot.desc = sinstrs asm l.Annot.desc }))
-                catches;
-            catch_all =
-              Option.map
-                (fun b -> { b with Annot.desc = sinstrs asm b.Annot.desc })
-                catch_all;
-          }
-    | TryCatch { label; typ; block; arms } ->
-        TryCatch
-          {
-            label;
-            typ;
-            block = { block with desc = sinstrs asm block.desc };
-            arms =
-              List.map
-                (fun a ->
-                  {
-                    a with
-                    arm_body =
-                      { a.arm_body with desc = sinstrs asm a.arm_body.desc };
-                  })
-                arms;
-          }
-    | Set (idx, op, v) -> Set (idx, op, sone asm v)
-    | Tee (idx, v) -> Tee (idx, sone asm v)
-    | Labelled (l, v) -> Labelled (l, sone asm v)
-    | Call (t, args) -> Call (sone asm t, List.map (sone asm) args)
-    | TailCall (t, args) -> TailCall (sone asm t, List.map (sone asm) args)
-    | Cast (v, t) -> Cast (sone asm v, t)
-    | CastDesc (v, t, d) -> CastDesc (sone asm v, t, sone asm d)
-    | Test (v, t) -> Test (sone asm v, t)
-    | NonNull v -> NonNull (sone asm v)
-    | Struct (idx, fields) ->
-        Struct
-          (idx, List.map (fun (i, v) -> (i, Option.map (sone asm) v)) fields)
-    | StructDesc (d, fields) ->
-        StructDesc
-          ( sone asm d,
-            List.map (fun (i, v) -> (i, Option.map (sone asm) v)) fields )
-    | StructDefaultDesc d -> StructDefaultDesc (sone asm d)
-    | StructGet (v, idx) -> StructGet (sone asm v, idx)
-    | GetDescriptor v -> GetDescriptor (sone asm v)
-    | StructSet (v, idx, w) -> StructSet (sone asm v, idx, sone asm w)
-    | Array (idx, a, b) -> Array (idx, sone asm a, sone asm b)
-    | ArrayDefault (idx, v) -> ArrayDefault (idx, sone asm v)
-    | ArrayFixed (idx, l) -> ArrayFixed (idx, List.map (sone asm) l)
-    | ArraySegment (idx, d, a, b) ->
-        ArraySegment (idx, d, sone asm a, sone asm b)
-    | ArrayGet (a, b) -> ArrayGet (sone asm a, sone asm b)
-    | ArraySet (a, b, c) -> ArraySet (sone asm a, sone asm b, sone asm c)
-    | BinOp (op, a, b) -> BinOp (op, sone asm a, sone asm b)
-    | UnOp (op, v) -> UnOp (op, sone asm v)
-    | Let (bs, body) -> Let (bs, Option.map (sone asm) body)
-    | Br (l, v) -> Br (l, Option.map (sone asm) v)
-    | Br_if (l, v) -> Br_if (l, sone asm v)
-    | On (v, h) -> On (sone asm v, h)
-    | Br_table (ls, v) -> Br_table (ls, sone asm v)
-    | Dispatch { index; cases; default; arms } ->
-        Dispatch
-          {
-            index = sone asm index;
-            cases;
-            default;
-            arms =
-              List.map
-                (fun (l, body) ->
-                  (l, { body with Annot.desc = sinstrs asm body.Annot.desc }))
-                arms;
-          }
-    | Match { scrutinee; arms; default } ->
-        Match
-          {
-            scrutinee = sone asm scrutinee;
-            arms =
-              List.map
-                (fun (pat, body) ->
-                  (pat, { body with Annot.desc = sinstrs asm body.Annot.desc }))
-                arms;
-            default = { default with desc = sinstrs asm default.desc };
-          }
-    | Br_on_null (l, v) -> Br_on_null (l, sone asm v)
-    | Br_on_non_null (l, v) -> Br_on_non_null (l, sone asm v)
-    | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone asm v)
-    | Br_on_cast_fail (l, t, v) -> Br_on_cast_fail (l, t, sone asm v)
-    | Br_on_cast_desc_eq (l, t, v, d) ->
-        Br_on_cast_desc_eq (l, t, sone asm v, sone asm d)
-    | Br_on_cast_desc_eq_fail (l, t, v, d) ->
-        Br_on_cast_desc_eq_fail (l, t, sone asm v, sone asm d)
-    | Throw (idx, v) -> Throw (idx, List.map (sone asm) v)
-    | ThrowRef v -> ThrowRef (sone asm v)
-    | ContNew (ct, v) -> ContNew (ct, sone asm v)
-    | ContBind (src, dst, l) -> ContBind (src, dst, List.map (sone asm) l)
-    | Suspend (tag, l) -> Suspend (tag, List.map (sone asm) l)
-    | Resume (ct, h, l) -> Resume (ct, h, List.map (sone asm) l)
-    | ResumeThrow (ct, tag, h, l) ->
-        ResumeThrow (ct, tag, h, List.map (sone asm) l)
-    | ResumeThrowRef (ct, h, l) -> ResumeThrowRef (ct, h, List.map (sone asm) l)
-    | Switch (ct, tag, l) -> Switch (ct, tag, List.map (sone asm) l)
-    | Return v -> Return (Option.map (sone asm) v)
-    | Sequence l -> Sequence (sinstrs asm l)
-    | Select (c, t, e) -> Select (sone asm c, sone asm t, sone asm e)
-    | If_annotation _ -> assert false (* handled in [sinstr] *)
-    | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
-      | Int _ | Float _ | StructDefault _ ) as x ->
-        x
-  in
-  (* Resolve each per-attribute [if <cond>] guard against the configuration.
-     A guard gates the presence of just this export, so it partitions the space
-     exactly like an [#[if]] block: [choose] prunes the export in configurations
-     where the guard cannot hold and enqueues the complementary configuration
-     where it does not, threading the surviving assumption into later fields. The
-     guard itself is dropped -- in each explored configuration the export is
-     unconditionally present or absent. *)
-  let sattrs asm (attrs : attributes) : attributes * S.t =
-    List.fold_left
-      (fun (acc, asm) (a : Ast.attribute) ->
-        match a.attr_guard with
-        | None -> (acc @ [ a ], asm)
-        | Some g ->
-            let kept, asm =
-              choose asm g.Annot.desc ~location:g.info
-                ~then_branch:(fun _ -> [ { a with attr_guard = None } ])
-                ~else_branch:(fun _ -> [])
-            in
-            (acc @ kept, asm))
-      ([], asm) attrs
-  in
-  let sdecl asm (decl : (Ast.import_decl, location) annotated) =
-    let attributes, asm = sattrs asm decl.desc.attributes in
-    ({ decl with desc = { decl.desc with attributes } }, asm)
-  in
-  let rec sdecls asm = function
-    | [] -> ([], asm)
-    | d :: rest ->
-        let d, asm = sdecl asm d in
-        let ds, asm = sdecls asm rest in
-        (d :: ds, asm)
-  in
-  let rec sfields asm fl =
-    match fl with
-    | [] -> []
-    | f :: rest ->
-        let fields, asm = sfield asm f in
-        fields @ sfields asm rest
-  and sfield asm (f : (_ modulefield, _) annotated) =
-    let sa attributes = sattrs asm attributes in
-    match f.desc with
-    | Conditional { cond; then_fields; else_fields } ->
-        choose asm cond ~location:f.info
-          ~then_branch:(fun asm' -> sfields asm' then_fields.desc)
-          ~else_branch:(fun asm' ->
-            match else_fields with Some e -> sfields asm' e.desc | None -> [])
-    | Func ({ body = lbl, instrs; attributes; _ } as r) ->
-        let attributes, asm = sa attributes in
-        ( [
-            {
-              f with
-              desc =
-                Func { r with body = (lbl, sinstrs asm instrs); attributes };
-            };
-          ],
-          asm )
-    | Global ({ def; attributes; _ } as g) ->
-        let attributes, asm = sa attributes in
-        ( [ { f with desc = Global { g with def = sone asm def; attributes } } ],
-          asm )
-    | Tag ({ attributes; _ } as r) ->
-        let attributes, asm = sa attributes in
-        ([ { f with desc = Tag { r with attributes } } ], asm)
-    | Memory ({ attributes; _ } as r) ->
-        let attributes, asm = sa attributes in
-        ([ { f with desc = Memory { r with attributes } } ], asm)
-    | Table ({ attributes; _ } as r) ->
-        let attributes, asm = sa attributes in
-        ([ { f with desc = Table { r with attributes } } ], asm)
-    | Import { module_; decl } ->
-        let decl, asm = sdecl asm decl in
-        ([ { f with desc = Import { module_; decl } } ], asm)
-    | Import_group { module_; decls } ->
-        let decls, asm = sdecls asm decls in
-        ([ { f with desc = Import_group { module_; decls } } ], asm)
-    | Module_annotation attrs ->
-        let attrs, asm = sa attrs in
-        ([ { f with desc = Module_annotation attrs } ], asm)
-    | Type _ | Data _ | Elem _ -> ([ f ], asm)
-  in
-  sfields asm0 fields
-
 (* [let] bindings are not allowed inside a conditional branch: branches are
    transparent and mutually exclusive, so a binding declared in one would leak
    past the conditional and clash with the other branch. *)
@@ -13260,33 +12876,6 @@ let check_let_bindings diagnostics fields =
       | Func { body = _, instrs; _ } ->
           List.iter (check_let_in_conditionals diagnostics) instrs
       | Global { def; _ } -> check_let_in_conditionals diagnostics def
-      | _ -> ())
-    fields
-
-(* Report a per-attribute [if <cond>] guard on anything but [export]/[start].
-   [check_attribute_list] reports the same on the module it types, but a module
-   with conditionals (a guard counts as one) is checked per configuration with
-   its guards resolved away ([specialize_fields]'s [sattrs]), so the misplaced
-   guard has to be caught on the unspecialized module. *)
-let check_guards diagnostics fields =
-  let check (attrs : attributes) =
-    List.iter
-      (fun (a : Ast.attribute) ->
-        match a.attr_guard with
-        | Some g when a.attr_name <> "export" && a.attr_name <> "start" ->
-            Error.guard_not_allowed diagnostics ~location:g.info a.attr_name
-        | _ -> ())
-      attrs
-  in
-  Ast_utils.iter_fields
-    (fun (field : (_ modulefield, _) annotated) ->
-      check (field_attributes field.desc);
-      match field.desc with
-      | Import { decl; _ } -> check decl.desc.attributes
-      | Import_group { decls; _ } ->
-          List.iter
-            (fun (d : (import_decl, _) annotated) -> check d.desc.attributes)
-            decls
       | _ -> ())
     fields
 
@@ -13352,34 +12941,46 @@ let apply_declared_features diagnostics features fields =
       | _ -> ())
     fields
 
-(* Check every reachable configuration of a conditional module: each is
-   specialized to be conditional-free and typed independently, so a diagnostic
-   is reported once with the assumption under which it is reachable. Only the
-   diagnostics matter here, so the typed module is not built ([~build:false]). *)
-let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
-    diagnostics (fields : location module_) =
-  Wax_wasm.Cond_explore.check_all diagnostics
-    ?truncation_location:
-      (match fields with hd :: _ -> Some hd.info | [] -> None)
-    ~explain:(fun env c -> Wax_wasm.Cond_solver.explain env ~style:`Wax c)
-    ~specialize:(fun env asm ~enqueue ~record ->
-      specialize_fields env diagnostics ~enqueue ~record asm fields)
-    ~check:(fun ctx m ->
-      ignore
-        (type_configuration ~build:false ~warn_unused ~suggest ~features
-           ~faithful ~simplify ctx m
-          : _ * _))
-    ()
-
 (* The shape of the module's conditionals for {!Wax_wasm.Cond_plan}: the
    field-level conditionals in order, each holding its nested ones, and the
    bodies holding statement-level ones — every initializer (which
    [type_configuration]'s [globals] pass types first) at rank 0, function
    bodies at rank 1. The statement order is the typing order,
    [Ast_utils.sub_instrs] listing operands and block bodies in source order.
-   Mirrored over the source text by [From_wasm.plan_shape]. *)
-let plan_shape (fields : location module_) : Wax_wasm.Cond_plan.item list =
+   With [guards], a per-attribute [if <cond>] guard is a conditional with two
+   empty branches (present / absent), at its field's position: the checking
+   plan partitions on it, so an export clash or an unused definition is
+   qualified by the guard like by any [#[if]]. The build plan leaves guards
+   out — they gate no type, and [From_wasm.plan_shape], which mirrors this
+   over the source text so the two sides agree on every decision, has no
+   counterpart for them. *)
+let plan_shape ~guards (fields : location module_) :
+    Wax_wasm.Cond_plan.item list =
   let module P = Wax_wasm.Cond_plan in
+  let guard_items (attrs : attributes) =
+    if not guards then []
+    else
+      List.filter_map
+        (fun (a : Ast.attribute) ->
+          Option.map
+            (fun (g : (Wax_wasm.Ast.cond, location) annotated) ->
+              P.Cond
+                { key = g.info; cond = g.desc; then_ = []; else_ = Some [] })
+            a.attr_guard)
+        attrs
+  in
+  let field_guards (desc : _ modulefield) =
+    guard_items (field_attributes desc)
+    @
+    match desc with
+    | Import { decl; _ } -> guard_items decl.desc.attributes
+    | Import_group { decls; _ } ->
+        List.concat_map
+          (fun (d : (import_decl, _) annotated) ->
+            guard_items d.desc.attributes)
+          decls
+    | _ -> []
+  in
   let rec instrs l = List.concat_map instr l
   and instr (i : _ instr) =
     match i.desc with
@@ -13412,11 +13013,43 @@ let plan_shape (fields : location module_) : Wax_wasm.Cond_plan.item list =
                   else_ = Option.map (fun e -> fields_ e.Annot.desc) else_fields;
                 };
             ]
-        | Func { body = _, l; _ } -> body 1 l
-        | desc -> body 0 (Ast_utils.field_roots desc))
+        | Func { body = _, l; _ } as desc -> field_guards desc @ body 1 l
+        | desc -> field_guards desc @ body 0 (Ast_utils.field_roots desc))
       l
   in
   fields_ fields
+
+(* Check every reachable configuration of a conditional module: one run of an
+   exhaustive [Cond_plan] per configuration, each typed on the preserved tree
+   under the run's own selection (its attribute guards resolved the same way),
+   so a diagnostic is reported once with the assumption under which it is
+   reachable. Only the diagnostics matter here, so the typed module is not
+   built ([~build:false]). *)
+let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
+    diagnostics (fields : location module_) shape =
+  let module P = Wax_wasm.Cond_plan in
+  let plan = P.make ~exhaustive:true diagnostics shape in
+  let configurations =
+    List.map
+      (fun run ->
+        (* Each configuration is checked in its own collector, derived from the
+           parent so it inherits its error-recovery mode: the [unbound_name]
+           cascade suppression then applies when type-checking a module
+           recovered past syntax errors, just as on the conditional-free path. *)
+        let cctx = Wax_utils.Diagnostic.collector ~parent:diagnostics () in
+        let select = P.select plan run in
+        ignore
+          (type_configuration ~build:false ~warn_unused ~suggest ~features
+             ~faithful ~simplify ~select ~guard:select cctx fields
+            : _ * _);
+        (Wax_utils.Diagnostic.collected cctx, P.assumption plan run))
+      (P.runs plan)
+  in
+  Wax_wasm.Cond_explore.report diagnostics
+    ?truncation_location:
+      (match fields with hd :: _ -> Some hd.info | [] -> None)
+    ~explain:(P.explain plan ~style:`Wax)
+    ~truncated:(P.truncated plan) configurations
 
 (* Stitch the runs' typed trees into one: the primary run's tree, each branch it
    did not select replaced by that branch as typed by the run that owns it
@@ -13590,15 +13223,13 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   apply_declared_features diagnostics features fields;
-  (* [check_let_bindings] reports a [let] binding inside an [(@if)] branch, which
-     can only exist when the module has a conditional; gate it on that so a
-     conditional-free module (the common case) skips a whole-module walk. The
-     same predicate then selects the type-checking path. *)
-  let has_conditional = List.exists field_has_conditional fields in
-  if has_conditional then begin
-    check_let_bindings diagnostics fields;
-    check_guards diagnostics fields
-  end;
+  (* The shape of the module's conditionals selects the type-checking path — a
+     conditional-free module (the common case) is typed once, directly — and
+     gates [check_let_bindings], which reports a [let] binding inside an
+     [#[if]] branch (one can only exist when the module has a conditional). *)
+  let shape = plan_shape ~guards:true fields in
+  let has_conditional = shape <> [] in
+  if has_conditional then check_let_bindings diagnostics fields;
   if not has_conditional then
     let types, typed =
       type_configuration ~warn_unused ~suggest ~resolve_links ~pun_spans
@@ -13607,7 +13238,7 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     ({ current = types; by_branch = Hashtbl.create 0 }, typed)
   else begin
     check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
-      diagnostics fields;
+      diagnostics fields shape;
     (* Build the typed module (consumed only by the deferred WAT conversion and
        the editor; validation-only paths use [check] and never reach here) with
        the conditionals preserved: one run per configuration the module's
@@ -13619,7 +13250,7 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     let plan =
       Wax_wasm.Cond_plan.make
         (Wax_utils.Diagnostic.collector ())
-        (plan_shape fields)
+        (plan_shape ~guards:false fields)
     in
     let results =
       List.map
@@ -13747,11 +13378,9 @@ let check ?(warn_unused = false) ?(suggest = false)
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   apply_declared_features diagnostics features fields;
   if warn_unused then lint_confusable diagnostics fields;
-  let has_conditional = List.exists field_has_conditional fields in
-  if has_conditional then begin
-    check_let_bindings diagnostics fields;
-    check_guards diagnostics fields
-  end;
+  let shape = plan_shape ~guards:true fields in
+  let has_conditional = shape <> [] in
+  if has_conditional then check_let_bindings diagnostics fields;
   if not has_conditional then
     ignore
       (type_configuration ~build:false ~warn_unused ~suggest ~features
@@ -13759,7 +13388,7 @@ let check ?(warn_unused = false) ?(suggest = false)
         : _ * _)
   else
     check_configurations ~warn_unused ~features ~simplify:false ~suggest
-      ~faithful:false diagnostics fields
+      ~faithful:false diagnostics fields shape
 
 let erase_types m =
   List.map
