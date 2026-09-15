@@ -1473,15 +1473,12 @@ module Stack = struct
        numeric residual unconditionally; the two cancelled only while the
        pairing was type-consistent, which an [(@if)] breaks.) *)
     | Ast.Hole -> 1
-    (* A conditional annotation claims NOTHING from the tree-typing stack this
-       scan models: the typer that builds the tree the lowering reads types each
-       branch as an isolated void block, so a branch's holes take no enclosing
-       value and a branch's leftovers deliver none. (The CONFIGURATION passes —
-       the Wax checker's spliced typing, like the Wasm validator's — instead
-       splice the chosen branch into the enclosing frame, where its claims mirror
-       the source's own pops per configuration; the emission already mirrors that
-       by construction, one hole per branch pop. What the scan must predict is
-       the reconnection in the PRESERVED tree, whose types drive [To_wasm].) *)
+    (* A conditional annotation claims what the branch the typer's plan selects
+       claims: that branch is typed SPLICED into the enclosing frame (its holes
+       take the enclosing values, its leftovers stay pending — see the
+       [If_annotation] arm of [instruction], which records the count at
+       emission), so the scan predicts the reconnection in the PRESERVED tree
+       whose types drive [To_wasm]. *)
     | Ast.If_annotation _ -> get_annotation_claims i
     | Ast.Block { typ; _ }
     | Ast.Loop { typ; _ }
@@ -5807,83 +5804,6 @@ let rec count_memories fields =
     0
     (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
-(* The shape of the module's conditionals for {!Wax_wasm.Cond_plan} — the
-   source-side mirror of [Typing.plan_shape] over the Wax tree this conversion
-   emits: the same conditionals at the same spans (each emitted node keeps its
-   source location), the field-level ones in order with their nested ones, the
-   bodies (global initializers at rank 0, function bodies at rank 1) holding
-   the statement-level ones in stream order — a folded instruction's operands
-   before its head, as they unfold. *)
-let plan_shape fields =
-  let module P = Wax_wasm.Cond_plan in
-  let rec instrs l = List.concat_map instr l
-  and instr (i : _ Src.instr) =
-    match i.desc with
-    | If_annotation { cond; then_body; else_body } ->
-        [
-          P.Cond
-            {
-              key = i.info;
-              cond;
-              then_ = instrs then_body.desc;
-              else_ =
-                Option.map
-                  (fun (b : (_ list, _) Ast.annotated) -> instrs b.desc)
-                  else_body;
-            };
-        ]
-    | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-        instrs block.desc
-    | If { if_block; else_block; _ } ->
-        instrs if_block.desc @ instrs else_block.desc
-    | Try { block; catches; catch_all; _ } ->
-        instrs block.desc
-        @ List.concat_map
-            (fun (_, (b : (_ list, _) Ast.annotated)) -> instrs b.desc)
-            catches
-        @ Option.fold ~none:[]
-            ~some:(fun (b : (_ list, _) Ast.annotated) -> instrs b.desc)
-            catch_all
-    | Folded (h, operands) -> instrs operands @ instr h
-    | _ -> []
-  in
-  let body rank l =
-    match instrs l with [] -> [] | items -> [ P.Body { rank; items } ]
-  in
-  let rec fields_ l =
-    List.concat_map
-      (fun (f : (_ Src.modulefield, _) Ast.annotated) ->
-        match f.desc with
-        | Module_if_annotation { cond; then_fields; else_fields } ->
-            [
-              P.Cond
-                {
-                  key = f.info;
-                  cond;
-                  then_ = fields_ then_fields.desc;
-                  else_ =
-                    Option.map
-                      (fun (e : (_ list, _) Ast.annotated) -> fields_ e.desc)
-                      else_fields;
-                };
-            ]
-        | Func { instrs = l; _ } -> body 1 l
-        | Global { init; _ } -> body 0 init
-        | Data { mode = Active (_, off); _ } -> body 0 off
-        | Elem { init; mode; _ } ->
-            body 0
-              (List.concat init
-              @
-              match mode with
-              | Active (_, off) -> off
-              | Passive | Declare -> [])
-        | Table { init = Init_expr e; _ } -> body 0 e
-        | Table { init = Init_segment exprs; _ } -> body 0 (List.concat exprs)
-        | _ -> [])
-      l
-  in
-  fields_ fields
-
 let rec count_tables fields =
   List.fold_left
     (fun n (f : (_ Src.modulefield, _) Ast.annotated) ->
@@ -6044,7 +5964,9 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
         address_types = Hashtbl.create 8;
         multi_ref_results = Hashtbl.create 8;
         cond_env = Cond.create ();
-        plan = Wax_wasm.Cond_plan.make cond_diag (plan_shape fields);
+        plan =
+          Wax_wasm.Cond_plan.make cond_diag
+            (Wax_wasm.Cond_plan.text_shape fields);
         cond_diag;
         cond_asm = Cond.true_;
       }

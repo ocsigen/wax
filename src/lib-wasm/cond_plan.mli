@@ -42,6 +42,16 @@ type item =
 type t
 type run = int
 
+val text_shape :
+  (Ast.location Ast.Text.modulefield, Ast.location) Ast.annotated list ->
+  item list
+(** The shape of a Wasm-text module's conditionals: the [(@if …)] module fields
+    in order, each holding its nested ones, and every body (an initializer at
+    rank 0, a function body at rank 1) holding its instruction-level ones in
+    stream order. Empty exactly when the module has no conditional. The Wax
+    typer's shape of the Wax tree the Wasm→Wax conversion emits from this module
+    is the same, node for node, so the two sides agree on every decision. *)
+
 val make : ?exhaustive:bool -> Wax_utils.Diagnostic.context -> item list -> t
 (** Build the plan for a module whose conditionals have the given shape: the
     field-level conditionals in order, each holding its nested conditionals and
@@ -55,8 +65,11 @@ val make : ?exhaustive:bool -> Wax_utils.Diagnostic.context -> item list -> t
     reachable side of each conditional it meets — the absent side of an
     else-less one included — deduplicated by seed) and no branch is forced: the
     plan a path-sensitive check explores, each configuration's diagnostics
-    qualified by {!assumption}. An exhaustive plan stops after 4096 runs; see
-    {!truncated}. *)
+    qualified by {!assumption}. An exhaustive plan stops after {!max_runs} runs;
+    see {!truncated}. *)
+
+val max_runs : int
+(** The run cap of an exhaustive plan. *)
 
 val runs : t -> run list
 (** Every run, the primary first. *)

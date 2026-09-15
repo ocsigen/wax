@@ -6476,188 +6476,116 @@ let validate_configuration ?(warn_unused = true)
 (* Path-sensitive validation of conditional annotations.
 
    A module containing [(@if ...)] conditionals denotes one concrete module per
-   "configuration" (a choice of branch at every reachable conditional). We
-   explore every reachable configuration (via {!Cond_explore.check_all}),
-   specializing the module for each — splicing in the selected branches to obtain
-   a conditional-free module — validating it with {!validate_configuration}, and
-   reporting each distinct error once, annotated with the minimal assumption
-   under which it occurs. *)
+   "configuration" (a choice of branch at every reachable conditional). An
+   exhaustive {!Cond_plan} enumerates every reachable configuration as a run;
+   the module is projected onto each — splicing in the branches the run selects
+   to obtain a conditional-free module — validated with
+   {!validate_configuration}, and each distinct error is reported once
+   ({!Cond_explore.report}), annotated with the minimal assumption under which
+   it occurs. *)
 
 (*** Conditional compilation and entry point ***)
 
-(* Walk through every nested instruction (branch hints included) via the
-   canonical [Ast_utils.fold_instr], so a conditional buried inside a
-   branch-hinted branch is not missed. *)
-let instr_has_conditional (i : _ Ast.Text.instr) =
-  Ast_utils.fold_instr
-    (fun found (i : _ Ast.Text.instr) ->
-      found || match i.desc with If_annotation _ -> true | _ -> false)
-    false i
-
-let expr_has_conditional e = List.exists instr_has_conditional e
-
-(* Exhaustive over [modulefield]: every instruction list a field can carry is
-   inspected (including the offset expression of an active [data]/[elem]
-   segment), and a new field variant is a compile error rather than a silent
-   miss. Must stay in sync with [specialize] below, which walks the same lists. *)
-let field_has_conditional (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
-  match f.desc with
-  | Module_if_annotation _ -> true
-  | Func { instrs; _ } -> expr_has_conditional instrs
-  | Global { init; _ } -> expr_has_conditional init
-  | Table { init; _ } -> (
-      match init with
-      | Init_default -> false
-      | Init_expr e -> expr_has_conditional e
-      | Init_segment segs -> List.exists expr_has_conditional segs)
-  | Elem { init; mode; _ } -> (
-      List.exists expr_has_conditional init
-      ||
-      match mode with
-      | Active (_, offset) -> expr_has_conditional offset
-      | Passive | Declare -> false)
-  | Data { mode; _ } -> (
-      match mode with
-      | Active (_, offset) -> expr_has_conditional offset
-      | Passive -> false)
-  | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
-  | Export _ | Start _ | String_global _ | Feature_annotation _ ->
-      false
-
-(* Specialize a module for one configuration: resolve every conditional using
-   the assumption [asm], splicing in the selected branch. Undetermined
-   conditionals select [@then] and [enqueue] the [@else] configuration; each
-   selected branch literal is passed to [record] to build the configuration's
-   full assumption. *)
-let specialize env diagnostics ~enqueue ~record asm0 fields =
-  (* Resolve one conditional and return both the specialized branch and the
-     assumption that holds afterwards. Each branch is taken only if it is
-     reachable under [asm] (its conjunction with the branch condition is
-     satisfiable); an unreachable branch is pruned, so we never explore an
-     infeasible configuration. The surviving assumption is threaded into the
-     following siblings, so e.g. once [cond1] forces [$wasi], a sibling
-     [(@if (not $wasi) …)] has its [@then] pruned. *)
-  let choose asm cond ~location ~then_branch ~else_branch =
-    let c = Cond_solver.of_cond env diagnostics ~location cond in
-    let then_asm = Cond_solver.and_ asm c
-    and else_asm = Cond_solver.and_ asm (Cond_solver.not_ c) in
-    if not (Cond_solver.is_satisfiable then_asm) then (
-      record (Cond_solver.not_ c);
-      (else_branch else_asm, else_asm))
-    else if not (Cond_solver.is_satisfiable else_asm) then (
-      record c;
-      (then_branch then_asm, then_asm))
-    else (
-      enqueue else_asm;
-      record c;
-      (then_branch then_asm, then_asm))
-  in
-  let rec sfields asm fl =
-    match fl with
-    | [] -> []
-    | f :: rest ->
-        let fields, asm = sfield asm f in
-        fields @ sfields asm rest
-  and sfield asm (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
+(* Project a module onto one configuration: every conditional resolved to the
+   side [select] gives for its span ([true]: the then-branch), spliced in.
+   Exhaustive over [modulefield] and [instr_desc]: every instruction list a
+   field or instruction can carry is walked (including the offset expression
+   of an active [data]/[elem] segment), and a new variant is a compile error
+   rather than a silent miss — the same lists {!Cond_plan.text_shape} reads. *)
+let project select fields =
+  let rec sfields fl = List.concat_map sfield fl
+  and sfield (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
     match f.desc with
-    | Module_if_annotation { cond; then_fields; else_fields } ->
-        choose asm cond ~location:f.info
-          ~then_branch:(fun asm' -> sfields asm' then_fields.desc)
-          ~else_branch:(fun asm' ->
-            match else_fields with Some e -> sfields asm' e.desc | None -> [])
+    | Module_if_annotation { then_fields; else_fields; _ } ->
+        if select f.info then sfields then_fields.desc
+        else
+          Option.fold ~none:[]
+            ~some:(fun (e : (_ list, _) Ast.annotated) -> sfields e.desc)
+            else_fields
     | Func { id; typ; locals; instrs; exports; priority } ->
         let desc : _ Ast.Text.modulefield =
-          Func
-            { id; typ; locals; instrs = sinstrs asm instrs; exports; priority }
+          Func { id; typ; locals; instrs = sinstrs instrs; exports; priority }
         in
-        ([ { f with desc } ], asm)
+        [ { f with desc } ]
     | Global { id; typ; init; exports } ->
         let desc : _ Ast.Text.modulefield =
-          Global { id; typ; init = sinstrs asm init; exports }
+          Global { id; typ; init = sinstrs init; exports }
         in
-        ([ { f with desc } ], asm)
+        [ { f with desc } ]
     | Table { id; typ; init; exports } ->
         let init : _ Ast.Text.tableinit =
           match init with
           | Init_default -> Init_default
-          | Init_expr e -> Init_expr (sinstrs asm e)
-          | Init_segment segs -> Init_segment (List.map (sinstrs asm) segs)
+          | Init_expr e -> Init_expr (sinstrs e)
+          | Init_segment segs -> Init_segment (List.map sinstrs segs)
         in
         let desc : _ Ast.Text.modulefield = Table { id; typ; init; exports } in
-        ([ { f with desc } ], asm)
+        [ { f with desc } ]
     | Elem { id; typ; init; mode } ->
         let mode : _ Ast.Text.elemmode =
           match mode with
-          | Active (idx, e) -> Active (idx, sinstrs asm e)
+          | Active (idx, e) -> Active (idx, sinstrs e)
           | (Passive | Declare) as mode -> mode
         in
         let desc : _ Ast.Text.modulefield =
-          Elem { id; typ; init = List.map (sinstrs asm) init; mode }
+          Elem { id; typ; init = List.map sinstrs init; mode }
         in
-        ([ { f with desc } ], asm)
+        [ { f with desc } ]
     | Data { id; init; mode } ->
         let mode : _ Ast.Text.datamode =
           match mode with
-          | Active (idx, e) -> Active (idx, sinstrs asm e)
+          | Active (idx, e) -> Active (idx, sinstrs e)
           | Passive as mode -> mode
         in
-        ([ { f with desc = Data { id; init; mode } } ], asm)
+        [ { f with desc = Data { id; init; mode } } ]
     | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
     | Export _ | Start _ | String_global _ | Feature_annotation _ ->
-        ([ f ], asm)
-  and sinstrs asm l =
-    match l with
-    | [] -> []
-    | i :: rest ->
-        let instrs, asm = sinstr asm i in
-        instrs @ sinstrs asm rest
-  and sinstr asm (i : _ Ast.Text.instr) =
+        [ f ]
+  and sinstrs l = List.concat_map sinstr l
+  and sinstr (i : _ Ast.Text.instr) =
     match i.desc with
-    | If_annotation { cond; then_body; else_body } ->
-        choose asm cond ~location:i.info
-          ~then_branch:(fun asm' -> sinstrs asm' then_body.desc)
-          ~else_branch:(fun asm' ->
-            match else_body with Some e -> sinstrs asm' e.desc | None -> [])
-    | desc -> ([ { i with desc = sstructured asm desc } ], asm)
-  and sstructured asm (desc : _ Ast.Text.instr_desc) =
+    | If_annotation { then_body; else_body; _ } ->
+        if select i.info then sinstrs then_body.desc
+        else
+          Option.fold ~none:[]
+            ~some:(fun (e : (_ list, _) Ast.annotated) -> sinstrs e.desc)
+            else_body
+    | desc -> [ { i with desc = sstructured desc } ]
+  and sstructured (desc : _ Ast.Text.instr_desc) =
     match desc with
     | Block b ->
-        Block
-          { b with block = { b.block with desc = sinstrs asm b.block.desc } }
+        Block { b with block = { b.block with desc = sinstrs b.block.desc } }
     | Loop b ->
-        Loop { b with block = { b.block with desc = sinstrs asm b.block.desc } }
+        Loop { b with block = { b.block with desc = sinstrs b.block.desc } }
     | If b ->
         If
           {
             b with
-            if_block = { b.if_block with desc = sinstrs asm b.if_block.desc };
-            else_block =
-              { b.else_block with desc = sinstrs asm b.else_block.desc };
+            if_block = { b.if_block with desc = sinstrs b.if_block.desc };
+            else_block = { b.else_block with desc = sinstrs b.else_block.desc };
           }
     | TryTable b ->
-        TryTable
-          { b with block = { b.block with desc = sinstrs asm b.block.desc } }
+        TryTable { b with block = { b.block with desc = sinstrs b.block.desc } }
     | Try b ->
         Try
           {
             b with
-            block = { b.block with desc = sinstrs asm b.block.desc };
+            block = { b.block with desc = sinstrs b.block.desc };
             catches =
               List.map
                 (fun (idx, l) ->
-                  (idx, { l with Ast.desc = sinstrs asm l.Ast.desc }))
+                  (idx, { l with Ast.desc = sinstrs l.Ast.desc }))
                 b.catches;
             catch_all =
               Option.map
-                (fun b -> { b with Ast.desc = sinstrs asm b.Ast.desc })
+                (fun b -> { b with Ast.desc = sinstrs b.Ast.desc })
                 b.catch_all;
           }
-    | Folded (h, l) ->
-        Folded ({ h with desc = sstructured asm h.desc }, sinstrs asm l)
+    | Folded (h, l) -> Folded ({ h with desc = sstructured h.desc }, sinstrs l)
     (* Every instruction that carries no nested instruction is returned as-is.
        Enumerated rather than caught by a wildcard so a future instruction that
-       nests others is a compile error here instead of silently escaping
-       specialization. *)
+       nests others is a compile error here instead of silently escaping the
+       projection. *)
     | ( Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _
       | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
       | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
@@ -6684,7 +6612,7 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
       | If_annotation _ ) as desc ->
         desc
   in
-  sfields asm0 fields
+  sfields fields
 
 (* WebAssembly requires every import to precede all non-import definitions
    (functions, tables, memories, globals, tags). Report any import that follows
@@ -6751,20 +6679,27 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
   @@ fun () ->
   apply_declared_features diagnostics features fields;
   check_import_order diagnostics fields;
-  if not (List.exists field_has_conditional fields) then
-    validate_configuration ~warn_unused ~features diagnostics modul
-  else
-    (* Tag each explored configuration's recorded types with a distinct index,
-       so a config-varying span's alternatives stay separable from a single
-       configuration's multi-result tuple. *)
-    let config = ref (-1) in
-    Cond_explore.check_all diagnostics
-      ?truncation_location:
-        (match fields with f :: _ -> Some f.Ast.info | [] -> None)
-      ~specialize:(fun env asm ~enqueue ~record ->
-        (name, specialize env diagnostics ~enqueue ~record asm fields))
-      ~check:(fun diagnostics modul ->
-        incr config;
-        sink_config := !config;
-        validate_configuration ~warn_unused ~features diagnostics modul)
-      ()
+  match Cond_plan.text_shape fields with
+  | [] -> validate_configuration ~warn_unused ~features diagnostics modul
+  | shape ->
+      let plan = Cond_plan.make ~exhaustive:true diagnostics shape in
+      let configurations =
+        List.map
+          (fun run ->
+            (* Each configuration is validated in its own collector, derived
+               from the parent so it inherits its error-recovery mode. Its
+               recorded types are tagged with the run's index, so a
+               config-varying span's alternatives stay separable from a single
+               configuration's multi-result tuple. *)
+            let cctx = Wax_utils.Diagnostic.collector ~parent:diagnostics () in
+            sink_config := run;
+            validate_configuration ~warn_unused ~features cctx
+              (name, project (Cond_plan.select plan run) fields);
+            (Wax_utils.Diagnostic.collected cctx, Cond_plan.assumption plan run))
+          (Cond_plan.runs plan)
+      in
+      Cond_explore.report diagnostics
+        ?truncation_location:
+          (match fields with f :: _ -> Some f.Ast.info | [] -> None)
+        ~explain:(Cond_plan.explain plan) ~truncated:(Cond_plan.truncated plan)
+        configurations

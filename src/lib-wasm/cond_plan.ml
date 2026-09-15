@@ -219,3 +219,79 @@ let select_owned t (location : Ast.location) =
       failwith
         (Printf.sprintf "Cond_plan.select_owned: unplanned conditional at %d-%d"
            location.loc_start.pos_cnum location.loc_end.pos_cnum)
+
+(* The shape of a Wasm-text module's conditionals: the mirror, over the source
+   text, of the Wax typer's [Typing.plan_shape] over the Wax tree the Wasm→Wax
+   conversion emits — the same nodes at the same spans (each emitted node keeps
+   its source location), the field-level ones in order with their nested ones,
+   the bodies (initializers at rank 0, function bodies at rank 1) holding the
+   statement-level ones in stream order, a folded instruction's operands before
+   its head, as they unfold. Also what the WAT validator explores. *)
+let text_shape fields =
+  let rec instrs l = List.concat_map instr l
+  and instr (i : _ Ast.Text.instr) =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } ->
+        [
+          Cond
+            {
+              key = i.info;
+              cond;
+              then_ = instrs then_body.desc;
+              else_ =
+                Option.map
+                  (fun (b : (_ list, _) Ast.annotated) -> instrs b.desc)
+                  else_body;
+            };
+        ]
+    | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+        instrs block.desc
+    | If { if_block; else_block; _ } ->
+        instrs if_block.desc @ instrs else_block.desc
+    | Try { block; catches; catch_all; _ } ->
+        instrs block.desc
+        @ List.concat_map
+            (fun (_, (b : (_ list, _) Ast.annotated)) -> instrs b.desc)
+            catches
+        @ Option.fold ~none:[]
+            ~some:(fun (b : (_ list, _) Ast.annotated) -> instrs b.desc)
+            catch_all
+    | Folded (h, operands) -> instrs operands @ instr h
+    | _ -> []
+  in
+  let body rank l =
+    match instrs l with [] -> [] | items -> [ Body { rank; items } ]
+  in
+  let rec fields_ l =
+    List.concat_map
+      (fun (f : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+        match f.desc with
+        | Module_if_annotation { cond; then_fields; else_fields } ->
+            [
+              Cond
+                {
+                  key = f.info;
+                  cond;
+                  then_ = fields_ then_fields.desc;
+                  else_ =
+                    Option.map
+                      (fun (e : (_ list, _) Ast.annotated) -> fields_ e.desc)
+                      else_fields;
+                };
+            ]
+        | Func { instrs = l; _ } -> body 1 l
+        | Global { init; _ } -> body 0 init
+        | Data { mode = Active (_, off); _ } -> body 0 off
+        | Elem { init; mode; _ } ->
+            body 0
+              (List.concat init
+              @
+              match mode with
+              | Active (_, off) -> off
+              | Passive | Declare -> [])
+        | Table { init = Init_expr e; _ } -> body 0 e
+        | Table { init = Init_segment exprs; _ } -> body 0 (List.concat exprs)
+        | _ -> [])
+      l
+  in
+  fields_ fields
