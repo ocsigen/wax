@@ -137,8 +137,11 @@ grammar keep their own changelogs.
   nested calls no longer blows up exponentially.
 - Inputs that were wrongly accepted are now rejected: a `br_on_cast` flags byte
   outside `0..3`, overlong tag bytes, degenerate import groups, a non-finite or
-  over-long hint payload, and a `br` value that violates the block's result
-  type. An out-of-f32-range float literal takes type `f64`.
+  over-long hint payload, a `br` value that violates the block's result type,
+  and a table with a non-nullable element type written with an inline element
+  list, whose active segment fills the table at instantiation but leaves the
+  table itself without a default. An out-of-f32-range float literal takes type
+  `f64`.
 - Output fixes: an empty blocktype uses the `0x40` shorthand, funcidx element
   segments encode `(ref func)` rather than `funcref`, an empty name-section
   entry names nothing, and data strings are split at word boundaries.

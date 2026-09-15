@@ -5127,14 +5127,17 @@ let tables_and_memories ctx fields =
           | None -> Sequence.register_failed ctx.tables id
           | Some typ ->
               (match init with
-              | Init_default ->
+              (* An inline element list lowers to an ACTIVE element segment, which
+                 fills the table at instantiation. The table itself is still
+                 default-initialized, so the form constrains the element type
+                 exactly as no initializer at all does. *)
+              | Init_default | Init_segment _ ->
                   if not typ.reftype.nullable then
                     Error.non_nullable_table_type ctx.diagnostics
                       ~location:field.info (*ZZZ*)
               | Init_expr e ->
                   constant_expression ctx ~location:field.info
-                    ~expected_source:src (Ref typ.reftype) e
-              | Init_segment _ -> ());
+                    ~expected_source:src (Ref typ.reftype) e);
               Sequence.register ctx.tables id (typ, src);
               ctx.defined_tables <-
                 (idx, id, report_location id) :: ctx.defined_tables;
