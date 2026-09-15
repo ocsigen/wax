@@ -152,9 +152,25 @@ Link two modules with source maps and verify instruction boundaries match:
   > EOF
   $ wax map1.wat -o map1.wasm --source-map
   $ wax map2.wat -o map2.wasm --source-map
-  $ wax link -o map_linked.wasm --source-map-file map_linked.wasm.map m1:map1.wasm m2:map2.wasm
+  $ wax link -o map_linked.wasm --source-map m1:map1.wasm m2:map2.wasm
   $ ../../check-sourcemap/check_sourcemap.exe map_linked.wasm map_linked.wasm.map map1.wasm map2.wasm
   Instruction-boundary source map verification successful!
+
+`--source-map` writes the map beside the output and points a `sourceMappingURL`
+custom section at it, as it does for a converted binary:
+  $ wax map_linked.wasm -f wat --validate > /dev/null && echo VALID
+  VALID
+  $ strings map_linked.wasm | grep sourceMappingURL
+  sourceMappingURL
+
+Without it neither artifact is produced, and the inputs' own maps are left
+unread:
+  $ wax link -o plain_linked.wasm m1:map1.wasm m2:map2.wasm
+  $ test -e plain_linked.wasm.map && echo "map written" || echo "no map"
+  no map
+  $ strings plain_linked.wasm | grep -c sourceMappingURL
+  0
+  [1]
 
 Name-aware type coalescing (--distinct-named-types). Two modules define a
 structurally-identical struct under different type and field names:

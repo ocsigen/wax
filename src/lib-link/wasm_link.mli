@@ -24,6 +24,7 @@ type input = {
 val f :
   ?rename_export:(string -> string -> string option) ->
   ?distinct_named_types:bool ->
+  ?source_map:bool ->
   input list ->
   output_file:string ->
   Source_map.t
@@ -37,6 +38,12 @@ val f :
     unchanged). Being told the defining module's name lets the caller keep the
     exports of one input only, or rename otherwise-colliding exports of
     different inputs to distinct names so both survive.
+
+    [source_map] (default [false]) also writes the returned map to
+    [output_file ^ ".map"] and appends a [sourceMappingURL] custom section
+    naming it, the pair of artifacts [wax --source-map] produces for a binary
+    output. The map is returned either way, so a caller that places it itself
+    (under another name, or in memory) leaves this off.
 
     [distinct_named_types] (default [false]) makes type deduplication
     name-aware: two structurally-equal types are coalesced into one output type

@@ -831,13 +831,15 @@ let check format_opt strict color warnings features debug error_format defines
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 128
 
-let link output_file source_map_file distinct_named_types inputs =
+let link output_file source_map distinct_named_types inputs =
   let inputs =
     List.map
       (fun (module_name, file) ->
+        (* An input's map is only worth reading when we are asked for one:
+           without [--source-map] the merged mappings go nowhere. *)
         let opt_source_map =
           let map_file = file ^ ".map" in
-          if Sys.file_exists map_file then
+          if source_map && Sys.file_exists map_file then
             try Some (Wax_linker.Source_map.Standard.of_file map_file)
             with _ -> None
           else None
@@ -847,15 +849,14 @@ let link output_file source_map_file distinct_named_types inputs =
   in
   match
     try
-      Ok (Wax_linker.Wasm_link.f ~distinct_named_types inputs ~output_file)
+      Ok
+        (Wax_linker.Wasm_link.f ~distinct_named_types ~source_map inputs
+           ~output_file)
     with
     | Wax_utils.Diagnostic.Aborted -> exit 128
     | exn -> Error (Printexc.to_string exn)
   with
-  | Ok map ->
-      Option.iter
-        (fun map_file -> Wax_linker.Source_map.to_file map map_file)
-        source_map_file
+  | Ok (_ : Wax_linker.Source_map.t) -> ()
   | Error msg ->
       Printf.eprintf "Link error: %s\n" msg;
       exit 128
@@ -1037,13 +1038,6 @@ let source_map_option =
      sourceMappingURL custom section."
   in
   Arg.(value & flag & info [ "source-map" ] ~doc)
-
-let source_map_file_option =
-  let doc = "Generate a source map file." in
-  Arg.(
-    value
-    & opt (some file_conv) None
-    & info [ "source-map-file" ] ~docv:"FILE" ~doc)
 
 (* Define link inputs: list of NAME:FILE pairs *)
 let link_inputs =
@@ -1460,10 +1454,10 @@ let lsp_cmd =
 
 let link_term =
   let+ output = link_output_file
-  and+ source_map_file = source_map_file_option
+  and+ source_map = source_map_option
   and+ distinct_named_types = link_distinct_named_types
   and+ inputs = link_inputs in
-  link output source_map_file distinct_named_types inputs
+  link output source_map distinct_named_types inputs
 
 let link_cmd =
   let doc = "Link WebAssembly binary modules together" in

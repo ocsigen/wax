@@ -1583,7 +1583,7 @@ type input = {
 }
 
 let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
-    files ~output_file =
+    ?source_map:(emit_source_map = false) files ~output_file =
   Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
     ~palette:Wax_utils.Colors.wat_theme ~source:None (fun d ->
       let files =
@@ -2303,8 +2303,19 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
 
       add_section out_ch ~id:0 name_section_buffer;
 
+      (* [sourceMappingURL] names the map as a sibling of the output, so the
+         section carries the basename rather than the path we were given. Same
+         pair of artifacts as [Wasm_output.module_] writes for [wax
+         --source-map]. *)
+      if emit_source_map then (
+        Write.name buf "sourceMappingURL";
+        Write.name buf (Filename.basename output_file ^ ".map");
+        add_section out_ch ~id:0 buf);
+
       close_out out_ch;
       succeeded := true;
+      if emit_source_map then
+        Source_map.to_file source_map (output_file ^ ".map");
 
       source_map)
 
