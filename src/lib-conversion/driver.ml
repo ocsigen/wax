@@ -33,6 +33,32 @@ let wat_parse_recover ~filename text =
     ~insert:Wax_wasm.Recover.insert ~closers:Wax_wasm.Recover.closers
     ~barrier:Wax_wasm.Recover.barrier text
 
+(* Lower a text module to the binary format. A leftover conditional annotation
+   cannot be represented in binary, and a named reference may resolve to
+   nothing; report either as a located diagnostic (rather than an uncaught
+   exception) and suggest a way out. *)
+let to_binary ~color ~source ast =
+  Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme ~source
+    (fun d ->
+      try Wax_wasm.Text_to_binary.module_ ast with
+      | Wax_wasm.Text_to_binary.Conditional_in_binary location ->
+          Wax_utils.Diagnostic.report d ~location ~severity:Error
+            ~message:
+              (Wax_utils.Message.text
+                 "Conditional annotations cannot be emitted to the WebAssembly \
+                  binary format.")
+            ~hint:
+              (Wax_utils.Message.text
+                 "Resolve the conditionals with -D/--define, or convert to a \
+                  text format (wat or wax).")
+            ();
+          Wax_utils.Diagnostic.abort ()
+      | Wax_wasm.Text_to_binary.Unresolved_reference (location, message) ->
+          Wax_utils.Diagnostic.report d ~location ~severity:Error
+            ~message:(Wax_utils.Message.text message)
+            ();
+          Wax_utils.Diagnostic.abort ())
+
 let wat_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(name_functions = false)
     ?(validate = false) ?(warn_unused = validate) ~filename text =
@@ -54,7 +80,7 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
-  Wax_wasm.Text_to_binary.module_ ast
+  to_binary ~color ~source:(Some text) ast
 
 let wax_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(validate = false)
@@ -81,7 +107,7 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
         (* Unused locals are reported against the Wax source by [Typing.f]
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
-  Wax_wasm.Text_to_binary.module_ wasm_ast
+  to_binary ~color ~source:(Some text) wasm_ast
 
 let output_binary ~out_channel ?(source_map = false) ast =
   Wax_wasm.Wasm_output.module_ ~out_channel ~source_map ast

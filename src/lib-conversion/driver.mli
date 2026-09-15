@@ -36,6 +36,20 @@ val wat_parse_recover :
     nesting-aware skip and auto-closing with [")"] salvage the constructs that
     parsed rather than dropping a whole field on the first error. *)
 
+val to_binary :
+  color:Wax_utils.Colors.flag ->
+  source:string option ->
+  Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_ ->
+  binary_module
+(** [to_binary ~color ~source ast] lowers the WebAssembly text module [ast] to
+    the binary format, reporting the two failures of
+    {!Wax_wasm.Text_to_binary.module_} as located diagnostics against [source]
+    rather than letting the exception escape: a conditional annotation that
+    survived specialization (which has no binary form) and a named index or
+    label reference that resolves to nothing. Both abort the diagnostic context,
+    so the process exits on error as it does for a parse or validation failure.
+*)
+
 val wat_to_binary :
   ?color:Wax_utils.Colors.flag ->
   ?defines:Wax_wasm.Cond_specialize.bindings ->
@@ -53,10 +67,9 @@ val wat_to_binary :
     {!Wax_wasm.Naming.name_functions_from_exports}) so it appears in the binary
     "name" section. A function reached by [ref.func] only from a function body
     is added to a declarative element segment (see {!Wax_wasm.Declare_refs}), so
-    the binary passes strict reference validation. Raises
-    {!Wax_wasm.Text_to_binary.Conditional_in_binary} if a conditional annotation
-    survived specialization, or {!Wax_wasm.Text_to_binary.Unresolved_reference}
-    if a named index or label reference resolves to nothing.
+    the binary passes strict reference validation. A conditional annotation that
+    survived specialization, or a named index or label reference that resolves
+    to nothing, is reported as a located diagnostic (see {!to_binary}).
 
     [warn_unused] (default: [validate]) is passed on to
     {!Wax_wasm.Validation.f}, which warns about an unused local, field or

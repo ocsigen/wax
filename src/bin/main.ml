@@ -82,31 +82,6 @@ let specialize_wat ?ctx ~color ~text defines ast =
     Option.iter (fun ctx -> Wax_utils.Trivia.drop_in_ranges ctx dropped) ctx;
     ast
 
-(* Lower a text module to the binary format. A leftover conditional annotation
-   cannot be represented in binary; report it as a located diagnostic (rather
-   than an uncaught exception) and suggest resolving it. *)
-let to_binary ~color ~source ast =
-  Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme ~source
-    (fun d ->
-      try Wax_wasm.Text_to_binary.module_ ast with
-      | Wax_wasm.Text_to_binary.Conditional_in_binary location ->
-          Wax_utils.Diagnostic.report d ~location ~severity:Error
-            ~message:
-              (Wax_utils.Message.text
-                 "Conditional annotations cannot be emitted to the WebAssembly \
-                  binary format.")
-            ~hint:
-              (Wax_utils.Message.text
-                 "Resolve the conditionals with -D/--define, or convert to a \
-                  text format (wat or wax).")
-            ();
-          Wax_utils.Diagnostic.abort ()
-      | Wax_wasm.Text_to_binary.Unresolved_reference (location, message) ->
-          Wax_utils.Diagnostic.report d ~location ~severity:Error
-            ~message:(Wax_utils.Message.text message)
-            ();
-          Wax_utils.Diagnostic.abort ())
-
 (* Expand the [@string]/[@char] annotations of a text module into core wasm
    ([array.new_fixed] / [i32.const]). A leftover conditional annotation has no
    core-wasm form; report it as a located diagnostic (rather than an uncaught
@@ -341,7 +316,9 @@ let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
         (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast_text);
-  let wasm_ast_binary = to_binary ~color ~source:(Some text) wasm_ast_text in
+  let wasm_ast_binary =
+    Wax_conversion.Driver.to_binary ~color ~source:(Some text) wasm_ast_text
+  in
   Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
     ~features wasm_ast_binary
 
@@ -364,7 +341,9 @@ let wat_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->
         Wax_wasm.Validation.f ~warn_unused ~features d ast);
-  let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
+  let wasm_ast_binary =
+    Wax_conversion.Driver.to_binary ~color ~source:(Some text) ast
+  in
   Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
     ~features wasm_ast_binary
 
