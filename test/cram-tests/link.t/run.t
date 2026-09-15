@@ -115,7 +115,6 @@ Link two modules with branch hints and verify hints are merged and preserved at 
   $ wax hints_linked.wasm -f wat
   (type (func (param i32) (result i32)))
   (type (func (param i32)))
-  (type (func))
   (func (param i32) (result i32)
     local.get 0
     (@metadata.code.branch_hint "\01")
@@ -126,7 +125,7 @@ Link two modules with branch hints and verify hints are merged and preserved at 
     end
   )
   (func (param i32)
-    block (type 2)
+    block
       local.get 0
       (@metadata.code.branch_hint "\00") br_if 0
     end

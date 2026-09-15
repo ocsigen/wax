@@ -74,7 +74,9 @@ name the merged module's functions: `$local` is still `app`'s own, while
   (table $t 2 2 funcref)
   (export "go" (func 1))
   (export "helper" (func $b))
-  (elem (table $t) (offset i32.const 0) func $b $local)
+  (elem (table $t) (offset i32.const 0) funcref
+    (item ref.func $b) (item ref.func $local)
+  )
 
 An offset moves when the bytes before it grow. `big` has enough functions that the
 index of its export needs a second LEB byte in the merged module, where `caller`

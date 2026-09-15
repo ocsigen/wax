@@ -63,12 +63,11 @@ index; the empty labelled blocks are there only to carry a label name:
   (type $Pair (struct (field $fst i32) (field $snd i32)))
   (type (func (param i32) (result i32)))
   (type (func (result i32)))
-  (type (func))
   (type (func (param i32)))
   (type $Vec (struct (field $len i32)))
   (func $helper (param $x i32) (result i32)
     (local $acc i32)
-    block $chk (type 3)
+    block $chk
     end
     local.get $x
     local.set $acc
@@ -82,7 +81,7 @@ index; the empty labelled blocks are there only to carry a label name:
   )
   (func $compute (param $in i32) (result i32)
     (local $doubled i32)
-    block $step (type 3)
+    block $step
     end
     local.get $in
     local.get $in
@@ -106,7 +105,7 @@ index; the empty labelled blocks are there only to carry a label name:
   (export "helper" (func $helper))
   (export "run" (func $exported))
   (export "main" (func $main))
-  (tag $err (type 4))
+  (tag $err (type 3))
 
   $ wax -v -f wasm -o /dev/null linked.wasm && echo OK
   OK
