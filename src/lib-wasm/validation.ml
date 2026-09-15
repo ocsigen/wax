@@ -963,6 +963,15 @@ module Error = struct
     warn_lint context ~location ~related Warning.Dead_code
       (text "This code is unreachable.")
 
+  (* A conditional-annotation branch no configuration selects (the mirror of
+     the Wax typer's [dead_branch]). *)
+  let dead_branch context ~location ~side =
+    warn_lint context ~location Warning.Dead_code
+      (text
+         (if side then "The @then branch of this conditional is unreachable:"
+          else "The @else branch of this conditional is unreachable:")
+      ++ text "no configuration selects it.")
+
   let redundant_operation context ~location message =
     warn_lint context ~location Warning.Redundant_operation message
 
@@ -6683,6 +6692,11 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
   | [] -> validate_configuration ~warn_unused ~features diagnostics modul
   | shape ->
       let plan = Cond_plan.make ~exhaustive:true diagnostics shape in
+      if warn_unused then
+        List.iter
+          (fun (location, side) ->
+            Error.dead_branch diagnostics ~location ~side)
+          (Cond_plan.dead_branches plan);
       let configurations =
         List.map
           (fun run ->

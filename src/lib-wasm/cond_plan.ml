@@ -35,6 +35,7 @@ type t = {
   env : Cond_solver.env;
   n_runs : int;
   truncated : bool;
+  items : item list;
 }
 
 let max_runs = 4096
@@ -192,6 +193,7 @@ let make ?(exhaustive = false) diagnostics items =
     env;
     n_runs = !n_runs;
     truncated = !truncated;
+    items;
   }
 
 let runs t = List.init t.n_runs Fun.id
@@ -295,3 +297,26 @@ let text_shape fields =
       l
   in
   fields_ fields
+
+(* Every branch of the shape with its key and the conditional's span, outermost
+   first. *)
+let rec located_branches items =
+  List.concat_map
+    (function
+      | Cond { key; then_; else_; _ } ->
+          ((key, true) :: located_branches then_)
+          @ Option.fold ~none:[]
+              ~some:(fun e -> (key, false) :: located_branches e)
+              else_
+      | Body { items; _ } -> located_branches items)
+    items
+
+let dead_branches t =
+  List.filter
+    (fun (location, side) ->
+      let k = key_of location in
+      (not (Hashtbl.mem t.owners (k, side)))
+      (* Only the outermost dead branch of a nest: a conditional inside a dead
+         branch is never decided, so it has no owning run of its own. *)
+      && Hashtbl.mem t.node_owner k)
+    (located_branches t.items)

@@ -87,6 +87,13 @@ val explain : t -> ?style:[ `Wat | `Wax ] -> Cond_solver.t -> string option
 
 val primary : t -> run
 
+val dead_branches : t -> (Ast.location * bool) list
+(** The branches no run of an exhaustive plan selects — the conditional's span
+    and the side ([true]: then) — i.e. the branches no consistent world reaches:
+    the condition cannot hold together with the enclosing ones, or at all. Only
+    the outermost of a dead nest is listed. Meaningful for an exhaustive plan; a
+    covering plan forces such branches instead. *)
+
 val select : t -> run -> Ast.location -> bool
 (** The branch [run] selects at the conditional with that span: [true] for the
     then-branch. Raises if the run never reaches that conditional. *)

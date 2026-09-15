@@ -203,6 +203,15 @@ module Error = struct
       ~related
       (text "This code is unreachable.")
 
+  (* A conditional-annotation branch no configuration selects: its condition
+     cannot hold together with the enclosing conditionals' (or at all). *)
+  let dead_branch context ~location ~side =
+    warn ~warning:Wax_utils.Warning.Dead_code ~universal:true context ~location
+      (text
+         (if side then "The then-branch of this conditional is unreachable:"
+          else "The else-branch of this conditional is unreachable:")
+      ++ text "no configuration selects it.")
+
   let short_stack context kind ~location ~actual ~expected =
     (* Like [unbound_name], suppress this in error-recovery mode: a stack
        underflow while type-checking a best-effort AST is usually a cascade from
@@ -13029,6 +13038,12 @@ let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
     diagnostics (fields : location module_) shape =
   let module P = Wax_wasm.Cond_plan in
   let plan = P.make ~exhaustive:true diagnostics shape in
+  (* A branch no configuration reaches is a property of the module, not of a
+     configuration, so it is reported directly (mirrored in the validator). *)
+  if warn_unused then
+    List.iter
+      (fun (location, side) -> Error.dead_branch diagnostics ~location ~side)
+      (P.dead_branches plan);
   let configurations =
     List.map
       (fun run ->

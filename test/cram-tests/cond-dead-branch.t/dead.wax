@@ -1,0 +1,25 @@
+#[if(debug)]
+{
+    fn f() -> i32 {
+        #[if(not(debug))]
+        {
+            1
+        }
+        #[else]
+        {
+            2
+        }
+    }
+    #[if(all(debug, wasi))]
+    {
+        fn g() {}
+    }
+    #[else]
+    {
+        fn h() {}
+    }
+}
+#[if(all(fast, not(fast)))]
+{
+    fn never() {}
+}

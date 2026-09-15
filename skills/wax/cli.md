@@ -196,7 +196,9 @@ server](#language-server)).
           themselves effect-free. Shown by default.
         - `dead-code` (group `correctness`): a statement that can never be
           reached, following an unconditional branch, `return`, or
-          `unreachable`. Shown by default.
+          `unreachable`; also a `#[if]` (`(@if)`) branch that no configuration
+          selects, its condition contradicting the enclosing conditionals' or
+          itself. Shown by default.
         - `cast-always-fails` (group `correctness`): a reference cast or test
           whose operand can never have the target type (the two are unrelated in
           the type hierarchy), so the cast always traps and the test is always
