@@ -45,8 +45,8 @@ type list = { value: i32, next: &?list };
 fn sum(l: &?list) -> i32 {
     let total: i32 = 0;
     while l is &list {
-        total += l!.value;
-        l = l!.next;
+        total += l.value;
+        l = l.next;
     }
     total;
 }
@@ -66,9 +66,8 @@ fn sum(l: &?list) -> i32 {
       (then
         (local.set $total
           (i32.add (local.get $total)
-            (struct.get $list $value (ref.as_non_null (local.get $l)))))
-        (local.set $l
-          (struct.get $list $next (ref.as_non_null (local.get $l))))
+            (struct.get $list $value (local.get $l))))
+        (local.set $l (struct.get $list $next (local.get $l)))
         (br $loop))))
   (local.get $total)
 )

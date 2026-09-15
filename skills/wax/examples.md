@@ -502,8 +502,7 @@ fn sum_list(head: &?list) -> i32 {
     if !head {
         return 0;
     }
-    let n = head!;
-    n.value + sum_list(n.next);
+    head.value + sum_list(head.next);
 }
 ```
 
@@ -929,10 +928,10 @@ fn worker() -> i32 {
 // Run the worker until its first suspend and return the value it yielded.
 #[export = "first_yield"]
 fn first_yield() -> i32 {
-    let c: &?k = k::new(worker);
+    let c = k::new(worker);
     let (v, rest) =
         'on_yield: do () -> (i32, &kr) {
-            _ = c!.resume() on [yield -> 'on_yield];  // worker returned; drop its result
+            _ = c.resume() on [yield -> 'on_yield];  // worker returned; drop its result
             return -1;
         };
     _ = rest;            // `rest` could be resumed with a reply to continue the worker
