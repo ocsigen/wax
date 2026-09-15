@@ -54,7 +54,8 @@
     ; The `wax lsp` language server (src/lib-lsp): protocol types and framing.
     ; 1.17 has the 3.17 `positionEncoding` capability the server advertises;
     ; 1.26 is the floor that has `Lsp.Uri.of_string` (used for diagnostics URIs).
-    (lsp (>= 1.26.0))
+    ; 1.28 breaks the API, so cap below it until the server is ported.
+    (lsp (and (>= 1.26.0) (< 1.28.0)))
     (jsonrpc (>= 1.26.0))
     ; Embeds the version reported by `wax --version` (git tag at build time).
     (dune-build-info (>= 3.0.0))
