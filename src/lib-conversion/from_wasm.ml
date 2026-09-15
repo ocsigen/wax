@@ -5912,180 +5912,225 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
     diagnostics (module_name, fields) =
   Wax_utils.Debug.timed "convert" @@ fun () ->
   try
-    let forbid_numeric = module_has_conditional fields in
-    (* Loads/stores reference the memory implicitly by index 0. When the module
+    let convert plan =
+      let forbid_numeric = module_has_conditional fields in
+      (* Loads/stores reference the memory implicitly by index 0. When the module
      has a single memory that numeric reference is unambiguous (even if the
      memory itself sits in a conditional branch), so numeric memory references
      are allowed; with several memories, indices may shift across branches like
      any other field, so the general constraint stands. *)
-    let forbid_numeric_memory = forbid_numeric && count_memories fields > 1 in
-    let forbid_numeric_table = forbid_numeric && count_tables fields > 1 in
-    let ctx =
-      let common_namespace = Namespace.make () in
-      let cond_diag = Wax_utils.Diagnostic.collector () in
-      {
-        diagnostics;
-        types =
-          Sequence.make ~forbid_numeric ~diagnostics
-            (Namespace.make ~kind:`Type ())
-            "t";
-        struct_fields = Hashtbl.create 16;
-        globals =
-          Sequence.make ~forbid_numeric ~diagnostics common_namespace "g";
-        functions =
-          Sequence.make ~forbid_numeric ~diagnostics common_namespace "f";
-        memories =
-          Sequence.make ~forbid_numeric:forbid_numeric_memory
-            ~is_conditional:forbid_numeric ~diagnostics common_namespace "m";
-        tables =
-          Sequence.make ~forbid_numeric:forbid_numeric_table
-            ~is_conditional:forbid_numeric ~diagnostics common_namespace "t";
-        tags =
-          Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "t";
-        datas = Sequence.make ~forbid_numeric ~diagnostics common_namespace "d";
-        elems = Sequence.make ~forbid_numeric ~diagnostics common_namespace "e";
-        referenced_elems = Hashtbl.create 16;
-        type_defs = CondTbl.make ();
-        implicit_types = Hashtbl.create 16;
-        named_implicit = [];
-        function_types = CondTbl.make ();
-        tag_types = CondTbl.make ();
-        exports = Hashtbl.create 16;
-        starts = Hashtbl.create 16;
-        locals = Sequence.make ~diagnostics common_namespace "x";
-        local_valtypes = Hashtbl.create 16;
-        global_valtypes = Hashtbl.create 16;
-        labels = LabelStack.make ();
-        label_arities = [];
-        block_params = [||];
-        return_arity = 0;
-        strict_constants;
-        faithful;
-        address_types = Hashtbl.create 8;
-        multi_ref_results = Hashtbl.create 8;
-        cond_env = Cond.create ();
-        plan =
-          Wax_wasm.Cond_plan.make cond_diag
-            (Wax_wasm.Cond_plan.text_shape fields);
-        cond_diag;
-        cond_asm = Cond.true_;
-      }
-    in
-    let export_tbl, export_lst, start_lst =
-      collect_exports ctx.cond_env ctx.cond_diag fields
-    in
-    register_names ctx export_tbl fields;
-    if not forbid_numeric then elaborate_implicit_types ctx fields;
-    (* Resolve each [(start …)] to its function's Wax name, keeping the branch
+      let forbid_numeric_memory = forbid_numeric && count_memories fields > 1 in
+      let forbid_numeric_table = forbid_numeric && count_tables fields > 1 in
+      let ctx =
+        let common_namespace = Namespace.make () in
+        let cond_diag = Wax_utils.Diagnostic.collector () in
+        {
+          diagnostics;
+          types =
+            Sequence.make ~forbid_numeric ~diagnostics
+              (Namespace.make ~kind:`Type ())
+              "t";
+          struct_fields = Hashtbl.create 16;
+          globals =
+            Sequence.make ~forbid_numeric ~diagnostics common_namespace "g";
+          functions =
+            Sequence.make ~forbid_numeric ~diagnostics common_namespace "f";
+          memories =
+            Sequence.make ~forbid_numeric:forbid_numeric_memory
+              ~is_conditional:forbid_numeric ~diagnostics common_namespace "m";
+          tables =
+            Sequence.make ~forbid_numeric:forbid_numeric_table
+              ~is_conditional:forbid_numeric ~diagnostics common_namespace "t";
+          tags =
+            Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "t";
+          datas =
+            Sequence.make ~forbid_numeric ~diagnostics common_namespace "d";
+          elems =
+            Sequence.make ~forbid_numeric ~diagnostics common_namespace "e";
+          referenced_elems = Hashtbl.create 16;
+          type_defs = CondTbl.make ();
+          implicit_types = Hashtbl.create 16;
+          named_implicit = [];
+          function_types = CondTbl.make ();
+          tag_types = CondTbl.make ();
+          exports = Hashtbl.create 16;
+          starts = Hashtbl.create 16;
+          locals = Sequence.make ~diagnostics common_namespace "x";
+          local_valtypes = Hashtbl.create 16;
+          global_valtypes = Hashtbl.create 16;
+          labels = LabelStack.make ();
+          label_arities = [];
+          block_params = [||];
+          return_arity = 0;
+          strict_constants;
+          faithful;
+          address_types = Hashtbl.create 8;
+          multi_ref_results = Hashtbl.create 8;
+          cond_env = Cond.create ();
+          plan;
+          cond_diag;
+          cond_asm = Cond.true_;
+        }
+      in
+      let export_tbl, export_lst, start_lst =
+        collect_exports ctx.cond_env ctx.cond_diag fields
+      in
+      register_names ctx export_tbl fields;
+      if not forbid_numeric then elaborate_implicit_types ctx fields;
+      (* Resolve each [(start …)] to its function's Wax name, keeping the branch
        condition it appeared under; rendered as a [#[start]] attribute on that
        function (guarded when the start is narrower than the function). *)
-    List.iter
-      (fun (index, asm, syn) ->
-        let name = (idx ctx `Func index).Ast.desc in
-        Hashtbl.replace ctx.starts name
-          ((asm, syn)
-          :: Option.value ~default:[] (Hashtbl.find_opt ctx.starts name)))
-      start_lst;
-    List.iter
-      (fun (kind, index, name, asm, syn) ->
-        let k =
-          ( kind,
-            (idx ctx
-               (match (kind : Src.exportable) with
-               | Func -> `Func
-               | Memory -> `Mem
-               | Table -> `Table
-               | Tag -> `Tag
-               | Global -> `Global)
-               index)
-              .desc )
-        in
-        let l =
-          (asm, syn, name)
-          ::
-          (match Hashtbl.find_opt ctx.exports k with
-          | None -> []
-          | Some l -> l)
-        in
-        Hashtbl.replace ctx.exports k l)
-      export_lst;
-    (* Record which element segments are referenced by table.init / elem.drop /
+      List.iter
+        (fun (index, asm, syn) ->
+          let name = (idx ctx `Func index).Ast.desc in
+          Hashtbl.replace ctx.starts name
+            ((asm, syn)
+            :: Option.value ~default:[] (Hashtbl.find_opt ctx.starts name)))
+        start_lst;
+      List.iter
+        (fun (kind, index, name, asm, syn) ->
+          let k =
+            ( kind,
+              (idx ctx
+                 (match (kind : Src.exportable) with
+                 | Func -> `Func
+                 | Memory -> `Mem
+                 | Table -> `Table
+                 | Tag -> `Tag
+                 | Global -> `Global)
+                 index)
+                .desc )
+          in
+          let l =
+            (asm, syn, name)
+            ::
+            (match Hashtbl.find_opt ctx.exports k with
+            | None -> []
+            | Some l -> l)
+          in
+          Hashtbl.replace ctx.exports k l)
+        export_lst;
+      (* Record which element segments are referenced by table.init / elem.drop /
      array.*_elem (recursing into conditional branches), so a declarative
      segment used this way is declared rather than dropped. *)
-    let rec collect_field (f : (_ Src.modulefield, _) Ast.annotated) =
-      match f.Ast.desc with
-      | Func { instrs; _ } ->
-          collect_elem_refs_instrs ctx ctx.referenced_elems instrs
-      | Module_if_annotation { then_fields; else_fields; _ } ->
-          List.iter collect_field then_fields.desc;
-          Option.iter
-            (fun e -> List.iter collect_field e.Wax_utils.Ast.desc)
-            else_fields
-      | _ -> ()
-    in
-    List.iter collect_field fields;
-    let converted =
-      List.concat_map (fun f -> modulefield ctx export_tbl f) fields
-    in
-    (* Prepend the type declarations synthesised for implicit types named by a
+      let rec collect_field (f : (_ Src.modulefield, _) Ast.annotated) =
+        match f.Ast.desc with
+        | Func { instrs; _ } ->
+            collect_elem_refs_instrs ctx ctx.referenced_elems instrs
+        | Module_if_annotation { then_fields; else_fields; _ } ->
+            List.iter collect_field then_fields.desc;
+            Option.iter
+              (fun e -> List.iter collect_field e.Wax_utils.Ast.desc)
+              else_fields
+        | _ -> ()
+      in
+      List.iter collect_field fields;
+      let converted =
+        List.concat_map (fun f -> modulefield ctx export_tbl f) fields
+      in
+      (* Prepend the type declarations synthesised for implicit types named by a
        ref-type reference (computed after conversion, which is what names them). *)
-    let converted = extra_type_decls ctx @ converted in
-    let recovered =
-      Recover_match.module_ ~faithful
-        (Sink_let.module_
-           (Recover_loops.module_
-              (Recover_trycatch.module_ (Recover_dispatch.module_ converted))))
-    in
-    (* A named module becomes a leading [#![module = "name"]] inner attribute. *)
-    let name_annotation =
-      match module_name with
-      | Some nm ->
-          [
-            Ast.no_loc
-              (Ast.Module_annotation
-                 [
-                   synth_attr ~location:nm.Wax_utils.Ast.info "module"
-                     (Some (string_of_name nm))
-                     None;
-                 ]);
-          ]
-      | None -> []
-    in
-    (* Stamp a [#![feature = "…"]] inner attribute for each gated feature the
+      let converted = extra_type_decls ctx @ converted in
+      let recovered =
+        Recover_match.module_ ~faithful
+          (Sink_let.module_
+             (Recover_loops.module_
+                (Recover_trycatch.module_ (Recover_dispatch.module_ converted))))
+      in
+      (* A named module becomes a leading [#![module = "name"]] inner attribute. *)
+      let name_annotation =
+        match module_name with
+        | Some nm ->
+            [
+              Ast.no_loc
+                (Ast.Module_annotation
+                   [
+                     synth_attr ~location:nm.Wax_utils.Ast.info "module"
+                       (Some (string_of_name nm))
+                       None;
+                   ]);
+            ]
+        | None -> []
+      in
+      (* Stamp a [#![feature = "…"]] inner attribute for each gated feature the
        module was seen to exercise ([Feature.used], recorded by the binary
        decoder and by validation), so the output recompiles standalone. A
        feature the module already declares with a [(@feature "…")] annotation
        was converted above; do not stamp it twice. *)
-    let feature_annotations =
-      match features with
-      | None -> []
-      | Some features ->
-          let declared =
+      let feature_annotations =
+        match features with
+        | None -> []
+        | Some features ->
+            let declared =
+              List.filter_map
+                (fun (f : (_ Src.modulefield, _) Ast.annotated) ->
+                  match f.desc with
+                  | Feature_annotation nm -> Wax_utils.Feature.of_name nm.desc
+                  | _ -> None)
+                fields
+            in
             List.filter_map
-              (fun (f : (_ Src.modulefield, _) Ast.annotated) ->
-                match f.desc with
-                | Feature_annotation nm -> Wax_utils.Feature.of_name nm.desc
-                | _ -> None)
-              fields
-          in
-          List.filter_map
-            (fun feature ->
-              if List.mem feature declared then None
-              else
-                Some
-                  (Ast.no_loc
-                     (Ast.Module_annotation
-                        [
-                          synth_attr ~location:Wax_utils.Ast.dummy_loc "feature"
-                            (Some
-                               (Ast.no_loc_instr
-                                  (Ast.String
-                                     (None, Wax_utils.Feature.name feature))))
-                            None;
-                        ])))
-            (Wax_utils.Feature.used features)
+              (fun feature ->
+                if List.mem feature declared then None
+                else
+                  Some
+                    (Ast.no_loc
+                       (Ast.Module_annotation
+                          [
+                            synth_attr ~location:Wax_utils.Ast.dummy_loc
+                              "feature"
+                              (Some
+                                 (Ast.no_loc_instr
+                                    (Ast.String
+                                       (None, Wax_utils.Feature.name feature))))
+                              None;
+                          ])))
+              (Wax_utils.Feature.used features)
+      in
+      name_annotation @ feature_annotations @ group_imports recovered
     in
-    name_annotation @ feature_annotations @ group_imports recovered
+    (* The typer builds the plan for the emitted module from its own shape of
+       it, and so does every later re-parse of the printed Wax; the stack model
+       in [convert] read the plan built from the SOURCE's shape. The two differ
+       when the emission reshapes the field level (an [@else] emptied by pulling
+       out its standalone exports is dropped, a conditional left empty in both
+       branches too, imports are regrouped ahead of the definitions), and a
+       plan is a set of decisions reached in stream order, so a reshaped field
+       level can shift a body's decisions. Compare the decision at every emitted
+       conditional; on a disagreement convert again with the emitted shape's
+       plan — the emitted structure does not depend on the plan, so the second
+       conversion's own plan is that plan and the two agree. *)
+    let plan_of shape =
+      Wax_wasm.Cond_plan.make (Wax_utils.Diagnostic.collector ()) shape
+    in
+    let decisions_agree p q (m : _ Ast.module_) =
+      let agree = ref true in
+      Wax_lang.Ast_utils.iter_module_instr
+        (fun (i : _ Ast.instr) ->
+          match i.desc with
+          | If_annotation _ ->
+              if
+                Wax_wasm.Cond_plan.select_owned p i.info
+                <> Wax_wasm.Cond_plan.select_owned q i.info
+              then agree := false
+          | _ -> ())
+        m;
+      !agree
+    in
+    let source_shape = Wax_wasm.Cond_plan.text_shape fields in
+    let source_plan = plan_of source_shape in
+    let result = convert source_plan in
+    if source_shape = [] then result
+    else
+      let emitted_plan =
+        plan_of (Wax_lang.Typing.plan_shape ~guards:false result)
+      in
+      if decisions_agree source_plan emitted_plan result then result
+      else
+        let result = convert emitted_plan in
+        let plan = plan_of (Wax_lang.Typing.plan_shape ~guards:false result) in
+        if decisions_agree emitted_plan plan result then result
+        else failwith "From_wasm: the conditional plan did not converge"
   with
   | Numeric_ref_in_conditional location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error

@@ -145,6 +145,16 @@ val erase_types :
 (** [erase_types modul] removes type annotations from the module, returning it
     to its original location-only annotation state. *)
 
+val plan_shape :
+  guards:bool -> Ast.location Ast.module_ -> Wax_wasm.Cond_plan.item list
+(** The shape of a module's conditionals for {!Wax_wasm.Cond_plan}: the
+    field-level conditionals in order, each holding its nested ones, and the
+    bodies (initializers at rank 0, function bodies at rank 1) holding the
+    statement-level ones. With [guards], a per-attribute [if] guard is a
+    conditional with two empty branches — the checking plan's shape; without,
+    the build plan's, which {!Wax_wasm.Cond_plan.text_shape} mirrors over the
+    Wasm text a Wasm→Wax conversion started from. *)
+
 val get_type_definition :
   Wax_utils.Diagnostic.context ->
   types ->
