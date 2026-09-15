@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-30719940.js";
+            window.path_to_searchindex_js = "searchindex-d213cba0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -415,7 +415,9 @@ themselves effect-free. Shown by default.</p>
 <li>
 <p><code>dead-code</code> (group <code>correctness</code>): a statement that can never be
 reached, following an unconditional branch, <code>return</code>, or
-<code>unreachable</code>. Shown by default.</p>
+<code>unreachable</code>; also a <code>#[if]</code> (<code>(@if)</code>) branch that no configuration
+selects, its condition contradicting the enclosing conditionals’ or
+itself. Shown by default.</p>
 </li>
 <li>
 <p><code>cast-always-fails</code> (group <code>correctness</code>): a reference cast or test
