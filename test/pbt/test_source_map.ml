@@ -320,7 +320,51 @@ let test_resize_semantic =
     ~count:2000 (QCheck.make ~print gen) (fun (rd, mappings) ->
       decode_abs (resize_mappings rd mappings) = expected_abs rd mappings)
 
+(* [iter_sources] numbers a section, and a source within it, only when there is
+   more than one to name. An embedder derives each source's on-disk filename
+   from that pair and reads it back with the same derivation, so the convention
+   is part of the contract rather than an implementation detail. *)
+let test_iter_sources () =
+  let map sources =
+    Standard.of_string
+      (Printf.sprintf {|{"version":3,"sources":[%s],"names":[],"mappings":"A"}|}
+         (String.concat "," (List.map (Printf.sprintf "%S") sources)))
+  in
+  let collect sections =
+    let acc = ref [] in
+    iter_sources
+      (concatenate (List.mapi (fun i s -> (i * 100, map s)) sections))
+      (fun i j source -> acc := (i, j, source) :: !acc);
+    List.rev !acc
+  in
+  let check name expected got =
+    if got <> expected then (
+      let show (i, j, s) =
+        let idx = function None -> "-" | Some i -> string_of_int i in
+        Printf.sprintf "(%s,%s,%s)" (idx i) (idx j) s
+      in
+      let show_all l = String.concat " " (List.map show l) in
+      Printf.eprintf "iter_sources, %s:\n  expected %s\n  got      %s\n" name
+        (show_all expected) (show_all got);
+      exit 1)
+  in
+  check "one section, one source"
+    [ (None, None, "a.ml") ]
+    (collect [ [ "a.ml" ] ]);
+  check "one section, two sources"
+    [ (None, Some 0, "a.ml"); (None, Some 1, "b.ml") ]
+    (collect [ [ "a.ml"; "b.ml" ] ]);
+  check "two sections, one source each"
+    [ (Some 0, None, "a.ml"); (Some 1, None, "b.ml") ]
+    (collect [ [ "a.ml" ]; [ "b.ml" ] ]);
+  check "two sections, only the multi-source one numbers its sources"
+    [
+      (Some 0, Some 0, "a.ml"); (Some 0, Some 1, "b.ml"); (Some 1, None, "c.ml");
+    ]
+    (collect [ [ "a.ml"; "b.ml" ]; [ "c.ml" ] ])
+
 let () =
+  test_iter_sources ();
   let suite = [ test_resize; test_resize_semantic; test_empty; test_shift ] in
   let result = QCheck_runner.run_tests suite in
   if result <> 0 then exit result

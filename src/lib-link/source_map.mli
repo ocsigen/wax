@@ -13,6 +13,13 @@ type t
 val to_file : t -> string -> unit
 val to_string : t -> string
 
+val iter_sources : t -> (int option -> int option -> string -> unit) -> unit
+(** [iter_sources m f] calls [f section source name] on every source file the
+    map names, where [section] and [source] are the indices of the section and
+    of the source within it, each [None] when there is only one of them to
+    name. An embedder that copies the sources next to the map uses the pair to
+    build each one's filename. *)
+
 (* A sequence of [(pos, delta)] byte-shift entries with strictly increasing
    [pos], describing how the code section grew/shrank when instructions were
    re-encoded during linking. Built imperatively by the code scan, hence the

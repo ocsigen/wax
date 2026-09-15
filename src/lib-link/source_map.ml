@@ -238,6 +238,27 @@ type t = Index.t
 let to_file = Index.to_file
 let to_string m = Yojson.Raw.to_string (Index.json m)
 
+(* The [int option]s index the section and the source WITHIN it, and are [None]
+   where there is only one to name — the convention a consumer uses to build a
+   per-source filename, so it must stay exactly this: an embedder writes the
+   sources out under names derived from (i, j) and reads them back with the same
+   derivation. A one-section map therefore numbers nothing, and a section with a
+   single source numbers only its section. *)
+let iter_sources { Index.sections; _ } f =
+  let single = function [ _ ] -> true | _ -> false in
+  let single_section = single sections in
+  List.iteri
+    (fun i { Index.map = { Standard.sources; _ }; _ } ->
+      let single_source = single sources in
+      List.iteri
+        (fun j source ->
+          f
+            (if single_section then None else Some i)
+            (if single_source then None else Some j)
+            source)
+        sources)
+    sections
+
 type resize_data = {
   mutable i : int;
   mutable pos : int array;
