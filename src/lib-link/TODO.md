@@ -1,7 +1,6 @@
 
-- Support Wat/Wax input and output
-- Tests
-- Preserve types (dedup up to syntactic equality)
+- Support Wat/Wax input and output (an input must be a binary: it is read
+  through `Read.open_in`, which wants the magic header)
 
 ## Known limitations
 
