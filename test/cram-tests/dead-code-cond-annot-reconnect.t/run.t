@@ -507,3 +507,27 @@ top:
   > WAT
   $ wax -i wat -f wax radtest.wat -o radtest.wax && wax radtest.wax -f wat | grep -coE 'ref.test'
   1
+
+A residual whose OWN printed form carries a hole claims from the stack below
+it, exactly as a statement's does: the convert's source pin `(_ : &?any)` takes
+the `null` before the reader's hole gets there, so with the annotation claiming
+the convert the reader is bottom-sprung after all. Read as a free skip, the
+scan walked past the convert to the `null`, called it the backing, and the bare
+`!_` re-defaulted to `i32.eqz` (a depth-4 backing-scan finding):
+
+  $ cat > holeres.wat <<'WAT'
+  > (module
+  >   (func
+  >     return
+  >     ref.null any
+  >     atomic.fence
+  >     extern.convert_any
+  >     (@if $dbg (@then drop) (@else drop))
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax holeres.wat -o holeres.wax && grep '!' holeres.wax
+      _ = !(_ : &?none);
+  $ wax holeres.wax -f wat | grep -coE 'ref.is_null|extern.convert_any'
+  2

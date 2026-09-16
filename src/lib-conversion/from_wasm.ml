@@ -1492,6 +1492,12 @@ module Stack = struct
     | _ ->
         List.fold_left (fun n s -> n + hole_claims s) 0 (Ast_utils.sub_instrs i)
 
+  (* The claims an entry's OWN tree makes on the stack below it. [ghost] says
+     they are already charged (a branch leftover: they were counted as the
+     annotation's claims), so the arm that skips it must not charge them
+     again. *)
+  let own_claims ~ghost i = if ghost then 0 else hole_claims i
+
   (* [claims] counts the values the holes ABOVE are still owed: each takes the next
      residual, so the scan skips that many before asking whether what it reaches can
      back this hole. Counting them is what makes a hole-bearing statement
@@ -1508,7 +1514,7 @@ module Stack = struct
      one representative per entry class. A new arm (a new entry kind, a new claim
      shape) must add its representative there, or the guard degrades back to
      fuzzing luck for exactly that arm. *)
-  let rec effective_backing stop ~crossed claims = function
+  let rec effective_backing stop ~crossed ?(ghost = false) claims = function
     (* A CONSUMED value ([consume] marked it): it prints as its own statement,
        and on the re-parse the block-shaped consumer above takes it as its
        parameter — the very claim [hole_claims] charged for that consumer. The
@@ -1523,7 +1529,7 @@ module Stack = struct
        single-value entry — re-dispatched as one. Its own holes are NOT
        charged here: they were counted as the annotation's branch claims. *)
     | (-2, w, i) :: rem ->
-        effective_backing stop ~crossed claims ((1, w, i) :: rem)
+        effective_backing stop ~crossed ~ghost:true claims ((1, w, i) :: rem)
     | (-1, _, i) :: rem ->
         (* Its own tree may CARRY holes (a consumed [select] of holes): those
            claim from this frame exactly like a statement's — the consumed
@@ -1568,12 +1574,21 @@ module Stack = struct
            [(@if)] (whose branches consume the value per configuration); in
            plain wasm the validator types the residual into the reference op
            and rejects. *)
-        if claims >= a then effective_backing stop ~crossed (claims - a) rem
+        if claims >= a then
+          effective_backing stop ~crossed (claims - a + own_claims ~ghost i) rem
         else `Value
     (* A value entry the holes above fully claim: not this hole's operand, so
-       keep looking past it. *)
-    | (a, None, _) :: rem when a >= 1 && claims >= a ->
-        effective_backing stop ~crossed (claims - a) rem
+       keep looking past it — charging its OWN holes, which claim from this
+       stack exactly as a statement's do. A residual is flushed as a statement
+       AT its position, so a hole inside it takes a value below it before this
+       hole gets there: [ref.null any ; atomic.fence ; extern.convert_any]
+       leaves the convert's pinned hole [(_ : &?any)] claiming the null, and
+       reading the convert as a free skip let the scan walk on to the null and
+       call it this hole's backing — the bare [!_] below an [(@if)] that claims
+       the convert then reconnected to nothing and re-defaulted to [i32.eqz]
+       (a depth-4 backing-scan finding). The [-1] arm charges the same way. *)
+    | (a, None, i) :: rem when a >= 1 && claims >= a ->
+        effective_backing stop ~crossed (claims - a + own_claims ~ghost i) rem
     (* An ADAPTIVE value — an untyped [select] of holes, or a bare hole — is not a
        backing: its own printed form carries no hierarchy, so on a re-parse the ref
        op's hole reconnects to it and the pair re-defaults to the NUMERIC form (a
