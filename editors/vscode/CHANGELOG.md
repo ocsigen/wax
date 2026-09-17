@@ -1,5 +1,63 @@
 # Changelog
 
+## Unreleased
+
+- Quick fixes (the lightbulb / `Ctrl+.`) for `.wax` and `.wat`: any diagnostic
+  the toolchain can repair mechanically is offered as a code action. This
+  covers the new suggestions, which are kept out of the Problems panel and only
+  appear on demand: `x = x + e` to `x += e`, `{x: x}` to `{x}`, and a redundant
+  type annotation the inferred type already pins (a `let`, a global or `const`,
+  a construction name `{T| …}`, a block or `if` result type). It also covers a
+  redundant cast, an unused local (prefix it with `_`), an unused label (delete
+  it), an ambiguous precedence (parenthesize it), and a syntax error the parser
+  recovered from by inserting a token, such as a missing `;` in Wax or a missing
+  operand in WAT. The fixes honour the `wax.define` configuration, so they agree
+  with the published diagnostics on a conditional module.
+- Type completion for `.wax`: `i32`/`i64`/`f32`/`f64`/`v128` are offered where
+  a type goes, and after `&`, `&?` or `&!` only the heap types apply (the
+  abstract ones, `fn`, and the module's named types). A bitwise `a & b` still
+  gets ordinary completion.
+- Type completion for `.wat`: every type position offers exactly the category
+  the grammar allows there (heap types after `ref.null` and inside `(ref …)`,
+  the reference abbreviations at a table or `elem` element type, value types in
+  `(param …)`, `(result …)`, `(local …)`, `(field …)` and a block result), plus
+  the module's `$`-named types.
+- Rename for `.wax` now renames both definitions of a symbol declared once per
+  `#[if]` / `#[else]` branch, so the module keeps working under the other
+  configuration. The document outline descends into conditional branches on
+  both languages.
+- Highlight the compilation-hints attributes `#[freq = n]`, `#[never_opt]`,
+  `#[always_opt]` and `#[targets(…)]`, which the bundled toolchain now
+  understands and preserves, alongside `#[likely]` / `#[unlikely]`.
+- The bundled toolchain follows the language: the final `;` of a block is
+  optional, and the parenthesized type ascription `(e : t)` asserts a type
+  without converting.
+- New lints shown in the Problems panel: `unnecessary-mut` (a private mutable
+  global no assignment ever targets) and `confusable-unicode` (a bidirectional
+  control character hidden in a string). `unused-field` now reports an unused
+  Wax function definition, and a dead cycle of mutually recursive functions or
+  types, and `dead-code` also flags a `#[if]` / `#[else]` branch no
+  configuration can select. A chain of failing casts reports only the innermost
+  one, and several false positives are gone (float identities, `any`/`extern`
+  conversions, a signed constant operand, SIMD vector methods).
+- Better syntax errors: the parser messages were regenerated and name the
+  construct under repair, and a syntax error now carries a hint and related
+  locations like every other diagnostic. Better locations for type errors
+  throughout, a duplicate binding reports where the previous one was, and the
+  cascades a single mistake used to produce are cut to one report.
+- Formatting fixes from the toolchain: an empty block body beside a following
+  clause, `rec` groups and catch arms always broken across lines, and more
+  faithful preservation of comments and of annotations the tokenizer does not
+  interpret.
+- Faster formatting, conversion and diagnostics on large files: the printer
+  streams to its output instead of building a document, and the trivia
+  (comment) tables are keyed on byte offsets.
+- Fixes to the analysis library: the cursor was mis-located for a bare `.`
+  completion probe on a non-ASCII line, a speculative rename buffer no longer
+  evicts open documents from the analysis cache, WAT rename validates the new
+  name before looking for a clash, and WAT signature help counts arguments like
+  Wax does.
+
 ## 0.3.0
 
 - Hover types for `.wax`: hovering over an expression shows its inferred type,
