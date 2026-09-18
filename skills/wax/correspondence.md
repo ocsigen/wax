@@ -638,6 +638,18 @@ Relaxed-SIMD operations follow the same scheme:
 
 No intrinsic can clash with a module entity name: the free-function intrinsics are written as `v128::`/`i64::` qualified paths and every other is a method on a receiver, so a function may freely be named e.g. `v128_bitselect` without any renaming.
 
+Nor with a struct field name. A method call is read as an intrinsic only when the receiver's type admits it, so a struct with a function-pointer field named after one of them keeps its indirect call, whatever the argument count:
+
+```wax
+type copier = fn(i32, i32, i32, i32) -> i32;
+type holder = { copy: &copier };
+fn invoke(h: &holder) -> i32 {
+    h.copy(1, 2, 3, 4);   // call_ref through the field, not array.copy
+}
+```
+
+This matters beyond hand-written code: field names come from the name section, so a decompiled module can name a field `copy`, `length`, `switch` or `add_i32x4`, and the Wax it decompiles to has to compile back to the same module.
+
 ## Memory Access
 
 Loads and stores are method calls on a [memory](correspondence.md#memories). The method name carries the access width; the value's signedness (for narrow loads) and its `i32`/`i64` type are expressed with the surrounding `as iN_s`/`as iN_u` cast, mirroring packed array access.

@@ -3246,58 +3246,103 @@ let check_resume_handlers ctx ~result_types handlers =
                 | _ -> ())))
     handlers
 
-(* Whether the receiver of a scalar-intrinsic-method call [recv.min(..)] names a
-   reference (e.g. a struct) rather than a numeric value. Decided purely, by
-   looking the name up in the locals / globals — no typing, so the dispatch can
-   gate on it without recording a spurious use. A reference receiver means
-   [recv.min] loads a function-pointer field (an indirect call), not the scalar
-   [min] intrinsic; only a numeric receiver reaches [type_binary_intrinsic_call].
-   A non-name receiver (a literal, a nested expression) is not a reference. *)
-let receiver_is_ref ctx recv =
-  let is_ref = function
-    | Some ({ typ = Ref _; _ } : inferred_valtype) -> true
-    | _ -> false
-  in
+(* The type a method call's receiver statically has, resolved PURELY: no typing,
+   so the dispatch in {!call_instruction} can consult it without recording a
+   use, reporting an error, or grounding an inference cell. Only the shapes
+   whose type is written down are resolved — a name (its local / global
+   declaration) and a field access (the field's declared type, its own receiver
+   resolved recursively) — through the wrappers that leave the type unchanged.
+   [None] means "cannot tell" (a literal, a call, a cast), which every caller
+   reads as "not a reference": the answer that leaves the dispatch as it was.
+
+   A static approximation rather than the receiver's real type because the
+   receiver cannot be typed BEFORE the arm is chosen: the arms disagree about
+   where it sits in emission order, so they draw its holes from different
+   slices of the pending list. An intrinsic pushes the receiver first and takes
+   the front of the slice; [type_indirect_call] emits the callee LAST and types
+   it against the tail (see its [front_holes] split). Typing the receiver above
+   the dispatch would fix one of the two orders and desync the other. *)
+let rec receiver_valtype ctx recv =
   match recv.Ast.desc with
-  | Get name -> (
+  | Ast.Get name -> (
+      let declared = function
+        | Some ({ typ; _ } : inferred_valtype) -> Some typ
+        | None -> None
+      in
       match StringMap.find_opt name.desc ctx.locals with
-      | Some (ity, _) -> is_ref ity
+      | Some (ity, _) -> declared ity
       | None -> (
           match Tbl.find_no_mark ctx.globals name with
-          | Some (_, ity) -> is_ref ity
-          | None -> false))
+          | Some (_, ity) -> declared ity
+          | None -> None))
+  | Ast.NonNull recv' -> receiver_valtype ctx recv'
+  (* A field read used as a receiver ([o.f.min(..)], [o.f.copy(..)]): the
+     field's DECLARED type, off the struct definition the inner receiver
+     resolves to. A packed field, a name the struct does not declare, and a
+     receiver of any other kind of definition are all unresolvable. *)
+  | Ast.StructGet (recv', field) -> (
+      match (receiver_type_definition ctx recv' : Ast.comptype option) with
+      | Some (Struct fields) -> (
+          match
+            Array.find_map
+              (fun f ->
+                if (field_name f).desc = field.desc then Some (field_type f)
+                else None)
+              fields
+          with
+          | Some { typ = Value typ; _ } -> Some typ
+          | Some { typ = Packed _; _ } | None -> None)
+      | Some (Func _ | Array _ | Cont _) | None -> None)
+  | _ -> None
+
+(* The definition of the named reference type a receiver has, for the guards
+   that need the shape of the type and not just the fact of a reference. Read
+   from the type table without marking it used, like everything here. *)
+and receiver_type_definition ctx recv : Ast.comptype option =
+  match receiver_valtype ctx recv with
+  | Some (Ref { typ = Type n | Exact n; _ }) -> (
+      match Tbl.find_no_mark ctx.type_context.types n with
+      | Some (_, sub) -> Some sub.typ
+      | None -> None)
+  | _ -> None
+
+(* Whether the receiver of a scalar-intrinsic-method call [recv.min(..)] is a
+   reference (e.g. a struct) rather than a numeric value. A reference receiver
+   means [recv.min] loads a function-pointer field (an indirect call), not the
+   scalar [min] intrinsic; only a numeric receiver reaches
+   [type_binary_intrinsic_call]. *)
+let receiver_is_ref ctx recv =
+  match receiver_valtype ctx recv with Some (Ref _) -> true | _ -> false
+
+(* Whether the receiver of an array-op method call ([a.fill(..)]) has a type
+   that is a reference to an array type. Gates the recovery of a wrong-arity
+   array op (an [a.fill()] being typed) so a struct with a field named
+   [fill]/[copy]/[init] is left to the indirect-call path instead. *)
+let receiver_is_array_ref ctx recv =
+  match receiver_type_definition ctx recv with
+  | Some (Array _) -> true
   | _ -> false
 
-(* Whether the receiver of an array-op method call ([a.fill(..)]) names a value
-   whose type is a reference to an array type. Pure, like {!receiver_is_ref}: it
-   reads the name's type from the locals / globals and the referenced type's
-   definition from the type table, recording nothing. Gates the recovery of a
-   wrong-arity array op (an [a.fill()] being typed) so a struct with a field
-   named [fill]/[copy]/[init] is left to the indirect-call path instead. *)
-let receiver_is_array_ref ctx recv =
-  let ref_name = function
-    | Some ({ typ = Ref { typ = Type n | Exact n; _ }; _ } : inferred_valtype)
-      ->
-        Some n
-    | _ -> None
-  in
-  let arrname =
-    match recv.Ast.desc with
-    | Get name -> (
-        match StringMap.find_opt name.desc ctx.locals with
-        | Some (ity, _) -> ref_name ity
-        | None -> (
-            match Tbl.find_no_mark ctx.globals name with
-            | Some (_, ity) -> ref_name ity
-            | None -> None))
-    | _ -> None
-  in
-  match arrname with
-  | None -> false
-  | Some n -> (
-      match Tbl.find_no_mark ctx.type_context.types n with
-      | Some (_, sub) -> ( match sub.typ with Array _ -> true | _ -> false)
-      | None -> false)
+(* Whether a method call's receiver is a reference to a STRUCT that declares a
+   field of the method's name — the one condition under which [recv.m(args)]
+   must be an indirect call through a function-pointer field rather than the
+   built-in intrinsic [m]. Every intrinsic-method arm of {!call_instruction}
+   whose receiver is a general expression is gated on its negation, so a struct
+   that happens to name a field [copy], [length], [switch] or [add_i32x4] keeps
+   its indirect call. That is what [To_wasm]'s [receiver_is_array] /
+   [receiver_is_value] already lower, and what the decompiler emits for such a
+   field: field names come from the name section, which is under no obligation
+   to avoid the intrinsic names.
+
+   Stated as "is definitely a struct field" rather than "is definitely not an
+   array / not a value" so that a receiver {!receiver_valtype} cannot resolve
+   keeps the arm it has always taken: the guard only ever DIVERTS a call it can
+   prove belongs elsewhere. *)
+let method_is_struct_field ctx recv (meth : Ast.ident) =
+  match receiver_type_definition ctx recv with
+  | Some (Struct fields) ->
+      Array.exists (fun f -> (field_name f).desc = meth.desc) fields
+  | _ -> false
 
 (* A cast is transparent to the hole-order check exactly when [to_wasm] lowers it
    to no instruction (so it occupies its operand's position and produces nothing):
@@ -9770,8 +9815,9 @@ and call_instruction ctx i =
   (* Stack-switching methods on a continuation receiver: [c.resume(x)],
      [c.resume_throw(exc(p))], [c.resume_throw_ref(e)], [c.switch(x, tag: t)];
      an [on] handler clause arrives as a wrapping [On] node (see
-     [type_on_clause]). These were keywords before, so no struct field can be
-     shadowed by claiming the names. *)
+     [type_on_clause]). These were keywords before, so no hand-written struct
+     field can claim the names — but a decompiled one can, its fields named by
+     the name section, so the receiver is checked like every other method's. *)
   | Call
       ( {
           desc =
@@ -9784,21 +9830,28 @@ and call_instruction ctx i =
                  } as meth) );
           _;
         },
-        args ) ->
+        args )
+    when not (method_is_struct_field ctx recv meth) ->
       type_cont_method_call ctx i ~handlers:[] recv meth args
+  (* The array bulk operations, at their exact argument counts. Each is gated
+     on the receiver not being a struct with a field of that name, which is an
+     indirect call through a function pointer instead. *)
   | Call
       ( ({ desc = StructGet (a, ({ desc = "fill"; _ } as meth)); _ } as func),
-        [ j; v; n ] ) ->
+        [ j; v; n ] )
+    when not (method_is_struct_field ctx a meth) ->
       type_array_fill_call ctx i func a meth j v n
   | Call
       ( ({ desc = StructGet (a1, ({ desc = "copy"; _ } as meth)); _ } as func),
-        [ i1; a2; i2; n ] ) ->
+        [ i1; a2; i2; n ] )
+    when not (method_is_struct_field ctx a1 meth) ->
       type_array_copy_call ctx i func a1 meth i1 a2 i2 n
   (* array.init_data / array.init_elem: arr.init(seg, dest, src, len). The
      element type selects data vs elem (as for array.new). *)
   | Call
       ( ({ desc = StructGet (a, ({ desc = "init"; _ } as meth)); _ } as func),
-        arg1 :: ([ _; _; _ ] as rest) ) ->
+        arg1 :: ([ _; _; _ ] as rest) )
+    when not (method_is_struct_field ctx a meth) ->
       type_array_init_call ctx i func a meth arg1 rest
   (* An array bulk method with the wrong argument count (the exact forms are
      above) — the empty [a.fill()] a call being typed leaves. Gated on an array
@@ -9836,14 +9889,16 @@ and call_instruction ctx i =
      [x.to_bits()], [arr.length()]. Kept in call form so they print back with
      their parentheses; the result type is read from the receiver. *)
   | Call (({ desc = StructGet (recv, meth); _ } as func), [])
-    when is_unary_method meth.desc ->
+    when is_unary_method meth.desc && not (method_is_struct_field ctx recv meth)
+    ->
       type_unary_intrinsic_call ctx i func recv meth
   (* SIMD vector op written as a method intrinsic, [recv.add_i32x4(b)]. The lane
      shape is read from the method name (the receiver is always v128, or a scalar
      for splat); arguments are the lane immediates (if any) followed by the
      remaining stack operands. *)
   | Call (({ desc = StructGet (recv, meth); _ } as func), args)
-    when Simd.classify meth.desc <> None ->
+    when Simd.classify meth.desc <> None
+         && not (method_is_struct_field ctx recv meth) ->
       type_simd_vector_op_call ctx i func recv meth args
   (* Built-in intrinsics written as a qualified path, [i64::add128(...)] or
      [v128::bitselect(...)]. *)

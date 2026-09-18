@@ -125,6 +125,12 @@ grammar keep their own changelogs.
   the type each source opcode states and the type checker pins any value that
   would otherwise come back at the wrong width.
 - A shadowing `let`'s initializer is kept in the outer scope.
+- A call through a struct's function-pointer field is no longer rejected when
+  the field's name is also a built-in method's (`copy`, `length`, `switch`, a
+  SIMD lane operation). The type checker chose the intrinsic by name and
+  argument count, while the lowering had always chosen by the receiver's type.
+  Field names come from the name section, so a decompiled module could carry
+  one and produce Wax that did not compile back.
 - Conditional modules: entities referenced only inside an `(@if)` body are
   converted, imports are hoisted, and every configuration is checked as a whole
   rather than through a separate specializer.
