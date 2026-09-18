@@ -35,144 +35,42 @@ WAT/WASM   ──→ lib-wasm (parse, validate)  ──→ lib-conversion ──
 
 All 9 conversion pipelines are supported (any combination of wax/wat/wasm as input/output).
 
+## Cross-cutting invariants
+
+- **Lints are mirrored.** A lint lives in both `lib-wax/typing.ml` (the Wax
+  typer) and `lib-wasm/validation.ml` (the Wasm validator), so it fires on wax,
+  wat and wasm input alike. `fuzz/oracle.sh`'s lint-parity oracle enforces this
+  and documents the few intentionally one-sided ones. Adding a lint means
+  adding it twice.
+- **Decompiled widths are recorded.** Every node `from_wasm` emits must either
+  record the type its source opcode states or be explicitly marked contextual;
+  see `Ast.expectation` in `lib-wax/ast.ml`, which explains why an unrecorded
+  node is the width machinery's one silent failure class.
+
 ## CLI Interface
 
-`wax` is a `Cmd.group` with `convert` as the default command and `format` /
-`check` subcommands. cmdliner won't fall through to the default on a leading
-positional, so `main.ml` rewrites `Sys.argv` (the js_of_ocaml trick) to keep the
-bare `wax <file>` form working — edit that heuristic if adding subcommands. The
-group carries `--version` (from `dune-build-info`: the git tag at release build
-time, else `dev`) and cmdliner's built-in `--help`.
+`docs/src/cli.md` is the reference for the commands, flags, defaults, warning
+names and exit codes; it is regenerated into `skills/wax/cli.md` and diffed
+under `dune runtest`. Update it in the same commit as a CLI change instead of
+restating it here. The commands are `convert` (the default), `format`, `check`
+and `lsp`.
 
-**convert** (default) — `dune exec wax -- [options] [INPUT]`. `INPUT` is optional; reads from stdin if omitted.
+What the user docs don't say:
 
-| Flag | Long | Description |
-|------|------|-------------|
-| `-i` | `--input-format` | Input format: `wax`, `wat`, `wasm` (default: auto from extension, else `wax`) |
-| `-f` | `--format` / `--output-format` | Output format: `wax`, `wat`, `wasm` (default: `wax`) |
-| `-o` | `--output` | Output file (default: stdout) |
-| `-v` | `--validate` | Force validation everywhere and report unused locals. Text input (wax/wat) converted to a *different* format is validated by default already; this additionally validates a same-format conversion and a trusted wasm binary input |
-| `-s` | `--strict-validate` | Stricter validation |
-| `-D` | `--define` | Set a conditional-compilation variable (`NAME`, `NAME=true/false`, `NAME=N.N.N`, `NAME=STR`); specializes `#[if]`/`(@if)` annotations. Repeatable |
-| `-X` | `--feature` | Enable/disable an optional proposal (off by default): `NAME[=on\|off]`. Known: `custom-descriptors` (exact refs, descriptor structs + instructions), `compact-import-section` (group same-module imports in the binary; from text input, lowers a `import "m" {}` block / `(import "m" (item …))` group to a compact entry — the shared-type Group2 text form is strictly name-only, so a group whose items bind ids (every wax block, and a binary group with name-section names) takes the per-item Group1 text form, while the binary encoder still emits the shared-type encoding whenever a group's item types agree (ids ride the name section); singleton block flattens, separate imports never merged; from binary input, coalesces same-module runs; explicit groups always kept compact and always accepted on input; a group entry's unused field-name slot must be the empty name the proposal fixes it at — one carrying a name is rejected rather than silently dropped — and a group with no items denotes no import, so nothing is lifted from it: its text form would be a bare `(import "m")`, which no text grammar reads back). A module can also declare a feature itself with a `#![feature = "NAME"]` inner attribute (WAT: `(@feature "NAME")` module annotation) — declared ∪ enabled, resolved in `Typing.apply_declared_features`/`Validation.apply_declared_features`; an explicit `NAME=off` against a declaring module is a conflict error at the attribute. A binary persists declarations as `+name` entries of the `target_features` custom section (third-party entries preserved verbatim, never interpreted); decompiling restores attributes from those entries ∪ the gated encodings the decoder saw (`Feature.mark_used` in `wasm_parser.ml`), so output recompiles standalone. Repeatable |
-| `-W` | `--warn` | Set a warning's level: `NAME=LEVEL` where `NAME` is a warning (`unused-local`, `unused-field`, `unused-import`, `unused-label`, `unnecessary-mut`, `shift-count-overflow`, `constant-trap`, `tautological-comparison`, `constant-condition`, `unused-result`, `dead-code`, `cast-always-fails`, `eager-select`, `precedence`, `redundant-operation`, `truncated-coverage`, `naming-conflict`, `reserved-word-rename`, `generated-name`, `compound-assignment`, `field-punning`, `redundant-annotation`, `confusable-unicode`), a group (`unused`, `correctness`, `redundant`, `naming`, `suggestion`), or `all`, and `LEVEL` is `hidden`/`warning`/`error`. `confusable-unicode` (group `correctness`) reports a "Trojan Source" bidirectional control character (U+202A/B/D/E, U+2066–2069, U+206C) in a string a module carries — an export/import name, a string literal, a data segment, or a conditional string — that can make the source read differently than it runs; the scan (`Wax_utils.Unicode.first_confusable`) runs on both sides via `lint_confusable` (`typing.ml` / `validation.ml`), matching what `wasm-tools` rejects in string literals. The `correctness` lints run during validation and are shown by default; `redundant-operation`, the `naming` warnings (Wasm→Wax renames/generated names), and the `suggestion` group are hidden by default. `unused-field`/`unused-import` span every named index space — function, global, memory, table, tag, type, and a *passive* data/element segment (an active or declarative segment runs at instantiation, so it counts as used) — and ask *reachability from the roots*, not whether a reference exists: the roots are the exported/start functions plus every reference from a module-level context (an initializer, a segment — except a *declarative* elem segment, which installs and runs nothing, so its references are recorded `Ignored`: the function it declares is live exactly when the `ref.func` it exists for is, which is what the Wax side sees, its surface leaving the segment implicit), liveness follows calls (a function reference counts as a call, so the analysis never reports a function that might run), and a field only dead code references is dead too. Types add one edge kind — a definition's own components (supertype, field/element type, `descriptor`) count only if the definition is live — so a `rec` group nothing outside it names is dead as a whole; only source definitions are candidates, not the implicit function types interned for an inline signature. That catches a dead cycle of mutually recursive functions or types, which a presence check cannot. `unnecessary-mut` (group `redundant`, but shown by default) reports a module-defined, non-exported global declared mutable that no `global.set` ever targets, so it could be a Wax `const` / a Wasm global without `mut`; an import's mutability is fixed by the linking contract and an exported one is host-writable, so both are exempt, as is a `_`-prefixed name, and a wholly unused global draws only `unused-field`. The `suggestion` group is emitted at severity `Suggestion` (not `Warning`) and each entry carries a machine-applicable `edit` (a source-slice-built replacement) — the Wax typer's mirror of what the `simplify` pass rewrites on the Wasm→Wax path, offered to hand-written Wax as editor quick fixes (`src/editor` → the VS Code `CodeActionProvider`) and shown by `wax check` only when enabled with `-W`: `compound-assignment` (`x = x + e` → `x += e`, requires `x` to be the binop's *first* operand), `field-punning` (`{x: x}` → `{x}`), `redundant-annotation` (a redundant type the inferred type already pins: a `let` annotation `let x: t = e` → `let x = e` — incl. the anonymous `_: t = e` and each binding of a tuple `let (a: t, b) = e`; a module-level global/`const` annotation `let counter: i32 = 0` → `let counter = 0`; a construction type name `{T| …}` → `{…}`; a block result type `do t { … }` → `do { … }`; and an `if` result type `if c => t { … }` → `if c { … }`); a redundant *cast* removal rides on the existing `redundant-operation` warning's `edit` instead. Some non-`suggestion` lints carry an `edit` too, so they surface as quick fixes as well: `unused-local` inserts `_` at the name start, Wax-side `unused-label` deletes the whole `'name:` prefix (the Wasm-validator side stays edit-less), and `precedence` wraps the tighter-binding sub-expression in parentheses (a single contiguous replacement, `(` ^ the source slice ^ `)`). All suggestion detection lives in `typing.ml`'s `suggest_*`/`lint_ref_cast` helpers (block/`if` result via `context_block_typ`/`suggest_if_result`, the shared deletion `edit` via `deletion_edit`), gated by `ctx.suggest` (mutually exclusive with `ctx.simplify` — enforced by an `invalid_arg` in `type_configuration`; `Typing.f`/`check` take `?suggest`). The `edit` is serialized by `--error-format json` (an `edit` object: the span fields plus `newText`). Most lints are mirrored on both sides — the Wax typer (`lib-wax/typing.ml`) and the Wasm validator (`lib-wasm/validation.ml`) — so they fire on Wax, WAT and WASM input alike (exceptions: `precedence` is Wax-only, as WAT/WASM have no infix precedence; `eager-select`'s Wasm side covers only folded `select`; the `suggestion` group is Wax-only); all are gated by `warn_unused` (tied to `-v`, always on under `check`). In the validator: the constant-operand/dead-code/redundant-arithmetic ones live in `lint_body` (which also hosts `eager-select`, walking folded `select` operands for a trapping/effectful subtree — unfolded `select`s are out of reach); `unused-label` via a usage flag on each control frame set in `branch_target`; `unused-field`/`unused-import` via `mark_reference` at each index space's single resolution point (`get_function`/`get_global`/`get_memory`/`get_table`/`get_data`/`get_elem`, and `lookup_tag_type`/`lookup_tag_signature` for tags), which records a root in `used_*` when `ctx.current_function = None` (a module-level context) and otherwise an edge in `body_references` — `current_function` is set by the `functions` pass around each body, off a counter mirroring `build_initial_env`'s index allocation over the same `expand_import_group`ed field list. `unused_fields` (end of `validate_configuration`) then runs `reachable_functions` (closure over the `Ref_function` edges from the `used_functions` seeds) and derives each space's used set from the roots plus what live functions reach. The typer mirrors this over names: `Tbl.t` gained a shared `current` ref (set via `ctx.current_function` in the typer's `functions`) and its `used` table now maps a referenced name to the referrer (`None` = root), queried by `Tbl.referrers`/`iter_references`; `unnecessary-mut` from the same pass, off `assigned_globals` (marked at `GlobalSet` and at an export) against the `mutable_globals` candidates — mirrored in `typing.ml` by `ctx.assigned_globals`, filled at the `Set` case of a `Global (true, _)` target. Types are tracked separately, on the *type* context (every resolution point can reach it, unlike the module context): `get_type_info` appends to `type_references` under `types.origin` (an `origin` = `Root`/`From_function`/`From_type`/`Ignored`, which also drives `mark_reference` for the other spaces), set per rec-group member in `rectype`, per function in `collect_implicit_types`/`build_initial_env`/`functions`, and `Ignored` across `check_type_definitions`'s sweep; `reachable_types` then closes over the `From_type` edges. A reference is kept as written (`By_index`/`By_name`) and mapped back through `type_defs`, since deduplication makes canonical indices non-injective; `string_type_reference` additionally records a by-canonical use so a named `(array (mut i8))` an `(@string …)` deduplicates onto is not reported. The typer mirrors all of it on `Tbl.current`/`Tbl.used`, now an `origin`, plus `ctx.canonical_type_references` — the by-canonical mirror, appended at a bare string literal (which names no type) and resolved once against `Tbl.iter_entries` at the head of the unused pass rather than scanned per literal. Two positions whose reference only the *lowering* spells were unrecorded in the typer and are now: a table's element reftype (`resolve_table_reftype`, at registration, which also makes the typer reject an unbound name there instead of leaving it to the lowering) and an *import's* signature type, which is a module-level `Root` reference, not `From_function` (an import has no body — `register_function` takes `~import` and only a definition attributes to itself; matches the validator and the typer's own imported-global/tag path). The reverse asymmetry is by design and stays: an INFERRED Wax type (a global's, a local's, a block result's) lowers to a reftype that must name the definition, so the wax form can report a type the wat form uses — `fuzz/oracle.sh`'s lint-parity arm exempts a wax-only `unused-field` when every one of them is about a type, and `unused-types-lowered-names.t` pins both directions. `dead-code` also reports a `#[if]`/`(@if)` branch no configuration selects (`Cond_plan.dead_branches` of the check path's exhaustive plan, outermost of a dead nest only; `Error.dead_branch` on both sides, gated by `warn_unused`). `cast-always-fails`/redundant-cast in `lint_cast` (peeks the operand via `with_current_stack` at `RefCast`/`RefTest`); the typer's `lint_ref_cast` reports only the innermost always-trapping cast of a chain (`ctx.cast_traps_reported`, keyed by span — nested casts share a start column, so two reports would render as one `line:col: message` under `--error-format short`/`json`). Later settings override earlier; repeatable. The `WAX_WARN` env var (comma/space-separated `NAME=LEVEL` specs) seeds defaults applied *before* `-W` — it layers under `-W` (unlike cmdliner's built-in env fallback), so `-W` refines it rather than replacing it. |
-|      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
-|      | `--desugar` | Expand the Wax-specific `(@string …)`/`(@char …)` annotations into core wasm (`array.new_fixed`/`i32.const`), strip `(@feature …)` (pure metadata; resolution already ran), and synthesize the declarative elem segment (`(elem declare func …)`) the lenient reader lets you omit for a body-only `ref.func` (via `Wax_wasm.Desugar` → `Wax_wasm.Declare_refs`, mirroring `Validation`'s `refs` set; no-op when already declared, e.g. wax→wat / binary→wat) so the output is plain WebAssembly text that passes strict/spec validation with no Wax-specific annotation left (the `metadata.code.*` hint annotations are real WebAssembly, so they stay). Wat output only (usage error `123` otherwise); fails (`128`) if an `(@if …)` remains unresolved — resolve with `-D` |
-|      | `--faithful` | Decompile without the stream-reshaping recoveries, so a wat/wasm module decompiled to wax recompiles with the same reachable instruction structure. Wax output only (usage error `123` otherwise). Reliably gates two recoveries: `t.eq; i32.eqz` stays `!(a==b)` (gated in `from_wasm.ml`'s `int_un_op`) instead of fusing to `t.ne`; and `Recover_match`'s flat `br_on_cast_fail`-chain arm (not the nested-ladder arm, an exact inverse that stays) is skipped. The typer's simplify pass is off (`Typing.f ~simplify:(not faithful) ~faithful`) so a redundant *non-null* `ref.cast` is kept and re-emits; `ctx.faithful` still prunes the nullable type-pin scaffolding casts (`unnecessary_cast`, since compiler pins and source casts are indistinguishable without provenance — cast fidelity is best-effort). Width pinning is NOT faithful-only anymore: `from_wasm` pins constant, leftover (`Stack.run`), dead-code (typed-hole conversions) and int→float-convert / `extend32_s` source widths on the default path too (the `f32`-method operand pin `e_fop` was deleted — a method's result width flows back from its consumer, covering it). Threaded `main.ml` (`wat_to_wax`/`wasm_to_wax`) → `From_wasm.module_ ~faithful` → `Recover_match.module_ ~faithful` + `Typing.f ~faithful`. Ungateable residuals (all inert, present on the default path too): the shared spellings (`extend32_s`; a 32-bit load widened to i64 — `i32.load; i64.extend_i32_u` ≡ `i64.load32_u`, since `i32.load` spells `m.load32`; the call family `ref.func`/`table.get` + `call_ref` ≡ `call`/`call_indirect`; float neg-of-literal), local/name/type renumbering, and a typed `select`'s immediate. A fused narrow `iN.load8/16_S` now round-trips exactly (rendered single-cast, re-fused) and a genuine `iN.load8/16 ; extend` pair stays a pair (two-cast). Proven by `fuzz/oracle.sh`'s `FAITHDRIFT` leg: the whole reachable opcode sequence (dead code included) with widths, the compiler-cast family and the shared spellings normalised away (documented there) |
-|      | `--color` | Color output: `auto`/`always`/`never` |
-|      | `--error-format` | Diagnostic rendering: `human` (default), `json`, or `short`. `json` emits one JSON object per diagnostic per line (JSON Lines) to stderr — errors, warnings, and syntax errors alike — for editors/CI/AI; `short` emits one `file:line:col: severity: message` line (gcc/rustc style, 1-based column, `-W` name appended as `[name]`). `human` (the default) appends the same `-W` name to the diagnostic header as `[name]` (e.g. `Warning [unused-local]:`, via `output_error_no_loc`). Set process-wide via `Diagnostic.set_format` (like `set_policy`); the emitters `output_error_json`/`output_error_short` live in `lib-utils/diagnostic.ml` (json via yojson). Syntax errors carry the same structured payload as other diagnostics (`Parsing.syntax_error` = `{location; message; related; hint; fix}`, built by the smart constructor `Parsing.syntax_error`/the legacy-shape `syntax_error_pair` used across the lexers and grammars, exception payload now that record), so they emit `hint`/`related`/`edit` too; a `fix` (reusing `Diagnostic.edit`) is derived mechanically when `parse_recover` repairs the parse by inserting a token (missing `;`/operand — `Recover.insert`'s 4th tuple field is the inserted token's source text), shown in `human` as a `Help:` line for an unnamed Error only (`print_fix`, so promoted warnings keep their own message) and in `json` as an `edit`. Also on `check`/`format` |
-|      | `--source-map` | Emit a source map alongside the output file and insert a `sourceMappingURL` custom section (wasm output to a file only; rejected for wat/wax output or stdout) |
-|      | `--debug` | Enable developer debug output for a category (repeatable, comma-separated). Categories: `timing` (log each pass's wall-clock time to stderr), `width-check` (on wasm/wat→wax, **report** each width repair instead of performing it — a developer's detector for locating where the decompiler relies on the backstop, no longer a fuzzing oracle), `width-record` (on wasm/wat→wax, report every value node whose expectation is still `Unset` — the recording-gap census; see below). The mechanism it reports on is how the decompiler keeps widths faithful: `from_wasm` RECORDS the type each source opcode states on the Wax node it emits — `Ast.instr`'s `expected` field, a three-state `Ast.expectation`: `Recorded` at the choke points (`expect`, `cast_to`, `typed_hole`, `Stack.push_num`), `Contextual` where a site deliberately claims nothing (`forget_expected`, the `contextual`/`bare_hole` markers on immediates, block-shaped/branch pass-through results, adaptive holes, references — the one class outside the channel), and `Unset` reserved for a path that never considered it — and `Typing.f ~width_check:[`Off|`Repair|`Report]` (`reconcile_widths`, after typing and simplify, before `project_annotation`) compares its own *resolved* type for the node (the projection's defaults, so a flexible literal is compared post-defaulting) against it. Under `` `Repair ``, the decompile default and the OWNING mechanism, a value whose width merely DEFAULTED wrong is wrapped in the identity cast that pins it (its inference cell grounded with `Cell.set`, so the unified cells of its tree settle too and one pass converges; `type_cast`'s `operand_pin_pending` keeps a cast whose operand awaits such a pin, so the pin has somewhere to attach). A disagreement no pin can fix — the value's type is fixed by context (`pin_stays_in_family`/`flexible_literal`/`defaulting_tree` decide) — is an error in BOTH modes: either the input is invalid (a binary is trusted, never validated) or the conversion is wrong. Every consumer that types `From_wasm` output must pass `` `Repair `` (the two CLI decompile paths, `Wat_editor.to_wax_string`/`binary_to_wax_string`, `run_wasm_testsuite`); a recording gap is invisible to it by construction and is owned STRUCTURALLY by the `Unset`/`Contextual` split: `--debug width-record` reports every `Unset` numeric/v128-valued node in a decompile, and `fuzz/width-record.sh` sweeps that census over the corpora as a per-PR ratchet (0 findings; its first run found and fixed real gaps — unrecorded vector loads, v128 globals, imported-memory/table `size`/`grow` results, comparison results), with the round-trip legs (WIDTHDRIFT/FAITHDRIFT/`drop-width.sh`) still the end-to-end net. `reconcile_widths` has two arms: a RESOLVED cell that disagrees, and an UNRESOLVED (`Unknown`) one — a value nothing in the module typed, which the lowering reads at its positional default (i32 where an operand's type picks the opcode, i.e. a narrow/atomic store or RMW), pinned unless the printed form already ascribes the recorded type (`ascribed_type`); `Error`/`Collecting` cells are deliberately left alone. `from_wasm` keeps only three casts repair cannot place: `int_un_op`/`float_un_op`'s truncation and convert SOURCE pins (redundant on a valid module, kept so an ill-typed one still decompiles to Wax the typer rejects instead of a different well-typed conversion), the `to_bits`/`from_bits` receiver casts (the bits methods cross the int/float divide, so no pin on the result reaches the receiver, and the Wax would not type-check at all), and the typed-`select` arm pin (a REFERENCE result type, outside the expectation channel). The only residual SILENT class is a recording gap (a value `from_wasm` emits with `Unset` expectation — invisible to reconciliation by construction, made enumerable by the `--debug width-record` census and gated by `fuzz/width-record.sh`; a new emission path must either RECORD what its opcode states or mark the node `contextual` with the reasoning). The two types outside the CHECK are not a third: `v128` has no member in the flexible-literal lattice, hence no re-parse default to drift to, so `numeric_width`/`numeric_valtype` skip it and no repair or report can fire on one — but it IS recorded (`recorded_expectation`), because a record doubles as "provably not a reference" for `Stack.effective_backing`, whose scan otherwise reads an untagged residual as the reference a dead hole reconnects to; and a reference pin `from_wasm` misses fails LOUD — the value re-parses into another hierarchy and drops the operation (FAITHDRIFT) or yields a module the reference rejects (ROUNDTRIP) — besides which a `_ as &t` on anything but a hole or a bare `null` IS a `ref.cast` opcode, so repair there could not be inert |
-
-Binary output to a terminal is blocked; use `-o` to write WASM to a file.
-
-A text input (wax/wat) is validated before being converted to a *different*
-format, so a malformed module is rejected instead of reaching the conversion /
-lowering passes (which trust their input). A same-format conversion (wat→wat,
-wax→wax) only re-prints and is not validated by default; a wasm binary input is
-trusted and not validated. `--validate` forces validation in every case.
-
-**format** — `dune exec wax -- format [options] FILE…`. Reformats each file in its own format (detected from the extension unless `-f` forces one). Formatting never validates. With no `FILE`, reads stdin and writes the formatted result to stdout (requires `-f`, since there is no extension to detect; `-i`/`-c` are rejected) — the interface an editor formatter or shell pipe uses.
-
-| Flag | Long | Description |
-|------|------|-------------|
-| `-i` | `--inplace` | Write back to each file; otherwise exactly one file is formatted to stdout (or none: stdin→stdout) |
-| `-c` | `--check` | Write nothing; list unformatted files, exit non-zero if any (mutually exclusive with `--inplace`) |
-| `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
-| `-W` | `--warn` | Set a warning's level (as for convert) |
-|      | `--color` / `--fold` / `--unfold` / `--debug` | As for convert |
-
-**check** — `dune exec wax -- check [options] FILE…`. Validates each file (type-check Wax / well-formedness Wasm), no output, exits non-zero on failure.
-
-| Flag | Long | Description |
-|------|------|-------------|
-| `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
-| `-s` | `--strict-validate` | Strict reference validation (Wasm Text) |
-| `-D` | `--define` | Set a conditional-compilation variable (as for convert); specializes `#[if]`/`(@if)` before validating. A partial set leaves the rest for the path-sensitive check. Repeatable |
-| `-W` | `--warn` | Set a warning's level (as for convert) |
-|      | `--all-errors` | Report every syntax error via panic-mode recovery instead of stopping at the first (text input only, Wax and Wat; ignored for a Wasm binary). Routes Wax through `Wax_conversion.Driver.wax_parse_recover` (then `Typing.check`) and Wat through `wat_parse_recover` (then `Validation.f`), each with `Diagnostic.set_recovery` on so real type/validation errors in intact regions surface while the recovery cascades are suppressed — for Wax the `unbound_name` cascade; for Wat (in `lib-wasm/validation.ml`) all warnings plus the stack-shape errors (`empty_stack`/`non_empty_stack`/`leftover_values`) an auto-closed/dropped body triggers |
-|      | `--color` / `--debug` | As for convert |
-
-**lsp** — `dune exec wax -- lsp`. Runs a Language Server Protocol server over
-stdin/stdout (JSON-RPC), for editors other than VS Code (Neovim, Emacs, Helix,
-…). It is a thin protocol layer (`src/lib-lsp/wax_lsp.ml`, on the `lsp` +
-`jsonrpc` opam packages) over the `src/lib-editor/` analysis, the pure analysis
-extracted from the VS Code wasm wrapper `src/editor/wax_format_js.ml` so both
-consumers share it. That library is three modules: `Editor_common` (the value
-types the features return and the shared helpers — trivia, positions, diag
-rendering), `Wax_editor` (the Wax features), and `Wat_editor` (the Wasm-text
-features, `open Editor_common`); the library is `(wrapped false)` so all three
-are top-level. Every language feature is a `*_string` function
-(`Wax_editor.hover_string` / `Wat_editor.hover_string`, dispatched on the
-document's language); the LSP server and the JS wrapper only marshal their
-results. The loop
-is synchronous (one request at a time), document sync is `Full` (each change
-carries the whole buffer, which is what `Wax_editor`'s source-keyed analysis
-cache expects), and the position encoding is negotiated at `initialize` (UTF-8
-when the client offers it, else UTF-16; the `*_string` functions take
-a `?encoding` that defaults to UTF-16, so the JS wrapper is unaffected, and
-`Editor_common.position ~encoding` maps results back). Requests
-map 1:1 to the editor functions (hover, definition, type-definition,
-references, document-highlight, prepare-rename/rename, document-symbol,
-completion, signature-help, inlay-hint, folding, selection-range,
-semantic-tokens, formatting); `code-action` reuses the diagnostics pass, turning
-each `diag` that carries a machine-applicable `edit` (a `Suggestion`, or a
-fixable warning like a redundant cast) whose span meets the request range into a
-`quickfix` `WorkspaceEdit` — the native mirror of the VS Code
-`CodeActionProvider`. Diagnostics are pushed via `publishDiagnostics` on
-open/change (lint diagnostics carry the `-W` code, a `codeDescription` link to
-the docs, and `DiagnosticTag.Unnecessary` via `Warning.is_unnecessary`; a
-`Suggestion` maps to `DiagnosticSeverity.Hint`). The one
-setting is `wax.define` (conditional-compilation defines, mirroring `-D`), read
-from `initializationOptions` and `workspace/didChangeConfiguration` and threaded
-into `check_string_with_defines`/`completion_string`. A Wasm-text document is
-served by `Wat_editor` (`is_wat` dispatches on the language the client declared
-at `didOpen` via `languageId` — `wat` vs `wax` — recorded per-URI in
-`doc_is_wat`, falling back to the `.wat` extension only for an unrecognized id;
-so an editor serving WAT under another extension or an unsaved buffer is
-honoured): formatting, diagnostics,
-outline, folding, selection-range; hover, signature-help and semantic-tokens
-(from `Validation.f`'s `?record_types` sink — each value at its instruction span,
-identifiers at their own span: a call's callee signature, a local/global's type,
-a type reference's source subtype; the subtype is kept in the reference-keyed
-`index_mapping` so deduplicated types still show their own definition); and
-navigation/rename (go-to-definition, references, document-highlight,
-prepare-rename, rename — over `Wax_wasm.Resolve`, the WAT name-resolution pass,
-which also classifies the semantic tokens; rename detects clashes like the Wax
-side by re-resolving the rewritten buffer and rejecting a change to the renamed
-binding's occurrence count, and both sides return the shared
-`Editor_common.rename_outcome`); and type-definition (from a value of
-a named reference type to that type's definition, via a def-span recorded in the
-sink at each such value); and completion (WAT operands are indices into flat
-spaces and the enclosing instruction fixes which space, so `Resolve.f`'s
-`?expected` sink records at every index use-site — including the zero-width `0`
-the recovering parse inserts for a missing operand — a thunk of the in-scope
-names of that space; completion finds the use-site at the cursor and offers those
-names with their leading `$`, letting the client filter by the typed prefix);
-and inlay-hint (WAT is explicitly typed, so what is implicit is the name behind a
-numeric index, not a type: after each numeric index that resolves to a named
-definition, `Wat_editor.inlays_string` shows that name — from `Resolve`'s uses —
-so `(local.get 0)` reads as `(local.get 0 $x)`; a symbolic use or an anonymous
-target shows nothing). `--stdio` is
-accepted and ignored. The
-`wax` binary builds in both `exe` and `wasm` modes, and `lsp`/`jsonrpc` compile
-under wasm_of_ocaml, so the npm wasm CLI still builds with the subcommand linked
-in.
-
-| Flag | Long | Description |
-|------|------|-------------|
-|      | `--stdio` | Accepted and ignored (stdin/stdout is the only transport); present so editors that pass it by convention do not error |
-
-**Exit status** (shared by all commands; see `docs/src/cli.md`): `0` success;
-`123` a usage error (bad flag combination) or a `format --check` run that found
-files needing formatting; `124` a command-line parse error (cmdliner); `125` an
-internal error; `128` the input was rejected by a diagnostic — a parse,
-validation, or type error, or a malformed wasm binary (also a `check` that
-found any problem). The distinction is misuse (`123`) vs bad input (`128`).
-Rejected input exits `128` wherever detected: `parsing.ml` (syntax),
-`Diagnostic.output_errors` (validation/type), and the `check` aggregate;
-`usage_error` in `main.ml` owns `123`. `fuzz/lib.sh`'s `classify_wax` mirrors
-the contract — keep them in sync.
+- cmdliner won't fall through to the default command on a leading positional,
+  so `main.ml` rewrites `Sys.argv` (the js_of_ocaml trick) to keep the bare
+  `wax <file>` form working — edit that heuristic when adding a subcommand.
+- Exit status: `0` success, `123` a usage error, `124` a cmdliner parse error,
+  `125` an internal error, `128` input rejected by a diagnostic (the
+  distinction is misuse vs bad input). `fuzz/lib.sh`'s `classify_wax` mirrors
+  the contract — keep them in sync.
+- A text input is validated before it is converted to a *different* format, so
+  the conversion and lowering passes may trust their input. A same-format
+  conversion and a wasm binary input are not validated; `-v` forces it.
+- `lsp` (`src/lib-lsp/`) is a thin protocol layer over `src/lib-editor/`, the
+  analysis the VS Code wasm wrapper (`src/editor/`) shares. A language feature
+  belongs in `lib-editor` as a `*_string` function; both front ends only
+  marshal its result.
 
 ## Non-Negotiable Rules
 
@@ -231,7 +129,7 @@ before pushing fixture or grammar changes with `npm run smoke` in
 User-facing docs live in the `docs/` mdbook (`docs/src/*.md`). When a change affects user-visible behavior, update the relevant page in the same commit:
 
 - **Language syntax / type system** → `docs/src/language.md`, and add/adjust an example in `docs/src/examples.md`.
-- **CLI flags or defaults** → `docs/src/cli.md` (and the CLI Interface table above).
+- **CLI flags or defaults** → `docs/src/cli.md`.
 - **Wax↔WASM mapping** → `docs/src/correspondence/*.md`.
 
 Every `wax` code block in `docs/src/examples.md` is compiled by `test/cram-tests/docs-examples.t`, so a stale example fails `dune runtest`. After editing examples, run `dune runtest` then `dune promote`. (Do not hand-edit the generated `docs/book/` HTML.)
