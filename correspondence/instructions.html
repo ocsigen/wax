@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c74cc59e.js";
+            window.path_to_searchindex_js = "../searchindex-e05eb11b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-15e75985.js"></script>
@@ -675,6 +675,14 @@ that can be dropped.</p>
 </table>
 </div>
 <p>No intrinsic can clash with a module entity name: the free-function intrinsics are written as <code>v128::</code>/<code>i64::</code> qualified paths and every other is a method on a receiver, so a function may freely be named e.g. <code>v128_bitselect</code> without any renaming.</p>
+<p>Nor with a struct field name. A method call is read as an intrinsic only when the receiver’s type admits it, so a struct with a function-pointer field named after one of them keeps its indirect call, whatever the argument count:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">copier</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>, <span class="hljs-type">i32</span>, <span class="hljs-type">i32</span>, <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;
+<span class="hljs-keyword">type</span> <span class="hljs-type">holder</span> = { copy: &amp;<span class="hljs-type">copier</span> };
+<span class="hljs-keyword">fn</span> <span class="hljs-title">invoke</span>(h: &amp;<span class="hljs-type">holder</span>) -&gt; <span class="hljs-type">i32</span> {
+    h.<span class="hljs-title">copy</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>);   <span class="hljs-comment">// call_ref through the field, not array.copy</span>
+}</span></pre>
+
+<p>This matters beyond hand-written code: field names come from the name section, so a decompiled module can name a field <code>copy</code>, <code>length</code>, <code>switch</code> or <code>add_i32x4</code>, and the Wax it decompiles to has to compile back to the same module.</p>
 <h2 id="memory-access"><a class="header" href="#memory-access">Memory Access</a></h2>
 <p>Loads and stores are method calls on a <a href="module_fields.html#memories">memory</a>. The method name carries the access width; the value’s signedness (for narrow loads) and its <code>i32</code>/<code>i64</code> type are expressed with the surrounding <code>as iN_s</code>/<code>as iN_u</code> cast, mirroring packed array access.</p>
 <div class="table-wrapper">
