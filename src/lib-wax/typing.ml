@@ -1137,11 +1137,7 @@ module Tbl = struct
         (* One entry per (name, origin) pair, not per reference: a helper called
            a thousand times from one function is one edge. Keeps [used] bounded by
            the reference graph rather than by the instruction count. *)
-        let referrer = !(env.current) in
-        if
-          referrer <> Ignored
-          && not (List.mem referrer (Hashtbl.find_all env.used x.desc))
-        then Hashtbl.add env.used x.desc referrer;
+        mark_reference env x.desc !(env.current);
         (* Link this use to the definition of the name; [resolve] handles only
            references, so [x.info] is a use site. The resolved value's summary
            rides along for hover. *)
@@ -10994,6 +10990,16 @@ and try_inference ctx i label typ ~body ~catches ~catch_all =
 
 (*** Module type and constant checking ***)
 
+(* A subtype has an optional descriptor/described type exactly when its
+   supertype does, and the former must be a subtype of the latter. *)
+let optional_ref_subtype ctx child parent =
+  match (child, parent) with
+  | None, None -> true
+  | Some child, Some parent ->
+      Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type child)
+        (Type parent)
+  | Some _, None | None, Some _ -> false
+
 let check_type_definitions ctx =
   Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
       let ty = Wax_wasm.Types.get_subtype (subtyping_info ctx) (def_id i) in
@@ -11048,24 +11054,10 @@ let check_type_definitions ctx =
                   false
             in
             let descriptor_ok =
-              (* A subtype has a descriptor iff its supertype does, and the
-                 subtype's descriptor must be a subtype of the supertype's. *)
-              match (ty.descriptor, ty'.descriptor) with
-              | None, None -> true
-              | Some ds, Some dp ->
-                  Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type ds)
-                    (Type dp)
-              | Some _, None | None, Some _ -> false
+              optional_ref_subtype ctx ty.descriptor ty'.descriptor
             in
             let describes_ok =
-              (* A subtype has a described type iff its supertype does, and the
-                 subtype's described type must be a subtype of the supertype's. *)
-              match (ty.describes, ty'.describes) with
-              | None, None -> true
-              | Some os, Some op ->
-                  Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type os)
-                    (Type op)
-              | Some _, None | None, Some _ -> false
+              optional_ref_subtype ctx ty.describes ty'.describes
             in
             if not (valid_subtype && descriptor_ok && describes_ok) then
               Error.invalid_subtype ctx.diagnostics ~location sup)
@@ -12065,6 +12057,11 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
   in
   check_type_definitions ctx;
   let memory_index = ref 0 in
+  let register_memory name address_type =
+    let i = !memory_index in
+    incr memory_index;
+    Tbl.add diagnostics ctx.memories name (i, address_type)
+  in
   (* Register a tag's type from its [typ]/[sign], shared by imported and defined
      tags. *)
   let register_tag name typ sign =
@@ -12090,6 +12087,10 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      exists to pre-empt), and a type named only as a table's element type counts
      as used — as it does in the validator. *)
   let resolve_table_reftype rt = ignore (internalize_valtype ctx (Ref rt)) in
+  let register_table name address_type reftype =
+    resolve_table_reftype reftype;
+    Tbl.add diagnostics ctx.tables name (address_type, reftype)
+  in
   (* Register an imported entity under its Wax name. *)
   let register_import (decl : Ast.import_decl) =
     match decl.kind with
@@ -12099,21 +12100,15 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
         let>@ typ = internalize_valtype ctx typ in
         Tbl.add diagnostics ctx.globals decl.id (mut, Some typ)
     | Import_tag { typ; sign } -> register_tag decl.id typ sign
-    | Import_memory { address_type; _ } ->
-        let i = !memory_index in
-        incr memory_index;
-        Tbl.add diagnostics ctx.memories decl.id (i, address_type)
+    | Import_memory { address_type; _ } -> register_memory decl.id address_type
     | Import_table { address_type; reftype = rt; _ } ->
-        resolve_table_reftype rt;
-        Tbl.add diagnostics ctx.tables decl.id (address_type, rt)
+        register_table decl.id address_type rt
   in
   walk_fields
     (fun field ->
       match field.desc with
       | Memory { name; address_type; data; _ } ->
-          let i = !memory_index in
-          incr memory_index;
-          Tbl.add diagnostics ctx.memories name (i, address_type);
+          register_memory name address_type;
           List.iter
             (fun (d : _ Ast.memdata) ->
               Option.iter
@@ -12140,8 +12135,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
       | Data { name; _ } ->
           Option.iter (fun n -> Tbl.add diagnostics ctx.datas n ()) name
       | Table { name; address_type; reftype = rt; _ } ->
-          resolve_table_reftype rt;
-          Tbl.add diagnostics ctx.tables name (address_type, rt)
+          register_table name address_type rt
       | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
       | Conditional _ | Type _ | Global _ | Module_annotation _ -> ())
     fields;
@@ -13232,19 +13226,11 @@ let dedupe_sinks ~resolve_links ~pun_spans ~member_completions =
       l := List.sort_uniq (fun (a, _) (b, _) -> compare (span a) (span b)) !l)
     member_completions
 
-let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
-    ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
-    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
-    fields =
-  Wax_utils.Debug.timed "type-check" @@ fun () ->
-  apply_declared_features diagnostics features fields;
-  (* The shape of the module's conditionals selects the type-checking path — a
-     conditional-free module (the common case) is typed once, directly — and
-     gates [check_let_bindings], which reports a [let] binding inside an
-     [#[if]] branch (one can only exist when the module has a conditional). *)
-  let shape = plan_shape ~guards:true fields in
+let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
+    ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
+    ?(member_completions = None) ?(faithful = false)
+    ?(features = Wax_utils.Feature.default ()) diagnostics fields shape =
   let has_conditional = shape <> [] in
-  if has_conditional then check_let_bindings diagnostics fields;
   if not has_conditional then
     let types, typed =
       type_configuration ~warn_unused ~suggest ~resolve_links ~pun_spans
@@ -13374,10 +13360,28 @@ let lint_confusable diagnostics fields =
   in
   walk fields
 
+(* Perform the common entry-point work exactly once: feature declarations affect
+   every type check, while the conditional shape selects the direct or
+   configuration-aware path. *)
+let prepare_module_check ~warn_unused diagnostics features fields =
+  apply_declared_features diagnostics features fields;
+  if warn_unused then lint_confusable diagnostics fields;
+  let shape = plan_shape ~guards:true fields in
+  if shape <> [] then check_let_bindings diagnostics fields;
+  shape
+
+let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
+    ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
+    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
+    fields =
+  Wax_utils.Debug.timed "type-check" @@ fun () ->
+  let shape = prepare_module_check ~warn_unused diagnostics features fields in
+  f_infer_with_shape ~simplify ~warn_unused ~suggest ~resolve_links ~pun_spans
+    ~member_completions ~faithful ~features diagnostics fields shape
+
 let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     ?(faithful = false) ?(width_check = `Off)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
-  if warn_unused then lint_confusable diagnostics fields;
   let types, typed =
     f_infer ~simplify ~warn_unused ~suggest ~faithful ~features diagnostics
       fields
@@ -13391,11 +13395,8 @@ let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
 let check ?(warn_unused = false) ?(suggest = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
-  apply_declared_features diagnostics features fields;
-  if warn_unused then lint_confusable diagnostics fields;
-  let shape = plan_shape ~guards:true fields in
+  let shape = prepare_module_check ~warn_unused diagnostics features fields in
   let has_conditional = shape <> [] in
-  if has_conditional then check_let_bindings diagnostics fields;
   if not has_conditional then
     ignore
       (type_configuration ~build:false ~warn_unused ~suggest ~features
