@@ -2,8 +2,9 @@
 
 This is the changelog for the `wax` / `wax-lib` opam packages. `dune-release`
 reads the top entry's version and notes when cutting an opam release (see
-[`RELEASING.md`](RELEASING.md)). The VS Code extension and the tree-sitter
-grammar keep their own changelogs.
+[`RELEASING.md`](RELEASING.md)). The VS Code extension keeps its own changelog,
+[`editors/vscode/CHANGELOG.md`](editors/vscode/CHANGELOG.md); the tree-sitter
+grammar keeps none, and both are versioned independently of the toolchain.
 
 ## Unreleased
 
