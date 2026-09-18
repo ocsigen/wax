@@ -147,4 +147,13 @@ User-facing docs live in the `docs/` mdbook (`docs/src/*.md`). When a change aff
 - **CLI flags or defaults** → `docs/src/cli.md`.
 - **Wax↔WASM mapping** → `docs/src/correspondence/*.md`.
 
+A user-visible change also needs an entry under `## Unreleased` in
+`CHANGES.md`, in the same commit, under the matching `###` heading
+(Language, Command line, Warnings, Diagnostics, Editors, Fixes,
+Performance, Library, Documentation). `dune-release` reads the top entry
+when cutting an opam release, so an unlisted change ships unannounced.
+Write it for a user: what changed and why it matters, not how it was
+implemented. A change confined to the VS Code extension goes in its own
+`editors/vscode/CHANGELOG.md` instead.
+
 Every `wax` code block in `docs/src/examples.md` is compiled by `test/cram-tests/docs-examples.t`, so a stale example fails `dune runtest`. After editing examples, run `dune runtest` then `dune promote`. (Do not hand-edit the generated `docs/book/` HTML.)
