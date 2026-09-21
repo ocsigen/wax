@@ -6284,14 +6284,20 @@ and type_cast ctx i =
                [pop_parameter]. It is counted by [count_holes] like any other
                hole, so a pending value is reserved for it — but consuming
                that value would also TYPE it, and the value is a residual some
-               other consumer reconnects to on the re-parse: an untyped
-               [select] captured this way is grounded at the ascribed type and
-               re-emits with a declared one ([(select (result nullref))] where
-               the source had a bare [(select)]), which the
-               dead-code-cond-annot-reconnect [pushblk] cell pins. So the hole
-               takes its type from the ascription and leaves the value alone.
-               (The reserved-but-unconsumed pending is the leftover
-               [with_holes] tolerates.) *)
+               other consumer reconnects to on the re-parse. Under an UNEQUAL
+               conditional annotation ([(@if $dbg (@then drop))] over a dead
+               [ref.null extern], then [ref.is_null]) the configurations
+               disagree on what the hole stands for: the polymorphic floor in
+               one, the [&?extern] residual in the other, and no single pin
+               type fits both — typing the value rejects a valid module (the
+               dead-code-cond-annot-reconnect [uneq] cell; the backing-scan
+               grid's [ScondNe] cells, 52 of them at depth 3). Even where the
+               capture is well-typed it re-spells the value: an untyped
+               [select] grounded this way re-emits with a declared type
+               ([(select (result nullref))] for a bare [(select)], the
+               [pushblk] cell). So the hole takes its type from the ascription
+               and leaves the value alone. (The reserved-but-unconsumed pending
+               is the leftover [with_holes] tolerates.) *)
             let* i' = return_expression i' Hole (Cell.make Unknown) in
             check_type ctx i' ty;
             return i'

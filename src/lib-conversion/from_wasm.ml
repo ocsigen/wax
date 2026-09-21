@@ -1183,10 +1183,13 @@ let cast_to (ty : Ast.casttype) (e : _ Ast.instr) : _ Ast.instr =
   { e with Ast.desc = Ast.Cast (e, ty); expected = cast_result ty }
 
 (* Wrap [e] in the parenthesized type ascription [(e : ty)] — the CLAIM-FREE
-   grounding: an ascribed bare hole claims no pending value, at any type, and
-   the node lowers to no instruction (see [Typing]'s [count_holes] and
-   [To_wasm]'s [Ascribed] arm). This is what every "leave the residual to the
-   branch that consumes it" pin below is spelled with. *)
+   grounding: an ascribed bare hole is grounded at [ty] without TYPING the
+   pending value it stands for ([Typing]'s ascription arm), and the node lowers
+   to no instruction ([To_wasm]'s [Ascribed] arm). Under an UNEQUAL conditional
+   annotation the same printed hole reads the polymorphic floor in one
+   configuration and a residual of any hierarchy in the other, so only a pin
+   that never types its value is right in both. This is what every "leave the
+   residual to the branch that consumes it" pin below is spelled with. *)
 let ascribe_to (ty : Ast.valtype) (e : _ Ast.instr) : _ Ast.instr =
   {
     e with

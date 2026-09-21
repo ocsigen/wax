@@ -7,9 +7,10 @@ plain wasm can never build (its validator types the residual into the consumer
 and rejects). The tree the lowering reads instead types each branch as an
 isolated void block: `From_wasm`'s backing scan models THAT rule (an annotation
 claims nothing), and a backing the reader's pin could not ascribe gets the
-CLAIM-FREE type ascription (`(_ : &?none)` and kin), which the typer gives no
-pending value — ascription asserts, it does not operate, so it grounds the
-hole without capturing the residual a branch consumes, and lowers to nothing.
+CLAIM-FREE type ascription (`(_ : &?none)` and kin), whose hole the typer
+grounds without typing the value it stands for — ascription asserts, it does
+not operate — so the residual a branch consumes is left alone, and the node
+lowers to nothing.
 
 A funcref residual under the annotation backs the `ref.is_null` hole bare (any
 reference recovers `ref.is_null`); the extern residual deeper is what the
@@ -350,6 +351,28 @@ untyped:
       _ = (_ : &?none) == (_ : &?none);
   $ wax pushblk.wax -f wat | grep -cE '\(select\)|ref.eq'
   2
+
+The claim-free grounding is load-bearing under an UNEQUAL annotation: one
+configuration drops the residual, so the reader's hole sits on the polymorphic
+floor and the `&?none` pin is right; the other leaves the `&?extern` residual
+for the hole to reconnect to positionally. A hole that TYPED its value would
+reject the second configuration (`&?extern` is not `&?none`); the ascribed
+hole leaves it alone and lowers to nothing, so the source pairing survives:
+
+  $ cat > uneq.wat <<'WAT'
+  > (module
+  >   (func
+  >     return
+  >     ref.null extern
+  >     (@if $dbg (@then drop))
+  >     ref.is_null
+  >     drop
+  >     unreachable))
+  > WAT
+  $ wax -i wat -f wax uneq.wat -o uneq.wax && grep '!' uneq.wax
+      _ = !(_ : &?none);
+  $ wax uneq.wax -f wat | grep -c 'ref.is_null'
+  1
 
 With NOTHING below the annotation, the synthetic is not injected at all:
 every pass already agrees (the parameter draws from the polymorphic floor in
