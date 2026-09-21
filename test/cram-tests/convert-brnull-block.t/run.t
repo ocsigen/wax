@@ -22,7 +22,8 @@ opcode on both the default and the `--faithful` path.
   > WAT
 
 The tested ref is pinned to the convert source; the fall-through hole then
-reconnects there rather than at the block's `&?any` result:
+reconnects there rather than at the block's `&?any` result, and so needs no pin
+of its own (it is already in the source hierarchy):
 
   $ wax -i wat -f wax --faithful m.wat
   #[export]
@@ -30,7 +31,7 @@ reconnects there rather than at the block's `&?any` result:
       'l: do &?any {
           unreachable;
           br_on_null 'l (_, _ as &?extern);
-          _ as &extern as &any;
+          _ as &?any;
           unreachable;
       }
   }

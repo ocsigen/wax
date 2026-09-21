@@ -2039,9 +2039,16 @@ let pop_typed ty =
    — the redundant pin on a grounded select is pruned by the same reparse-adaptive
    mirror in the typer that keeps the load-bearing one. Mirrors the dead-code
    numeric-operand pins in [int_bin_op]/[pop_typed]. *)
-let type_hole_src src e =
+let rec type_hole_src src e =
   match e.Ast.desc with
   | Ast.Hole | Ast.Select _ -> cast_to (Valtype src) e
+  (* A [ref.as_non_null] FORWARDS the reference, so the source pin belongs on
+     the reference inside it. Wrapping the [!] instead leaves its own (bottom)
+     result untyped, and the outer surface [as] then has to cast it: [_! as
+     i32_s] re-lowers as [ref.cast (ref i31) ; i31.get_s] where the source had
+     one opcode (the backing-scan [Rnn] cells). *)
+  | Ast.NonNull inner ->
+      { e with Ast.desc = Ast.NonNull (type_hole_src src inner) }
   | _ -> e
 
 (* As [type_hole_src] for the cross-hierarchy converts ([extern.convert_any] /
@@ -2237,6 +2244,20 @@ let backing_adaptive_null (b : _ Ast.instr) =
       true
   | _ -> false
 
+(* Whether [b] is the backing an EXTERN source pin must ground rather than
+   capture: the scan named it, it is the hole's own single-value capture, and its
+   printed form says nothing about its hierarchy — so it defaults to the any
+   hierarchy on a re-parse and a pin over it would cross (see
+   [pin_backing_source]). A classifiable backing is already handled: in the
+   source hierarchy it leaves the hole bare, outside it takes the claim-free
+   bottom. *)
+let backing_needs_grounding ctx ~from_top (b : _ Ast.instr) =
+  from_top = 0
+  &&
+  match backing_class_of ctx ~from_top b with
+  | Unknown_class -> true
+  | Ref_class _ | Value_class | Null_class -> false
+
 let backing_wrong_hierarchy ctx src ~from_top (b : _ Ast.instr) =
   match backing_class_of ctx ~from_top b with
   | Ref_class { hier; _ } -> hier <> src
@@ -2327,6 +2348,34 @@ let pin_forwarding_source src stack =
         () )
   | _ -> (stack, ())
 
+(* Ground the residual [b] that [Stack.effective_backing] named as a bare
+   hole's backing, for a consumer whose source hierarchy is EXTERN. It is the
+   deeper twin of [pin_forwarding_source], which only reaches a residual still
+   on top of the stack; the scan sees through interposed zero-value statements,
+   so the residual to ground is generally not the head, and it is found here by
+   physical identity with the node the scan returned.
+
+   Why the extern hierarchy alone needs it. Every other top-of-hierarchy pin is
+   same-hierarchy and so inert after unification, which is why an UNCLASSIFIABLE
+   backing is otherwise left to the pin on the hole ("whatever it captures is
+   right-hierarchy — the validator typed it there"). An extern source pin
+   CROSSES: land it on a residual whose own printed form defaults to the any
+   hierarchy and it becomes [extern.convert_any], the opcode the pin exists to
+   prevent. The residual must take the source hierarchy instead, so the hole
+   reconnects there and the consumer lowers to its one opcode — [(_ as &?extern)!]
+   rather than [_!] plus a pinned hole (a wasm-smith FAITHDRIFT on
+   [br 'l ; ref.as_non_null ; nop ; ref.cast (ref extern)], and its
+   [any.convert_extern] mirror). Only a SINGLE-value capture is grounded
+   ([from_top = 0]): a claimed-past multi-value residual hands the hole a middle
+   result, which this node-level pin cannot address. *)
+let pin_backing_source src b stack =
+  let rec go = function
+    | [] -> []
+    | ((a, w, i) as entry) :: rem ->
+        if i == b then (a, w, convert_src src i) :: rem else entry :: go rem
+  in
+  (go stack, ())
+
 (* Whether a popped operand's value slot is an unclaimed hole — the shapes
    [convert_src] recurses through — so its re-parse claims the next pending
    value and [pin_forwarding_source]'s grounding matters. *)
@@ -2334,7 +2383,46 @@ let rec hole_reconnects (e : _ Ast.instr) =
   match e.Ast.desc with
   | Ast.Hole -> true
   | Ast.NonNull inner -> hole_reconnects inner
+  (* The two forwarding shapes [convert_src] also recurses through: the value the
+     consumer takes is the tested ref's, so an unclaimed hole there reconnects
+     and must be grounded exactly as a directly-popped one. Left out, a pin
+     [pin_hierarchy] placed INSIDE the [br_on_null] landed on the residual the
+     inner hole reconnects to and manufactured the crossing
+     ([br 'l ; ref.as_non_null ; nop ; br_on_null 'l ; ref.cast (ref extern)]). *)
+  | Ast.Br_on_null (_, inner) -> hole_reconnects inner
+  | Ast.Sequence (_ :: _ as l) -> hole_reconnects (List.hd (List.rev l))
   | _ -> false
+
+let rec pin_hierarchy pin (e : _ Ast.instr) =
+  match e.Ast.desc with
+  (* A hole, or an untyped [select] of holes: both re-parse type-adaptively (the
+     select's result type is its arms'), so both take the target hierarchy under the
+     outer cast and absorb it. Same shapes [type_hole_src]/[convert_src] pin. *)
+  | Ast.Hole | Ast.Select _ -> Some (cast_to pin e)
+  | Ast.NonNull inner ->
+      Option.map
+        (fun inner -> { e with Ast.desc = Ast.NonNull inner })
+        (pin_hierarchy pin inner)
+  (* A forwarding [br_on_null], and a [br_on_null] whose label carries values
+     (the [Sequence] of delivered values then the tested ref): the value the
+     outer cast consumes is the tested ref's non-null version, so the pin must
+     land on that ref INSIDE the branch. Wrapping the branch instead pins its
+     already-[any]-defaulted result and materialises the spurious
+     [extern.convert_any] the pin exists to prevent — the same reason
+     [convert_src] recurses through these two shapes, which this function's
+     header claims to match (a wasm-smith FAITHDRIFT on
+     [br 'l ; br_on_null 'l ; ref.cast (ref extern)]). *)
+  | Ast.Br_on_null (l, inner) ->
+      Option.map
+        (fun inner -> { e with Ast.desc = Ast.Br_on_null (l, inner) })
+        (pin_hierarchy pin inner)
+  | Ast.Sequence (_ :: _ as l) ->
+      let rev = List.rev l in
+      Option.map
+        (fun last ->
+          { e with Ast.desc = Ast.Sequence (List.rev (last :: List.tl rev)) })
+        (pin_hierarchy pin (List.hd rev))
+  | _ -> None
 
 (* [pop_typed] carrying the receiver's width tag, for a method-form op that
    inherits its receiver's flexibility (a rotate, a float method). A hole is
@@ -2784,8 +2872,34 @@ let pin_callee ctx t (f : _ Ast.instr) =
            [effective_backing]'s [crossed_any]): go claim-free. *)
         | `Floor | `Blocked -> crossed_any
       in
-      return (if wrong then ascribe_to target f else pin f)
-  | _ -> return (pin f)
+      (* An UNCLASSIFIABLE residual, as in the convert arms: the pin would land
+         on it and materialise a [ref.cast] the source never had
+         ([ref.as_non_null ; atomic.fence ; call_ref] re-lowering with a cast
+         between the fence and the call). The residual IS the callee the source
+         popped, so grounding it at the callee type is what the hole then
+         reconnects to, and the hole stays bare. *)
+      let* grounded =
+        match backing with
+        | `Backing (b, from_top, _) when backing_needs_grounding ctx ~from_top b
+          ->
+            let* () = pin_backing_source target b in
+            return true
+        | _ -> return false
+      in
+      return
+        (if grounded then f else if wrong then ascribe_to target f else pin f)
+  (* A FORWARDING operand — a [ref.as_non_null] over the callee, the shapes
+     [pin_hierarchy] recurses through — carries the reference inside it, so the
+     pin belongs there. Wrapping the forwarder instead pins its own (bottom,
+     non-null) result and materialises a [ref.cast] the source never had:
+     [(_! as &?t)()] re-lowers as [ref.as_non_null ; ref.cast ; call_ref] where
+     the source had two opcodes (the backing-scan [Rnn.VmultiRC] cells). Inside,
+     the pin sits on the hole and is absorbed, exactly as [convert_src] places a
+     convert's source pin. *)
+  | _ -> (
+      match pin_hierarchy (Ast.Valtype target) f with
+      | Some f' -> return f'
+      | None -> return (pin f))
 
 (* Whether the residual's own printed form names exactly the type [type_name] —
    the one capture a [(_ as &?type_name)] receiver pin provably absorbs as
@@ -2848,7 +2962,13 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
         | `Floor | `Blocked -> crossed_any
       in
       return (if wrong then ascribe_to target recv else pin recv)
-  | _ -> return (pin recv)
+  (* As [pin_callee]: a forwarding receiver carries the reference inside it, so
+     the pin goes there — [(_! as &?s).f] re-lowers with a [ref.cast] the source
+     never had. *)
+  | _ -> (
+      match pin_hierarchy (Ast.Valtype target) recv with
+      | Some recv' -> return recv'
+      | None -> return (pin recv))
 
 (* Pin the reference HIERARCHY of an operand that leaves it open: a hole is
    polymorphic, and [!e] ([ref.as_non_null]) only forwards its operand's type. The
@@ -3043,18 +3163,6 @@ let int_bin_op ctx (i0 : _ Src.instr) sz (op : Src.int_bin_op) =
   | Le s -> compare (Le (Some s))
   | Ge s -> compare (Ge (Some s))
 
-let rec pin_hierarchy pin (e : _ Ast.instr) =
-  match e.Ast.desc with
-  (* A hole, or an untyped [select] of holes: both re-parse type-adaptively (the
-     select's result type is its arms'), so both take the target hierarchy under the
-     outer cast and absorb it. Same shapes [type_hole_src]/[convert_src] pin. *)
-  | Ast.Hole | Ast.Select _ -> Some (cast_to pin e)
-  | Ast.NonNull inner ->
-      Option.map
-        (fun inner -> { e with Ast.desc = Ast.NonNull inner })
-        (pin_hierarchy pin inner)
-  | _ -> None
-
 (* Branch-hinting / compilation-hints proposals: carry a Wasm instruction's hints
    onto the Wax instruction it decompiles to. A Wasm instruction contributes one
    entry to the stack of Wax expressions being built, so the hints go on whatever
@@ -3139,11 +3247,16 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
   (* Ascribe a (struct/array) method receiver its reference type, so the method
      resolves even when the receiver is a hole on a polymorphic stack (unreachable
      code); a redundant cast on a concrete receiver is dropped by [simplify]. *)
+  (* As [pin_receiver] / [pin_callee]: over a FORWARDING operand the pin goes on
+     the reference inside it, so it is absorbed rather than casting the
+     forwarder's own bottom result ([(_! as &?array).length()] re-lowered with a
+     [ref.cast] the source never had). A concrete operand takes the plain
+     wrapper. *)
   let cast_ref recv typ =
-    {
-      recv with
-      Ast.desc = Ast.Cast (recv, Valtype (Ref { nullable = true; typ }));
-    }
+    let pin = Ast.Valtype (Ast.Ref { nullable = true; typ }) in
+    match pin_hierarchy pin recv with
+    | Some recv' -> recv'
+    | None -> { recv with Ast.desc = Ast.Cast (recv, pin) }
   in
   (* Ascribe the continuation operand — the last of [args] — with the
      instruction's type immediate, [(c as &?ct)], so a resume/switch/bind
@@ -3691,12 +3804,29 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `Backing (b, _, _) -> backing_adaptive_null b
         | `Value | `Floor | `Blocked -> false
       in
+      (* An UNCLASSIFIABLE residual is the third outcome: its printed form says
+         nothing about its hierarchy, so it is neither left to a bare hole nor
+         safe to pin over — the pin lands on it and materialises exactly the
+         [ref.cast] this arm's rule is about. Ground the residual at the source
+         instead ([pin_backing_source]); it is then IN the source hierarchy, so
+         [backed] leaves the hole bare and the convert keeps its one opcode. *)
+      let* grounded =
+        match backing with
+        | `Backing (b, from_top, _)
+          when hole_reconnects e && (not adaptive_null)
+               && backing_needs_grounding ctx ~from_top b ->
+            let* () = pin_backing_source src b in
+            return true
+        | _ -> return false
+      in
       let backed =
         is_bare_hole e && (not adaptive_null)
-        &&
-        match backing with
-        | `Backing (b, from_top, _) -> backing_in_hierarchy ctx `Any ~from_top b
-        | `Value | `Floor | `Blocked -> false
+        && (grounded
+           ||
+           match backing with
+           | `Backing (b, from_top, _) ->
+               backing_in_hierarchy ctx `Any ~from_top b
+           | `Value | `Floor | `Blocked -> false)
       in
       let wrong =
         is_bare_hole e
@@ -3745,13 +3875,27 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `Backing (b, _, _) -> backing_adaptive_null b
         | `Value | `Floor | `Blocked -> false
       in
+      (* As [RefCast]: this source pin crosses hierarchies, so an unclassifiable
+         residual is grounded at the source rather than captured by a pin on the
+         hole (see [pin_backing_source]). Grounded, it IS in the source
+         hierarchy, so [backed] below leaves the hole bare. *)
+      let* grounded =
+        match backing with
+        | `Backing (b, from_top, _)
+          when hole_reconnects e && (not adaptive_null)
+               && backing_needs_grounding ctx ~from_top b ->
+            let* () = pin_backing_source src b in
+            return true
+        | _ -> return false
+      in
       let backed =
         is_bare_hole e && (not adaptive_null)
-        &&
-        match backing with
-        | `Backing (b, from_top, _) ->
-            backing_in_hierarchy ctx `Extern ~from_top b
-        | `Value | `Floor | `Blocked -> false
+        && (grounded
+           ||
+           match backing with
+           | `Backing (b, from_top, _) ->
+               backing_in_hierarchy ctx `Extern ~from_top b
+           | `Value | `Floor | `Blocked -> false)
       in
       let wrong =
         is_bare_hole e
@@ -3830,16 +3974,51 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          [(_ as &?extern)], the reference analogue of the numeric width pins (and
          of [ref.is_null]'s [(_ as &?any)]). Only this direction needs it: a hole
          cast to the any/func hierarchy already re-lowers to [ref.cast], and a
-         real extern operand fixes the hierarchy itself and is left bare. *)
+         real extern operand fixes the hierarchy itself and is left bare.
+
+         But that pin may only capture NOTHING. Alone among the
+         top-of-hierarchy pins it CROSSES hierarchies, so it is not inert over
+         whatever it lands on: [(_ as &?extern)] over an any-hierarchy value IS
+         [extern.convert_any], the very opcode-family change it exists to
+         prevent. So it is applied only to a hole springing from the polymorphic
+         bottom with no residual to reconnect to ([`Floor] / [`Blocked]) — there
+         the bare cast would otherwise be absorbed and lost entirely. Over a
+         real [`Backing] the hole stays bare and reconnects: an ADAPTIVE
+         residual (a forwarding [br_on_null], an untyped [select]) then takes
+         the extern hierarchy from this cast's own [as] surface, one opcode,
+         exactly the source, while a pin would land on it and manufacture the
+         convert (a wasm-smith FAITHDRIFT on
+         [br 'l ; br_on_null 'l ; nop ; ref.cast (ref noextern)], the [nop]
+         splitting the cast off the residual it would otherwise have consumed
+         directly). A residual that is NOT adaptive is grounded at the source
+         instead ([pin_backing_source]), and a [`Value] backing — or one
+         provably in another hierarchy — takes the claim-free bottom below. *)
       let target = reftype ctx t in
+      let* backing, crossed_any = Stack.effective_backing is_poly_terminator in
+      let bottom_sprung =
+        match backing with
+        | `Floor | `Blocked -> true
+        | `Backing _ | `Value -> false
+      in
+      let extern_target =
+        match target.typ with Extern | NoExtern -> true | _ -> false
+      in
+      let extern_src : Ast.valtype = Ref { nullable = true; typ = Extern } in
+      (* An unclassifiable residual takes the source hierarchy itself, so the
+         hole below it reconnects there and stays bare (see
+         [pin_backing_source]). *)
+      let* () =
+        match backing with
+        | `Backing (b, from_top, _)
+          when extern_target && hole_reconnects e
+               && backing_needs_grounding ctx ~from_top b ->
+            pin_backing_source extern_src b
+        | _ -> return ()
+      in
       let e =
-        match target.typ with
-        | Extern | NoExtern ->
-            Option.value ~default:e
-              (pin_hierarchy
-                 (Ast.Valtype (Ast.Ref { nullable = true; typ = Extern }))
-                 e)
-        | _ -> e
+        if extern_target && bottom_sprung then
+          Option.value ~default:e (pin_hierarchy (Ast.Valtype extern_src) e)
+        else e
       in
       (* And over a backing provably outside the TARGET's hierarchy — reachable
          only through an [(@if)], whose branches consume it per configuration —
@@ -3853,12 +4032,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          round-trips to. A SAME-hierarchy capture stays bare: it is either the
          cast's own operand (no annotation in between — the validator typed it
          there) or re-lowers as at most this cast's own [ref.cast]. *)
-      let* e =
+      let e =
         match e.Ast.desc with
         | Ast.Hole ->
-            let* backing, crossed_any =
-              Stack.effective_backing is_poly_terminator
-            in
             let target_hier = heaptype_hierarchy ctx target.typ in
             let wrong =
               match backing with
@@ -3873,13 +4049,12 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
               (* As [pin_callee]: annotation in play, claiming pin unsafe. *)
               | `Floor | `Blocked -> crossed_any
             in
-            return
-              (if wrong then
-                 ascribe_to
-                   (Ref { nullable = true; typ = hierarchy_bottom target_hier })
-                   e
-               else e)
-        | _ -> return e
+            if wrong then
+              ascribe_to
+                (Ref { nullable = true; typ = hierarchy_bottom target_hier })
+                e
+            else e
+        | _ -> e
       in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref target))))
   | RefCastDescEq t ->

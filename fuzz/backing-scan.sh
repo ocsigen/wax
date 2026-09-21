@@ -239,6 +239,13 @@ rdr test   "ref.test"           "ref.test (ref null \$s)|drop"
 # cells still assert validity, no crash, and no INTRODUCED crossing — the
 # output may carry at most the source's one ref.cast.
 rdr cast   "ref.cast"           "ref.cast (ref null \$s)|drop" 0
+# The EXTERN-target mirror of the cast reader, as [cvtx] is [cvt]'s. Only an
+# any-hierarchy target ([$s]) was a reader, so the one cast whose type pin
+# CROSSES hierarchies — the [(_ as &?extern)] that keeps [ref.cast (ref extern)]
+# from re-lowering as [extern.convert_any] — never met a backing at all, and
+# both of the shapes that put something under it (a forwarding [br_on_null]
+# residual, a [ref.as_non_null] one) shipped introducing the crossing.
+rdr castx  "ref.cast"           "ref.cast (ref extern)|drop" 0
 
 # The crossing opcodes that must not be INTRODUCED (output count <= source
 # count, per opcode).

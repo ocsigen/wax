@@ -153,6 +153,13 @@ grammar keeps none, and both are versioned independently of the toolchain.
   stack for a later statement keeps its result type. Two annotations that were
   each redundant on their own — the block's result, and the cast pinning the
   same type — were both dropped, and the Wax that came out no longer compiled.
+- Decompiled dead code no longer gains a `ref.cast`, or a stray
+  `extern.convert_any`, on the way back. The decompiler pins the type of an
+  operand it cannot see, and those pins were landing on a neighbouring value
+  instead of on the hole they were meant for, where they turned into real
+  instructions. Affected a `ref.cast` into the extern hierarchy, both
+  `extern`/`any` conversions, a `call_ref` callee, a field or element access
+  receiver, `array.len` and `i31.get_s`.
 - Output fixes: an empty blocktype uses the `0x40` shorthand, funcidx element
   segments encode `(ref func)` rather than `funcref`, an empty name-section
   entry names nothing, and data strings are split at word boundaries.
