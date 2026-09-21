@@ -149,6 +149,10 @@ grammar keeps none, and both are versioned independently of the toolchain.
   list, whose active segment fills the table at instantiation but leaves the
   table itself without a default. An out-of-f32-range float literal takes type
   `f64`.
+- A decompiled block (`do`, `if`, `loop`, `try`) whose value is left on the
+  stack for a later statement keeps its result type. Two annotations that were
+  each redundant on their own — the block's result, and the cast pinning the
+  same type — were both dropped, and the Wax that came out no longer compiled.
 - Output fixes: an empty blocktype uses the `0x40` shorthand, funcidx element
   segments encode `(ref func)` rather than `funcref`, an empty name-section
   entry names nothing, and data strings are split at word boundaries.

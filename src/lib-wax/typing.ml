@@ -5772,8 +5772,11 @@ and bind_bound_types ctx ~src ~dst =
    consumer needs. This is what makes an unannotated stack-switching operand
    ['h: do { … }] lower identically to the explicitly annotated ['h: do &?t { … }]
    (see the repros in the resume-family typers). Non-block operands and blocks
-   whose result is already written are returned unchanged. *)
-and annotate_omitted_block src (operand : location instr) : location instr =
+   whose result is already written are returned unchanged. Polymorphic in the
+   node's info so [restore_leftover_block_result] can apply it to a TYPED node
+   as well as to a parsed operand. *)
+and annotate_omitted_block : 'a. valtype -> 'a instr -> 'a instr =
+ fun src operand ->
   let fill typ =
     if typ.results = [||] then { typ with results = [| src |] } else typ
   in
@@ -5788,6 +5791,29 @@ and annotate_omitted_block src (operand : location instr) : location instr =
     | d -> d
   in
   { operand with desc }
+
+(* Put back the result type of a block-like STATEMENT whose value is left on the
+   stack for a later consumer. Nothing in that position pins a type on a
+   re-parse — [toplevel_instruction] types such a statement against its own
+   declared result — so an omitted one strands the body's value ("This value
+   remains on the stack").
+
+   [simplify] reaches that shape by dropping two annotations that are each
+   redundant on their own: the block's result type, redundant because the cast
+   wrapping it pinned the same type ([context_block_typ]), and then the cast
+   itself, redundant because the block already had that type. Together they
+   leave a bare [do { … }] that no longer states what its body yields (a
+   wasm-smith round-trip finding on [block (result anyref) … end ; ref.cast
+   anyref], its value dropped several instructions later). Restoring the block's
+   own annotation is the spelling the same block already reaches when no cast
+   wrapped it, so the two inputs converge rather than diverge. *)
+and restore_leftover_block_result ctx (i' : (_ array * _) instr) =
+  match fst i'.info with
+  | [| cell |] -> (
+      match standalone_valtype ctx cell with
+      | Some iv -> annotate_omitted_block iv.typ i'
+      | None -> i')
+  | _ -> i'
 
 (* Fill in each omitted block-construct operand's result from the expected
    operand types, when they are known and their count matches (a mismatched
@@ -10548,6 +10574,13 @@ and block_contents ctx results l =
   | i :: r ->
       fun st ->
         let st_after, i' = toplevel_instruction ctx i st in
+        (* Statements follow, so [i'] is not the block's trailing value-producer:
+           anything it leaves on the stack is a leftover a later statement
+           consumes, and a block-like [i'] must therefore state its own result
+           (see [restore_leftover_block_result]). A TRAILING one needs no
+           annotation — [block_contents] routes it through [check_instruction],
+           which fills the result back in from the block's own. *)
+        let i' = if r = [] then i' else restore_leftover_block_result ctx i' in
 
         (* Dead code: the stack was reachable before [i], typing [i] left it
            polymorphic ([Unreachable] — [i] is a [br]/[return]/[unreachable] or
