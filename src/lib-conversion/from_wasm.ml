@@ -2956,7 +2956,17 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
             && (not (backing_names_type ~from_top b type_name))
             &&
             match backing_class_of ctx ~from_top b with
-            | Null_class | Unknown_class -> false
+            | Null_class -> false
+            (* An UNCLASSIFIABLE backing cannot be shown absorbable, and under a
+               crossed annotation the claiming pin is a [ref.cast] EMITTED
+               before the access's other operands: its hole then claims the
+               annotation's push rather than the residual, which is the very
+               mis-capture the pin exists to avoid, and the typer rejects the
+               spelling outright ("This expression occurs before a hole '_'" —
+               the backing-scan [Rnn.ScondPush*] cells). The claim-free
+               ascription lowers to nothing, so it states the type without
+               taking a value and the operands keep their source order. *)
+            | Unknown_class -> true
             | Value_class | Ref_class _ -> true)
         (* As [pin_callee]: annotation in play, claiming pin unsafe. *)
         | `Floor | `Blocked -> crossed_any
@@ -4015,11 +4025,6 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
             pin_backing_source extern_src b
         | _ -> return ()
       in
-      let e =
-        if extern_target && bottom_sprung then
-          Option.value ~default:e (pin_hierarchy (Ast.Valtype extern_src) e)
-        else e
-      in
       (* And over a backing provably outside the TARGET's hierarchy — reachable
          only through an [(@if)], whose branches consume it per configuration —
          a bare hole would capture it, and typing the capture compounds this
@@ -4032,29 +4037,38 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          round-trips to. A SAME-hierarchy capture stays bare: it is either the
          cast's own operand (no annotation in between — the validator typed it
          there) or re-lowers as at most this cast's own [ref.cast]. *)
-      let e =
+      let target_hier = heaptype_hierarchy ctx target.typ in
+      let wrong =
         match e.Ast.desc with
-        | Ast.Hole ->
-            let target_hier = heaptype_hierarchy ctx target.typ in
-            let wrong =
-              match backing with
-              | `Value -> true
-              | `Backing (b, from_top, crossed) -> (
-                  crossed
-                  &&
-                  match backing_class_of ctx ~from_top b with
-                  | Ref_class { hier; _ } -> Some hier <> target_hier
-                  | Value_class -> true
-                  | Null_class | Unknown_class -> false)
-              (* As [pin_callee]: annotation in play, claiming pin unsafe. *)
-              | `Floor | `Blocked -> crossed_any
-            in
-            if wrong then
-              ascribe_to
-                (Ref { nullable = true; typ = hierarchy_bottom target_hier })
-                e
-            else e
-        | _ -> e
+        | Ast.Hole -> (
+            match backing with
+            | `Value -> true
+            | `Backing (b, from_top, crossed) -> (
+                crossed
+                &&
+                match backing_class_of ctx ~from_top b with
+                | Ref_class { hier; _ } -> Some hier <> target_hier
+                | Value_class -> true
+                | Null_class | Unknown_class -> false)
+            (* As [pin_callee]: annotation in play, claiming pin unsafe. *)
+            | `Floor | `Blocked -> crossed_any)
+        | _ -> false
+      in
+      (* The claim-free grounding is decided BEFORE the extern pin and wins over
+         it. Both target the same bare hole, and the pin — being a cast — claims
+         a pending value, which is exactly what an annotation in play makes
+         unsafe; applied first it also replaced the [Hole] this test matches on,
+         so the grounding could never fire for an extern target at all (the
+         backing-scan [Rnn.ScondPushR.Bp1] cell: the claiming pin captured a
+         value a branch released and re-lowered as an [extern.convert_any]). *)
+      let e =
+        if wrong then
+          ascribe_to
+            (Ref { nullable = true; typ = hierarchy_bottom target_hier })
+            e
+        else if extern_target && bottom_sprung then
+          Option.value ~default:e (pin_hierarchy (Ast.Valtype extern_src) e)
+        else e
       in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref target))))
   | RefCastDescEq t ->

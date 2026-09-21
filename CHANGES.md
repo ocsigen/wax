@@ -160,6 +160,11 @@ grammar keeps none, and both are versioned independently of the toolchain.
   instructions. Affected a `ref.cast` into the extern hierarchy, both
   `extern`/`any` conversions, a `call_ref` callee, a field or element access
   receiver, `array.len` and `i31.get_s`.
+- A conditionally-compiled module no longer defeats the decompiler's type
+  pins. Where a pin sat over a value whose type the decompiler could not read,
+  behind an `#[if]` it could take a value one of the branches had pushed —
+  producing Wax that either did not compile back or gained a stray
+  `extern.convert_any`.
 - Output fixes: an empty blocktype uses the `0x40` shorthand, funcidx element
   segments encode `(ref func)` rather than `funcref`, an empty name-section
   entry names nothing, and data strings are split at word boundaries.

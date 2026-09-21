@@ -167,6 +167,13 @@ sym Rany   "struct.new_default \$s"
 sym Rnum   "i64.add"
 sym Rmeth  "f32.sqrt"
 sym Rv128  "v128.not"
+# A [ref.as_non_null] residual: a reference entry that is NOT adaptive — printed
+# as its own statement [_!] it types independently and defaults to the any
+# hierarchy — so a crossing pin over it neither adapts (as [Radapt] does) nor is
+# classifiable (as [Rext]/[Rany] are). It is the third outcome the extern
+# readers must ground rather than capture, and the alphabet had no
+# representative for it.
+sym Rnn    "ref.as_non_null"
 sym Radapt "select"
 sym Vmulti "call \$f2"
 sym VmultiRE "call \$f3"
