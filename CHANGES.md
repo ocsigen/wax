@@ -6,7 +6,7 @@ reads the top entry's version and notes when cutting an opam release (see
 [`editors/vscode/CHANGELOG.md`](editors/vscode/CHANGELOG.md); the tree-sitter
 grammar keeps none, and both are versioned independently of the toolchain.
 
-## Unreleased
+## 0.2.0
 
 ### Language
 
