@@ -182,7 +182,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Library
 
-- `wax-lib` depends on `cmdliner`.
+- `wax-lib` depends on `cmdliner`, and now needs menhir 20260122 or later:
+  the parser and its error messages are built with options that release
+  introduced.
 - `Driver.to_binary` reports a failed lowering (a conditional that survived
   specialization, an unresolved reference) as a located diagnostic instead of
   letting an exception escape to the embedder.
