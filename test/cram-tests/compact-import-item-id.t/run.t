@@ -36,9 +36,8 @@ name section — so nothing is lost by spelling the types out:
 The import section holds one shared-type entry: "env", the empty name, the 0x7E
 marker, the shared globaltype, then the two field names:
 
-  $ xxd -s 17 -l 17 g1.wasm
-  00000011: 0103 656e 7600 7e03 7f00 0201 6101 6203  ..env.~.....a.b.
-  00000021: 02                                       .
+  $ od -A n -t x1 -j 17 -N 17 g1.wasm | xargs
+  01 03 65 6e 76 00 7e 03 7f 00 02 01 61 01 62 03 02
 
 Decompiling restores the ids from the name section, back to the per-item form:
 

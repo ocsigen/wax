@@ -35,8 +35,8 @@ No `(func)` type is minted, and each block keeps the shorthand:
 The only type is `$f`'s own signature, and the three block instructions encode
 as `02 40`, `03 40` and `04 40`:
 
-  $ xxd -s 23 -l 12 b.wasm
-  00000017: 0240 0b03 400b 4101 0440 0b0b            .@..@.A..@..
+  $ od -A n -t x1 -j 23 -N 12 b.wasm | xargs
+  02 40 0b 03 40 0b 41 01 04 40 0b 0b
 
 A type use that is *written* still round-trips as written, so the fix does not
 normalise away a module that genuinely spells the long form:
@@ -60,5 +60,5 @@ normalise away a module that genuinely spells the long form:
     end
   )
 
-  $ xxd -s 23 -l 6 e.wasm
-  00000017: 0240 0b02 000b                           .@....
+  $ od -A n -t x1 -j 23 -N 6 e.wasm | xargs
+  02 40 0b 02 00 0b

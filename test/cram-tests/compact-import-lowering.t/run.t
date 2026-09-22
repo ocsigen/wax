@@ -92,8 +92,8 @@ gets the shared-type (`0x7E`) encoding, its shared functype written once:
   }
 
   $ wax homo.wax -f wasm -o homo.wasm
-  $ xxd -s 16 -l 16 homo.wasm
-  00000010: 1001 0365 6e76 007e 0000 0301 6101 6201  ...env.~....a.b.
+  $ od -A n -t x1 -j 16 -N 16 homo.wasm | xargs
+  10 01 03 65 6e 76 00 7e 00 00 03 01 61 01 62 01
   $ wax homo.wasm -f wax
   #![feature = "compact-import-section"]
   type t = fn(i32);
