@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - Quick fixes (the lightbulb / `Ctrl+.`) for `.wax` and `.wat`: any diagnostic
   the toolchain can repair mechanically is offered as a code action. This
