@@ -1,6 +1,7 @@
 .vscode/**
 .gitignore
 CONTRIBUTING.md
+ROADMAP.md
 node_modules/**
 package-lock.json
 test/**
