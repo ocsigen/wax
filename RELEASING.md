@@ -20,7 +20,13 @@ own cadence.
    is not on the remote, or the tag points at a stale commit, the release runs
    against the wrong tree.
 2. **To re-run a release after fixing something, move the tag:**
-   `git tag -f <tag> && git push --force origin <tag>`.
+   `git tag -a -f <tag> -m "wax X.Y.Z" && git push --force origin <tag>`. Two
+   things follow. `npm-package.yml` runs again and its publish step fails,
+   because that version is already on npm; the build and test jobs still pass
+   and nothing published changes, so the red run is noise. And a source tarball
+   already attached to the release is now stale: delete it (`gh release
+   delete-asset vX.Y.Z wax-vX.Y.Z.tbz -y`) before `dune-release publish`
+   uploads the rebuilt one.
 
 ## One-time setup (already done, listed for reference)
 
@@ -48,7 +54,11 @@ and the version stamped into `wax --version`.
 4. Sanity check: `dune exec wax -- --version` should print `X.Y.Z`.
 5. Commit `dune-project`, `wax.opam`, `wax-lib.opam`.
 6. `git push origin main`.
-7. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+7. `git tag -a vX.Y.Z -m "wax X.Y.Z" && git push origin vX.Y.Z`. The tag has to
+   be **annotated**. `dune subst` stamps the version into the opam source
+   tarball from `git describe`, which only sees annotated tags, so a lightweight
+   tag ships a tarball that says `(version <abbreviated commit>)` and an
+   `opam install`ed `wax --version` then prints that hash instead of a version.
 8. Watch the Actions run:
    - **Release binaries** (`release.yml`) attaches the native binaries (static
      Linux x86_64, macOS arm64/x86_64, Windows x86_64) and `SHA256SUMS` to a
@@ -76,7 +86,12 @@ packages are only installable from source
 (`opam pin add wax https://github.com/ocsigen/wax.git`).
 
 Prerequisites (one-time): `opam install dune-release`, and a GitHub token for
-`dune-release` (`dune-release config` / `~/.config/dune/github.token`).
+`dune-release` (`dune-release config` / `~/.config/dune/github.token`). That
+token expires. When it has, publishing stops with `Github API returned: "Bad
+credentials"`; `printf '%s' "$(gh auth token)" > ~/.config/dune/github.token`
+reuses the `gh` CLI's credential, which carries the `repo` scope every step
+below needs. (`printf` rather than `>` from `gh auth token` directly, to leave
+off the trailing newline.)
 
 Per release:
 
@@ -87,12 +102,14 @@ Per release:
 3. Build and attach the source tarball, then submit both packages:
    ```sh
    dune-release distrib --tag vX.Y.Z   # build the source tarball
-   dune-release publish                # attach it to the vX.Y.Z GitHub release
-   dune-release opam pkg               # stage packages/wax* locally (both packages)
-   dune-release opam submit            # open the opam-repository PR (wax + wax-lib)
+   dune-release publish --tag vX.Y.Z   # attach it to the vX.Y.Z GitHub release
+   dune-release opam pkg --tag vX.Y.Z  # stage packages/wax* locally (both packages)
+   dune-release opam submit --tag vX.Y.Z  # open the opam-repository PR (wax + wax-lib)
    ```
-   Only `distrib` needs `--tag`; the later steps reuse the archive and tag it
-   just built, so they take no `--tag` or artefact argument. If your
+   Pass `--tag` to every step, not just `distrib`. Without it the later steps
+   take the version from the top of `CHANGES.md` and look for
+   `_build/wax-X.Y.Z.tbz`, while `distrib --tag vX.Y.Z` names the archive after
+   the tag, `wax-vX.Y.Z.tbz`, and they stop with "No such file". If your
    `dune-release` version disagrees, check `dune-release <cmd> --help` (the
    artefact/`--tag` spelling has changed across versions).
 
@@ -106,6 +123,12 @@ Notes:
 - `dune-release` reuses the existing `vX.Y.Z` GitHub release (created by
   `release.yml`) and adds the source tarball as another asset, alongside the
   native binaries. Run it after that release exists, so ordering matters.
+- The opam package version drops the `v`: `opam pkg` stages `wax.X.Y.Z` and
+  `wax-lib.X.Y.Z` from a `vX.Y.Z` tag, which is what opam-repository wants.
+- `wax --version` from an opam install reads `vX.Y.Z`, with the `v`, since that
+  is what `git describe` returns for the tag. The binaries and the npm package
+  print `X.Y.Z`, from the `(version)` field. Making the two agree would need a
+  second tag named `X.Y.Z`, which is what `dune-release tag` would create.
 - The generated opam file carries a `version:` field (a side effect of the
   `(version)` stanza that stamps `wax --version`). opam-repository prefers it
   absent; if lint flags it, drop the `version:` line from the staged
@@ -125,9 +148,10 @@ There is no CI workflow for the extension; publishing is manual.
    npx ovsx publish -p "$OVSX_PAT"  # Open VSX (VSCodium, Cursor, Gitpod, Theia, …)
    ```
    Or produce a single `.vsix` once with `npm run package` and hand it to both:
-   `npx vsce publish --packagePath wax-*.vsix` and
-   `npx ovsx publish wax-*.vsix -p "$OVSX_PAT"` (also uploadable through each
-   registry's web UI).
+   `npx vsce publish --packagePath wax-X.Y.Z.vsix` and
+   `npx ovsx publish wax-X.Y.Z.vsix -p "$OVSX_PAT"` (also uploadable through each
+   registry's web UI). Name the version; `.vsix` files from earlier releases
+   pile up in that directory, so a `wax-*.vsix` glob matches several.
 
 Notes:
 - Publish to **both** registries for every release: the Marketplace serves
