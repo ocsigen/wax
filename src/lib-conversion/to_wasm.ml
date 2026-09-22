@@ -23,7 +23,6 @@ type ctx = {
   (* The declared continuation types, whose [as]-cast is a compile-time
      ascription lowering to no instruction. *)
   cont_types : (string, unit) Hashtbl.t;
-  struct_fields : (string, string list) Hashtbl.t;
   referenced_functions : (string, unit) Hashtbl.t;
   extra_types : (string, Text.name * subtype) Hashtbl.t;
   (* Structurally equal module types, keyed by definition, so an internal
@@ -701,6 +700,16 @@ let neg_int_const_fits bits s =
   | Some v -> Int64.unsigned_compare v (Int64.shift_left 1L (bits - 1)) <= 0
 
 (*** The instruction converter ***)
+
+(* The declared field names of struct type [idx], in order, with any [..]
+   splice expanded. Read from the typer's table rather than cached by name: a
+   struct type declared in both branches of a [#[if]] has different fields in
+   each, and [in_branch] puts the current branch's definition in force. *)
+let struct_field_names ctx idx =
+  match Wax_lang.Typing.get_type_definition ctx.diagnostics ctx.types idx with
+  | Some { typ = Struct fields; _ } ->
+      Array.to_list (Array.map (fun field -> (field_name field).desc) fields)
+  | _ -> assert false
 
 (* Lower a struct literal's field values in the type's declared field order.
    [fields] maps names to values; a punned field ([None], written [{x}]) lowers
@@ -1587,7 +1596,7 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
       let idx =
         match opt_idx with Some idx -> idx | None -> expr_type_name i
       in
-      let field_names = Hashtbl.find ctx.struct_fields idx.desc in
+      let field_names = struct_field_names ctx idx in
       let args_code = struct_field_args ret ctx field_names fields in
       folded loc (StructNew (index idx)) args_code
   | StructDefault opt_idx ->
@@ -1601,7 +1610,7 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
   | StructDesc (d, fields) ->
       (* The struct type is the (exact) result type. *)
       let idx = expr_type_name i in
-      let field_names = Hashtbl.find ctx.struct_fields idx.desc in
+      let field_names = struct_field_names ctx idx in
       let args_code = struct_field_args ret ctx field_names fields in
       (* The descriptor operand is pushed last, above the field values. *)
       folded loc (StructNewDesc (index idx)) (args_code @ instruction ret ctx d)
@@ -2435,7 +2444,6 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
       namespace = Namespace.make ();
       type_kinds = Hashtbl.create 16;
       cont_types = Hashtbl.create 16;
-      struct_fields = Hashtbl.create 16;
       referenced_functions = Hashtbl.create 16;
       extra_types = Hashtbl.create 16;
       reuse_types = Hashtbl.create 16;
@@ -2498,13 +2506,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                   Hashtbl.replace ctx.cont_types idx.desc ();
                   `Func
               | Array _ -> `Array
-              | Struct fields ->
-                  let field_names =
-                    Array.to_list
-                      (Array.map (fun field -> (field_name field).desc) fields)
-                  in
-                  Hashtbl.add ctx.struct_fields idx.desc field_names;
-                  `Struct
+              | Struct _ -> `Struct
             in
             Hashtbl.add ctx.type_kinds idx.desc kind)
           rectype

@@ -435,7 +435,9 @@ type backing_class =
 
 type ctx = {
   types : Sequence.t;
-  struct_fields : (string, Sequence.t * string list) Hashtbl.t;
+  struct_fields : (Sequence.t * string list) CondTbl.t;
+      (* Per branch, like [type_defs]: a struct type declared in both arms of
+         an [(@if …)] may have different fields in each. *)
   globals : Sequence.t;
   functions : Sequence.t;
   memories : Sequence.t;
@@ -681,7 +683,7 @@ let comptype st name (t : Src.comptype) : Ast.comptype =
   match t with
   | Func t -> Func (functype st t)
   | Struct l ->
-      let seq = fst (Hashtbl.find st.struct_fields name) in
+      let seq = fst (CondTbl.find st.struct_fields st.cond_asm name) in
       Struct
         (Array.mapi
            (fun i t ->
@@ -787,9 +789,11 @@ let conversion_error ctx ~location message =
    Report it and abort like other conversion errors rather than crash on the
    missing table entry. *)
 let struct_fields ctx type_name =
-  match Hashtbl.find_opt ctx.struct_fields type_name.Wax_utils.Ast.desc with
-  | Some fields -> fields
-  | None ->
+  match
+    CondTbl.find ctx.struct_fields ctx.cond_asm type_name.Wax_utils.Ast.desc
+  with
+  | fields -> fields
+  | exception Not_found ->
       conversion_error ctx ~location:type_name.Ast.info
         (Wax_utils.Message.text "This type should be a struct type.")
 
@@ -827,7 +831,11 @@ let collapse_splices ctx (rt : Ast.rectype) : Ast.rectype =
       | Struct child_ast_fields, Some parent_name -> (
           match
             ( src_struct parent_name,
-              Hashtbl.find_opt ctx.struct_fields parent_name.Ast.desc )
+              try
+                Some
+                  (CondTbl.find ctx.struct_fields ctx.cond_asm
+                     parent_name.Ast.desc)
+              with Not_found -> None )
           with
           | Some parent_src, Some (_, parent_names) ->
               let parent_names = Array.of_list parent_names in
@@ -5844,10 +5852,11 @@ let register_names ctx export_tbl fields =
                               [||]
                           | { desc = parent; _ } -> (
                               match
-                                Hashtbl.find_opt ctx.struct_fields parent
+                                CondTbl.find ctx.struct_fields ctx.cond_asm
+                                  parent
                               with
-                              | Some (_, names) -> Array.of_list names
-                              | None -> [||]))
+                              | _, names -> Array.of_list names
+                              | exception Not_found -> [||]))
                     in
                     let fields =
                       Array.mapi
@@ -5861,7 +5870,7 @@ let register_names ctx export_tbl fields =
                             (get_annot t) [])
                         l
                     in
-                    Hashtbl.replace ctx.struct_fields name
+                    CondTbl.add ctx.struct_fields ctx.cond_asm name
                       (seq, Array.to_list fields))
               rectype
         | Global { id; exports; typ; _ } ->
@@ -6137,7 +6146,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
             Sequence.make ~forbid_numeric ~diagnostics
               (Namespace.make ~kind:`Type ())
               "t";
-          struct_fields = Hashtbl.create 16;
+          struct_fields = CondTbl.make ();
           globals =
             Sequence.make ~forbid_numeric ~diagnostics common_namespace "g";
           functions =
