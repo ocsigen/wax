@@ -83,5 +83,5 @@ never had.
       _ = (_ : &?noextern) as &extern;
       unreachable;
   }
-  $ wax -i wax -f wat b.wax | grep -oE 'extern\.convert_any' | wc -l
+  $ wax -i wax -f wat b.wax | grep -oE 'extern\.convert_any' | wc -l | tr -d ' '
   0

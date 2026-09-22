@@ -222,7 +222,7 @@ opcode:
 Every `ref.as_non_null` is still exactly one opcode, and no `ref.cast` is
 introduced anywhere:
 
-  $ wax -i wax -f wat f.wax | grep -oE 'ref\.as_non_null' | wc -l
+  $ wax -i wax -f wat f.wax | grep -oE 'ref\.as_non_null' | wc -l | tr -d ' '
   5
-  $ wax -i wax -f wat f.wax | grep -oE 'ref\.cast' | wc -l
+  $ wax -i wax -f wat f.wax | grep -oE 'ref\.cast' | wc -l | tr -d ' '
   0
