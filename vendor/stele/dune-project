@@ -16,9 +16,11 @@
   (description "A build-time generator that turns a Menhir grammar's --list-errors output and its .cmly into readable syntax-error messages, with a golden/census/stats workflow, a soundness oracle, and a hand-override escape hatch; plus a small runtime helper (stele.runtime) that resolves the delimiter markers the generated messages carry. Configured per grammar by a text sidecar, so the tool itself is grammar-agnostic.")
   (depends
     (ocaml (>= 4.14))
-    (menhir (and :build (>= 20220210)))
-    (menhirSdk (>= 20220210))
-    (menhirLib (>= 20220210))
+    ; 20260122 for --no-code-generation and for the Cmly_api [Surface] module
+    ; main.ml reads (token aliases, the pre-inlining surface grammar).
+    (menhir (and :build (>= 20260122)))
+    (menhirSdk (>= 20260122))
+    (menhirLib (>= 20260122))
     ; 2.0 for the Cmd.group subcommand CLI the generator exposes.
     (cmdliner (>= 2.0.0))
   )

@@ -14,8 +14,8 @@ depends: [
   "dune" {>= "3.20"}
   "ocaml" {>= "4.14"}
   "sedlex" {>= "3.3"}
-  "menhir" {build & >= "20220210"}
-  "menhirLib" {>= "20220210"}
+  "menhir" {build & >= "20260122"}
+  "menhirLib" {>= "20260122"}
   "cmdliner" {>= "2.0.0"}
   "re" {>= "1.10.0"}
   "yojson" {>= "2.0.0"}

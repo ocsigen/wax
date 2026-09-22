@@ -28,8 +28,11 @@
     ; 3.3 adds the byte-offset position API (lexing_bytes_position_start/curr)
     ; the lexers use; still compatible with OCaml 4.14.
     (sedlex (>= 3.3))
-    (menhir (and :build (>= 20220210)))
-    (menhirLib (>= 20220210))
+    ; 20260122 for --no-code-generation (src/lib-wasm/dune.menhir, which builds
+    ; the .cmly without the code back-end) and for the Cmly_api [Surface]
+    ; module that the vendored stele generator reads.
+    (menhir (and :build (>= 20260122)))
+    (menhirLib (>= 20260122))
     ; No dependency on stele: its runtime helper (stele.runtime, resolving the
     ; <N> delimiter markers) is vendored under vendor/stele/ and ships in-tree,
     ; so it is not fetched from opam.
