@@ -8,6 +8,12 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ## Unreleased
 
+### Fixes
+
+- Converting between WAT and Wax no longer fails with "This reference resolves
+  to nothing" when a struct type is declared in both branches of an `(@if …)`
+  (or `#[if]`) with different fields. Each branch now uses its own field names.
+
 ## 0.2.0
 
 ### Language
