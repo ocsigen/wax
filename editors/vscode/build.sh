@@ -32,15 +32,20 @@ cp -r "$src/wax_format_js.bc.wasm.assets" "$dest/"
 # Ship only the .wasm module(s); drop the .wasm.map sourcemaps.
 rm -f "$dest/wax_format_js.bc.wasm.assets"/*.map
 
-# The generated loader locates its .wasm relative to require.main.filename (the
-# program entry). The desktop extension loads it with require(), so rewrite that
-# to module.filename, which then points at the loader's own installed location.
-# (The web host takes the loader's fetch branch instead, where this is unused.)
-if ! grep -q 'require\.main\.filename' "$dest/wax_format_js.bc.wasm.js"; then
-  echo "error: require.main.filename not found in the loader (wasm_of_ocaml output changed?)" >&2
+# The generated loader has to locate its .wasm relative to its own installed
+# location. Older wasm_of_ocaml spelled that require.main.filename (the program
+# entry), which under the desktop extension's require() is VS Code's entry and
+# not ours, so it is rewritten to module.filename; newer wasm_of_ocaml already
+# emits module.filename, and then there is nothing to do. Neither spelling means
+# the output shape changed and the staged loader would look elsewhere for the
+# module. (The web host takes the loader's fetch branch instead, where this is
+# unused.)
+if grep -q 'require\.main\.filename' "$dest/wax_format_js.bc.wasm.js"; then
+  sed -i 's/require\.main\.filename/module.filename/g' "$dest/wax_format_js.bc.wasm.js"
+elif ! grep -q 'module\.filename' "$dest/wax_format_js.bc.wasm.js"; then
+  echo "error: the loader resolves its .wasm through neither require.main.filename nor module.filename (wasm_of_ocaml output changed?)" >&2
   exit 1
 fi
-sed -i 's/require\.main\.filename/module.filename/g' "$dest/wax_format_js.bc.wasm.js"
 
 echo "==> Bundling the extension"
 (cd "$here" && node esbuild.mjs "$@")
