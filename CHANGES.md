@@ -21,6 +21,11 @@ grammar keeps none, and both are versioned independently of the toolchain.
   fails with "The variable '…' is not bound", or silently produces code that
   computes a different result, when a local set by such a type test is used
   again outside it (by a second test, or on the next iteration of a loop).
+- Converting WAT or Wasm to Wax no longer fails with "The label '…' is not
+  bound" on a loop whose label is the target of a `try_table` catch clause or
+  of a branch that skips the loop's final update, nor with "This expression
+  occurs before a hole" on a `try_table` whose caught value feeds a compound
+  assignment such as `x += …`.
 
 ## 0.2.0
 

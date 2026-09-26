@@ -28,8 +28,14 @@ open Ast
 let is_void (t : functype) = t.params = [||] && t.results = [||]
 
 (* Whether any branch within [i] targets the label [name] — a "continue" to a
-   recovered loop, which forces the label to be kept. *)
+   recovered loop, which forces the label to be kept. Besides the branch
+   instructions matched below, a [try_table] catch clause or a [resume]/[on]
+   handler can target the loop ({!Recover_trycatch.target_labels}). *)
 let rec refs_instr name (i : location instr) : bool =
+  List.exists
+    (fun (l : label) -> String.equal l.desc name)
+    (Recover_trycatch.target_labels i.desc)
+  ||
   match i.desc with
   | Br (l, e) -> String.equal l.desc name || refs_opt name e
   | Br_if (l, e) -> String.equal l.desc name || refs_instr name e
@@ -202,7 +208,13 @@ let fold_loop l typ (block : (_ Ast.instr list, _) Ast.annotated) =
           ]
             when is_void bt
                  && (not (String.equal blk.desc l.desc))
-                 && refs_list blk.desc inner.desc ->
+                 && refs_list blk.desc inner.desc
+                 (* The loop label [l] is gone from the recovered form, so
+                    nothing else may target it (a [br 'l] that skips the step
+                    has no continue-expression spelling). *)
+                 && (not (refs_list l.desc inner.desc))
+                 && (not (refs_instr l.desc step))
+                 && not (refs_instr l.desc cond) ->
               While { label = Some blk; cond; step = Some step; block = inner }
           | _ -> (
               let label = keep_label l cond body in
