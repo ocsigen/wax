@@ -13,6 +13,14 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - Converting between WAT and Wax no longer fails with "This reference resolves
   to nothing" when a struct type is declared in both branches of an `(@if …)`
   (or `#[if]`) with different fields. Each branch now uses its own field names.
+- Converting WAT or Wasm to Wax no longer fails with "The label '…' is not
+  bound" when a block holds a type-test chain (`br_on_cast_fail`, `br_on_cast`
+  or `br_on_null`) whose code branches to the block's label again, for example
+  two `br_on_cast_fail` to the same block. Such blocks now stay as blocks
+  instead of being turned into a `match`. The same conversion also no longer
+  fails with "The variable '…' is not bound", or silently produces code that
+  computes a different result, when a local set by such a type test is used
+  again outside it (by a second test, or on the next iteration of a loop).
 
 ## 0.2.0
 

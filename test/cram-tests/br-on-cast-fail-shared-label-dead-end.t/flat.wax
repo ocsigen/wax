@@ -1,0 +1,15 @@
+type s = { f: i32 };
+type t = { g: f32 };
+fn f(a: &eq) -> i32 {
+    _ =
+        'l: do &eq {
+            let x = br_on_cast_fail 'l &s a;
+            return x.f;
+        };
+    _ =
+        'm: do &eq {
+            let y = br_on_cast_fail 'm &t a;
+            return 2;
+        };
+    0;
+}

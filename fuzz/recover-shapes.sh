@@ -21,8 +21,9 @@
 # bottom-fuzz pattern). Then the NEAR-MISS leg, aimed at the bail-out arms: a
 # deterministic budgeted subset of one-step structural mutations of the
 # lowered wat — a nop inserted at a line, a line deleted, adjacent lines
-# swapped, a branch depth bumped — each gated by `wax check` (the cross
-# product over-generates; validity filters) and sent through oracle.sh. A
+# swapped, a branch depth bumped, a branch or statement duplicated — each
+# gated by `wax check` (the cross product over-generates; validity filters)
+# and sent through oracle.sh. A
 # recovery that fires on a shape it should decline, or declines a shape it
 # should invert, surfaces as a ROUNDTRIP/FAITHDRIFT finding.
 #
@@ -111,7 +112,13 @@ fi
 
 # ---- Enumerate mutation slots over the lowered wats. ----
 # A slot is "file <TAB> kind <TAB> line"; kinds: nop (insert after), del,
-# swap (with the next line), br+ / br- (bump a branch depth on that line).
+# swap (with the next line), br+ / br- (bump a branch depth on that line),
+# dup (repeat a branch or local write) and dupw (repeat the three-line
+# statement ending at that line). The dup kinds exist because the others never
+# make a SECOND use of a name a recovery removes: a second branch to a folded
+# block's label (in its body, or nested into the scrutinee) or a second write
+# to a local an arm rebinds. Both escaped the guard while the others ran clean
+# (two br_on_cast_fail to one block, from the wasm_of_ocaml runtime).
 SLOTS="$RESULTS/slots"
 : >"$SLOTS"
 for ((i = 0; i < NSEEDS; i++)); do
@@ -122,6 +129,8 @@ for ((i = 0; i < NSEEDS; i++)); do
       print f "\tswap\t" NR
     }
     /br(_if|_table|_on_[a-z_]+)?[ \t]+\$/ { print f "\tbr+\t" NR; print f "\tbr-\t" NR }
+    /^[[:space:]]*(br(_if|_table|_on_[a-z_]+)?|local\.(set|tee))[ \t]/ { print f "\tdup\t" NR }
+    NR > 2 && /^[[:space:]]*(local\.(set|tee)|drop)([ \t]|$)/ { print f "\tdupw\t" NR }
   ' "$LOWERED/$i.wat" >>"$SLOTS"
 done
 total=$(wc -l <"$SLOTS")
@@ -134,6 +143,8 @@ apply_mutation() { # src kind line dst
   case "$kind" in
     nop) awk -v l="$ln" '{ print } NR == l { print "    nop" }' "$src" >"$dst" ;;
     del) awk -v l="$ln" 'NR != l' "$src" >"$dst" ;;
+    dup) awk -v l="$ln" '{ print } NR == l { print }' "$src" >"$dst" ;;
+    dupw) awk -v l="$ln" '{ w[NR] = $0; print } NR == l { print w[l - 2]; print w[l - 1]; print }' "$src" >"$dst" ;;
     swap) awk -v l="$ln" 'NR == l { hold = $0; next } NR == l + 1 { print; print hold; held = 1; next } { print } END { if (!held && hold != "") print hold }' "$src" >"$dst" ;;
     br+ | br-) # Retarget the line's branch to the NEIGHBOURING declared label
       # (wax-emitted wat uses symbolic labels, so a numeric-depth bump would be

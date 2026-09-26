@@ -1,3 +1,9 @@
+val occurs_list :
+  string -> Wax_lang.Ast.location Wax_lang.Ast.instr list -> bool
+(** [occurs_list x l] is whether any instruction in [l] (at any depth) reads or
+    writes the local [x]. Binders ([let], [match] patterns) are not treated as
+    shadowing, so a rebound [x] still counts. *)
+
 val module_ :
   Wax_lang.Ast.location Wax_lang.Ast.module_ ->
   Wax_lang.Ast.location Wax_lang.Ast.module_

@@ -62,18 +62,19 @@ let split_decls stmts =
   aux [] stmts
 
 (* Strip a ladder block's consume of its inner block, returning any leading
-   declarations to hoist, the binding ([Some x] for a bound cast arm), that inner
-   block, and the trailing arm body. A [null] arm consumes nothing (a bare
-   block), an unbound cast drops the block (an anonymous [Let], [_ = block]), a
-   bound cast binds it (a [Set] / a fused [let]). *)
+   declarations to hoist, the binding ([Some (x, set)] for a bound cast arm),
+   that inner block, and the trailing arm body. A [null] arm consumes nothing (a
+   bare block), an unbound cast drops the block (an anonymous [Let],
+   [_ = block]), a bound cast binds it (a fused [let], [set = false], or a [Set]
+   of a local declared elsewhere, [set = true]). *)
 let consume_step stmts =
   let decls, stmts = split_decls stmts in
   match stmts with
   | { desc = Let ([ (Some x, _) ], Some inner); _ } :: body when is_block inner
     ->
-      Some (decls, Some x, inner, body)
+      Some (decls, Some (x, false), inner, body)
   | { desc = Set (x, _, inner); _ } :: body when is_block inner ->
-      Some (decls, Some x, inner, body)
+      Some (decls, Some (x, true), inner, body)
   | { desc = Let ([ (None, _) ], Some inner); _ } :: body when is_block inner ->
       Some (decls, None, inner, body)
   (* The bare-block arm is the NULL arm, which consumes nothing — so its block
@@ -177,10 +178,38 @@ let rec diverges_instr i =
 and diverges_list l =
   match List.rev l with [] -> false | last :: _ -> diverges_instr last
 
+(* Whether [i] branches to a label named [name] bound outside it. A nested
+   construct rebinding [name] shadows it within its body (nested ladders reuse
+   the same label names), so only the parts evaluated outside that body are
+   searched there. *)
+let rec branches_out name (i : location instr) =
+  List.exists
+    (fun (l : label) -> l.desc = name)
+    (Recover_trycatch.target_labels i.desc)
+  ||
+  match i.desc with
+  | Block { label = Some l; _ }
+  | Loop { label = Some l; _ }
+  | TryTable { label = Some l; _ }
+  | Try { label = Some l; _ }
+  | TryCatch { label = Some l; _ }
+    when l.desc = name ->
+      false
+  | If { label = Some l; cond; _ } when l.desc = name -> branches_out name cond
+  | While { label = Some l; cond; step; _ } when l.desc = name -> (
+      branches_out name cond
+      || match step with Some s -> branches_out name s | None -> false)
+  | _ -> branches_out_list name (Ast_utils.sub_instrs i)
+
+and branches_out_list name l = List.exists (branches_out name) l
+
 (* Recognise one flat-chain arm block. Returns its pattern, scrutinee, body, and
    whether a bound cast carries its binding itself (a fused [let x = …],
    [`Fused]) or names a local declared just before the block ([`Decl x], which
-   the fold drops). The body must diverge (leave the [match]). *)
+   the fold drops). The body must diverge (leave the [match]), and neither it
+   nor the scrutinee may branch to the block's own label: the [match] replaces the block, so such a
+   branch (a second [br_on_cast_fail 'L] in the same block, say) would be left
+   unbound. *)
 let arm_block stmt =
   match stmt.desc with
   | Let
@@ -192,21 +221,29 @@ let arm_block stmt =
                 { label = Some self; typ; block = { desc = test :: body; _ } };
             _;
           } )
-    when typ.params = [||] && Array.length typ.results = 1 && diverges_list body
-    -> (
-      match test.desc with
-      | Let ([ (Some x, _) ], Some { desc = Br_on_cast_fail (l, rt, scrut); _ })
-        when l.desc = self.desc ->
-          Some (MatchCast (Some x, rt), scrut, body, `Fused)
-      | Set (x, _, { desc = Br_on_cast_fail (l, rt, scrut); _ })
-        when l.desc = self.desc ->
-          Some (MatchCast (Some x, rt), scrut, body, `Decl x)
-      | Let ([ (None, _) ], Some { desc = Br_on_cast_fail (l, rt, scrut); _ })
-        when l.desc = self.desc ->
-          Some (MatchCast (None, rt), scrut, body, `Fused)
-      | Br_on_non_null (l, scrut) when l.desc = self.desc ->
-          Some (MatchNull, scrut, body, `Fused)
-      | _ -> None)
+    when typ.params = [||]
+         && Array.length typ.results = 1
+         && diverges_list body
+         && not (branches_out_list self.desc body) -> (
+      match
+        match test.desc with
+        | Let
+            ([ (Some x, _) ], Some { desc = Br_on_cast_fail (l, rt, scrut); _ })
+          when l.desc = self.desc ->
+            Some (MatchCast (Some x, rt), scrut, body, `Fused)
+        | Set (x, _, { desc = Br_on_cast_fail (l, rt, scrut); _ })
+          when l.desc = self.desc ->
+            Some (MatchCast (Some x, rt), scrut, body, `Decl x)
+        | Let ([ (None, _) ], Some { desc = Br_on_cast_fail (l, rt, scrut); _ })
+          when l.desc = self.desc ->
+            Some (MatchCast (None, rt), scrut, body, `Fused)
+        | Br_on_non_null (l, scrut) when l.desc = self.desc ->
+            Some (MatchNull, scrut, body, `Fused)
+        | _ -> None
+      with
+      (* The scrutinee moves out of the block too. *)
+      | Some (_, scrut, _, _) when branches_out self.desc scrut -> None
+      | arm -> arm)
   | _ -> None
 
 let compat scrut s =
@@ -240,7 +277,12 @@ let rec collect_arms scrut stmts =
             | Some (pat, s, body, _) -> (pat, s, body)
             | None -> assert false
           in
-          take pat body s rest'
+          (* The arm's binding replaces the local [x], but only within its
+             body. A use in the scrutinee, a later arm or the default would be
+             left reading a local the arm no longer writes (reached again past
+             a loop back-edge, say), so the run stops before this arm. *)
+          if Sink_let.occurs_list x.desc (s :: rest') then ([], scrut, [], stmts)
+          else take pat body s rest'
       | _ ->
           let arms, scrut, hoisted, trailing = collect_arms scrut rest in
           if arms = [] then ([], scrut, [], stmts)
@@ -279,6 +321,17 @@ and try_fold ~faithful (i : location instr) (trailing : location instr list) :
         List.length (List.sort_uniq compare label_names)
         = List.length label_names
       in
+      (* An arm body is moved out of the ladder blocks into the [match], which
+         binds none of their labels, so a body still branching to one (a
+         [br_if 'Lᵢ] to a later arm's consume, a [br 'escape] to the default)
+         would be left dangling. The scrutinee moves out of them too. *)
+      let bodies_free =
+        not
+          (List.exists
+             (fun body ->
+               List.exists (fun name -> branches_out_list name body) label_names)
+             ([ scrut ] :: List.map (fun (_, _, body) -> body) levels))
+      in
       let chain_ok =
         List.length levels = n
         && List.map (fun ((l : label), _) -> l.desc) tests = take n label_names
@@ -287,12 +340,12 @@ and try_fold ~faithful (i : location instr) (trailing : location instr list) :
         | last :: _ -> last.desc = escape.desc
         | [] -> false
       in
-      if n < 1 || (not distinct) || not chain_ok then None
+      if n < 1 || (not distinct) || (not chain_ok) || not bodies_free then None
       else
         let arm (_, pat_kind) (_, binding, body) =
           let pat =
             match (pat_kind, binding) with
-            | `Cast rt, Some x -> Some (MatchCast (Some x, rt))
+            | `Cast rt, Some (x, _) -> Some (MatchCast (Some x, rt))
             | `Cast rt, None -> Some (MatchCast (None, rt))
             | `Null, None -> Some MatchNull
             | `Null, Some _ -> None
@@ -305,34 +358,72 @@ and try_fold ~faithful (i : location instr) (trailing : location instr list) :
         if List.exists Option.is_none arms then None
         else
           let arms = List.filter_map Fun.id arms in
-          (* A declaration whose name an arm rebinds is redundant (re-lowering
-             reintroduces it); the rest are genuine locals to hoist. *)
-          let bound =
-            List.filter_map
-              (fun (p, _) ->
-                match p with MatchCast (Some x, _) -> Some x.desc | _ -> None)
-              arms
+          (* A local an arm's binding replaces must not be used outside the
+             arms rebinding it (in the scrutinee, another arm or the default):
+             that use would read a local the arm no longer writes. So such an
+             arm is folded only when the local is declared within the ladder
+             (so no use lies beyond it) and has no use outside. *)
+          let used_outside x =
+            Sink_let.occurs_list x (scrut :: trailing)
+            || List.exists
+                 (fun (p, (b : (_ instr list, _) Ast.annotated)) ->
+                   (match p with
+                     | MatchCast (Some y, _) -> y.desc <> x
+                     | _ -> true)
+                   && Sink_let.occurs_list x b.desc)
+                 arms
           in
+          let declared x =
+            List.exists
+              (fun d ->
+                match d.desc with
+                | Let ([ (Some y, _) ], None) -> y.desc = x
+                | _ -> false)
+              decls
+          in
+          let replaced_ok =
+            List.for_all
+              (fun (_, binding, _) ->
+                match binding with
+                | Some ((x : ident), true) ->
+                    declared x.desc && not (used_outside x.desc)
+                | _ -> true)
+              levels
+          in
+          (* A declaration whose name an arm rebinds is redundant (re-lowering
+             reintroduces it) unless the local is still used outside the arms
+             rebinding it (then it is a different local that a fused binding
+             only shadows). The rest are genuine locals to hoist. *)
           let hoisted =
             List.filter
               (fun d ->
                 match d.desc with
-                | Let ([ (Some x, _) ], None) -> not (List.mem x.desc bound)
+                | Let ([ (Some x, _) ], None) ->
+                    (not
+                       (List.exists
+                          (fun (p, _) ->
+                            match p with
+                            | MatchCast (Some y, _) -> y.desc = x.desc
+                            | _ -> false)
+                          arms))
+                    || used_outside x.desc
                 | _ -> true)
               decls
           in
-          Some
-            ( hoisted,
-              {
-                i with
-                desc =
-                  Match
-                    {
-                      scrutinee = rewrite_instr ~faithful scrut;
-                      arms;
-                      default = no_loc (rewrite_list ~faithful trailing);
-                    };
-              } )
+          if not replaced_ok then None
+          else
+            Some
+              ( hoisted,
+                {
+                  i with
+                  desc =
+                    Match
+                      {
+                        scrutinee = rewrite_instr ~faithful scrut;
+                        arms;
+                        default = no_loc (rewrite_list ~faithful trailing);
+                      };
+                } )
 
 and rewrite_list ~faithful stmts =
   match stmts with

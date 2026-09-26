@@ -1,3 +1,8 @@
+val target_labels :
+  Wax_lang.Ast.location Wax_lang.Ast.instr_desc -> Wax_lang.Ast.label list
+(** [target_labels desc] is the labels the instruction [desc] itself branches to
+    (not those of nested instructions, nor the labels it defines). *)
+
 val module_ :
   Wax_lang.Ast.location Wax_lang.Ast.module_ ->
   Wax_lang.Ast.location Wax_lang.Ast.module_
