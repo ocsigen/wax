@@ -122,6 +122,7 @@ module Tbl : sig
     namespace : Namespace.t;
     tbl : (string, 'a) Hashtbl.t;
     used : (string, origin) Hashtbl.t;
+    recorded : (string * origin, unit) Hashtbl.t;
     current : origin ref;
     hover : 'a -> hover_target option;
   }

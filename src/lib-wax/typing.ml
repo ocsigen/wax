@@ -1091,6 +1091,7 @@ module Tbl = struct
       namespace;
       tbl = Hashtbl.create 16;
       used = Hashtbl.create 16;
+      recorded = Hashtbl.create 16;
       current;
       hover;
     }
@@ -1109,10 +1110,10 @@ module Tbl = struct
      declaration syntactically (see [canonical_type_references]). Same one
      entry per (name, origin) pair as [resolve]. *)
   let mark_reference env name referrer =
-    if
-      referrer <> Ignored
-      && not (List.mem referrer (Hashtbl.find_all env.used name))
-    then Hashtbl.add env.used name referrer
+    if referrer <> Ignored && not (Hashtbl.mem env.recorded (name, referrer))
+    then (
+      Hashtbl.replace env.recorded (name, referrer) ();
+      Hashtbl.add env.used name referrer)
 
   (* [f name value] for every declaration in this table. *)
   let iter_entries env f = Hashtbl.iter f env.tbl

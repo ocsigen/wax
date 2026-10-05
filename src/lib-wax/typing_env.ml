@@ -164,6 +164,10 @@ module Tbl = struct
        types that only name each other. Populated by [resolve] (one entry per
        distinct name/origin pair); queried by [referrers] / [iter_references]. *)
     used : (string, origin) Hashtbl.t;
+    (* The name/origin pairs already in [used], so recording a reference is a
+       constant-time membership test rather than a scan of every origin that
+       references the name (thousands, for a runtime helper). *)
+    recorded : (string * origin, unit) Hashtbl.t;
     (* Where references are currently being made from. Shared by every table of
        the module context, so [resolve] can attribute a reference
        without the context being threaded into [Tbl]. *)
