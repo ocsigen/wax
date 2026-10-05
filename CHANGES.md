@@ -26,6 +26,10 @@ grammar keeps none, and both are versioned independently of the toolchain.
   of a branch that skips the loop's final update, nor with "This expression
   occurs before a hole" on a `try_table` whose caught value feeds a compound
   assignment such as `x += …`.
+- The npm package, the VS Code extension and the playground no longer crash
+  with "Maximum call stack size exceeded" on a Wax module with tens of
+  thousands of top-level items, such as one decompiled from a large Wasm
+  binary.
 
 ## 0.2.0
 

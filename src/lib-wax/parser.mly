@@ -433,34 +433,43 @@ type raw_field =
       * located_fields
   | RF_else of (Lexing.position * Lexing.position) * located_fields
 
-let rec lower_fields = function
-  | [] -> []
-  | RF_plain f :: rest -> f :: lower_fields rest
+(* Tail-recursive: a decompiled module can have tens of thousands of top-level
+   fields, more stack than the wasm build gets. *)
+let lower_fields fields =
+  let rec loop acc = function
+  | [] -> List.rev acc
+  | RF_plain f :: rest -> loop (f :: acc) rest
   | RF_if (loc, cond, then_fields) :: RF_else (eloc, else_fields) :: rest ->
       (* Keep each branch's own [#[if]/#[else] { … }] span (marker included) on
          its located body — see [process_stmts]. *)
-      annot (fst loc, snd eloc)
-        (Conditional
-           {
-             cond;
-             then_fields = { then_fields with info = location_of loc };
-             else_fields = Some { else_fields with info = location_of eloc };
-           })
-      :: lower_fields rest
+      let f =
+        annot (fst loc, snd eloc)
+          (Conditional
+             {
+               cond;
+               then_fields = { then_fields with info = location_of loc };
+               else_fields = Some { else_fields with info = location_of eloc };
+             })
+      in
+      loop (f :: acc) rest
   | RF_if (loc, cond, then_fields) :: rest ->
-      annot loc
-        (Conditional
-           {
-             cond;
-             then_fields = { then_fields with info = location_of loc };
-             else_fields = None;
-           })
-      :: lower_fields rest
+      let f =
+        annot loc
+          (Conditional
+             {
+               cond;
+               then_fields = { then_fields with info = location_of loc };
+               else_fields = None;
+             })
+      in
+      loop (f :: acc) rest
   | RF_else (loc, _) :: _ ->
       raise
         (Wax_utils.Parsing.syntax_error_pair
            (loc,
            Wax_utils.Message.text ("An '#[else]' must directly follow an '#[if(...)]' field.\n") ))
+  in
+  loop [] fields
 
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 
