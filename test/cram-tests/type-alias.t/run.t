@@ -557,6 +557,15 @@ unwritten, take the aliases of the types they are inferred from too.
     (resume $k (block (result (@type $n)) (local.get $a)) (local.get $c))
   )
 
+A declared type written with an alias is still the type a function of the
+same signature reuses: the global's type is [$t], not a new function type.
+
+  $ wax -f wat reuse.wax
+  (@type $word i32)
+  (type $t (func (result (@type $word))))
+  (func $get (result (@type $word)) (i32.const 42))
+  (global $f (export "f") (ref $t) (ref.func $get))
+
 Code whose lowering depends on the type an alias stands for, such as an
 arithmetic operation, only lowers in a resolved configuration.
 
