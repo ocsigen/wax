@@ -15,10 +15,14 @@
    toolchain must keep and lower to a form that holds in every configuration.
 
    With [differ], the [#[else]] branch defines each alias as a neighbouring type
-   instead (i32 and i64, f32 and f64, a reference with the other nullability),
-   and cast targets are aliased too: the module then means something different
-   in each configuration, if it is valid at all, and converting it unresolved
-   must agree with converting each configuration (see fuzz/alias-fuzz.sh).
+   instead (i32 and i64, f32 and f64; for a reference, the other nullability, a
+   related struct type, or the other hierarchy), and cast targets are aliased
+   too: the module then means something different in each configuration, if it
+   is valid at all, and converting it unresolved must agree with converting
+   each configuration (see fuzz/alias-fuzz.sh). Some statements of each
+   function body are also placed in one or both branches of an [#[if(v_2)]],
+   so that the configurations are combinations of two variables, and two
+   field names of a struct subtype may be swapped.
 
    Aliasing changes nothing about the module, so the oracle compares: the binary
    must be byte-identical to the original's (after [-D] for a conditional run),
@@ -80,10 +84,15 @@ let param (p : (ident option * valtype, location) annotated) =
 let functype ({ params; results } : functype) : functype =
   { params = Array.map param params; results = Array.map alias_of results }
 
+(* Whether cast targets are aliased too (the [differ] mode). *)
+let casts = ref false
+
+(* A field's type is not aliased in the [differ] mode: a field of a subtype
+   whose type differs between configurations seldom still makes it one. *)
 let fieldtype (f : fieldtype) : fieldtype =
   match f.typ with
-  | Value v -> { f with typ = Value (alias_of v) }
-  | Packed _ -> f
+  | Value v when not !casts -> { f with typ = Value (alias_of v) }
+  | Value _ | Packed _ -> f
 
 let comptype (c : comptype) : comptype =
   match c with
@@ -96,9 +105,6 @@ let comptype (c : comptype) : comptype =
            fields)
   | Array f -> Array (fieldtype f)
   | Cont _ -> c
-
-(* Whether cast targets are aliased too (the [differ] mode). *)
-let casts = ref false
 
 let rec instr (i : 'a instr) : 'a instr =
   let desc =
@@ -113,16 +119,116 @@ let rec instr (i : 'a instr) : 'a instr =
   in
   { i with desc }
 
+(* The supertype of each type the module declares, by name. *)
+let supertypes : (string, string) Hashtbl.t = Hashtbl.create 16
+
+let rec collect_supertypes (f : (_ modulefield, location) annotated) =
+  match f.desc with
+  | Type rt ->
+      Array.iter
+        (fun (m : (ident * subtype, location) annotated) ->
+          let name, st = m.desc in
+          Option.iter
+            (fun (s : ident) -> Hashtbl.replace supertypes name.desc s.desc)
+            st.supertype)
+        rt
+  | Conditional { then_fields; else_fields; _ } ->
+      List.iter collect_supertypes then_fields.desc;
+      Option.iter
+        (fun (l : (_ list, location) annotated) ->
+          List.iter collect_supertypes l.desc)
+        else_fields
+  | _ -> ()
+
+(* A type related to [t] by subtyping, its supertype or else a subtype. *)
+let related t =
+  match Hashtbl.find_opt supertypes t with
+  | Some s -> Some s
+  | None ->
+      Hashtbl.fold
+        (fun sub sup acc -> if acc = None && sup = t then Some sub else acc)
+        supertypes None
+
 (* A type of the same kind as [t], for the [#[else]] definition of a [differ]
-   run. *)
+   run: a reference may keep its heap type and change its nullability, or name
+   a related struct type (whose fields may sit elsewhere), or move to the other
+   hierarchy. *)
 let neighbour (t : valtype) : valtype =
   match t with
   | I32 -> I64
   | I64 -> I32
   | F32 -> F64
   | F64 -> F32
+  | Ref ({ typ = Type n | Exact n; _ } as r) when next () mod 2 = 0 -> (
+      match related n.desc with
+      | Some s -> Ref { r with typ = Type (no_loc s) }
+      | None -> Ref { r with nullable = not r.nullable })
+  | Ref ({ typ = Any | Eq | I31 | Struct | Array | None_; _ } as r)
+    when next () mod 2 = 0 ->
+      Ref { r with typ = Extern }
+  | Ref ({ typ = Extern | NoExtern; _ } as r) when next () mod 2 = 0 ->
+      Ref { r with typ = Eq }
   | Ref r -> Ref { r with nullable = not r.nullable }
   | V128 | Alias _ -> t
+
+(* The second variable of a [differ] run, when there is one. *)
+let second = ref None
+
+(* [instrs] with some statements in both branches of an [#[if(v_2)]]: never a
+   [let] that binds a name, which the rest of the body may use, nor the last
+   statement when it may be the body's value: unless the body has none
+   ([no_value]), or that statement is a [let], which binds nothing then. *)
+let rec wrap_statements ~no_value (instrs : location instr list) =
+  match (instrs, !second) with
+  | [], _ | _, None -> instrs
+  | ({ desc = Let (bindings, _); _ } as i) :: rest, _
+    when List.exists (fun (n, _) -> Option.is_some n) bindings ->
+      i :: wrap_statements ~no_value rest
+  | [ ({ desc = d; _ } as i) ], _
+    when (not no_value) && match d with Let _ -> false | _ -> true ->
+      [ i ]
+  | i :: rest, Some v ->
+      let i =
+        if next () mod 3 <> 0 then i
+        else
+          (* In both branches, or in only one: a construct then occurs in only
+             some configurations, which the conversion may not all type. *)
+          let then_, else_ =
+            match next () mod 3 with
+            | 0 -> ([ i ], [ i ])
+            | 1 -> ([ i ], [])
+            | _ -> ([], [ i ])
+          in
+          {
+            i with
+            desc =
+              If_annotation
+                {
+                  cond = Wax_wasm.Ast.Cond_var (no_loc v);
+                  then_body = no_loc then_;
+                  else_body = Some (no_loc else_);
+                };
+          }
+      in
+      i :: wrap_statements ~no_value rest
+
+(* For a [differ] run, a subtype's struct fields with the names of two of them
+   swapped, sometimes: a field the subtype inherits may then sit elsewhere
+   under the same name than in its supertype. Not across a [..] splice, which
+   names no inherited field. *)
+let swap_field_names (c : comptype) : comptype =
+  match c with
+  | Struct fields
+    when Array.length fields >= 2
+         && (not (Array.exists is_splice_field fields))
+         && next () mod 2 = 0 ->
+      let fields = Array.copy fields in
+      let i = next () mod (Array.length fields - 1) in
+      let a = fields.(i) and b = fields.(i + 1) in
+      fields.(i) <- { a with desc = (fst b.desc, snd a.desc) };
+      fields.(i + 1) <- { b with desc = (fst a.desc, snd b.desc) };
+      Struct fields
+  | _ -> c
 
 let import_decl (d : (import_decl, location) annotated) =
   let kind =
@@ -145,9 +251,27 @@ let rec field (f : (_ modulefield, location) annotated) =
           (Array.map
              (fun (m : (ident * subtype, location) annotated) ->
                let name, st = m.desc in
+               let st =
+                 if !second <> None && st.supertype <> None then
+                   { st with typ = swap_field_names st.typ }
+                 else st
+               in
                { m with desc = (name, { st with typ = comptype st.typ }) })
              rt)
-    | Func r -> Func { r with sign = Option.map functype r.sign }
+    | Func r ->
+        Func
+          {
+            r with
+            sign = Option.map functype r.sign;
+            body =
+              ( fst r.body,
+                wrap_statements
+                  ~no_value:
+                    (match r.sign with
+                    | Some { results; _ } -> results = [||]
+                    | None -> false)
+                  (snd r.body) );
+          }
     | Global r -> Global { r with typ = Option.map alias_of r.typ }
     | Tag r -> Tag { r with sign = Option.map functype r.sign }
     | Import r -> Import { r with decl = import_decl r.decl }
@@ -177,9 +301,11 @@ let () =
   in
   let differ = Array.length Sys.argv > 4 && Sys.argv.(4) = "differ" in
   casts := differ;
+  if differ then second := Option.map (fun v -> v ^ "_2") conditional;
   state := (seed * 2) + 1;
   let src = In_channel.with_open_bin file In_channel.input_all in
   let m, _ctx = WaxParser.parse_from_string ~color ~filename:file src in
+  List.iter collect_supertypes m;
   let m = List.map field m in
   let defs_with f =
     List.rev_map
