@@ -23,6 +23,7 @@ type ident = (string, location) annotated
 
 include module type of Wax_wasm.Ast.Make_types (struct
   type idx = ident
+  type alias = ident
   type 'a annotated_array = (ident * 'a, location) annotated array
   type 'a opt_annotated_array = (ident option * 'a, location) annotated array
 end)
@@ -381,6 +382,9 @@ type 'info elemmode = EPassive | EActive of ident * 'info instr
 
 type 'info modulefield =
   | Type of rectype
+  (* A value-type alias, [type t = v;]: the name [t] then stands for the value
+     type [v] wherever a value type is expected. *)
+  | Type_alias of { name : ident; typ : valtype }
   | Func of {
       name : ident;
       typ : ident option;

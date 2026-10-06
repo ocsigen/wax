@@ -1927,6 +1927,18 @@ parse: REC LBRACE TYPE IDENT EQUAL LBRACE RBRACE SEMI WHILE
 
 Expecting '}', or a type definition.
 
+parse: REC LBRACE TYPE IDENT EQUAL WHILE
+
+Expecting 'describes', 'descriptor', 'open', or a composite type.
+
+parse: REC LBRACE TYPE IDENT WHILE
+
+Expecting ':', or '='.
+
+parse: REC LBRACE TYPE WHILE
+
+Expecting a type name.
+
 parse: REC LBRACE WHILE
 
 Expecting '}', or a type definition.
@@ -2227,6 +2239,54 @@ parse: TAG WHILE
 
 Expecting a tag name.
 
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIBES IDENT DESCRIPTOR IDENT LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIBES IDENT DESCRIPTOR IDENT WHILE
+
+Expecting a composite type.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIBES IDENT DESCRIPTOR WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIBES IDENT LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIBES IDENT WHILE
+
+Expecting 'descriptor', or a composite type.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIBES WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIPTOR IDENT LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIPTOR IDENT WHILE
+
+Expecting a composite type.
+
+parse: TYPE IDENT COLON IDENT EQUAL DESCRIPTOR WHILE
+
+Expecting a type name.
+
+parse: TYPE IDENT COLON IDENT EQUAL LBRACE RBRACE WHILE
+
+Expecting ';'.
+
+parse: TYPE IDENT COLON IDENT EQUAL OPEN WHILE
+
+Expecting 'describes', 'descriptor', or a composite type.
+
+parse: TYPE IDENT COLON IDENT EQUAL WHILE
+
+Expecting 'describes', 'descriptor', 'open', or a composite type.
+
 parse: TYPE IDENT COLON IDENT WHILE
 
 Expecting '='.
@@ -2298,6 +2358,10 @@ parse: TYPE IDENT EQUAL FN WHILE
 
 Expecting a function type.
 
+parse: TYPE IDENT EQUAL IDENT WHILE
+
+Expecting ';'.
+
 parse: TYPE IDENT EQUAL LBRACE DOTDOT COMMA IDENT COLON IDENT IDENT
 
 Assuming that the structure type is complete, expecting '}'.
@@ -2356,7 +2420,7 @@ Expecting 'describes', 'descriptor', or a composite type.
 
 parse: TYPE IDENT EQUAL WHILE
 
-Expecting 'describes', 'descriptor', 'open', or a composite type.
+Expecting 'describes', 'descriptor', 'open', a composite type, or a value type.
 
 parse: TYPE IDENT WHILE
 

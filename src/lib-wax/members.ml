@@ -83,6 +83,7 @@ let numtype_name : Ast.valtype -> string = function
   | F64 -> "f64"
   | V128 -> "v128"
   | Ref _ -> "ref"
+  | Alias a -> a.desc
 
 (* The member-completion candidates for [methods] on a numeric receiver
    rendered as [recv_name] (a concrete [i32] or a flexible-literal family like
@@ -129,7 +130,7 @@ let struct_candidates fields =
 
 (* Expected operand/result type of a SIMD intrinsic, as a fresh type cell. *)
 let simd_valtype : Simd.ty -> inferred_valtype = function
-  | TV128 -> { typ = V128; internal = V128; anon_comptype = None }
+  | TV128 -> { typ = V128; internal = V128; anon_comptype = None; alias = None }
   | TI32 -> i32_valtype
   | TI64 -> i64_valtype
   | TF32 -> f32_valtype

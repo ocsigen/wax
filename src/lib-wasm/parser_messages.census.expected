@@ -200,7 +200,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', or parameters and results.
        <_>This '(' opens the enclosing construct.
-  112x Expecting ')'.
+  114x Expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'always_opt', 'freq', or 'never_opt'.
     1x Expecting 'and', 'not', 'or', a comparison operator, or an integer.
@@ -306,7 +306,7 @@
     2x Expecting a type use, or an index.
     2x Expecting a type use.
     1x Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
-    3x Expecting a value type.
+    4x Expecting a value type.
     1x Expecting a vector shape and its lanes.
     2x Expecting a vector shape.
    32x Expecting an 8-bit signed integer.
@@ -316,7 +316,7 @@
     1x Expecting an extern index.
     1x Expecting an external type.
     3x Expecting an identifier ('$...'), or an inline export.
-    2x Expecting an identifier ('$...').
+    4x Expecting an identifier ('$...').
     1x Expecting an import descriptor: 'func', 'memory', 'table', 'global', 'tag', or 'item'.
    85x Expecting an index.
     1x Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).

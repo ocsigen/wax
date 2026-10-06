@@ -1955,10 +1955,6 @@ parse: LPAREN TABLE ID WAIT
 Assuming that the exports are complete, expecting a reference type, a table type, an address type, or an inline import.
 <^1>these exports
 
-parse: LPAREN TABLE LPAREN WAIT
-
-Expecting 'ref'.
-
 parse: LPAREN TABLE LPAREN_IMPORT STRING STRING RPAREN NAT ANYREF WAIT
 
 Expecting ')'.
@@ -2679,7 +2675,7 @@ parse_script: LPAREN REGISTER WAIT
 
 Expecting a string.
 
-parse_script: LPAREN SCRIPT ID STRING_ANNOT
+parse_script: LPAREN SCRIPT ID TYPE_ANNOT
 
 Assuming that the script is complete, expecting ')'.
 <^1>this script
@@ -3129,6 +3125,32 @@ Expecting ')', a string, or an index.
 <2>This '(' opens the enclosing construct.
 
 parse_script: STRING_ANNOT WAIT
+
+Expecting an identifier ('$...').
+
+parse_script: TYPE_ANNOT ID ANYREF WAIT
+
+Expecting ')'.
+<3>This '(' opens the enclosing construct.
+
+parse_script: TYPE_ANNOT ID LPAREN WAIT
+
+Expecting 'ref'.
+
+parse_script: TYPE_ANNOT ID TYPE_ANNOT ID WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: TYPE_ANNOT ID TYPE_ANNOT WAIT
+
+Expecting an identifier ('$...').
+
+parse_script: TYPE_ANNOT ID WAIT
+
+Expecting a value type.
+
+parse_script: TYPE_ANNOT WAIT
 
 Expecting an identifier ('$...').
 

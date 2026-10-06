@@ -1,0 +1,5 @@
+type r = &?t;
+type s = { f: r };
+type t = {};
+#[export = "f"]
+fn f(x: r, y: t) {}

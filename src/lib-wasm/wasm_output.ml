@@ -118,6 +118,7 @@ module Encoder = struct
     | F64 -> byte b 0x7C
     | V128 -> byte b 0x7B
     | Ref r -> reftype b r
+    | Alias _ -> .
 
   let mut b m = byte b (if m then 0x01 else 0x00)
 

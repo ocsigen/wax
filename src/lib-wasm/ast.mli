@@ -31,6 +31,12 @@ module Uint64 = Wax_utils.Uint64
 (* Types *)
 
 type packedtype = I8 | I16
+
+(** The alias payload of a representation without value-type aliases (the binary
+    format, the resolved type store): it has no value, so the [Alias] arm of
+    such a {!TYPES.valtype} can never be built and needs no case. *)
+type no_alias = |
+
 type 'typ muttype = { mut : bool; typ : 'typ }
 
 type limits = {
@@ -49,6 +55,7 @@ type limits = {
     family from one instance to another. *)
 module type TYPES = sig
   type idx
+  type alias
   type 'a annotated_array
   type 'a opt_annotated_array
 
@@ -71,7 +78,18 @@ module type TYPES = sig
     | Exact of idx
 
   type reftype = { nullable : bool; typ : heaptype }
-  type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype
+
+  (** [Alias] names a value-type alias ([(@type $t)] in WAT, a bare type name in
+      Wax), resolved against its definition. Only the source formats have one:
+      elsewhere [alias] is {!no_alias}. *)
+  type valtype =
+    | I32
+    | I64
+    | F32
+    | F64
+    | V128
+    | Ref of reftype
+    | Alias of alias
 
   type functype = {
     params : valtype opt_annotated_array;
@@ -116,11 +134,13 @@ end
 
 module Make_types (X : sig
   type idx
+  type alias
   type 'a annotated_array
   type 'a opt_annotated_array
 end) :
   TYPES
     with type idx = X.idx
+     and type alias = X.alias
      and type 'a annotated_array = 'a X.annotated_array
      and type 'a opt_annotated_array = 'a X.opt_annotated_array
 
@@ -128,7 +148,9 @@ end) :
     one {!Make_types} instance to another. Only the [idx]-carrying arms differ
     between instances; everything else is copied through. [ctx] is threaded to
     [M.idx] so a mapper that resolves or renames indices can carry its context
-    (a name map, a symbol table, …). *)
+    (a name map, a symbol table, …). A value-type alias is mapped by [M.alias]
+    to a whole value type, kept as an alias or expanded to its definition;
+    [M.alias] is passed the value-type mapper, to map a definition with. *)
 module Map_types_spine
     (Src : TYPES)
     (Dst : TYPES)
@@ -136,6 +158,9 @@ module Map_types_spine
       type ctx
 
       val idx : ctx -> Src.idx -> Dst.idx
+
+      val alias :
+        ctx -> (Src.valtype -> Dst.valtype) -> Src.alias -> Dst.valtype
     end) : sig
   val heaptype : M.ctx -> Src.heaptype -> Dst.heaptype
   val reftype : M.ctx -> Src.reftype -> Dst.reftype
@@ -154,6 +179,9 @@ module Map_types
       type ctx
 
       val idx : ctx -> Src.idx -> Dst.idx
+
+      val alias :
+        ctx -> (Src.valtype -> Dst.valtype) -> Src.alias -> Dst.valtype
 
       val params :
         ctx ->
@@ -739,6 +767,7 @@ module Text : sig
 
   module X : sig
     type nonrec idx = idx
+    type alias = name
     type 'a annotated_array = (name option * 'a, location) annotated array
     type 'a opt_annotated_array = (name option * 'a, location) annotated array
     type label = name option
@@ -854,6 +883,10 @@ module Text : sig
        uses the named optional proposal (the Wax [#![feature = "…"]] inner
        attribute). *)
     | Feature_annotation of name
+    (* A value-type alias [(@type $id t)]: [(@type $id)] then stands for the
+       value type [t] wherever one is expected. It defines no type index; the
+       binary encoder expands every use. *)
+    | Type_alias of { id : name; typ : valtype }
     | Module_if_annotation of {
         cond : cond;
         then_fields :
@@ -875,6 +908,7 @@ module Binary : sig
 
   module X : sig
     type nonrec idx = idx
+    type alias = no_alias
     type 'a annotated_array = 'a array
     type 'a opt_annotated_array = 'a array
     type label = unit

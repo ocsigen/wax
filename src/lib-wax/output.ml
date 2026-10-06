@@ -222,6 +222,7 @@ let rec valtype pp t =
   | F64 -> type_ pp "f64"
   | V128 -> type_ pp "v128"
   | Ref t -> reftype pp t
+  | Alias a -> type_ pp a.desc
 
 and tuple always_paren pp l =
   match l with
@@ -296,7 +297,7 @@ let suffix_string : Ast.storagetype -> string = function
   | Value I64 -> "i64"
   | Value F32 -> "f32"
   | Value F64 -> "f64"
-  | Value (V128 | Ref _) -> assert false
+  | Value (V128 | Ref _ | Alias _) -> assert false
 
 let muttype t pp { mut; typ } =
   if mut then
@@ -1898,6 +1899,16 @@ let rec modulefield pp (field : (_ modulefield, location) Ast.annotated) =
   atomic_node pp (Some field.info) @@ fun () ->
   match field.desc with
   | Type t -> rectype pp t
+  | Type_alias { name; typ } ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "type";
+          space pp ();
+          identifier pp name.desc;
+          space pp ();
+          punctuation pp "=";
+          space pp ();
+          valtype pp typ;
+          punctuation pp ";")
   | Module_annotation attrs ->
       hvbox pp (fun () ->
           List.iteri
