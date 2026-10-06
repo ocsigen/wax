@@ -925,6 +925,18 @@ if [ -n "$waxf" ] && [ -n "$watf" ]; then
           | grep -F '[unused-field]' | grep -qv "The type '"; then
       only_wax="$(printf '%s\n' "$only_wax" | grep -vxF 'unused-field' || true)"
     fi
+    # [unused-field] on a TYPE ALIAS is wat-side one-sided, the mirror image: a
+    # cast or an ascription can name an alias in Wax ([x as d], [(e : d)]) but
+    # not in the wat it lowers to (an instruction such as [f64.promote_f32], or
+    # nothing), so an alias only such a use names is unreferenced in the wat.
+    # Both linters are right about their own input. Dropped only when EVERY
+    # [unused-field] the wat form reports is about a type alias.
+    if printf '%s\n' "$only_wat" | grep -qxF 'unused-field' \
+       && ! timeout -k 5 "$TIMEOUT" "$WAX" check -W all=warning \
+            --error-format short "$watf" 2>&1 \
+          | grep -F '[unused-field]' | grep -qv "The type alias '"; then
+      only_wat="$(printf '%s\n' "$only_wat" | grep -vxF 'unused-field' || true)"
+    fi
     if [ -n "$only_wax" ] || [ -n "$only_wat" ]; then
       dw="$(printf '%s' "$only_wax" | paste -sd, -)"
       dt="$(printf '%s' "$only_wat" | paste -sd, -)"

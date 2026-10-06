@@ -357,6 +357,17 @@ Errors in alias definitions are reported once, at the definition.
   11 │ 
   [128]
 
+Discarding a cast to an alias is reported as discarding the cast to the type it
+stands for, on both sides.
+
+  $ wax check -W unused-result=warning discard.wax 2>&1 | grep Warning
+  Warning [unused-result]:
+  Warning [unused-result]:
+  $ wax -f wat discard.wax -o discard.wat
+  $ wax check -W unused-result=warning discard.wat 2>&1 | grep Warning
+  Warning [unused-result]:
+  Warning [unused-result]:
+
 An alias may not take the name of a built-in type, a packed storage type or a
 conversion target included: an alias [i8] would read back as the packed [i8].
 A WAT alias with such a name is renamed on its way to Wax.
