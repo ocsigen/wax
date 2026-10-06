@@ -598,6 +598,25 @@ same signature reuses: the global's type is [$t], not a new function type.
   (func $get (result (@type $word)) (i32.const 42))
   (global $f (export "f") (ref $t) (ref.func $get))
 
+An alias defined as a conditional one is conditional too, and a select whose
+type is given by its context (a returned value) lowers like any other.
+
+  $ wax -f wat chain.wax
+  (@if $p (@then (@type $n i32)) (@else (@type $n eqref)))
+  (@type $m (@type $n))
+  (func $sel (export "sel")
+    (param $a (@type $m)) (param $b (@type $m)) (param $c i32)
+    (result (@type $m))
+    (return
+      (select (result (@type $m)) (local.get $a) (local.get $b) (local.get $c)))
+  )
+  (func $sel2 (export "sel2")
+    (param $a (@type $n)) (param $b (@type $n)) (param $c i32)
+    (result (@type $n))
+    (return
+      (select (result (@type $n)) (local.get $a) (local.get $b) (local.get $c)))
+  )
+
 A type is reused only where it is the same type in every configuration: a cast
 to [&fn() -> i64] does not reuse a [fn() -> n] whose [n] is [i64] in one
 configuration only, and a function's own type keeps the alias it is written
