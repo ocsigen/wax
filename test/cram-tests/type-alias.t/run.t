@@ -706,6 +706,44 @@ configuration is fine, but the module converted as a whole cannot hold it.
     (return (ref.cast anyref (local.get $x)))
   )
 
+A number literal that takes its type from a conditional alias is an
+[i64.const] in one configuration and an [i32.const] in the other.
+
+  $ wax check literal.wax
+  $ wax -f wat literal.wax
+  Error:
+    This literal takes the type of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+    ──➤  literal.wax:11:16
+   9 │ #[export]
+  10 │ fn zero() -> n {
+  11 │     let x: n = 0;
+     ·                ^
+  12 │     return x;
+  13 │ }
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
+  [128]
+  $ wax -D p=false -f wat literal.wax
+  (@type $n i32)
+  (func $zero (export "zero") (result (@type $n))
+    (local $x (@type $n))
+    (local.set $x (i32.const 0))
+    (return (local.get $x))
+  )
+
+When every branch defines the alias as the same type, the literal has one form.
+
+  $ wax -f wat literal-same.wax
+  (@if $p (@then (@type $n i32)) (@else (@type $n i32)))
+  (func $zero (export "zero") (result (@type $n))
+    (local $x (@type $n))
+    (local.set $x (i32.const 0))
+    (return (local.get $x))
+  )
+
 Code whose lowering depends on the type an alias stands for, such as an
 arithmetic operation, only lowers in a resolved configuration.
 
@@ -715,9 +753,9 @@ arithmetic operation, only lowers in a resolved configuration.
     Type mismatch: this produces a value of type '(@type $nativeint)', but type
     'i64' is expected.
    ──➤  shared.wax:4:12
-  2 │ #[export = "succ"]
-  3 │ fn succ(x: nativeint) -> nativeint {
-  4 │     return x + 1;
+  2 │ #[export = "double"]
+  3 │ fn double(x: nativeint) -> nativeint {
+  4 │     return x + x;
     ·            ^
   5 │ }
   6 │ 
@@ -725,7 +763,7 @@ arithmetic operation, only lowers in a resolved configuration.
   [128]
   $ wax -D portable_int=false -f wat shared.wax
   (@type $nativeint i32)
-  (func $succ (export "succ")
+  (func $double (export "double")
     (param $x (@type $nativeint)) (result (@type $nativeint))
-    (return (i32.add (local.get $x) (i32.const 1)))
+    (return (i32.add (local.get $x) (local.get $x)))
   )
