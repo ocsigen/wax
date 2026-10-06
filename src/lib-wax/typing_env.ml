@@ -223,6 +223,17 @@ type type_context = {
          queries always see the current type space. Read via [subtyping_info]. *)
 }
 
+(* [typ] with an alias use replaced by the value type it stands for, as its
+   definition writes it, so an inferred type never carries an alias. An unknown
+   or cyclic alias is kept: converting it fails, and was reported. *)
+let rec unalias (ctx : type_context) (typ : valtype) =
+  match typ with
+  | Alias a -> (
+      match Hashtbl.find_opt ctx.aliases.tbl a.desc with
+      | Some { poisoned = false; alias_typ; _ } -> unalias ctx alias_typ
+      | Some { poisoned = true; _ } | None -> typ)
+  | I32 | I64 | F32 | F64 | V128 | Ref _ -> typ
+
 (* One pending-value underflow ([pop_many] on an empty stack): the counts to
    report, and whether they have been. The placeholder cell recorded alongside
    it in [missing_holes] lets the hole that consumes it report the underflow at

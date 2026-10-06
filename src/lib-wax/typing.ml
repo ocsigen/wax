@@ -1297,17 +1297,6 @@ let alias_definition d (ctx : type_context) (a : ident) =
         a;
       None
 
-(* [typ] with an alias use replaced by the value type it stands for, as its
-   definition writes it, so an inferred type never carries an alias. An unknown
-   or cyclic alias is kept: converting it fails, and was reported. *)
-let rec unalias (ctx : type_context) (typ : valtype) =
-  match typ with
-  | Alias a -> (
-      match Tbl.find_no_mark ctx.aliases a with
-      | Some { poisoned = false; alias_typ; _ } -> unalias ctx alias_typ
-      | Some { poisoned = true; _ } | None -> typ)
-  | I32 | I64 | F32 | F64 | V128 | Ref _ -> typ
-
 (* Whether [typ] is written with an alias. Such an annotation is never
    redundant, even when it equals the type inferred: it may stand for another
    type in another configuration. *)
