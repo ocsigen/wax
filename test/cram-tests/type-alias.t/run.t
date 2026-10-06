@@ -669,6 +669,32 @@ aliases included.
     (return (local.get $y))
   )
 
+A cast to a conditional alias is an instruction that depends on the
+configuration ([ref.cast eqref] in one, [ref.cast anyref] in the other). Each
+configuration is fine, but the module converted as a whole cannot hold it.
+
+  $ wax check cast.wax
+  $ wax -f wat cast.wax
+  Error:
+    This cast to the type alias 'n' has no single WebAssembly form: the alias is
+    defined under a conditional annotation.
+    ──➤  cast.wax:11:12
+   9 │ #[export]
+  10 │ fn c(x: &?any) -> n {
+  11 │     return x as n;
+     ·            ^^^^^^
+  12 │ }
+  13 │ 
+  Hint:
+    Cast in the branches of a conditional, to the types the alias stands for, or
+    resolve the conditionals with -D.
+  [128]
+  $ wax -D p=false -f wat cast.wax
+  (@type $n anyref)
+  (func $c (export "c") (param $x anyref) (result (@type $n))
+    (return (ref.cast anyref (local.get $x)))
+  )
+
 Code whose lowering depends on the type an alias stands for, such as an
 arithmetic operation, only lowers in a resolved configuration.
 

@@ -977,6 +977,18 @@ module Error = struct
     report context ~location
       ((text "There is no field named" ++ name x) ^^ text ".")
 
+  let conditional_alias_cast context ~location x =
+    report context ~location
+      ~hint:
+        (text
+           "Cast in the branches of a conditional, to the types the alias \
+            stands for, or resolve the conditionals with -D.")
+      (text "This cast to the type alias"
+      ++ name x
+      ++ text
+           "has no single WebAssembly form: the alias is defined under a \
+            conditional annotation.")
+
   let configuration_dependent_field context ~location x =
     report context ~location
       ~hint:
@@ -7172,6 +7184,19 @@ and type_cast ctx i =
             when a.desc = a'.desc && (not ctx.simplify)
                  && conditional_alias ctx a ->
               Ascribed (Alias a)
+          (* Any other cast to a conditional alias is an instruction that
+             depends on the configuration ([ref.cast eqref] in one, [anyref] in
+             another), which a module lowered for every configuration at once
+             cannot hold. *)
+          | Valtype (Alias a), _
+            when (not ctx.simplify) && conditional_alias ctx a ->
+              Option.iter
+                (fun tbl ->
+                  Hashtbl.replace tbl
+                    (i.info.loc_start.pos_cnum, i.info.loc_end.pos_cnum)
+                    (i.info, a))
+                ctx.build_errors;
+              typ
           | _ -> typ
         in
         return_expression i (Cast (i', typ)) ty
@@ -12554,7 +12579,7 @@ let report_field_positions diagnostics tbl =
 (*** Type-checking a configuration ***)
 
 let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
-    ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
+    ?build_errors ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
     ?(member_completions = None) ?(faithful = false)
     ?(features = Wax_utils.Feature.default ())
     ?(select =
@@ -12694,6 +12719,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
       member_completions;
       simplify;
       suggest;
+      build_errors;
       select;
       faithful;
     }
@@ -13945,6 +13971,7 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
         (Wax_utils.Diagnostic.collector ())
         (plan_shape ~guards:false fields)
     in
+    let build_errors = Hashtbl.create 4 in
     let results =
       List.map
         (fun run ->
@@ -13952,11 +13979,18 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
             type_configuration
               ~select:(Wax_wasm.Cond_plan.select plan run)
               ~resolve_links ~pun_spans ~member_completions ~faithful ~features
-              ~simplify
+              ~simplify ~build_errors
               (Wax_utils.Diagnostic.collector ())
               fields ))
         (Wax_wasm.Cond_plan.runs plan)
     in
+    (* Each run checked a configuration; what holds in none as one module is
+       the build's to report, once. *)
+    Hashtbl.fold (fun _ e l -> e :: l) build_errors []
+    |> List.sort (fun ((l : location), _) ((l' : location), _) ->
+        compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
+    |> List.iter (fun ((location : location), a) ->
+        Error.conditional_alias_cast diagnostics ~location a);
     dedupe_sinks ~resolve_links ~pun_spans ~member_completions;
     stitch plan results
   end

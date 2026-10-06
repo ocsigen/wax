@@ -1,0 +1,12 @@
+#[if(p)]
+{
+    type n = &?eq;
+}
+#[else]
+{
+    type n = &?any;
+}
+#[export]
+fn c(x: &?any) -> n {
+    return x as n;
+}
