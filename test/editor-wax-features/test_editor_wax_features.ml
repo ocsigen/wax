@@ -194,4 +194,16 @@ let () =
     asrc "fn f(x: ";
   Wax_editor.completion_string asrc 1 8 []
   |> List.iter (fun (c : Editor_common.completion) ->
-      if c.k_name = "n" then Printf.printf "  detail: %s\n" c.k_detail)
+      if c.k_name = "n" then Printf.printf "  detail: %s\n" c.k_detail);
+  (* The outline lists each definition, and every occurrence of the alias is
+     highlighted as a type. *)
+  Printf.printf "=== symbols (conditional type alias) ===\n";
+  List.iter
+    (fun (s : Editor_common.sym) ->
+      Printf.printf "  %s %s %s\n" s.s_kind s.s_name (show_loc s.s_selection))
+    (Wax_editor.symbols_string asrc);
+  Printf.printf "=== semantic tokens (conditional type alias) ===\n";
+  List.iter
+    (fun (t : Editor_common.sem_token) ->
+      Printf.printf "  (%d,%d)+%d %s\n" t.st_line t.st_char t.st_len t.st_type)
+    (Wax_editor.semantic_tokens_string asrc)
