@@ -1,0 +1,18 @@
+#[if(p)]
+{
+    type n = i64;
+}
+#[else]
+{
+    type n = i32;
+}
+type ft = fn(n);
+type k = cont ft;
+import "m" {
+    fn two() -> (n, n);
+}
+#[export = "f"]
+fn f(c: &k, a: n) {
+    let (x, y) = two();
+    c.resume(do { a });
+}

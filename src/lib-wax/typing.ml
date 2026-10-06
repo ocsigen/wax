@@ -6054,7 +6054,12 @@ and cont_func_params ctx ct =
   match sub.typ with
   | Cont ft -> (
       match Tbl.find_opt ctx.type_context.types ft with
-      | Some (_, { typ = Func f; _ }) -> Some f.params
+      | Some (_, { typ = Func f; _ }) -> (
+          (* As written, so an operand block filled from it takes an alias. *)
+          match written_comptype ctx ft with
+          | Some (Func w) when Array.length w.params = Array.length f.params ->
+              Some w.params
+          | _ -> Some f.params)
       | _ -> None)
   | _ -> None
 
@@ -6139,7 +6144,7 @@ and restore_leftover_block_result ctx (i' : (_ array * _) instr) =
   match fst i'.info with
   | [| cell |] -> (
       match standalone_valtype ctx cell with
-      | Some iv -> annotate_omitted_block iv.typ i'
+      | Some iv -> annotate_omitted_block (declared_form iv) i'
       | None -> i')
   | _ -> i'
 
