@@ -22,10 +22,24 @@
 #                    seed's;
 #   COND_REJECT    — unresolved, the module does not convert to WAT, or the WAT
 #                    does not validate, or does not specialize to the binary the
-#                    seed compiles to through WAT (compiling through WAT and
+#                    seed compiles to through WAT, up to type identity (a
+#                    function typed with an alias gets a type of its own, where
+#                    the seed reuses an equal one; compiling through WAT and
 #                    directly can differ in metadata, aliases or not);
 #   COND_ROUNDTRIP — that WAT does not convert back to Wax, or the result no
 #                    longer compiles under -D.
+#
+# Then with the [#[else]] branch defining each alias as a neighbouring type
+# (i32/i64, f32/f64, the other nullability), cast targets aliased too: the
+# module means something different in each configuration, where it is valid at
+# all. Converting it unresolved, as one module for every configuration, must
+# agree with converting each configuration:
+#
+#   COMMUTE        — the module converts unresolved, and a configuration
+#                    compiles on its own, but the converted module specialized
+#                    to that configuration does not compile, or is not the same
+#                    module (compared by fuzz_canon, up to type identity: a
+#                    duplicated type is the same type, a different one is not).
 #
 # Plus CRASH for any wax invocation that exits other than ok/rejected. Seeds come
 # from fuzz/corpus-wax/valid (run fuzz/wax-corpus.sh first); a seed that does not
@@ -39,13 +53,18 @@ SEEDS="${SEEDS:-$ROOT/fuzz/corpus-wax/valid}"
 JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
 KEEP="$ROOT/fuzz/alias-findings"
 ALIAS="${ALIAS:-$ROOT/_build/default/src/bin/fuzz_alias.exe}"
-[ -x "$ALIAS" ] || { echo "fuzz_alias not built — run 'dune build' first" >&2; exit 2; }
+CANON="${CANON:-$ROOT/_build/default/src/bin/fuzz_canon.exe}"
+[ -x "$ALIAS" ] && [ -x "$CANON" ] \
+  || { echo "fuzz_alias/fuzz_canon not built — run 'dune build' first" >&2; exit 2; }
 [ -d "$SEEDS" ] && [ -n "$(find "$SEEDS" -name '*.wax' -print -quit)" ] \
   || { echo "no wax seeds at $SEEDS — run fuzz/wax-corpus.sh first" >&2; exit 2; }
 mkdir -p "$KEEP"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 freeze_wax "$RESULTS"
+# Snapshot the helpers too, so a rebuild during the run does not pull them away.
+cp "$ALIAS" "$RESULTS/.fuzz_alias" && ALIAS="$RESULTS/.fuzz_alias"
+cp "$CANON" "$RESULTS/.fuzz_canon" && CANON="$RESULTS/.fuzz_canon"
 
 mapfile -t SEED_FILES < <(find "$SEEDS" -name '*.wax' | sort)
 NSEEDS=${#SEED_FILES[@]}
@@ -57,11 +76,18 @@ NSEEDS=${#SEED_FILES[@]}
 # declarative element segment a module with conditionals gets once they are
 # resolved may list its functions differently (one already declared by an
 # export, say), aliases or not.
+NORM='s/select (result \(i32\|i64\|f32\|f64\|v128\))/select/g; /^ *(elem declare /d'
 same_module() {
   cmp -s "$1" "$2" && return 0
-  local norm='s/select (result \(i32\|i64\|f32\|f64\|v128\))/select/g; /^ *(elem declare /d'
-  diff -q <("$WAX" -f wat "$1" 2>&1 | sed "$norm") \
-          <("$WAX" -f wat "$2" 2>&1 | sed "$norm") >/dev/null
+  diff -q <("$WAX" -f wat "$1" 2>&1 | sed "$NORM") \
+          <("$WAX" -f wat "$2" 2>&1 | sed "$NORM") >/dev/null
+}
+
+# Whether two binaries are the same module up to type identity (see fuzz_canon):
+# a type spelled twice is still one type. Rendered under the worker's $dir.
+same_canonical() {
+  "$CANON" "$1" "$dir/canon1.txt" "$2" "$dir/canon2.txt" \
+    && diff -q <(sed "$NORM" "$dir/canon1.txt") <(sed "$NORM" "$dir/canon2.txt") >/dev/null
 }
 
 # Worker: alias seed #i (the seed file and the alias choices both derived from
@@ -120,7 +146,7 @@ fuzz_one() {
     if [ "$verdict" = ok ]; then
       "$WAX" -f wat "$seed" -o "$dir/orig.wat" 2>/dev/null
       "$WAX" -f wasm "$dir/orig.wat" -o "$dir/orig-wat.wasm" 2>/dev/null
-      same_module "$dir/orig-wat.wasm" "$dir/cw.wasm" || { keep "$dir/c.wax"
+      same_canonical "$dir/orig-wat.wasm" "$dir/cw.wasm" || { keep "$dir/c.wax"
         report COND_REJECT "the unresolved WAT specializes to a different binary" \
           "$ALIAS $seed $s fz_cond | wax -f wat | wax -D fz_cond=true -f wasm" ; }
     else
@@ -143,6 +169,25 @@ fuzz_one() {
     keep "$dir/c.wax"
     report COND_REJECT "unresolved, does not convert to WAT ($verdict): $(grep -m1 -i error "$ERRLOG")" \
       "$ALIAS $seed $s fz_cond | wax -f wat"
+  fi
+
+  # Differing aliases: unresolved conversion must commute with -D.
+  if "$ALIAS" "$seed" "$s" fz_cond differ >"$dir/d.wax" 2>/dev/null \
+     && [ "$(classify_wax -f wat "$dir/d.wax" -o "$dir/d.wat")" = ok ]; then
+    for v in true false; do
+      [ "$(classify_wax -D "fz_cond=$v" -f wasm "$dir/d.wax" -o "$dir/dd-$v.wasm")" = ok ] \
+        || continue
+      verdict="$(classify_wax -D "fz_cond=$v" -f wasm "$dir/d.wat" -o "$dir/dw-$v.wasm")"
+      if [ "$verdict" != ok ]; then
+        keep "$dir/d.wax"
+        report COMMUTE "converted unresolved, does not compile under -D fz_cond=$v ($verdict)" \
+          "$ALIAS $seed $s fz_cond differ | wax -f wat | wax -D fz_cond=$v -f wasm"
+      elif ! same_canonical "$dir/dd-$v.wasm" "$dir/dw-$v.wasm"; then
+        keep "$dir/d.wax"
+        report COMMUTE "under -D fz_cond=$v, converting unresolved then specializing differs from specializing" \
+          "$ALIAS $seed $s fz_cond differ  (compare -D fz_cond=$v on the .wax and on its unresolved .wat)"
+      fi
+    done
   fi
 
   [ -n "$out" ] && printf '%s' "$out" >"$RESULTS/$i"
