@@ -114,7 +114,7 @@ server](#language-server)).
           quick-fix `edit` that inserts a `_` at the name's start.
         - `unused-field` (groups `unused`, `correctness`): a module field that
           nothing reachable references — a function, global, memory, table, tag,
-          type, or a *passive* data or element segment. An active segment (and a
+          type, value-type alias, or a *passive* data or element segment. An active segment (and a
           declarative one) runs at instantiation, so it counts as used whether or
           not an instruction names it; only a passive segment, reachable solely
           through `memory.init`/`table.init` and `data.drop`/`elem.drop`, can be
