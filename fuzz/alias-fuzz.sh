@@ -30,10 +30,12 @@
 #                    longer compiles under -D.
 #
 # Then with the [#[else]] branch defining each alias as a neighbouring type
-# (i32/i64, f32/f64, the other nullability), cast targets aliased too: the
-# module means something different in each configuration, where it is valid at
-# all. Converting it unresolved, as one module for every configuration, must
-# agree with converting each configuration:
+# (i32/i64, f32/f64; for a reference, the other nullability, a related struct
+# type or the other hierarchy), cast targets aliased too, and some statements
+# placed in one or both branches of an #[if(fz_cond_2)]: the module means something
+# different in each configuration, where it is valid at all. Converting it
+# unresolved, as one module for every configuration, must agree with converting
+# each configuration:
 #
 #   COMMUTE        — the module converts unresolved, and a configuration
 #                    compiles on its own, but the converted module specialized
@@ -175,18 +177,21 @@ fuzz_one() {
   if "$ALIAS" "$seed" "$s" fz_cond differ >"$dir/d.wax" 2>/dev/null \
      && [ "$(classify_wax -f wat "$dir/d.wax" -o "$dir/d.wat")" = ok ]; then
     for v in true false; do
-      [ "$(classify_wax -D "fz_cond=$v" -f wasm "$dir/d.wax" -o "$dir/dd-$v.wasm")" = ok ] \
-        || continue
-      verdict="$(classify_wax -D "fz_cond=$v" -f wasm "$dir/d.wat" -o "$dir/dw-$v.wasm")"
-      if [ "$verdict" != ok ]; then
-        keep "$dir/d.wax"
-        report COMMUTE "converted unresolved, does not compile under -D fz_cond=$v ($verdict)" \
-          "$ALIAS $seed $s fz_cond differ | wax -f wat | wax -D fz_cond=$v -f wasm"
-      elif ! same_canonical "$dir/dd-$v.wasm" "$dir/dw-$v.wasm"; then
-        keep "$dir/d.wax"
-        report COMMUTE "under -D fz_cond=$v, converting unresolved then specializing differs from specializing" \
-          "$ALIAS $seed $s fz_cond differ  (compare -D fz_cond=$v on the .wax and on its unresolved .wat)"
-      fi
+      for v2 in true false; do
+        local defs=(-D "fz_cond=$v" -D "fz_cond_2=$v2") cfg="fz_cond=$v fz_cond_2=$v2"
+        [ "$(classify_wax "${defs[@]}" -f wasm "$dir/d.wax" -o "$dir/dd.wasm")" = ok ] \
+          || continue
+        verdict="$(classify_wax "${defs[@]}" -f wasm "$dir/d.wat" -o "$dir/dw.wasm")"
+        if [ "$verdict" != ok ]; then
+          keep "$dir/d.wax"
+          report COMMUTE "converted unresolved, does not compile under $cfg ($verdict)" \
+            "$ALIAS $seed $s fz_cond differ | wax -f wat | wax ${defs[*]} -f wasm"
+        elif ! same_canonical "$dir/dd.wasm" "$dir/dw.wasm"; then
+          keep "$dir/d.wax"
+          report COMMUTE "under $cfg, converting unresolved then specializing differs from specializing" \
+            "$ALIAS $seed $s fz_cond differ  (compare ${defs[*]} on the .wax and on its unresolved .wat)"
+        fi
+      done
     done
   fi
 
