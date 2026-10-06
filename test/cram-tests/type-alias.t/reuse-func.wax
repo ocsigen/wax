@@ -1,0 +1,13 @@
+#[if(p)]
+{
+    type word = i64;
+}
+#[else]
+{
+    type word = i32;
+}
+fn get() -> word {
+    #[if(p)] { return 1 as i64; } #[else] { return 1; }
+}
+#[export]
+const f = get;

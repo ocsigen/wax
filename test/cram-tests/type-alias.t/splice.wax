@@ -1,0 +1,15 @@
+#[if(p)]
+{
+    type n = i64;
+}
+#[else]
+{
+    type n = i32;
+}
+type base = open { f: mut n };
+type sub: base = { .., g: i32 };
+#[export]
+fn rd(s: &sub) -> n {
+    let y = s.f;
+    return y;
+}

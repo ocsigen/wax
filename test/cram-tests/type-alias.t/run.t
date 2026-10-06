@@ -598,6 +598,44 @@ same signature reuses: the global's type is [$t], not a new function type.
   (func $get (result (@type $word)) (i32.const 42))
   (global $f (export "f") (ref $t) (ref.func $get))
 
+A type is reused only where it is the same type in every configuration: a cast
+to [&fn() -> i64] does not reuse a [fn() -> n] whose [n] is [i64] in one
+configuration only, and a function's own type keeps the alias it is written
+with.
+
+  $ wax -f wat reuse-cast.wax
+  (@if $p (@then (@type $n i64)) (@else (@type $n i32)))
+  (type $t (func (result (@type $n))))
+  (func $c (export "c") (param $x (ref func)) (result (ref func))
+    (return (ref.cast (ref $"<fn:->I;>") (local.get $x)))
+  )
+  (func $h (export "h") (param $x (ref $t)) (result (ref $t))
+    (return (local.get $x))
+  )
+  (type $"<fn:->I;>" (func (result i64)))
+  $ wax -f wat reuse-func.wax
+  (@if $p (@then (@type $word i64)) (@else (@type $word i32)))
+  (func $get (result (@type $word))
+    (@if $p (@then (return (i64.const 1))) (@else (return (i32.const 1))))
+  )
+  (global $f (export "f") (ref $<func:get>) (ref.func $get))
+  (type $<func:get> (func (result (@type $word))))
+
+A struct inheriting its supertype's fields with [..] inherits them as written,
+aliases included.
+
+  $ wax -f wat splice.wax
+  (@if $p (@then (@type $n i64)) (@else (@type $n i32)))
+  (type $base (sub (struct (field $f (mut (@type $n))))))
+  (type $sub
+    (sub final $base (struct (field $f (mut (@type $n))) (field $g i32)))
+  )
+  (func $rd (export "rd") (param $s (ref $sub)) (result (@type $n))
+    (local $y (@type $n))
+    (local.set $y (struct.get $sub $f (local.get $s)))
+    (return (local.get $y))
+  )
+
 Code whose lowering depends on the type an alias stands for, such as an
 arithmetic operation, only lowers in a resolved configuration.
 
