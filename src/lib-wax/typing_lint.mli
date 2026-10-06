@@ -12,10 +12,11 @@ val is_pure_binary_method : string -> bool
 (** Whether a no-/one-argument numeric instruction method ([x.abs()],
     [x.min(y)]) is pure and total. *)
 
-val cast_is_total : Ast.casttype -> bool
-(** Whether a cast never traps, so discarding its result is pointless. *)
+val cast_is_total : Typing_env.module_context -> Ast.casttype -> bool
+(** Whether a cast never traps, so discarding its result is pointless. A cast to
+    a value-type alias is classified as the cast to the type it stands for. *)
 
-val is_effectless : 'a Ast.instr -> bool
+val is_effectless : Typing_env.module_context -> 'a Ast.instr -> bool
 (** Whether evaluating an expression has no side effect and cannot trap. *)
 
 val collect_assigned_locals :

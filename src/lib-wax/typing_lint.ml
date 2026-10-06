@@ -134,38 +134,55 @@ let is_pure_binary_method = function
    cast ([as &T]) may trap and is conservatively treated as non-total (the
    never-trapping [extern.convert_any] is spelled the same way but not
    distinguished here). Mirrors the Wasm validator's [classify]. *)
-let cast_is_total = function
+(* [t] with an alias use replaced by the value type it stands for, as written
+   (see [Typing.unalias]); an unknown or poisoned alias is kept. *)
+let rec unalias ctx (t : valtype) =
+  match t with
+  | Alias a -> (
+      match Hashtbl.find_opt ctx.type_context.aliases.tbl a.desc with
+      | Some { alias_typ; poisoned = false; _ } -> unalias ctx alias_typ
+      | Some { poisoned = true; _ } | None -> t)
+  | I32 | I64 | F32 | F64 | V128 | Ref _ -> t
+
+let rec cast_is_total ctx = function
   | Ast.Signedtype { typ; strict; _ } -> (
       match typ with `F32 | `F64 -> true | `I32 | `I64 -> not strict)
   | Valtype (I32 | I64 | F32 | F64) -> true
-  (* An alias is taken to stand for a reference type: it may trap. *)
-  | Valtype (V128 | Ref _ | Alias _) | Functype _ -> false
+  (* An alias, as the type it stands for; one that stands for none (an error,
+     already reported) is taken to be a reference type, which may trap. *)
+  | Valtype (Alias _ as t) -> (
+      match unalias ctx t with
+      | Alias _ -> false
+      | t -> cast_is_total ctx (Valtype t))
+  | Valtype (V128 | Ref _) | Functype _ -> false
   (* An ascription is a static assertion; nothing to trap. *)
   | Ascribed _ -> true
 
-let rec is_effectless (e : _ Ast.instr) =
+let rec is_effectless ctx (e : _ Ast.instr) =
   (* A field value; the punning shorthand [{x}] reads a local/global. *)
-  let field (_, v) = match v with Some e -> is_effectless e | None -> true in
+  let field (_, v) =
+    match v with Some e -> is_effectless ctx e | None -> true
+  in
   match e.desc with
   | Get _ | Int _ | Float _ | Char _ | String _ | Null | StructDefault _ -> true
-  | UnOp (_, a) -> is_effectless a
+  | UnOp (_, a) -> is_effectless ctx a
   | Call ({ desc = StructGet (recv, m); _ }, [])
     when is_pure_unary_method m.desc ->
-      is_effectless recv
+      is_effectless ctx recv
   | Call ({ desc = StructGet (recv, m); _ }, [ a ])
     when is_pure_binary_method m.desc ->
-      is_effectless recv && is_effectless a
+      is_effectless ctx recv && is_effectless ctx a
   (* A SIMD vector method on a value ([v.add_i32x4(w)], [v.trunc_sat_f32x4_u()]):
      every vector op is pure and non-trapping (the trapping SIMD accesses are the
      [mem.]-path loads/stores, classified separately by [Simd.mem_method]). *)
   | Call ({ desc = StructGet (recv, m); _ }, args)
     when Wax_wasm.Simd.classify m.desc <> None ->
-      is_effectless recv && List.for_all is_effectless args
+      is_effectless ctx recv && List.for_all (is_effectless ctx) args
   (* A [v128::…] SIMD constructor or vector op ([v128::i8x16(…)], a lane build)
      is effect-free and non-trapping when its operands are — the trapping SIMD
      memory accesses use the [mem.] path, not [v128::]. *)
   | Call ({ desc = Path ({ desc = "v128"; _ }, _); _ }, args) ->
-      List.for_all is_effectless args
+      List.for_all (is_effectless ctx) args
   (* [memory.size] / [table.size] ([m.size()]) reads the current size: pure and
      non-trapping, unlike the effectful grow/fill/copy/init on the same path. *)
   | Call
@@ -175,17 +192,18 @@ let rec is_effectless (e : _ Ast.instr) =
   (* A typed null [null as &?t] is [ref.null] (a constant), not a trapping ref
      cast, so it is effect-free like a bare [null]. *)
   | Cast ({ desc = Null; _ }, Valtype (Ref { nullable = true; _ })) -> true
-  | Cast (a, ct) when cast_is_total ct -> is_effectless a
+  | Cast (a, ct) when cast_is_total ctx ct -> is_effectless ctx a
   | BinOp ({ desc = Div _ | Rem _; _ }, _, _) -> false
-  | BinOp (_, a, b) -> is_effectless a && is_effectless b
-  | Select (a, b, c) -> is_effectless a && is_effectless b && is_effectless c
-  | Test (a, _) -> is_effectless a
+  | BinOp (_, a, b) -> is_effectless ctx a && is_effectless ctx b
+  | Select (a, b, c) ->
+      is_effectless ctx a && is_effectless ctx b && is_effectless ctx c
+  | Test (a, _) -> is_effectless ctx a
   | Struct (_, fields) -> List.for_all field fields
-  | StructDesc (d, fields) -> is_effectless d && List.for_all field fields
-  | StructDefaultDesc d -> is_effectless d
-  | Array (_, elt, len) -> is_effectless elt && is_effectless len
-  | ArrayDefault (_, len) -> is_effectless len
-  | ArrayFixed (_, elts) -> List.for_all is_effectless elts
+  | StructDesc (d, fields) -> is_effectless ctx d && List.for_all field fields
+  | StructDefaultDesc d -> is_effectless ctx d
+  | Array (_, elt, len) -> is_effectless ctx elt && is_effectless ctx len
+  | ArrayDefault (_, len) -> is_effectless ctx len
+  | ArrayFixed (_, elts) -> List.for_all (is_effectless ctx) elts
   | _ -> false
 
 (* Accumulate into [acc] the local names assigned ([Set]/[Tee] targets) anywhere
@@ -1002,7 +1020,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
       (* A drop [_ = e] is a single anonymous binding; if [e] is effect-free,
          computing it only to discard the result is pointless. *)
       (match (bindings, body) with
-      | [ (None, _) ], Some e when is_effectless e ->
+      | [ (None, _) ], Some e when is_effectless ctx e ->
           Error.unused_result ctx.diagnostics ~location:e.info
       | _ -> ());
       opt body
