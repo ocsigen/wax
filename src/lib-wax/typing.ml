@@ -989,6 +989,18 @@ module Error = struct
            "has no single WebAssembly form: the alias is defined under a \
             conditional annotation.")
 
+  let conditional_alias_literal context ~location x =
+    report context ~location
+      ~hint:
+        (text
+           "Write it in the branches of a conditional, give it a type of its \
+            own, or resolve the conditionals with -D.")
+      (text "This literal takes the type of the type alias"
+      ++ name x
+      ++ text
+           "and has no single WebAssembly form: the alias stands for different \
+            types under a conditional annotation.")
+
   let configuration_dependent_field context ~location x =
     report context ~location
       ~hint:
@@ -7194,7 +7206,7 @@ and type_cast ctx i =
                 (fun tbl ->
                   Hashtbl.replace tbl
                     (i.info.loc_start.pos_cnum, i.info.loc_end.pos_cnum)
-                    (i.info, a))
+                    (i.info, a, `Cast))
                 ctx.build_errors;
               typ
           | _ -> typ
@@ -12979,6 +12991,38 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
   Option.iter
     (fun tbl -> record_field_positions ctx tbl typed_fields)
     field_positions;
+  (* A literal whose type is a conditional alias's is a constant of that
+     configuration's type ([f32.const] in one, [f64.const] in another), which
+     a module lowered for every configuration at once cannot hold when the
+     types differ. Record the type each run gives it. (Where the alias's type
+     reaches the lowered module, as a local's or a result's, validating it
+     checks the constant anyway; a dropped one is checked only here.) *)
+  Option.iter
+    (fun tbl ->
+      Ast_utils.iter_module_instr
+        (fun (i : _ instr) ->
+          match (i.desc, fst i.info) with
+          | (Int _ | Float _), [| cell |] -> (
+              match Cell.get cell with
+              | Valtype { alias = Some a; internal; _ }
+                when (not ctx.simplify) && conditional_alias ctx a ->
+                  let l = snd i.info in
+                  let key = (l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
+                  let seen =
+                    match Hashtbl.find_opt tbl key with
+                    | Some (_, _, `Literal seen) -> seen
+                    | _ -> []
+                  in
+                  Hashtbl.replace tbl key
+                    ( l,
+                      a,
+                      `Literal
+                        (if List.mem internal seen then seen
+                         else internal :: seen) )
+              | _ -> ())
+          | _ -> ())
+        typed_fields)
+    build_errors;
   (* Check the alias definitions no use resolved. A reference they make is no
      use of what it names. *)
   (let current = ctx.type_context.aliases.current in
@@ -13987,10 +14031,13 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
     (* Each run checked a configuration; what holds in none as one module is
        the build's to report, once. *)
     Hashtbl.fold (fun _ e l -> e :: l) build_errors []
-    |> List.sort (fun ((l : location), _) ((l' : location), _) ->
+    |> List.sort (fun ((l : location), _, _) ((l' : location), _, _) ->
         compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
-    |> List.iter (fun ((location : location), a) ->
-        Error.conditional_alias_cast diagnostics ~location a);
+    |> List.iter (fun ((location : location), a, kind) ->
+        match kind with
+        | `Cast -> Error.conditional_alias_cast diagnostics ~location a
+        | `Literal [ _ ] -> ()
+        | `Literal _ -> Error.conditional_alias_literal diagnostics ~location a);
     dedupe_sinks ~resolve_links ~pun_spans ~member_completions;
     stitch plan results
   end

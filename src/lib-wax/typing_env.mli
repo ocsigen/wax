@@ -162,7 +162,13 @@ type module_context = {
   warn_unused : bool;
   simplify : bool;
   suggest : bool;
-  build_errors : (int * int, Ast.location * Ast.ident) Hashtbl.t option;
+  build_errors :
+    ( int * int,
+      Ast.location
+      * Ast.ident
+      * [ `Cast | `Literal of Wax_wasm.Types.Internal.valtype list ] )
+    Hashtbl.t
+    option;
   select : Ast.location -> bool;
       (* The branch this run types at each conditional annotation, by the
          conditional's own span ([true] = then). Fixed ahead of typing by the

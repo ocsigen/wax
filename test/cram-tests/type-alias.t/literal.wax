@@ -1,0 +1,13 @@
+#[if(p)]
+{
+    type n = i64;
+}
+#[else]
+{
+    type n = i32;
+}
+#[export]
+fn zero() -> n {
+    let x: n = 0;
+    return x;
+}
