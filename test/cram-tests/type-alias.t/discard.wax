@@ -1,0 +1,9 @@
+type d = f64;
+#[export]
+fn f(x: f32) {
+    _ = x as d;
+}
+#[export]
+fn g(x: f32) {
+    _ = x as f64;
+}
