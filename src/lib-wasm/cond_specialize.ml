@@ -27,6 +27,10 @@ let parse_define s =
     | None -> (s, None)
   in
   if String.equal name "" then Error "empty variable name"
+  else if not (Wax_utils.Identifier.is_valid name) then
+    Error
+      (Printf.sprintf "'%s' is not a valid variable name (a Wax identifier)"
+         name)
   else
     let v =
       match value with

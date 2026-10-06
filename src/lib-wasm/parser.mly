@@ -1099,7 +1099,18 @@ string_list: l = list(STRING) { l }
 
 condition:
 | s = STRING { Ast.Cond_string s }
-| v = ID { Ast.Cond_var v }
+| v = ID
+  { (* A variable is shared with Wax, and set with -D: it is named as in Wax. *)
+    if not (Wax_utils.Identifier.is_valid v.Ast.desc) then
+      raise
+        (Wax_utils.Parsing.syntax_error_pair
+           ( (v.info.Ast.loc_start, v.info.loc_end),
+             Wax_utils.Message.text
+               (Printf.sprintf
+                  "A condition variable must be a valid Wax identifier, \
+                   which '$%s' is not.\n"
+                  v.desc) ));
+    Ast.Cond_var v }
 | "(" maj = NAT min = NAT pat = NAT ")"
     { Ast.Cond_version (int_of_string maj, int_of_string min, int_of_string pat) }
 | "(" AND l = condition+ ")" { Ast.Cond_and l }

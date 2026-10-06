@@ -1612,8 +1612,8 @@ import_kind_decl:
 (* Conditions of conditional annotations. Reuse the WAT-level [Wax_wasm.Ast.cond]
    (we do not evaluate them; they are preserved for the preprocessor). *)
 condition:
-| name = ident { Wax_wasm.Ast.Cond_var name }
-| name = ident op = condition_relop rhs = condition_literal
+| name = condition_variable { Wax_wasm.Ast.Cond_var name }
+| name = condition_variable op = condition_relop rhs = condition_literal
   { Wax_wasm.Ast.Cond_cmp (op, Wax_wasm.Ast.Cond_var name, rhs) }
 | name = ident "(" l = separated_list_trailing(",", condition) ")"
   { match name.Annot.desc, l with
@@ -1625,6 +1625,11 @@ condition:
         (Wax_utils.Parsing.syntax_error_pair
            ($loc,
            Wax_utils.Message.text ("Expected 'all', 'any', or 'not(<cond>)' in a condition.") )) }
+
+(* A condition variable: any identifier, a keyword included (as for a label),
+   since the WAT [$name] it is shared with may be one. *)
+condition_variable:
+| name = ident_or_keyword { annot $sloc name }
 
 condition_literal:
 | "(" a = INT "," b = INT "," c = INT ")"

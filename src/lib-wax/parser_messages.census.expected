@@ -95,6 +95,7 @@
     1x Expecting '(', or a binding name.
     9x Expecting '('.
     2x Expecting ')', ',', or ':'.
+    1x Expecting ')', ',', or a comparison operator.
     3x Expecting ')', or ','.
     1x Expecting ')', or a call target.
     1x Expecting ')', or a call target.

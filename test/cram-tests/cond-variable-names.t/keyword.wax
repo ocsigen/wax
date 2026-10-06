@@ -1,0 +1,16 @@
+#[if(all(if, type = "wasi"))]
+{
+    const g = 0;
+}
+#[else]
+{
+    const g = 1;
+}
+#[export = "f"]
+fn f() -> i32 {
+    #[if(loop)]
+    {
+        return 1;
+    }
+    return g;
+}

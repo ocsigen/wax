@@ -1213,7 +1213,7 @@ Both formats can guard module fields by a condition that a downstream preprocess
   (@else (global $size i32 (i32.const 20))))
 ```
 
-The conditions are equivalent; note the surface differences: Wax variables are bare (`ocaml_version`) while WAT variables are `$`-prefixed; Wax versions are tuples `(5, 1, 0)` while WAT writes them `(5 1 0)`; Wax combines conditions with `all`/`any`/`not`, WAT with `and`/`or`/`not`.
+The conditions are equivalent; note the surface differences: Wax variables are bare (`ocaml_version`) while WAT variables are `$`-prefixed (a WAT variable must be named by a valid Wax identifier); Wax versions are tuples `(5, 1, 0)` while WAT writes them `(5 1 0)`; Wax combines conditions with `all`/`any`/`not`, WAT with `and`/`or`/`not`.
 
 The conditions are preserved, not evaluated. Type checking (`--validate`) explores each reachable combination independently (see the [Language Guide](language.md#conditional-compilation)). The two forms convert to each other, so a conditional written in Wax survives a round-trip through WAT and back.
 

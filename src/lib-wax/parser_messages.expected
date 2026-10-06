@@ -1301,7 +1301,7 @@ parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN IDENT RPAREN WHILE
 Expecting ']'.
 <5>This '[' opens the enclosing construct.
 
-parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN WHILE
+parse: FN IDENT LBRACE SHARP LBRACKET IF LPAREN UNDERSCORE
 
 Expecting a condition.
 
@@ -2006,6 +2006,10 @@ parse: SHARP LBRACKET IDENT WHILE
 Expecting '=', ']', or an attribute guard.
 <2>This '[' opens the enclosing construct.
 
+parse: SHARP LBRACKET IF LPAREN AS WHILE
+
+Expecting ')', ',', or a comparison operator.
+
 parse: SHARP LBRACKET IF LPAREN IDENT BANGEQUAL LPAREN INT COMMA INT COMMA INT WHILE
 
 Expecting ')'.
@@ -2045,11 +2049,11 @@ parse: SHARP LBRACKET IF LPAREN IDENT LPAREN IDENT BANGEQUAL STRING WHILE
 
 Expecting ')', or ','.
 
-parse: SHARP LBRACKET IF LPAREN IDENT LPAREN IDENT COMMA WHILE
+parse: SHARP LBRACKET IF LPAREN IDENT LPAREN IDENT COMMA UNDERSCORE
 
 Expecting ')', or a condition.
 
-parse: SHARP LBRACKET IF LPAREN IDENT LPAREN WHILE
+parse: SHARP LBRACKET IF LPAREN IDENT LPAREN UNDERSCORE
 
 Expecting ')', or a condition.
 <1>This '(' opens the enclosing construct.
@@ -2067,7 +2071,7 @@ parse: SHARP LBRACKET IF LPAREN IDENT WHILE
 
 Expecting '(', ')', ',', or a comparison operator.
 
-parse: SHARP LBRACKET IF LPAREN WHILE
+parse: SHARP LBRACKET IF LPAREN UNDERSCORE
 
 Expecting a condition.
 
@@ -2086,7 +2090,7 @@ parse: SHARP LBRACKET IMPORT COMMA IF LPAREN IDENT RPAREN WHILE
 Expecting ']'.
 <3>This '[' opens the enclosing construct.
 
-parse: SHARP LBRACKET IMPORT COMMA IF LPAREN WHILE
+parse: SHARP LBRACKET IMPORT COMMA IF LPAREN UNDERSCORE
 
 Expecting a condition.
 

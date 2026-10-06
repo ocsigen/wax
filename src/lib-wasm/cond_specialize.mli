@@ -21,7 +21,8 @@ val parse_define : string -> (string * value, string) result
     ["name=value"]. A bare name binds a boolean [true]. Otherwise the value kind
     is inferred: ["true"]/["false"] is a boolean, [N.N.N] (three non-negative
     integers) a version, and anything else a string. Returns [Error msg] on a
-    malformed argument (an empty variable name). *)
+    malformed argument: an empty variable name, or one that is not a valid Wax
+    identifier (a condition variable is named as in Wax). *)
 
 val of_list : (string * value) list -> bindings
 (** Build bindings from name/value pairs. On a duplicate name, the last entry

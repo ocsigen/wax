@@ -1973,6 +1973,8 @@ A condition is one of:
   all(debug, not(target = "wasm32"))
   ```
 
+A variable is named by an identifier, which may be a keyword (`#[if(loop)]`). Its name is shared with WebAssembly text, where it is written `$debug`, and with [`-D`](cli.md), so a WAT variable whose name is not a valid Wax identifier, such as `$portable-int`, is rejected.
+
 A branch groups any number of items, so several can be guarded at once:
 
 ```wax,check

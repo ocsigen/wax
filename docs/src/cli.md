@@ -59,6 +59,8 @@ server](#language-server)).
     - The value kind is inferred: a bare *NAME* (or `NAME=true` / `NAME=false`)
       sets a boolean; `NAME=N.N.N` (three integers) sets a version; any other
       `NAME=VALUE` sets a string.
+    - *NAME* must be a valid Wax identifier (a keyword is allowed); another
+      name is a command-line error, as no conditional could name it.
     - Repeatable, to set several variables. Has no effect on Wasm binary input
       (which carries no conditionals).
 

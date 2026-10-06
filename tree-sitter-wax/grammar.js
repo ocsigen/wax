@@ -1108,13 +1108,20 @@ module.exports = grammar({
     ),
 
     _condition: $ => choice(
-      $.identifier,
+      $._condition_variable,
       $.condition_comparison,
       $.condition_combinator,
     ),
 
+    // A condition variable: any identifier, a keyword included (as for a label;
+    // parser.mly's `condition_variable`).
+    _condition_variable: $ => choice(
+      $.identifier,
+      alias(choice(...KEYWORDS), $.identifier),
+    ),
+
     condition_comparison: $ => seq(
-      field('name', $.identifier),
+      field('name', $._condition_variable),
       field('operator', choice('=', '!=', '<', '>', '<=', '>=')),
       field('value', $._condition_literal),
     ),

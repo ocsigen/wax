@@ -7139,7 +7139,7 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "identifier"
+          "name": "_condition_variable"
         },
         {
           "type": "SYMBOL",
@@ -7151,6 +7151,217 @@
         }
       ]
     },
+    "_condition_variable": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "null"
+              },
+              {
+                "type": "STRING",
+                "value": "inf"
+              },
+              {
+                "type": "STRING",
+                "value": "nan"
+              },
+              {
+                "type": "STRING",
+                "value": "tag"
+              },
+              {
+                "type": "STRING",
+                "value": "fn"
+              },
+              {
+                "type": "STRING",
+                "value": "mut"
+              },
+              {
+                "type": "STRING",
+                "value": "type"
+              },
+              {
+                "type": "STRING",
+                "value": "rec"
+              },
+              {
+                "type": "STRING",
+                "value": "open"
+              },
+              {
+                "type": "STRING",
+                "value": "nop"
+              },
+              {
+                "type": "STRING",
+                "value": "unreachable"
+              },
+              {
+                "type": "STRING",
+                "value": "do"
+              },
+              {
+                "type": "STRING",
+                "value": "while"
+              },
+              {
+                "type": "STRING",
+                "value": "loop"
+              },
+              {
+                "type": "STRING",
+                "value": "if"
+              },
+              {
+                "type": "STRING",
+                "value": "else"
+              },
+              {
+                "type": "STRING",
+                "value": "let"
+              },
+              {
+                "type": "STRING",
+                "value": "const"
+              },
+              {
+                "type": "STRING",
+                "value": "as"
+              },
+              {
+                "type": "STRING",
+                "value": "is"
+              },
+              {
+                "type": "STRING",
+                "value": "become"
+              },
+              {
+                "type": "STRING",
+                "value": "br"
+              },
+              {
+                "type": "STRING",
+                "value": "br_if"
+              },
+              {
+                "type": "STRING",
+                "value": "br_table"
+              },
+              {
+                "type": "STRING",
+                "value": "dispatch"
+              },
+              {
+                "type": "STRING",
+                "value": "match"
+              },
+              {
+                "type": "STRING",
+                "value": "br_on_null"
+              },
+              {
+                "type": "STRING",
+                "value": "br_on_non_null"
+              },
+              {
+                "type": "STRING",
+                "value": "br_on_cast"
+              },
+              {
+                "type": "STRING",
+                "value": "br_on_cast_fail"
+              },
+              {
+                "type": "STRING",
+                "value": "return"
+              },
+              {
+                "type": "STRING",
+                "value": "try"
+              },
+              {
+                "type": "STRING",
+                "value": "try_legacy"
+              },
+              {
+                "type": "STRING",
+                "value": "catch"
+              },
+              {
+                "type": "STRING",
+                "value": "throw"
+              },
+              {
+                "type": "STRING",
+                "value": "throw_ref"
+              },
+              {
+                "type": "STRING",
+                "value": "cont"
+              },
+              {
+                "type": "STRING",
+                "value": "suspend"
+              },
+              {
+                "type": "STRING",
+                "value": "on"
+              },
+              {
+                "type": "STRING",
+                "value": "memory"
+              },
+              {
+                "type": "STRING",
+                "value": "import"
+              },
+              {
+                "type": "STRING",
+                "value": "pagesize"
+              },
+              {
+                "type": "STRING",
+                "value": "shared"
+              },
+              {
+                "type": "STRING",
+                "value": "descriptor"
+              },
+              {
+                "type": "STRING",
+                "value": "describes"
+              },
+              {
+                "type": "STRING",
+                "value": "data"
+              },
+              {
+                "type": "STRING",
+                "value": "table"
+              },
+              {
+                "type": "STRING",
+                "value": "elem"
+              }
+            ]
+          },
+          "named": true,
+          "value": "identifier"
+        }
+      ]
+    },
     "condition_comparison": {
       "type": "SEQ",
       "members": [
@@ -7159,7 +7370,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_condition_variable"
           }
         },
         {

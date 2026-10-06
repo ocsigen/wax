@@ -8,6 +8,14 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ## Unreleased
 
+### Language
+
+- A conditional-compilation variable must now be named by a valid Wax
+  identifier, in WAT (`(@if $name …)`) and with `-D`. A name that is not one,
+  such as `$portable-int`, used to be accepted but could not be converted to
+  Wax. A keyword is a valid name, and Wax now accepts it in a condition
+  (`#[if(loop)]`).
+
 ### Fixes
 
 - Converting a Wax module without resolving its conditional annotations no

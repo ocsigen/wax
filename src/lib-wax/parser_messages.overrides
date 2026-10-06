@@ -144,3 +144,12 @@ Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
 # type home alone.
 parse: CONST IDENT EQUAL CHAR AS AMPERSAND FN LPAREN RPAREN WHILE
 Expecting '->', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
+
+# --- Condition variable ---
+# After a condition variable: a combinator's '(', the end of the condition, or
+# a comparison. A keyword may also be a variable (see [condition_variable]),
+# which merges this state's lookahead with the label states' and lists '='
+# beside the comparison operators it belongs to.
+
+parse: SHARP LBRACKET IF LPAREN IDENT WHILE
+Expecting '(', ')', ',', or a comparison operator.
