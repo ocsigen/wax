@@ -61,7 +61,7 @@
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix))
 
 (executables
- (names fuzz_mutate fuzz_gen fuzz_recover fuzz_alias)
+ (names fuzz_mutate fuzz_gen fuzz_recover fuzz_alias fuzz_canon)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
 
 ; dump_mnemonics prints the WAT lexer's keyword table (one mnemonic per line);
