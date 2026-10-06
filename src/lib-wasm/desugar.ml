@@ -12,6 +12,10 @@ exception Conditional_remains of Ast.location
 (** Raised when an [(@if ...)] annotation is still present: it could not be
     resolved (no matching [-D]), and there is nothing to desugar it to. *)
 
+exception Unbound_alias of Ast.location
+(** Raised on a value-type alias use that names no alias, or a cyclic one: there
+    is no value type to expand it to. *)
+
 (* The array type a [@string] builds must be declared for [array.new_fixed] to
    name it. An untyped string uses the default [<string>] ([mut i8]); we
    synthesise that type once, under this name (freshened on the rare chance the
@@ -267,6 +271,15 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
             (Types [| Ast.no_loc (Some (Ast.no_loc string_type_name), st) |]);
         ]
     else fields
+  in
+  (* A value-type alias has no core form either: expand every use and drop the
+     definitions. Any [(@if ...)] has already raised above, so every definition
+     is a top-level field, and an alias that does not expand is unbound or
+     cyclic. *)
+  let fields =
+    Ast_utils.expand_type_aliases
+      ~unbound:(fun a -> raise (Unbound_alias a.Ast.info))
+      fields
   in
   (* Plain WebAssembly requires every function used by [ref.func] in a body to
      be declared; Wax's lenient reader lets the segment be omitted, so synthesise

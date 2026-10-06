@@ -50,6 +50,7 @@ module Map =
       type ctx = B.name_map
 
       let idx map i = index ~map i
+      let alias _ _ (a : B.alias) = match a with _ -> .
     end)
 
 let heaptype = Map.heaptype

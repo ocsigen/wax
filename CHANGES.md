@@ -10,6 +10,16 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Language
 
+- Value-type aliases: `type word = i64;` in Wax, `(@type $word i64)` in WAT,
+  names a value type that can then be used wherever a value type is expected
+  (`(@type $word)` in WAT). Defined differently in the branches of an `#[if]`
+  or `(@if …)`, an alias stands for a different type in each configuration,
+  so code that only passes such values around no longer has to be written
+  once per configuration. A value read from a declaration written with an
+  alias has the alias's type, so a local whose type is inferred from it is
+  declared with the alias, and editors show the alias. Aliases convert
+  between Wax and WAT, conditional ones included. Compiling to the binary
+  format, or `--desugar`, replaces them by the types they stand for.
 - A conditional-compilation variable must now be named by a valid Wax
   identifier, in WAT (`(@if $name …)`) and with `-D`. A name that is not one,
   such as `$portable-int`, used to be accepted but could not be converted to

@@ -789,6 +789,7 @@ let field_symbols
             s_selection = id.info;
             s_children = [];
           })
+  | Type_alias { name; _ } -> [ one name.desc "type" name.info ]
   | Import { decl; _ } -> [ import_symbol decl ]
   | Import_group { module_; decls } ->
       [
@@ -930,6 +931,7 @@ let field_completions
       |> List.map (fun entry ->
           let id, _ = entry.Annot.desc in
           one id.Annot.desc "type" (render_typedef entry))
+  | Type_alias { name; typ } -> [ one name.desc "type" (render_valtype typ) ]
   | Memory { name; _ } -> [ one name.desc "memory" "" ]
   | Table { name; _ } -> [ one name.desc "table" "" ]
   | Elem { name; _ } -> [ one name.desc "array" "" ]
@@ -1909,6 +1911,7 @@ let semantic_tokens_string ?(encoding = UTF16) src =
               Array.iter
                 (fun e -> add (Wax_lang.Ast.member_name e).info "type")
                 rectype
+          | Type_alias { name; _ } -> add name.info "type"
           | Import { decl; _ } ->
               add decl.desc.id.info (import_tok decl.desc.kind)
           | Import_group { decls; _ } ->

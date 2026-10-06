@@ -691,6 +691,12 @@ let report context ~location ~severity ?warning ?(universal = false) ?hint ?edit
           if Queue.length context.queue = context.max then output_errors context
       )
 
+let replay ?location ?(related = []) context (e : entry) =
+  report context
+    ~location:(Option.value location ~default:e.location)
+    ~severity:e.severity ?warning:e.warning ~universal:e.universal ?hint:e.hint
+    ?edit:e.edit ~related:(e.related @ related) ~message:e.message ()
+
 exception Aborted
 
 let abort () = raise Aborted

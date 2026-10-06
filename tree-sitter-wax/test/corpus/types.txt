@@ -51,3 +51,34 @@ rec { type l = { hd: i32, tl: &?l }; type arr = [mut i8]; }
           type: (primitive_type
             (identifier)))))))
 
+
+==================
+value-type alias
+==================
+
+type word = i64;
+type str = &?extern;
+fn f(x: word) -> word { x; }
+
+---
+
+(source_file
+  (type_alias
+    name: (identifier)
+    type: (primitive_type
+      (identifier)))
+  (type_alias
+    name: (identifier)
+    type: (reference_type
+      heap: (type_identifier)))
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    result: (primitive_type
+      (identifier))
+    body: (block
+      (identifier))))

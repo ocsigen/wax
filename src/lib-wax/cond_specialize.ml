@@ -312,7 +312,7 @@ let module_ ctx env (fields : location Ast.module_) :
         ]
     | Module_annotation attrs ->
         [ { f with desc = Module_annotation (sattrs attrs) } ]
-    | Type _ | Data _ | Elem _ -> [ f ]
+    | Type _ | Type_alias _ | Data _ | Elem _ -> [ f ]
   in
   let fields = sfields fields in
   (fields, List.rev !ranges)

@@ -28,6 +28,7 @@ module Internal : sig
 
   module X : sig
     type idx = Id.t
+    type alias = Ast.no_alias
     type 'a annotated_array = 'a array
     type 'a opt_annotated_array = 'a array
   end
@@ -56,6 +57,7 @@ module Normalized : sig
 
   module X : sig
     type idx = ref_index
+    type alias = Ast.no_alias
     type 'a annotated_array = 'a array
     type 'a opt_annotated_array = 'a array
   end

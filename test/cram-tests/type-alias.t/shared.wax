@@ -1,0 +1,5 @@
+#[if(portable_int)] { type nativeint = i64; } #[else] { type nativeint = i32; }
+#[export = "succ"]
+fn succ(x: nativeint) -> nativeint {
+    return x + 1;
+}

@@ -7,6 +7,11 @@ exception Conditional_remains of location
     annotation's source location so the caller can report a located diagnostic.
 *)
 
+exception Unbound_alias of location
+(** Raised by {!module_} on a value-type alias use ([(@type $id)]) that names no
+    alias definition, or a cyclic one, so it has no value type to expand to.
+    Carries the use's location. *)
+
 val module_ : location Text.module_ -> location Text.module_
 (** Expand the Wax-specific [@string] and [@char] annotations of a WAT module
     into core WebAssembly ([array.new_fixed] / [i32.const]) — including
@@ -14,5 +19,7 @@ val module_ : location Text.module_ -> location Text.module_
     text. A synthesised [i8] array type is appended when an untyped string needs
     one. Also synthesises the declarative element segment for any [ref.func]
     that Wax's lenient reader let the module omit (via {!Declare_refs}), so the
-    output passes strict/spec reference validation. Raises
-    {!Conditional_remains} on any remaining [(@if ...)]. *)
+    output passes strict/spec reference validation. Every value-type alias use
+    is replaced by the value type it stands for, and the alias definitions are
+    dropped. Raises {!Conditional_remains} on any remaining [(@if ...)], and
+    {!Unbound_alias} on an alias use that cannot be expanded. *)

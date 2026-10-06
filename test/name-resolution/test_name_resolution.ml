@@ -114,3 +114,11 @@ let () =
     "type ft = fn(i32) -> i32;\n\
      type k = cont ft;\n\
      fn f(c: &k) { _ = c.resume; }\n"
+;;
+
+(* A value-type alias use resolves to its definition; one defined in two
+   conditional branches resolves to the one this configuration selects. *)
+resolve "type alias"
+  "#[if(p)] { type word = i64; } #[else] { type word = i32; }\n\
+   type cell = { v: mut word };\n\
+   fn get(c: &cell) -> word { let w: word = c.v; w; }\n"

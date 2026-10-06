@@ -1361,6 +1361,10 @@
           "named": true
         },
         {
+          "type": "type_alias",
+          "named": true
+        },
+        {
           "type": "type_definition",
           "named": true
         }
@@ -1492,6 +1496,10 @@
         },
         {
           "type": "tag_definition",
+          "named": true
+        },
+        {
+          "type": "type_alias",
           "named": true
         },
         {
@@ -3942,6 +3950,10 @@
           "named": true
         },
         {
+          "type": "type_alias",
+          "named": true
+        },
+        {
           "type": "type_definition",
           "named": true
         }
@@ -4736,6 +4748,32 @@
         "types": [
           {
             "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "type_alias",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_value_type",
             "named": true
           }
         ]

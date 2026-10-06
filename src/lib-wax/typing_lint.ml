@@ -138,7 +138,8 @@ let cast_is_total = function
   | Ast.Signedtype { typ; strict; _ } -> (
       match typ with `F32 | `F64 -> true | `I32 | `I64 -> not strict)
   | Valtype (I32 | I64 | F32 | F64) -> true
-  | Valtype (V128 | Ref _) | Functype _ -> false
+  (* An alias is taken to stand for a reference type: it may trap. *)
+  | Valtype (V128 | Ref _ | Alias _) | Functype _ -> false
   (* An ascription is a static assertion; nothing to trap. *)
   | Ascribed _ -> true
 

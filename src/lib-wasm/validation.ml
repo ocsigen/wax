@@ -86,6 +86,13 @@ let print_text_valtype pp (ty : Ast.Text.valtype) =
             sp_space pp);
           print_text_heaptype pp typ;
           sp_punct pp ")")
+  | Alias a ->
+      sp_box pp (fun () ->
+          sp_punct pp "(";
+          sp_kw pp "@type";
+          sp_space pp;
+          print_ident pp a.desc;
+          sp_punct pp ")")
 
 let print_text_storagetype pp (ty : Ast.Text.storagetype) =
   match ty with
@@ -339,7 +346,8 @@ let source_of_valtype (ty : valtype) : source_type =
     | F32 -> F32
     | F64 -> F64
     | V128 -> V128
-    | Ref { nullable; typ } -> Ref { nullable; typ = source_of_heaptype typ })
+    | Ref { nullable; typ } -> Ref { nullable; typ = source_of_heaptype typ }
+    | Alias _ -> .)
 
 (*** Diagnostics ***)
 
@@ -1021,6 +1029,38 @@ module Error = struct
       (text "The" ++ text kind ++ text "index" ++ ident index.Ast.desc
      ++ text "is already bound.")
 
+  let unbound_alias context ~location name lst =
+    report context ~location ~severity:Error ?hint:(did_you_mean lst)
+      ((text "Unknown type alias" ++ ident name) ^^ text ".")
+
+  let alias_already_defined context ~location ~prev_loc name =
+    report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously defined here";
+          };
+        ]
+      (text "The type alias" ++ ident name ++ text "is already defined.")
+
+  let alias_names_type context ~location ~prev_loc name =
+    report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "type defined here";
+          };
+        ]
+      (text "The type alias" ++ ident name
+      ++ text "has the name of a type definition.")
+
+  let cyclic_alias context ~location name =
+    report context ~location ~severity:Error
+      (text "The type alias" ++ ident name
+      ++ text "is defined in terms of itself.")
+
   let expected_func_type context ~location idx =
     report context ~location ~severity:Error
       (text "Type" ++ index idx ++ text "should be a function type.")
@@ -1359,6 +1399,21 @@ type type_context = {
      skipped entirely otherwise. Mirrors the module context's [warn_unused],
      which is not reachable from every resolution point. *)
   record_references : bool;
+  (* The configuration's value-type aliases ([(@type $id t)]), by name. *)
+  aliases : (string, alias) Hashtbl.t;
+}
+
+(* A value-type alias definition. Its value type is resolved at each use, as if
+   written there (so a reference type in it may name a type of the rec group
+   being defined), and an error that resolution meets is reported at the use.
+   A [poisoned] alias, whose definition is in error (reported there: it is
+   cyclic or names no type), stands for no value type. One that is never [used]
+   is checked at the end of type checking. *)
+and alias = {
+  alias_typ : Ast.Text.valtype;
+  alias_loc : Ast.location;
+  poisoned : bool;
+  mutable used : bool;
 }
 
 (* The source composite type a reference resolves to, named as the source wrote
@@ -1476,12 +1531,32 @@ let lookup_source_comptype tc (idx : Ast.Text.idx) =
   | Some (_, _, ct, _) -> Some ct
   | None -> None
 
+(* The value-type aliases of the configuration being validated. A source type
+   keeps an alias use as written, so a diagnostic names the type as the source
+   does; [unalias_source] sees through it where a source type is taken apart,
+   which happens in helpers with no type context to read the aliases from. Set
+   by [validate_configuration]. *)
+let source_aliases : (string, alias) Hashtbl.t ref = ref (Hashtbl.create 1)
+
+(* [source] with an alias use replaced by the value type it stands for, as its
+   definition writes it. An unbound or cyclic alias is left as is: its use was
+   reported, and the value it types is poisoned. *)
+let rec unalias_source (source : source_type) =
+  match source with
+  | Plain (Alias a) -> (
+      match Hashtbl.find_opt !source_aliases a.desc with
+      | Some { alias_typ; poisoned = false; _ } ->
+          unalias_source (Plain alias_typ)
+      | Some { poisoned = true; _ } | None -> source)
+  | Plain (I32 | I64 | F32 | F64 | V128 | Ref _) | Inline_ref _ | Bottom_ref ->
+      source
+
 (* If [source] is a value of a named reference type, record its type's
    definition span at [loc] for go-to-type-definition. *)
 let record_value_type_def loc source =
   match (!recorded_types, loc, !sink_type_context) with
   | Some r, Some l, Some tc when l.Ast.loc_start.Lexing.pos_cnum >= 0 -> (
-      match source with
+      match unalias_source source with
       | Plain (Ast.Text.Ref { typ = Type idx | Exact idx; _ }) -> (
           match lookup_subtype_entry tc idx with
           | Some e ->
@@ -1525,6 +1600,116 @@ let require_feature d (ctx : type_context) ~location feature =
   if not (Wax_utils.Feature.is_enabled ctx.features feature) then
     Error.feature_disabled d ~location feature
 
+(* The definition an alias use refers to, or [None] for an unbound alias,
+   reported here, or a poisoned one, reported at its definition. *)
+let alias_definition d ctx (a : Ast.Text.name) =
+  match Hashtbl.find_opt ctx.aliases a.desc with
+  | Some { poisoned = true; _ } -> None
+  | Some al ->
+      al.used <- true;
+      Some al
+  | None ->
+      Error.unbound_alias d ~location:a.info a.desc
+        (Wax_utils.Spell_check.f
+           (fun f -> Hashtbl.iter (fun id _ -> f id) ctx.aliases)
+           a.desc);
+      None
+
+(* Register the configuration's alias definitions, the first of a name winning
+   (a duplicate is reported by [check_syntax]), and report each alias whose
+   definition leads back to itself. *)
+let collect_aliases d ctx fields =
+  let type_names = Hashtbl.create 16 in
+  let type_count = ref 0 in
+  List.iter
+    (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      match field.desc with
+      | Type_alias { id; typ } ->
+          if not (Hashtbl.mem ctx.aliases id.desc) then
+            Hashtbl.add ctx.aliases id.desc
+              {
+                alias_typ = typ;
+                alias_loc = id.info;
+                poisoned = false;
+                used = false;
+              }
+      | Types r ->
+          Array.iter
+            (fun (e : (Ast.Text.name option * _, _) Ast.annotated) ->
+              Option.iter
+                (fun (n : Ast.Text.name) ->
+                  Hashtbl.replace type_names n.desc ())
+                (fst e.desc);
+              incr type_count)
+            r
+      | _ -> ())
+    fields;
+  (* A definition naming no type of the module is in error wherever it is
+     used: report it once, here. *)
+  let names_no_type (ty : Ast.Text.valtype) =
+    match ty with
+    | Ref { typ = Type idx | Exact idx; _ } -> (
+        match idx.desc with
+        | Id id when not (Hashtbl.mem type_names id) ->
+            Error.unbound_index d ~location:idx.info "type" idx
+              (Wax_utils.Spell_check.f
+                 (fun f -> Hashtbl.iter (fun id _ -> f id) type_names)
+                 id);
+            true
+        | Num n when Uint32.to_int n >= !type_count ->
+            Error.unbound_index d ~location:idx.info "type" idx [];
+            true
+        | Id _ | Num _ -> false)
+    | I32 | I64 | F32 | F64 | V128 | Ref _ | Alias _ -> false
+  in
+  Hashtbl.fold (fun name al l -> (name, al) :: l) ctx.aliases []
+  |> List.sort (fun (_, al) (_, al') ->
+      compare al.alias_loc.loc_start.pos_cnum al'.alias_loc.loc_start.pos_cnum)
+  |> List.iter (fun (name, al) ->
+      if names_no_type al.alias_typ then
+        Hashtbl.replace ctx.aliases name { al with poisoned = true });
+  let rec leads_back name seen (ty : Ast.Text.valtype) =
+    match ty with
+    | Alias a -> (
+        a.desc = name
+        || (not (List.mem a.desc seen))
+           &&
+           match Hashtbl.find_opt ctx.aliases a.desc with
+           | Some al -> leads_back name (a.desc :: seen) al.alias_typ
+           | None -> false)
+    | I32 | I64 | F32 | F64 | V128 | Ref _ -> false
+  in
+  Hashtbl.fold
+    (fun name al l ->
+      if leads_back name [] al.alias_typ then (name, al) :: l else l)
+    ctx.aliases []
+  |> List.sort (fun (_, al) (_, al') ->
+      compare al.alias_loc.loc_start.pos_cnum al'.alias_loc.loc_start.pos_cnum)
+  |> List.iter (fun (name, al) ->
+      Error.cyclic_alias d ~location:al.alias_loc name;
+      Hashtbl.replace ctx.aliases name { al with poisoned = true })
+
+(* Resolve an alias use with [resolve], reporting an error it meets at the use,
+   [a]: the definition is fine (see [collect_aliases]), but not where it is
+   used, as a reference type naming a type defined after the use site. *)
+let resolve_alias d (a : Ast.Text.name) al resolve =
+  let c = Wax_utils.Diagnostic.collector ~parent:d () in
+  let r = resolve c al.alias_typ in
+  List.iter
+    (fun e ->
+      Wax_utils.Diagnostic.replay ~location:a.info
+        ~related:
+          [
+            {
+              Wax_utils.Diagnostic.location =
+                Wax_utils.Diagnostic.entry_location e;
+              message = Wax_utils.Message.text "in the type alias definition";
+            };
+          ]
+        d e)
+    (Wax_utils.Diagnostic.collected c);
+  r
+
 let heaptype d ctx (h : Ast.Text.heaptype) : heaptype option =
   match h with
   | Func -> Some Func
@@ -1554,7 +1739,7 @@ let reftype d ctx { Ast.Text.nullable; typ } =
   let+@ typ = heaptype d ctx typ in
   { nullable; typ }
 
-let valtype d ctx (ty : Ast.Text.valtype) =
+let rec valtype d ctx (ty : Ast.Text.valtype) =
   match ty with
   | I32 -> Some I32
   | I64 -> Some I64
@@ -1564,6 +1749,9 @@ let valtype d ctx (ty : Ast.Text.valtype) =
   | Ref r ->
       let+@ ty = reftype d ctx r in
       Ref ty
+  | Alias a ->
+      let*@ al = alias_definition d ctx a in
+      resolve_alias d a al (fun d ty -> valtype d ctx ty)
 
 let array_map_opt f arr =
   let exception Short_circuit in
@@ -1602,6 +1790,17 @@ let tabletype d ctx ({ limits; reftype = typ } : Ast.Text.tabletype) =
 
 let globaltype d ctx ty = muttype valtype d ctx ty
 
+(* Check the alias definitions no use resolved, in source order, reporting
+   their errors at the definition. No reference they make is a use of a type. *)
+let check_unused_aliases d ctx =
+  ctx.origin <- Ignored;
+  Hashtbl.fold
+    (fun _ al l -> if al.used || al.poisoned then l else al :: l)
+    ctx.aliases []
+  |> List.sort (fun al al' ->
+      compare al.alias_loc.loc_start.pos_cnum al'.alias_loc.loc_start.pos_cnum)
+  |> List.iter (fun al -> ignore (valtype d ctx al.alias_typ))
+
 (* Type-definition builders. These produce the *normalized* representation
    ([Types.Normalized]) that {!Types.add_rectype} takes: a reference to a member
    of the group being defined is [Rec pos], anything else is [Def id]. They are
@@ -1636,7 +1835,7 @@ let n_reftype d ctx { Ast.Text.nullable; typ } : Nz.reftype option =
   let+@ typ = n_heaptype d ctx typ in
   { Nz.nullable; typ }
 
-let n_valtype d ctx (ty : Ast.Text.valtype) : Nz.valtype option =
+let rec n_valtype d ctx (ty : Ast.Text.valtype) : Nz.valtype option =
   match ty with
   | I32 -> Some Nz.I32
   | I64 -> Some Nz.I64
@@ -1646,6 +1845,9 @@ let n_valtype d ctx (ty : Ast.Text.valtype) : Nz.valtype option =
   | Ref r ->
       let+@ ty = n_reftype d ctx r in
       Nz.Ref ty
+  | Alias a ->
+      let*@ al = alias_definition d ctx a in
+      resolve_alias d a al (fun d ty -> n_valtype d ctx ty)
 
 let n_functype d ctx { Ast.Text.params; results } : Nz.functype option =
   let*@ params =
@@ -2156,9 +2358,11 @@ let pop_any ctx loc st =
 (* The non-null version of a popped reference's source type, for an instruction
    that re-pushes the value with the null case removed. *)
 let non_null_source (source : source_type) : source_type =
-  match source with
+  match unalias_source source with
   | Plain (Ref r) -> Plain (Ref { r with nullable = false })
   | Inline_ref _ as source -> source
+  (* An unbound alias: the value is poisoned, its type already reported. *)
+  | Plain (Alias _) as source -> source
   | _ -> assert false
 
 let pop ctx loc ?arity ~expected_source ty st =
@@ -2359,9 +2563,13 @@ let is_defaultable ty =
   match ty with
   | I32 | I64 | F32 | F64 | V128 -> true
   | Ref { nullable; _ } -> nullable
+  | Alias _ -> .
 
 let number_or_vec ty =
-  match ty with I32 | I64 | F32 | F64 | V128 -> true | Ref _ -> false
+  match ty with
+  | I32 | I64 | F32 | F64 | V128 -> true
+  | Ref _ -> false
+  | Alias _ -> .
 
 let int_un_op_type ty (op : Ast.Text.int_un_op) =
   match op with
@@ -2760,7 +2968,8 @@ let field_has_default (ty : fieldtype) =
   | Value ty -> (
       match ty with
       | I32 | I64 | F32 | F64 | V128 -> true
-      | Ref { nullable; _ } -> nullable)
+      | Ref { nullable; _ } -> nullable
+      | Alias _ -> .)
 
 let shape_type (shape : Ast.vec_shape) =
   match shape with
@@ -3243,7 +3452,7 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
              continuation reference, so its source form is [(ref $idx)] or
              [(ref (exact $idx))] — [cont_functype_of_heaptype] accepts both, so
              the exactness does not change which type's params are looked up. *)
-          match (cont_param_source ctx x).(n - 1) with
+          match unalias_source (cont_param_source ctx x).(n - 1) with
           | Plain (Ref { typ = Type idx | Exact idx; _ }) ->
               cont_param_source ctx idx
           | _ -> assert false
@@ -4228,7 +4437,8 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       (match field.typ with
       | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
       | Value (Ref _) ->
-          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
+          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info
+      | Value (Alias _) -> .);
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
       push ~source:(exact_ref_source ctx idx) (Some loc)
@@ -4329,7 +4539,8 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
       (match field.typ with
       | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
       | Value (Ref _) ->
-          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
+          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info
+      | Value (Alias _) -> .);
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
@@ -5995,7 +6206,7 @@ let lint_confusable ctx fields =
             Option.iter
               (fun (f : (_, _) Ast.annotated) -> walk f.Ast.desc)
               else_fields
-        | Types _ | Start _ -> ())
+        | Types _ | Start _ | Type_alias _ -> ())
       fields
   in
   walk fields
@@ -6254,6 +6465,7 @@ let check_syntax ctx lst =
   let tags = Hashtbl.create 16 in
   let elems = Hashtbl.create 16 in
   let datas = Hashtbl.create 16 in
+  let aliases = ref [] in
   let check_unbound tbl kind id =
     let>@ id : Ast.Text.name = id in
     match Hashtbl.find_opt tbl id.desc with
@@ -6383,8 +6595,23 @@ let check_syntax ctx lst =
       | Elem { id; _ } -> check_unbound elems "elem" id
       | Data { id; _ } -> check_unbound datas "data" id
       | String_global { id; _ } -> check_unbound globals "global" (Some id)
+      | Type_alias { id; _ } -> (
+          match List.assoc_opt id.desc !aliases with
+          | Some prev_loc ->
+              Error.alias_already_defined ctx.diagnostics ~location:id.info
+                ~prev_loc id.desc
+          | None -> aliases := (id.desc, id.info) :: !aliases)
       | Feature_annotation _ | Module_if_annotation _ -> ())
     lst;
+  (* An alias and a type are named in distinct positions ([(@type $t)] and
+     [(ref $t)]), but Wax names both in one, so a name may not be both. *)
+  List.iter
+    (fun (name, location) ->
+      match Hashtbl.find_opt types name with
+      | Some prev_loc ->
+          Error.alias_names_type ctx.diagnostics ~location ~prev_loc name
+      | None -> ())
+    (List.rev !aliases);
   match
     List.filter
       (fun field ->
@@ -6413,8 +6640,11 @@ let validate_configuration ?(warn_unused = true)
       type_references = [];
       canonical_type_references = [];
       record_references = warn_unused;
+      aliases = Hashtbl.create 8;
     }
   in
+  source_aliases := type_context.aliases;
+  collect_aliases diagnostics type_context fields;
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
@@ -6482,6 +6712,7 @@ let validate_configuration ?(warn_unused = true)
   functions ~warn_unused ctx fields;
   exports ctx fields;
   start ctx fields;
+  check_unused_aliases diagnostics type_context;
   if warn_unused then lint_confusable ctx fields;
   unused_fields ctx
 
@@ -6551,7 +6782,8 @@ let project select fields =
         in
         [ { f with desc = Data { id; init; mode } } ]
     | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
-    | Export _ | Start _ | String_global _ | Feature_annotation _ ->
+    | Export _ | Start _ | String_global _ | Feature_annotation _ | Type_alias _
+      ->
         [ f ]
   and sinstrs l = List.concat_map sinstr l
   and sinstr (i : _ Ast.Text.instr) =
@@ -6651,7 +6883,8 @@ let check_import_order diagnostics fields =
          | None, (Import _ | Import_group1 _ | Import_group2 _)
          | ( _,
              ( Types _ | Export _ | Start _ | Elem _ | Data _
-             | Feature_annotation _ | Module_if_annotation _ ) ) ->
+             | Feature_annotation _ | Type_alias _ | Module_if_annotation _ ) )
+           ->
              can_import)
        None fields)
 

@@ -149,6 +149,12 @@ val entry_hint : entry -> Message.t option
 val entry_edit : entry -> edit option
 val entry_related : entry -> label list
 
+val replay :
+  ?location:Ast.location -> ?related:label list -> context -> entry -> unit
+(** [replay context e] reports the collected entry [e] to [context], at
+    [location] instead of its own when given, and with the extra [related]
+    labels. *)
+
 type theme
 (** A theme for diagnostic output. *)
 

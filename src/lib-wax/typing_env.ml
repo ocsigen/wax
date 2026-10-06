@@ -65,6 +65,7 @@ let ref_none_valtype ~nullable : inferred_valtype =
     typ = Ref { nullable; typ = None_ };
     internal = Internal.Ref { nullable; typ = Internal.None_ };
     anon_comptype = None;
+    alias = None;
   }
 
 (* The concrete value type an inference cell stands for on its own, or [None]
@@ -172,10 +173,11 @@ module Tbl = struct
        the module context, so [resolve] can attribute a reference
        without the context being threaded into [Tbl]. *)
     current : origin ref;
-    hover : 'a -> hover_target option;
-        (* A summary of a resolved value (its type / definition), attached to
-           the reference [resolve] records, for editor hover on a name that is
-           not an expression. [fun _ -> None] leaves the reference hover-less. *)
+    hover : string -> 'a -> hover_target option;
+        (* A summary of a resolved value (its type / definition), given the
+           name and the value, attached to the reference [resolve] records, for
+           editor hover on a name that is not an expression. [fun _ _ -> None]
+           leaves the reference hover-less. *)
   }
 end
 
@@ -183,9 +185,29 @@ end
 
 type types = (Wax_wasm.Types.ref_index * subtype) Tbl.t
 
+(* A value-type alias definition. Its value type is resolved at each use, as if
+   written there, and an error that resolution meets is reported at the use. A
+   [poisoned] alias, whose definition is in error (reported there: it is cyclic
+   or names no type), stands for no value type. One that is never [used] is
+   checked at the end of type checking. *)
+type alias = {
+  alias_name : Ast.ident;
+  alias_typ : Ast.valtype;
+  poisoned : bool;
+  mutable used : bool;
+}
+
 type type_context = {
   internal_types : Wax_wasm.Types.t;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
+  aliases : alias Tbl.t;
+  written : (string, subtype) Hashtbl.t;
+  (* Each type definition as written, aliases included: [types] holds them
+         expanded, for the code that takes them apart, and this for the values
+         read through them to record the alias they were declared with (see
+         [Infer.inferred_valtype]). *)
+  (* The value-type aliases, in the types' namespace: a name is a type or an
+         alias, not both. *)
   features : Wax_utils.Feature.set;
       (* The enabled optional features / proposals, and which are used. *)
   mutable subtyping_info_cache : Wax_wasm.Types.subtyping_info option;

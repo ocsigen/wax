@@ -1,0 +1,22 @@
+#[if(portable_int)] { type nativeint = i64; } #[else] { type nativeint = i32; }
+import "nativeint" {
+    fn Nativeint_val(v: &eq) -> nativeint;
+    fn caml_copy_nativeint(n: nativeint) -> &eq;
+    const zero: nativeint;
+}
+type cell = { v: mut nativeint };
+type digits = [mut nativeint];
+const z = zero;
+#[export = "copy"]
+fn copy(v: &eq) -> &eq {
+    let n = Nativeint_val(v);
+    return caml_copy_nativeint(n);
+}
+#[export = "field"]
+fn field(c: &cell, d: &digits) -> &eq {
+    let x = c.v;
+    let y = d[0];
+    let b = do { x };
+    c.v = y;
+    return caml_copy_nativeint(b);
+}

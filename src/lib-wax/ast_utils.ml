@@ -787,6 +787,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms
 let rec map_modulefield_gen fi field =
   match field with
   | Type t -> Type t
+  | Type_alias r -> Type_alias r
   | Module_annotation a -> Module_annotation a
   (* Imports carry no instructions, so the info type is free to change. *)
   | Import { module_; decl } -> Import { module_; decl }
@@ -865,8 +866,8 @@ let field_roots (field : _ modulefield) =
   (* No instructions of their own; a [Conditional]'s nested fields are reached
      through the field walk, not through its roots. *)
   | Data { mode = Passive; _ }
-  | Type _ | Tag _ | Import _ | Import_group _ | Module_annotation _
-  | Conditional _ ->
+  | Type _ | Type_alias _ | Tag _ | Import _ | Import_group _
+  | Module_annotation _ | Conditional _ ->
       []
 
 let iter_module_instr f m =

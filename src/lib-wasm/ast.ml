@@ -23,6 +23,11 @@ module Uint64 = Wax_utils.Uint64
 (* Types *)
 
 type packedtype = I8 | I16
+
+(* The alias payload of a representation without value-type aliases (the
+   binary format, the resolved type store): it has no value, so the [Alias] arm
+   of such a [valtype] can never be built and needs no case. *)
+type no_alias = |
 type 'typ muttype = { mut : bool; typ : 'typ }
 
 type limits = {
@@ -42,6 +47,7 @@ type limits = {
    family from one instance to another. *)
 module type TYPES = sig
   type idx
+  type alias
   type 'a annotated_array
   type 'a opt_annotated_array
 
@@ -64,7 +70,15 @@ module type TYPES = sig
     | Exact of idx
 
   type reftype = { nullable : bool; typ : heaptype }
-  type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype
+
+  type valtype =
+    | I32
+    | I64
+    | F32
+    | F64
+    | V128
+    | Ref of reftype
+    | Alias of alias
 
   type functype = {
     params : valtype opt_annotated_array;
@@ -107,14 +121,17 @@ end
 
 module Make_types (X : sig
   type idx
+  type alias
   type 'a annotated_array
   type 'a opt_annotated_array
 end) :
   TYPES
     with type idx = X.idx
+     and type alias = X.alias
      and type 'a annotated_array = 'a X.annotated_array
      and type 'a opt_annotated_array = 'a X.opt_annotated_array = struct
   type idx = X.idx
+  type alias = X.alias
   type nonrec 'a annotated_array = 'a X.annotated_array
   type nonrec 'a opt_annotated_array = 'a X.opt_annotated_array
 
@@ -158,7 +175,15 @@ end) :
     | Exact _ -> None
 
   type reftype = { nullable : bool; typ : heaptype }
-  type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype
+
+  type valtype =
+    | I32
+    | I64
+    | F32
+    | F64
+    | V128
+    | Ref of reftype
+    | Alias of alias
 
   type functype = {
     params : valtype X.opt_annotated_array;
@@ -205,7 +230,9 @@ end
    differ between instances; every other constructor is copied through. [ctx] is
    threaded to [M.idx] so a mapper that resolves or renames indices can carry its
    context (a name map, a symbol table, …) exactly as a hand-written mapper
-   would. *)
+   would. A value-type alias is mapped by [M.alias] to a whole value type, kept
+   as an alias or expanded to its definition; [M.alias] is passed the value-type
+   mapper, to map a definition with. *)
 module Map_types_spine
     (Src : TYPES)
     (Dst : TYPES)
@@ -213,6 +240,9 @@ module Map_types_spine
       type ctx
 
       val idx : ctx -> Src.idx -> Dst.idx
+
+      val alias :
+        ctx -> (Src.valtype -> Dst.valtype) -> Src.alias -> Dst.valtype
     end) =
 struct
   let heaptype ctx (h : Src.heaptype) : Dst.heaptype =
@@ -237,7 +267,7 @@ struct
   let reftype ctx (r : Src.reftype) : Dst.reftype =
     { nullable = r.nullable; typ = heaptype ctx r.typ }
 
-  let valtype ctx (v : Src.valtype) : Dst.valtype =
+  let rec valtype ctx (v : Src.valtype) : Dst.valtype =
     match v with
     | I32 -> I32
     | I64 -> I64
@@ -245,6 +275,7 @@ struct
     | F64 -> F64
     | V128 -> V128
     | Ref r -> Ref (reftype ctx r)
+    | Alias a -> M.alias ctx (valtype ctx) a
 
   let storagetype ctx (s : Src.storagetype) : Dst.storagetype =
     match s with Value v -> Value (valtype ctx v) | Packed p -> Packed p
@@ -264,6 +295,9 @@ module Map_types
       type ctx
 
       val idx : ctx -> Src.idx -> Dst.idx
+
+      val alias :
+        ctx -> (Src.valtype -> Dst.valtype) -> Src.alias -> Dst.valtype
 
       val params :
         ctx ->
@@ -290,6 +324,7 @@ struct
         type ctx = M.ctx
 
         let idx = M.idx
+        let alias = M.alias
       end)
 
   let functype ctx (t : Src.functype) : Dst.functype =
@@ -869,6 +904,7 @@ module Text = struct
 
   module X = struct
     type nonrec idx = idx
+    type alias = name
     type 'a annotated_array = (name option * 'a, location) annotated array
     type 'a opt_annotated_array = (name option * 'a, location) annotated array
     type label = name option
@@ -989,6 +1025,10 @@ module Text = struct
        uses the named optional proposal (the Wax [#![feature = "…"]] inner
        attribute). *)
     | Feature_annotation of name
+    (* A value-type alias [(@type $id t)]: [(@type $id)] then stands for the
+       value type [t] wherever one is expected. It defines no type index; the
+       binary encoder expands every use. *)
+    | Type_alias of { id : name; typ : valtype }
     | Module_if_annotation of {
         cond : cond;
         then_fields :
@@ -1007,6 +1047,7 @@ module Binary = struct
 
   module X = struct
     type nonrec idx = idx
+    type alias = no_alias
     type 'a annotated_array = 'a array
     type 'a opt_annotated_array = 'a array
     type label = unit

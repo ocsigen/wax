@@ -722,20 +722,17 @@ reference_type:
     in
     { nullable; typ } }
 
+(* A name other than a built-in value type is a use of a value-type alias. *)
 value_type:
 | t = IDENT
-   { try Hashtbl.find valtype_tbl t with Not_found ->
-       raise (Wax_utils.Parsing.syntax_error_pair ($sloc,
-           Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a value type.\n" t) )) }
+   { try Hashtbl.find valtype_tbl t with Not_found -> Alias (annot $sloc t) }
 | t = reference_type { Ref t }
 
 cast_type:
 | t = IDENT
    { try Valtype (Hashtbl.find valtype_tbl t) with Not_found ->
        try Hashtbl.find casttype_tbl t with Not_found ->
-         raise (Wax_utils.Parsing.syntax_error_pair
-                  ($sloc,
-           Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a cast type.\n" t) )) }
+         Valtype (Alias (annot $sloc t)) }
 | t = reference_type { Valtype (Ref t) }
 | "&" nullable = boption("?") FN s = function_type(AS)
    { Functype { nullable; sign = s } }
@@ -758,8 +755,7 @@ function_type_definition:
 storage_type:
 | t = IDENT
    { try Hashtbl.find storagetype_tbl t with Not_found ->
-       raise (Wax_utils.Parsing.syntax_error_pair ($sloc,
-           Wax_utils.Message.text (Printf.sprintf "Identifier '%s' is not a storage type.\n" t) )) }
+       Value (Alias (annot $sloc t)) }
 | t = reference_type { Value (Ref t) }
 
 field_type:
@@ -797,13 +793,19 @@ type_name:
 
 type_definition:
 | TYPE name = type_name
-  supertype = option(":" s = type_name { s })
+  supertype = ioption(":" s = type_name { s })
   "=" op = boption(OPEN)
   describes = ioption(DESCRIBES o = type_name { o })
   descriptor = ioption(DESCRIPTOR d = type_name { d })
   typ = composite_type ";"
     { annot $sloc
         (name, {typ; supertype; final = not op; descriptor; describes}) }
+
+(* A value-type alias, [type t = v;]: the name [t] then stands for the value
+   type [v] wherever a value type is expected. *)
+type_alias:
+| TYPE name = type_name "=" typ = value_type ";"
+  { annot $sloc (Type_alias { name; typ }) }
 
 rectype:
 | REC "{" l = list(type_definition) "}" { annot $loc($1) (Array.of_list l) }
@@ -1565,6 +1567,7 @@ elem:
    conditional branch body. *)
 module_field:
 | r = rectype { RF_plain {Annot.desc = Type r.Annot.desc; info = r.Annot.info} }
+| a = type_alias { RF_plain a }
 | a = inner_attribute { RF_plain (annot $sloc (Module_annotation [a])) }
 | attributes = list(attribute) d = definition
   { RF_plain (attributed $sloc attributes d) }

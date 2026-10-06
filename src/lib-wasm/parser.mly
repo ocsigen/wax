@@ -174,6 +174,7 @@
 %token STRING_ANNOT "(@string"
 %token CHAR_ANNOT "(@char"
 %token FEATURE_ANNOT "(@feature"
+%token TYPE_ANNOT "(@type"
 %token BRANCH_HINT_ANNOT "(@metadata.code.branch_hint"
 %token INSTR_FREQ_ANNOT "(@metadata.code.instr_freq"
 %token CALL_TARGETS_ANNOT "(@metadata.code.call_targets"
@@ -612,6 +613,7 @@ value_type:
 | F64 { F64 }
 | V128 { V128 }
 | t = reference_type { Ref t }
+| TYPE_ANNOT i = ID ")" { Alias i }
 
 functype:
 | "(" FUNC r = parameters_and_results ")"{ r }
@@ -1514,6 +1516,12 @@ feature_annotation:
 | FEATURE_ANNOT s = STRING ")"
   { annot $sloc (Feature_annotation s) }
 
+(* A value-type alias definition, [(@type $id t)]; [(@type $id)] then stands
+   for [t] wherever a value type is expected. *)
+type_alias:
+| TYPE_ANNOT id = ID typ = value_type ")"
+  { annot $sloc (Type_alias {id; typ}) }
+
 module_field:
 | f = rectype
 | f = import
@@ -1528,6 +1536,7 @@ module_field:
 | f = data
 | f = globalstring
 | f = feature_annotation
+| f = type_alias
 | f = cond_module_field
   { f }
 

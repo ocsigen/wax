@@ -748,6 +748,16 @@ let wat_field_symbols
                   s_children = [];
                 }
           | None -> None)
+  | Type_alias { id; _ } ->
+      [
+        {
+          s_name = id_name id;
+          s_kind = "type";
+          s_range = field.info;
+          s_selection = id.info;
+          s_children = [];
+        };
+      ]
   | Export _ | Start _ -> []
   | Feature_annotation _ -> []
   | Module_if_annotation _ -> []

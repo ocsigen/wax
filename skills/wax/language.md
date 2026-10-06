@@ -1944,6 +1944,63 @@ When decompiling Wasm or WAT back to Wax, the compiler introduces holes wherever
 an instruction takes an operand from the stack instead of from a nested
 sub-expression, so this same mechanism round-trips stack-style code.
 
+## Type Aliases
+
+`type name = t;` names the value type `t`. The name can then be written wherever a value type is expected: in a signature, a local or global declaration, a struct or array field, a block result or a cast.
+
+```wax,check
+type word = i64;
+type cell = { value: mut word };
+
+fn get(c: &cell) -> word {
+    return c.value;
+}
+```
+
+An alias stands for its value type: `word` and `i64` are the same type, and a cast to `word` is a cast to `i64`. The value type may be a reference type or another alias, but an alias is not a heap type: a reference names the type it refers to (`&cell`), never an alias. A name a type definition already uses cannot be an alias, and a reference to a type is written with `&`: in a value-type position, a type's bare name is an error.
+
+Aliases are most useful with [conditional compilation](#conditional-compilation). Defined differently in the two branches of an `#[if]`, an alias stands for a different type in each configuration, so code that only passes such values around is written once:
+
+```wax,check
+#[if(portable_int)]
+{
+    type nativeint = i64;
+}
+#[else]
+{
+    type nativeint = i32;
+}
+
+import "nativeint" {
+    fn Nativeint_val(v: &eq) -> nativeint;
+    fn caml_copy_nativeint(n: nativeint) -> &eq;
+}
+
+fn copy(v: &eq) -> &eq {
+    let n = Nativeint_val(v);
+    return caml_copy_nativeint(n);
+}
+
+fn succ(n: nativeint) -> nativeint {
+    let r: nativeint;
+    #[if(portable_int)]
+    {
+        r = n + 1;
+    }
+    #[else]
+    {
+        r = n + 1;
+    }
+    return r;
+}
+```
+
+A value read from a declaration written with an alias (a parameter, a local, a global, a struct field, an array element, a function result) has the alias's type, and a declaration whose type is inferred from it takes the alias too: the local `n` above is a `nativeint`, whichever type that is. Editors show such a value's type by its alias.
+
+Code whose instructions depend on the type, such as the addition in `succ`, goes in the branches of a conditional: WebAssembly has no instruction that adds both an `i32` and an `i64`. Its two branches look the same in Wax, but compile to an `i64.add` and an `i32.add`. Converting to WebAssembly text without resolving the conditionals reports a construct that does not follow this rule. Once `-D` resolves them, each configuration compiles on its own.
+
+The aliases carry over to WebAssembly text, where they are written as annotations (see [the correspondence](correspondence.md#type-aliases)). The binary format has no aliases: compiling to it replaces each one by the type it stands for.
+
 ## Conditional Compilation
 
 Top-level items can be guarded by conditions, using a Rust-like attribute syntax. `#[if(<condition>)] { ... }` keeps the braced items only when `<condition>` holds; an optional `#[else] { ... }` provides an alternative. The braces are required:
@@ -2023,7 +2080,7 @@ fn size() -> i32 {
 }
 ```
 
-The conditions are **not evaluated** by the compiler; they are preserved for a downstream preprocessor. The `#[if]` and `#[else]` branches are **mutually exclusive** (they never coexist), so, for instance, the same name may be defined in both.
+The conditions are **not evaluated** by the compiler; they are preserved for a downstream preprocessor. The `#[if]` and `#[else]` branches are **mutually exclusive** (they never coexist), so, for instance, the same name may be defined in both. A [type alias](#type-aliases) defined in both branches lets the code outside them use a type that differs between configurations.
 
 Variables can be given values on the command line with [`-D`/`--define`](cli.md), which specializes the conditionals: a condition that becomes fully determined causes its conditional to be removed (the surviving branch is spliced in), and one that still mentions unset variables is kept with its condition simplified. For example, `wax -D debug=true` turns `#[if(all(debug, target = "wasi"))]` into `#[if(target = "wasi")]`, and `wax -D debug=false` removes that conditional altogether.
 

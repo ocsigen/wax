@@ -1,0 +1,10 @@
+type t = {};
+type a = i32;
+type a = i64;
+type t = i32;
+type c1 = c2;
+type c2 = c1;
+type bad = &missing;
+type i32 = i64;
+fn f(x: nope, y: c1, z: t) {}
+fn g(x: bad, y: bad) {}

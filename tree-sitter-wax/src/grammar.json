@@ -1275,6 +1275,39 @@
         }
       ]
     },
+    "type_alias": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "type"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "="
+        },
+        {
+          "type": "FIELD",
+          "name": "type",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_value_type"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": ";"
+        }
+      ]
+    },
     "_expression": {
       "type": "CHOICE",
       "members": [
@@ -5265,6 +5298,10 @@
         {
           "type": "SYMBOL",
           "name": "type_definition"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "type_alias"
         },
         {
           "type": "SYMBOL",

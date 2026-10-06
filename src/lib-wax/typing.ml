@@ -642,6 +642,23 @@ module Error = struct
       report ?hint:(did_you_mean suggestions) context ~location
         (text "The" ++ text kind ++ name x ++ text "is not bound.")
 
+  (* A bare name in a value-type position names a value-type alias. *)
+  let unknown_value_type context ~location ~suggestions ~is_type x =
+    if not (Wax_utils.Diagnostic.in_recovery context) then
+      report context ~location
+        ?hint:
+          (if is_type then
+             Some
+               (text "A reference to type" ++ name x ++ text "is written"
+                ++ kw ("&" ^ x.desc)
+               ^^ text ".")
+           else did_you_mean suggestions)
+        (name x ++ text "is not a value type or a type alias.")
+
+  let cyclic_alias context ~location x =
+    report context ~location
+      (text "The type alias" ++ name x ++ text "is defined in terms of itself.")
+
   let unknown_intrinsic context ~location ns name =
     report context ~location
       (text "There is no" ++ kw (ns ^ "::" ^ name) ++ text "intrinsic.")
@@ -1097,7 +1114,7 @@ end
 module Tbl = struct
   include Typing_env.Tbl
 
-  let make ?(hover = fun _ -> None) ~current namespace kind =
+  let make ?(hover = fun _ _ -> None) ~current namespace kind =
     {
       kind;
       namespace;
@@ -1154,7 +1171,7 @@ module Tbl = struct
         (* Link this use to the definition of the name; [resolve] handles only
            references, so [x.info] is a use site. The resolved value's summary
            rides along for hover. *)
-        record_reference ~hover:(env.hover v) env.namespace.links x.info
+        record_reference ~hover:(env.hover x.desc v) env.namespace.links x.info
           (match Hashtbl.find_opt env.namespace.tbl x.desc with
           | Some (_, loc) -> [ loc ]
           | None -> [])
@@ -1234,6 +1251,95 @@ let require_feature d (ctx : type_context) ~location feature =
   if not (Wax_utils.Feature.is_enabled ctx.features feature) then
     Error.feature_disabled d ~location feature
 
+(* The definition an alias use refers to, or [None] for a name that is no
+   alias, reported here, or a poisoned alias, reported at its definition. *)
+let alias_definition d (ctx : type_context) (a : ident) =
+  match Tbl.find_opt ctx.aliases a with
+  | Some { poisoned = true; _ } -> None
+  | Some al ->
+      al.used <- true;
+      Some al
+  | None ->
+      let suggestions =
+        Wax_utils.Spell_check.f
+          (fun f ->
+            List.iter f [ "i32"; "i64"; "f32"; "f64"; "v128" ];
+            Tbl.iter ctx.aliases (fun k _ -> f k))
+          a.desc
+      in
+      Error.unknown_value_type d ~location:a.info ~suggestions
+        ~is_type:(Option.is_some (Tbl.find_no_mark ctx.types a))
+        a;
+      None
+
+(* [typ] with an alias use replaced by the value type it stands for, as its
+   definition writes it, so an inferred type never carries an alias. An unknown
+   or cyclic alias is kept: converting it fails, and was reported. *)
+let rec unalias (ctx : type_context) (typ : valtype) =
+  match typ with
+  | Alias a -> (
+      match Tbl.find_no_mark ctx.aliases a with
+      | Some { poisoned = false; alias_typ; _ } -> unalias ctx alias_typ
+      | Some { poisoned = true; _ } | None -> typ)
+  | I32 | I64 | F32 | F64 | V128 | Ref _ -> typ
+
+(* Whether [typ] is written with an alias. Such an annotation is never
+   redundant, even when it equals the type inferred: it may stand for another
+   type in another configuration. *)
+let is_alias (typ : valtype) = match typ with Alias _ -> true | _ -> false
+
+(* [st] with every alias use replaced by the value type it stands for (see
+   [unalias]), so a type definition read back from the type table never carries
+   an alias. *)
+let unalias_subtype ctx (st : subtype) =
+  let storage (t : storagetype) =
+    match t with Value v -> Value (unalias ctx v) | Packed _ -> t
+  in
+  let field (f : fieldtype) = { f with typ = storage f.typ } in
+  let typ : comptype =
+    match st.typ with
+    | Func { params; results } ->
+        Func
+          {
+            params =
+              Array.map
+                (fun (p : (ident option * valtype, location) annotated) ->
+                  { p with desc = (fst p.desc, unalias ctx (snd p.desc)) })
+                params;
+            results = Array.map (unalias ctx) results;
+          }
+    | Struct fields ->
+        Struct
+          (Array.map
+             (fun (f : (ident * fieldtype, location) annotated) ->
+               { f with desc = (fst f.desc, field (snd f.desc)) })
+             fields)
+    | Array f -> Array (field f)
+    | Cont _ -> st.typ
+  in
+  { st with typ }
+
+(* Resolve an alias use with [resolve], reporting an error it meets at the use,
+   [a]: the definition is fine (see [check_alias_definitions]), but not where
+   it is used, as a reference type naming a type defined after the use site. *)
+let resolve_alias d (a : ident) al resolve =
+  let c = Wax_utils.Diagnostic.collector ~parent:d () in
+  let r = resolve c al.alias_typ in
+  List.iter
+    (fun e ->
+      Wax_utils.Diagnostic.replay ~location:a.info
+        ~related:
+          [
+            {
+              Wax_utils.Diagnostic.location =
+                Wax_utils.Diagnostic.entry_location e;
+              message = Wax_utils.Message.text "in the type alias definition";
+            };
+          ]
+        d e)
+    (Wax_utils.Diagnostic.collected c);
+  r
+
 let heaptype d ctx (h : heaptype) : Internal.heaptype option =
   match h with
   | Func -> Some Func
@@ -1263,7 +1369,7 @@ let reftype d ctx { nullable; typ } =
   let+@ typ = heaptype d ctx typ in
   { Internal.nullable; typ }
 
-let valtype d ctx ty : Internal.valtype option =
+let rec valtype d ctx ty : Internal.valtype option =
   match ty with
   | I32 -> Some I32
   | I64 -> Some I64
@@ -1273,6 +1379,9 @@ let valtype d ctx ty : Internal.valtype option =
   | Ref r ->
       let+@ ty = reftype d ctx r in
       (Ref ty : Internal.valtype)
+  | Alias a ->
+      let*@ al = alias_definition d ctx a in
+      resolve_alias d a al (fun d ty -> valtype d ctx ty)
 
 (* Like [Array.map] into an option, returning [None] as soon as [f] returns
    [None] on any element (so [let*!] propagates a single failure). *)
@@ -1349,7 +1458,7 @@ let n_reftype d ctx { nullable; typ } : Nz.reftype option =
   let+@ typ = n_heaptype d ctx typ in
   { Nz.nullable; typ }
 
-let n_valtype d ctx ty : Nz.valtype option =
+let rec n_valtype d ctx ty : Nz.valtype option =
   match ty with
   | I32 -> Some I32
   | I64 -> Some I64
@@ -1359,6 +1468,9 @@ let n_valtype d ctx ty : Nz.valtype option =
   | Ref r ->
       let+@ ty = n_reftype d ctx r in
       (Ref ty : Nz.valtype)
+  | Alias a ->
+      let*@ al = alias_definition d ctx a in
+      resolve_alias d a al (fun d ty -> n_valtype d ctx ty)
 
 let n_functype d ctx { params; results } : Nz.functype option =
   check_unique_param_names d params;
@@ -1616,10 +1728,84 @@ let add_type d (ctx : type_context) ty =
             | None -> { typ with supertype = None }
             | Some _ -> typ
           in
+          (* Stored without aliases, for the readers that take a definition
+             apart (a field's storage type, a signature's value types). *)
+          Hashtbl.replace ctx.written name.desc typ;
+          let typ = unalias_subtype ctx typ in
           Tbl.override ctx.types name
             (Wax_wasm.Types.Def (Wax_wasm.Types.Id.add i' i), typ))
         ty;
       Some i'
+
+(* Register a value-type alias definition. Aliases are registered before the
+   types, which may use them, so a name a type of [type_names] (by name, to its
+   definition) also bears is reported here, at the alias, which is then not
+   registered. *)
+let add_alias d (ctx : type_context) type_names (name : ident) typ =
+  if List.mem name.desc reserved_type_names then
+    Error.reserved_type_name d ~location:name.info name;
+  match Hashtbl.find_opt type_names name.desc with
+  | Some prev_loc ->
+      Error.name_already_bound d ~location:name.info ~prev_loc "type" name
+  | None ->
+      Tbl.add d ctx.aliases name
+        { alias_name = name; alias_typ = typ; poisoned = false; used = false }
+
+(* Report each alias whose definition names no type of [type_names], or leads
+   back to itself: it is in error wherever it is used, so it is reported once,
+   here, and stands for no value type. *)
+let check_alias_definitions d (ctx : type_context) type_names =
+  let by_position al al' =
+    compare al.alias_name.info.loc_start.pos_cnum
+      al'.alias_name.info.loc_start.pos_cnum
+  in
+  let all = ref [] in
+  Tbl.iter ctx.aliases (fun _ al -> all := al :: !all);
+  List.sort by_position !all
+  |> List.iter (fun al ->
+      match al.alias_typ with
+      | Ref { typ = Type x | Exact x; _ }
+        when not (Hashtbl.mem type_names x.desc) ->
+          let suggestions =
+            Wax_utils.Spell_check.f
+              (fun f -> Hashtbl.iter (fun k _ -> f k) type_names)
+              x.desc
+          in
+          Error.unbound_name d ~location:x.info ~suggestions "type" x;
+          Tbl.override ctx.aliases al.alias_name { al with poisoned = true }
+      | _ -> ());
+  let rec leads_back name seen (ty : valtype) =
+    match ty with
+    | Alias a -> (
+        a.desc = name
+        || (not (List.mem a.desc seen))
+           &&
+           match Tbl.find_no_mark ctx.aliases a with
+           | Some al -> leads_back name (a.desc :: seen) al.alias_typ
+           | None -> false)
+    | I32 | I64 | F32 | F64 | V128 | Ref _ -> false
+  in
+  let cyclic = ref [] in
+  Tbl.iter ctx.aliases (fun name al ->
+      if leads_back name [] al.alias_typ then cyclic := al :: !cyclic);
+  List.sort by_position !cyclic
+  |> List.iter (fun al ->
+      Error.cyclic_alias d ~location:al.alias_name.info al.alias_name;
+      Tbl.override ctx.aliases al.alias_name { al with poisoned = true })
+
+(* Check the alias definitions no use resolved, in source order, reporting
+   their errors at the definition. *)
+let check_unused_aliases d (ctx : type_context) =
+  let unused = ref [] in
+  Tbl.iter ctx.aliases (fun _ al ->
+      if not (al.used || al.poisoned) then unused := al :: !unused);
+  List.sort
+    (fun al al' ->
+      compare al.alias_name.info.loc_start.pos_cnum
+        al'.alias_name.info.loc_start.pos_cnum)
+    !unused
+  |> List.iter (fun al ->
+      ignore (valtype d ctx al.alias_typ : Internal.valtype option))
 
 (*** The module context ***)
 
@@ -1716,6 +1902,41 @@ let lookup_array_type ?location ctx name =
       Error.expected_array_type ctx.diagnostics
         ~location:(Option.value ~default:name.info location);
       None
+
+(* The definition of the type [name] as written, aliases included, from which
+   a value read through it takes the alias it was declared with. *)
+let written_comptype ctx (name : ident) =
+  Option.map
+    (fun (st : subtype) -> st.typ)
+    (Hashtbl.find_opt ctx.type_context.written name.desc)
+
+let written_results ctx name (results : valtype array) =
+  match written_comptype ctx name with
+  | Some (Func f) when Array.length f.results = Array.length results ->
+      f.results
+  | _ -> results
+
+let written_struct_field ctx name (field : fieldtype) (field_name' : string) =
+  match written_comptype ctx name with
+  | Some (Struct fields) -> (
+      match
+        Array.find_map
+          (fun f ->
+            if (field_name f).desc = field_name' then Some (field_type f)
+            else None)
+          fields
+      with
+      | Some f -> f
+      | None -> field)
+  | _ -> field
+
+let written_array_field ctx name (field : fieldtype) =
+  match written_comptype ctx name with Some (Array f) -> f | _ -> field
+
+(* A struct's fields as written, for member completion to list them as the
+   source declares them. *)
+let written_struct_fields ctx name fields =
+  match written_comptype ctx name with Some (Struct f) -> f | _ -> fields
 
 (* The composite type of a synthesized type (its name starting with ['<'], e.g.
    [<string>] or an inline function type) — used as the [anon_comptype] of an
@@ -1926,10 +2147,11 @@ let rec subtype ?location ?(pin = true) ctx ty ty' =
       true
   | _, (Unknown | Error | UnknownRef) -> assert false
   | UnknownRef, _ -> false
+  | _, Valtype { internal = Alias _; _ } -> .
 
 let cast ctx ty ty' =
   let ity = Cell.get ty in
-  match (ity, ty') with
+  match (ity, unalias ctx.type_context ty') with
   | (Number | Int), Ref { typ = I31 | Extern; _ } ->
       Cell.set ty (Valtype i32_valtype);
       true
@@ -1984,7 +2206,8 @@ let cast ctx ty ty' =
        let ty' = Ref { nullable = true; typ } in
        let>@ ity' = valtype ctx.diagnostics ctx.type_context ty' in
        Cell.set ty
-         (Valtype { typ = ty'; internal = ity'; anon_comptype = None }));
+         (Valtype
+            { typ = ty'; internal = ity'; anon_comptype = None; alias = None }));
       true
   | Valtype { internal = F32 | F64; _ }, (F32 | F64)
   | Valtype { internal = I32 | I64; _ }, I32
@@ -2053,6 +2276,9 @@ let cast ctx ty ty' =
      dead-code stack value that unifies with whatever its block needs. *)
   | UnknownRef, (I32 | I64 | F32 | F64 | V128) -> false
   | (Unknown | Error | UnknownRef | Collecting _), _ -> true
+  | Valtype { internal = Alias _; _ }, _ -> .
+  (* An unknown alias, already reported. *)
+  | _, Alias _ -> true
 
 let signed_cast ctx ty ty' =
   let ity = Cell.get ty in
@@ -2073,6 +2299,7 @@ let signed_cast ctx ty ty' =
              typ = Ref { typ = Any; nullable = true };
              internal = Ref { typ = Any; nullable = true };
              anon_comptype = None;
+             alias = None;
            });
       true
   | (Number | Int), (`I64 | `F32 | `F64) ->
@@ -2155,6 +2382,7 @@ let signed_cast ctx ty ty' =
   | UnknownRef, (`I32 | `I64) -> true
   | UnknownRef, (`F32 | `F64) -> false
   | (Unknown | Error | Collecting _), _ -> true
+  | Valtype { internal = Alias _; _ }, _ -> .
 
 (*** The typing stack ***)
 
@@ -2401,13 +2629,42 @@ let with_empty_stack ctx ~kind:_ ~location f =
 
 (*** Instruction-checking helpers ***)
 
+(* The alias a declaration written [typ] carries (see [inferred_valtype]). *)
+let written_alias (typ : valtype) =
+  match typ with
+  | Alias a -> Some a
+  | I32 | I64 | F32 | F64 | V128 | Ref _ -> None
+
+(* How a declaration whose type is inferred as [iv] is written: with the alias
+   it was declared with, when it has one, so that the declaration has the right
+   type in every configuration (see [inferred_valtype]). *)
+let declared_form (iv : inferred_valtype) =
+  match iv.alias with Some a -> Alias a | None -> iv.typ
+
+(* The same for an inferred cell, [None] when it carries no alias. *)
+let declared_alias cell =
+  match Cell.get cell with
+  | Valtype { alias = Some a; _ } -> Some (Alias a)
+  | _ -> None
+
 let internalize_valtype ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
-  { typ; internal; anon_comptype = None }
+  {
+    typ = unalias ctx.type_context typ;
+    internal;
+    anon_comptype = None;
+    alias = written_alias typ;
+  }
 
 let internalize ?inline ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
-  valtype_cell { typ; internal; anon_comptype = inline }
+  valtype_cell
+    {
+      typ = unalias ctx.type_context typ;
+      internal;
+      anon_comptype = inline;
+      alias = written_alias typ;
+    }
 
 (* Check that a source element reference type can be stored where [dst] elements
    are expected (table.copy / table.init / array.init_elem): [src] must be a
@@ -2503,11 +2760,13 @@ let local_suggestions ctx name =
    [Set]/[Tee] target, a bare global). A poison value ([None]) has no summary. *)
 let hover_of_valtype ty = Option.map (fun ity -> Value_type ity) ty
 
-let hover_of_global ((_, ty) : bool * inferred_valtype option) =
+let hover_of_global _ ((_, ty) : bool * inferred_valtype option) =
   hover_of_valtype ty
 
-let hover_of_type ((_, st) : Wax_wasm.Types.ref_index * subtype) =
-  Some (Type_def st)
+(* A type's definition as written, aliases included ([written]), rather than
+   as stored, with its aliases expanded (see [add_type]). *)
+let hover_of_type written name ((_, st) : Wax_wasm.Types.ref_index * subtype) =
+  Some (Type_def (Option.value (Hashtbl.find_opt written name) ~default:st))
 
 (* A name in value position resolves, in order, to a local, then a global, then
    a function (as a non-null reference); [Get]/[Set]/[Tee] share this ladder and
@@ -2656,7 +2915,9 @@ let field_has_default (ty : fieldtype) =
   | Value ty -> (
       match ty with
       | I32 | I64 | F32 | F64 | V128 -> true
-      | Ref { nullable; _ } -> nullable)
+      | Ref { nullable; _ } -> nullable
+      (* Type definitions are stored without aliases ([add_type]). *)
+      | Alias _ -> assert false)
 
 (* The typed node for [i]: its hints ride along, being advisory metadata the
    typer neither reads nor changes, and so does its [expected] type — the
@@ -2917,6 +3178,7 @@ let context_result_cell ctx typ ~expected =
    quick-fix suggestion. *)
 let block_result_redundant ctx typ ~expected ~result_cell =
   typ.results <> [||]
+  && (not (Array.exists is_alias typ.results))
   &&
   match
     (standalone_valtype ctx expected, standalone_valtype ctx result_cell)
@@ -3001,6 +3263,7 @@ let bind_let_value ?init ctx ~location result_ty (name, typ) =
              ~some:(fun v -> valtype_equal ctx v ity)
              standalone)
       in
+      let redundant = redundant && not (is_alias typ) in
       ((name, if ctx.simplify && redundant then None else Some typ), redundant)
   | None ->
       (* A packed AGGREGATE read bound (or dropped: [name] may be anonymous)
@@ -3026,7 +3289,10 @@ let bind_let_value ?init ctx ~location result_ty (name, typ) =
           ctx.local_decls := name :: !(ctx.local_decls);
           mark_initialized ctx name.desc)
         name;
-      ((name, None), false)
+      (* A value of an alias's type declares the local with the alias. *)
+      ( ( name,
+          match name with Some _ -> declared_alias result_ty | None -> None ),
+        false )
 
 (* When converting from Wasm, an expression producing several values (typically
    a call) is emitted as a bare statement, and the values it leaves on the stack
@@ -3529,7 +3795,7 @@ let context_block_typ ctx ~keyword (block_start : Lexing.position)
     Typing_suggest.suggest_block_result ctx ~keyword block_start brace_start;
   if typ.results = [||] then
     match standalone_valtype ctx expected with
-    | Some iv -> { typ with results = [| iv.typ |] }
+    | Some iv -> { typ with results = [| declared_form iv |] }
     | None -> typ
   else if ctx.simplify && redundant then { typ with results = [||] }
   else typ
@@ -4177,6 +4443,11 @@ let anon_function_type ctx (sign : functype) =
         Buffer.add_char buf '&';
         if nullable then Buffer.add_char buf '?';
         ht typ
+    | Alias a -> (
+        match unalias ctx.type_context t with
+        (* An unknown alias, already reported: the type is never built. *)
+        | Alias _ -> Buffer.add_string buf ("?" ^ a.desc)
+        | t -> vt t)
   and ht (h : heaptype) =
     Buffer.add_string buf
       (match h with
@@ -4880,7 +5151,9 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
             typ = Ref { nullable = _; typ; _ };
             internal = Ref { nullable = _; typ = ityp; _ };
             anon_comptype;
+            _;
           } ->
+          (* No longer the alias's type: the null is ruled out. *)
           return_expression i (NonNull i')
             (Cell.make
                (Valtype
@@ -4888,6 +5161,7 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
                     typ = Ref { nullable = false; typ };
                     internal = Ref { nullable = false; typ = ityp };
                     anon_comptype;
+                    alias = None;
                   }))
       | Unknown | UnknownRef | Null ->
           (* A reference recovered from a polymorphic value — dead/branch code, a
@@ -5119,6 +5393,7 @@ and type_branch ctx i =
               typ = Ref { nullable = _; typ; _ };
               internal = Ref { nullable = _; typ = ityp; _ };
               anon_comptype;
+              _;
             } ->
             Cell.make
               (Valtype
@@ -5126,6 +5401,7 @@ and type_branch ctx i =
                    typ = Ref { nullable = false; typ };
                    internal = Ref { nullable = false; typ = ityp };
                    anon_comptype;
+                   alias = None;
                  })
         | Unknown | UnknownRef | Null ->
             (* A reference recovered from a polymorphic value, or a bare [null]
@@ -5167,6 +5443,7 @@ and type_branch ctx i =
             typ = Ref { nullable = _; typ; _ };
             internal = Ref { nullable = _; typ = ityp; _ };
             anon_comptype;
+            _;
           } ->
           check_subtypes ctx ~location:(snd i'.info)
             (Array.append types
@@ -5177,6 +5454,7 @@ and type_branch ctx i =
                         typ = Ref { nullable = false; typ };
                         internal = Ref { nullable = false; typ = ityp };
                         anon_comptype;
+                        alias = None;
                       });
                |])
             params
@@ -5194,6 +5472,7 @@ and type_branch ctx i =
                         typ = Ref { nullable = false; typ = None_ };
                         internal = Ref { nullable = false; typ = None_ };
                         anon_comptype = None;
+                        alias = None;
                       });
                |])
             params
@@ -5221,7 +5500,12 @@ and type_branch ctx i =
          let typ =
            Cell.make
              (Valtype
-                { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+                {
+                  typ = Ref ty;
+                  internal = Ref ityp;
+                  anon_comptype = None;
+                  alias = None;
+                })
          in
          check_subtypes ctx ~location:(snd i'.info)
            (Array.append types [| typ |])
@@ -5363,7 +5647,13 @@ and type_branch ctx i =
           params;
       let typ =
         Cell.make
-          (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+          (Valtype
+             {
+               typ = Ref ty;
+               internal = Ref ityp;
+               anon_comptype = None;
+               alias = None;
+             })
       in
       return_statement i
         (Br_on_cast_fail
@@ -5395,7 +5685,12 @@ and type_branch ctx i =
          let typ =
            Cell.make
              (Valtype
-                { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+                {
+                  typ = Ref ty;
+                  internal = Ref ityp;
+                  anon_comptype = None;
+                  alias = None;
+                })
          in
          check_subtypes ctx ~location:(snd i'.info)
            (Array.append types [| typ |])
@@ -5459,7 +5754,13 @@ and type_branch ctx i =
         params;
       let typ =
         Cell.make
-          (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+          (Valtype
+             {
+               typ = Ref ty;
+               internal = Ref ityp;
+               anon_comptype = None;
+               alias = None;
+             })
       in
       return_statement i
         (Br_on_cast_desc_eq_fail
@@ -6095,6 +6396,7 @@ and type_arith ctx i =
                            typ = Ref { nullable = true; typ = Eq };
                            internal = Ref { nullable = true; typ = Eq };
                            anon_comptype = None;
+                           alias = None;
                          })
                 | Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }
@@ -6744,6 +7046,9 @@ and type_cast ctx i =
         && (not operand_pin_pending) && (not load_bearing_null)
         && (not load_bearing_bottom_ref)
         && (not load_bearing_cont)
+        && (match typ with
+          | Valtype t | Ascribed t -> not (is_alias t)
+          | Signedtype _ | Functype _ -> true)
         && (not (is_unknown_or_error ty'))
         && subtype ctx ty' ty
       in
@@ -6849,7 +7154,7 @@ and type_aggregate_access ctx i =
             match def.typ with
             | Struct fields -> (
                 record_members ctx.member_completions field.info
-                  (Members.R_struct fields);
+                  (Members.R_struct (written_struct_fields ctx ty fields));
                 match
                   Array.find_map
                     (fun f ->
@@ -6857,7 +7162,9 @@ and type_aggregate_access ctx i =
                       if nm.desc = field.desc then Some typ else None)
                     fields
                 with
-                | Some typ -> field_read_type ctx typ
+                | Some typ ->
+                    field_read_type ctx
+                      (written_struct_field ctx ty typ field.desc)
                 | None ->
                     Error.missing_field ctx.diagnostics ~location:field.info
                       field;
@@ -6866,7 +7173,7 @@ and type_aggregate_access ctx i =
                 (match def.typ with
                 | Array elem ->
                     record_members ctx.member_completions field.info
-                      (Members.R_array elem)
+                      (Members.R_array (written_array_field ctx ty elem))
                 | Cont _ ->
                     if ctx.member_completions <> None then
                       record_members ctx.member_completions field.info
@@ -6943,7 +7250,7 @@ and type_aggregate_access ctx i =
             | None -> None
             | Some fields -> (
                 record_members ctx.member_completions field.info
-                  (Members.R_struct fields);
+                  (Members.R_struct (written_struct_fields ctx ty fields));
                 match
                   Array.find_map
                     (fun f ->
@@ -7007,7 +7314,7 @@ and type_aggregate_access ctx i =
       match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
-          let*! ty = field_read_type ctx typ in
+          let*! ty = field_read_type ctx (written_array_field ctx ty typ) in
           return_expression i (ArrayGet (i1', i2')) ty
       | Error ->
           (* Receiver already failed to type; recover silently. *)
@@ -7128,6 +7435,7 @@ and type_variable_access ctx i =
                          typ = (if exact then Exact ty else Type ty);
                        };
                    anon_comptype = inline_comptype ctx name;
+                   alias = None;
                  })
         | Poisoned ->
             (* Already reported at the definition; the Error poison keeps the
@@ -7273,6 +7581,7 @@ and type_let ctx i =
           let* i', reinfer = check_instruction ctx (valtype_cell ity) i' in
           let needed =
             reinfer_needed ~drop_supertype ctx reinfer (valtype_cell ity)
+            || is_alias annot
           in
           Option.iter
             (fun name ->
@@ -9370,7 +9679,7 @@ and check_instruction ctx expected (i : location instr) =
       let typ =
         if omitted then
           match standalone_valtype ctx expected with
-          | Some iv -> { typ with results = [| iv.typ |] }
+          | Some iv -> { typ with results = [| declared_form iv |] }
           | None -> typ
         else if ctx.simplify && redundant then { typ with results = [||] }
         else typ
@@ -9694,6 +10003,11 @@ and type_indirect_call ctx i i' l =
         lookup_func_type ~location:(snd i'.info) ctx ty
     | _ -> None
   in
+  let callee_type_name =
+    match Cell.get callee_type with
+    | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> Some ty
+    | _ -> None
+  in
   let param_types =
     Option.bind functype (fun typ ->
         array_map_opt
@@ -9727,9 +10041,12 @@ and type_indirect_call ctx i i' l =
                   ~location:(snd i'.info) ~expected:(Array.length param_types)
                   ~provided:(List.length l')
             | _ -> ());
-            let*! returned_types =
-              array_map_opt (internalize ctx) typ.results
+            let results =
+              match callee_type_name with
+              | Some ty -> written_results ctx ty typ.results
+              | None -> typ.results
             in
+            let*! returned_types = array_map_opt (internalize ctx) results in
             return_statement i (Call (i', l')) returned_types)
     | Error ->
         (* The callee already failed to type (e.g. an unbound name); recover
@@ -10855,7 +11172,7 @@ and finalize_inferred ?(needed = false) ?(exacts = []) ?(natural = []) ?location
             report_exact_mismatches ctx ~location ~result:(valtype_cell iv)
               exacts
         | None -> ());
-        ([| valtype_cell iv |], { typ with results = [| iv.typ |] })
+        ([| valtype_cell iv |], { typ with results = [| declared_form iv |] })
     | None -> ([||], typ)
   else
     let result_cells =
@@ -10865,6 +11182,7 @@ and finalize_inferred ?(needed = false) ?(exacts = []) ?(natural = []) ?location
     in
     let drop =
       ctx.simplify && (not needed)
+      && (not (Array.exists is_alias typ.results))
       && Array.length result_cells = 1
       (* Keep the annotation if any exit (a fall-through / [br_table] value, …)
          would re-default to a different width on re-parse. *)
@@ -11348,7 +11666,7 @@ let storagetype_name : storagetype -> string = function
   | Value I64 -> "i64"
   | Value F32 -> "f32"
   | Value F64 -> "f64"
-  | Value (V128 | Ref _) -> "?"
+  | Value (V128 | Ref _ | Alias _) -> "?"
 
 (* Whether a raw literal string is a valid value of the run's element type. Reuse
    the same predicates the WAT numlist form validates with, so the two agree. *)
@@ -11360,7 +11678,7 @@ let data_run_element_valid (st : storagetype) s =
   | Value I64 -> Wax_wasm.Misc.is_int64 s
   | Value F32 -> Wax_wasm.Misc.is_float32 s
   | Value F64 -> Wax_wasm.Misc.is_float64 s
-  | Value (V128 | Ref _) -> false
+  | Value (V128 | Ref _ | Alias _) -> false
 
 (* The lane count and per-lane validity of a [v128] run element's shape. *)
 let vec_lane_count : Wax_utils.V128.shape -> int = function
@@ -11548,6 +11866,7 @@ let rec globals ctx fields =
                     let needed =
                       reinfer_needed ~drop_supertype:(not mut) ctx reinfer
                         (valtype_cell ity)
+                      || is_alias annot
                     in
                     let redundant = not needed in
                     (* Offer dropping the redundant annotation as a quick fix for
@@ -11574,7 +11893,9 @@ let rec globals ctx fields =
                     (expression_type ctx def')
                 in
                 Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
-                (None, def')
+                (* As for a [let], a value of an alias's type declares the
+                   global with the alias. *)
+                (declared_alias (expression_type ctx def'), def')
           in
           check_constant_instruction ctx def';
           After { field with desc = Global { g with typ; def = def' } }
@@ -11806,7 +12127,8 @@ let rec functions ctx fields =
       | Before
           ({
              desc =
-               Type _ | Module_annotation _ | Import _ | Import_group _ | Tag _;
+               ( Type _ | Type_alias _ | Module_annotation _ | Import _
+               | Import_group _ | Tag _ );
              _;
            } as f) ->
           Some f)
@@ -11907,7 +12229,7 @@ let field_attributes (field : _ modulefield) =
       attributes
   (* An import's attributes hang off each [import_decl]; they are validated
      while walking the import, not through [field_attributes]. *)
-  | Type _ | Conditional _ | Import _ | Import_group _ -> []
+  | Type _ | Type_alias _ | Conditional _ | Import _ | Import_group _ -> []
 
 (* Reject unknown attributes and validate the value shape of the ones that are
    allowed on the entity carrying them. [import_ok] is set for the declarations
@@ -12043,7 +12365,8 @@ let check_attributes diagnostics
     | Func _ -> (true, true, false)
     | Global _ | Memory _ | Table _ | Tag _ -> (true, false, false)
     | Module_annotation _ -> (false, false, true)
-    | Data _ | Elem _ | Type _ | Import _ | Import_group _ | Conditional _ ->
+    | Data _ | Elem _ | Type _ | Type_alias _ | Import _ | Import_group _
+    | Conditional _ ->
         (false, false, false)
   in
   let priority_ok = match field.desc with Func _ -> true | _ -> false in
@@ -12137,10 +12460,13 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
      function whose body made it (see [Tbl.current]). *)
   let current = ref Root in
   let type_context =
+    let namespace = Namespace.make ~links () in
+    let written = Hashtbl.create 16 in
     {
       internal_types = Wax_wasm.Types.create ();
-      types =
-        Tbl.make ~hover:hover_of_type ~current (Namespace.make ~links ()) "type";
+      types = Tbl.make ~hover:(hover_of_type written) ~current namespace "type";
+      aliases = Tbl.make ~current namespace "type alias";
+      written;
       features;
       subtyping_info_cache = None;
     }
@@ -12157,6 +12483,28 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
         | _ -> f field)
       fields
   in
+  (* Aliases first: a type definition may use one, wherever it is defined. *)
+  let type_names = Hashtbl.create 16 in
+  walk_fields
+    (fun (field : (_ modulefield, _) annotated) ->
+      match field.desc with
+      | Type rectype ->
+          Array.iter
+            (fun e ->
+              let name = member_name e in
+              if not (Hashtbl.mem type_names name.desc) then
+                Hashtbl.replace type_names name.desc name.info)
+            rectype
+      | _ -> ())
+    fields;
+  walk_fields
+    (fun (field : (_ modulefield, _) annotated) ->
+      match field.desc with
+      | Type_alias { name; typ } ->
+          add_alias diagnostics type_context type_names name typ
+      | _ -> ())
+    fields;
+  check_alias_definitions diagnostics type_context type_names;
   walk_fields
     (fun (field : (_ modulefield, _) annotated) ->
       match field.desc with
@@ -12311,7 +12659,9 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
       | Table { name; address_type; reftype = rt; _ } ->
           register_table name address_type rt
       | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
-      | Conditional _ | Type _ | Global _ | Module_annotation _ -> ())
+      | Conditional _ | Type _ | Type_alias _ | Global _ | Module_annotation _
+        ->
+          ())
     fields;
   (* A module may not export the same name twice. Each [#[export = "..."]]
      attribute is one export; [walk_fields] descends only into the branch this
@@ -12332,7 +12682,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
     | Tag { name; _ } ->
         Some name
     | Data _ | Elem _ | Import _ | Import_group _ | Conditional _ | Type _
-    | Module_annotation _ ->
+    | Type_alias _ | Module_annotation _ ->
         None
   in
   (* Process the [export]/[start]/[module] attributes carried by an entity whose
@@ -12482,6 +12832,13 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
   Option.iter
     (fun tbl -> record_field_positions ctx tbl typed_fields)
     field_positions;
+  (* Check the alias definitions no use resolved. A reference they make is no
+     use of what it names. *)
+  (let current = ctx.type_context.aliases.current in
+   let saved = !current in
+   current := Ignored;
+   check_unused_aliases ctx.diagnostics ctx.type_context;
+   current := saved);
   (* Report module fields that are defined but never referenced (the module-level
      analog of an unused local). A field is exempt if its name starts with [_], if
      it is exported or is the start function (both externally reachable), or if it
@@ -12662,7 +13019,9 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
                   Error.unused_field ctx.diagnostics ~location:name.info "type"
                     name)
               rectype
-        | Data _ | Elem _ | Module_annotation _ | Conditional _ -> ())
+        | Data _ | Elem _ | Type_alias _ | Module_annotation _ | Conditional _
+          ->
+            ())
       fields
   end;
   ( ctx.type_context.types,
@@ -12712,7 +13071,9 @@ let project_module (m : inferred_module_annotation Ast.module_) :
    the pass is about the value's numeric width, and a narrow read has none of its
    own. *)
 let numeric_width (ty : Ast.valtype) =
-  match ty with I32 | I64 | F32 | F64 -> Some ty | Ref _ | V128 -> None
+  match ty with
+  | I32 | I64 | F32 | F64 -> Some ty
+  | Ref _ | V128 | Alias _ -> None
 
 let inferred_width (ty : Ast.storagetype) =
   match ty with
@@ -12740,7 +13101,9 @@ let flexible_literal (ty : inferred_type) =
    taking it across this divide is a CONVERSION (in Wax it even needs a signage,
    [as f32_s]), so no repair may cross it. *)
 let numeric_family (t : Ast.valtype) =
-  match t with I32 | I64 -> `Int | F32 | F64 | Ref _ | V128 -> `Float
+  match t with
+  | I32 | I64 -> `Int
+  | F32 | F64 | Ref _ | V128 | Alias _ -> `Float
 
 (* The family a numeric CAST accepts for its operand, which is what bounds a pin
    inserted there ([None] for a cast that is not numeric): an identity/width cast
@@ -12754,7 +13117,7 @@ let cast_operand_family (t : Ast.casttype) =
   | Ascribed ((I32 | I64 | F32 | F64) as t) -> Some (numeric_family t)
   | Signedtype { typ = `I32 | `I64; _ } -> Some `Float
   | Signedtype { typ = `F32 | `F64; _ } -> Some `Int
-  | Valtype (Ref _ | V128) | Functype _ | Ascribed _ -> None
+  | Valtype (Ref _ | V128 | Alias _) | Functype _ | Ascribed _ -> None
 
 (* Whether a pin to [required] keeps the value in the family its own inferred type
    commits it to. A literal still free of a family ([Number], or the float-capable
@@ -12778,7 +13141,7 @@ let numeric_valtype (ty : Ast.valtype) =
   | I64 -> Some i64_valtype
   | F32 -> Some f32_valtype
   | F64 -> Some f64_valtype
-  | Ref _ | V128 -> None
+  | Ref _ | V128 | Alias _ -> None
 
 (* The offending expression, elided past a line's worth: a disagreement is
    reported against a whole operand tree, which can be large. *)
@@ -12867,7 +13230,7 @@ let rec reconcile_widths mode diagnostics ~under_cast ~ascribed (i : _ instr) :
                     (p.Lexing.pos_cnum - p.Lexing.pos_bol + 1))
                (Infer.Output.valtype_string t)
                (width_expr i)
-         | Some (Value (Ref _)) | Some (Packed _) | None -> ())
+         | Some (Value (Ref _ | Alias _)) | Some (Packed _) | None -> ())
      | _ -> ());
   (* This node first: a repair here grounds the cell its whole flexible subtree
      shares, so the recursion below sees the settled type. *)
@@ -13508,7 +13871,7 @@ let lint_confusable diagnostics fields =
       (fun (field : (_ modulefield, location) annotated) ->
         let location = field.info in
         match field.desc with
-        | Type _ -> ()
+        | Type _ | Type_alias _ -> ()
         | Func { body = _, instrs; attributes; _ } ->
             check_attrs attributes;
             check_body instrs

@@ -447,6 +447,9 @@ type backing_class =
 
 type ctx = {
   types : Sequence.t;
+  aliases : Sequence.t;
+      (* The value-type aliases, named in the types' namespace: Wax puts both in
+         one. An alias defined in several branches keeps one name. *)
   struct_fields : (Sequence.t * string list) CondTbl.t;
       (* Per branch, like [type_defs]: a struct type declared in both arms of
          an [(@if …)] may have different fields in each. *)
@@ -623,6 +626,10 @@ let type_ref_name ctx (i : Src.idx) =
       { i with desc = name }
   | _ -> idx ctx `Type i
 
+(* The Wax name of a value-type alias. *)
+let alias_name ctx (a : Src.name) =
+  Sequence.get ctx.aliases { a with desc = Src.Id a.desc }
+
 (* The spine ([heaptype]…[fieldtype]) copies each constructor through, naming
    each index via [type_ref_name]; [functype]/[comptype]/[subtype] below stay
    hand-written because they allocate Wax names (with rename diagnostics) and
@@ -633,6 +640,7 @@ module Map =
       type nonrec ctx = ctx
 
       let idx st i = type_ref_name st i
+      let alias st _ (a : Src.alias) : Ast.valtype = Alias (alias_name st a)
     end)
 
 let heaptype = Map.heaptype
@@ -750,6 +758,11 @@ let record_global_valtype ctx (typ : Src.globaltype) name =
   | F64 -> CondTbl.add ctx.global_valtypes ctx.cond_asm name Ast.F64
   | V128 -> CondTbl.add ctx.global_valtypes ctx.cond_asm name Ast.V128
   | Ref _ -> ()
+  (* Recorded as such, so the node that reads it makes no width claim (see
+     [recorded_expectation]). *)
+  | Alias a ->
+      CondTbl.add ctx.global_valtypes ctx.cond_asm name
+        (Alias (alias_name ctx a))
 
 (*** Type lookup and arity ***)
 
@@ -783,6 +796,12 @@ let uniform_claim ctx conds f =
   match conds with
   | [] -> Claim (f ())
   | conds -> (
+      let key (t : Ast.valtype option) =
+        match t with
+        | Some (Alias a) -> `Alias a.desc
+        | Some t -> `Type t
+        | None -> `None
+      in
       let saved = ctx.cond_asm in
       let claims =
         List.map
@@ -792,7 +811,7 @@ let uniform_claim ctx conds f =
           conds
       in
       match claims with
-      | t :: rest when List.for_all (fun t' -> t' = t) rest -> Claim t
+      | t :: rest when List.for_all (fun t' -> key t' = key t) rest -> Claim t
       | _ -> Varies)
 
 let lookup_type (type typ) ctx (kind : typ kind) idx : typ =
@@ -1202,6 +1221,8 @@ let recorded_expectation (ty : Ast.valtype) : Ast.expectation =
   match ty with
   | I32 | I64 | F32 | F64 | V128 -> Recorded ty
   | Ref _ -> Contextual
+  (* An alias may stand for a different type in each configuration. *)
+  | Alias _ -> Contextual
 
 let expect (ty : Ast.valtype) (i : _ Ast.instr) : _ Ast.instr =
   { i with Ast.expected = recorded_expectation ty }
@@ -2222,7 +2243,11 @@ let heaptype_class ctx (t : Ast.heaptype) =
   | Some hier -> Ref_class { hier; eq = hier = `Any && t <> Any }
 
 let valtype_class ctx (t : Ast.valtype) =
-  match t with Ast.Ref { typ; _ } -> heaptype_class ctx typ | _ -> Value_class
+  match t with
+  | Ast.Ref { typ; _ } -> heaptype_class ctx typ
+  (* An alias may stand for a reference in some configuration. *)
+  | Alias _ -> Unknown_class
+  | I32 | I64 | F32 | F64 | V128 -> Value_class
 
 (* The per-result classes of a multi-value signature, in result order. *)
 let result_classes ctx (results : Src.valtype array) =
@@ -4422,6 +4447,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | params -> (
             match params.(Array.length params - 1) with
             | Src.Ref _ -> true
+            (* Whatever it stands for in a configuration, the parameter types
+               the hole there. *)
+            | Src.Alias _ -> true
             | _ -> false)
       in
       (* A backing that provably re-types as a NON-reference (a multi-value
@@ -4461,8 +4489,17 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
          anchored operand (guarded below by [not any_anchor]): casting an operand
          the typer already placed in another hierarchy to [t] would be a static
          error, but a bare hole is polymorphic. *)
+      (* A select typed with an alias keeps its type as an ascription: the
+         type may be numeric in one configuration and a reference in another,
+         so only the alias says which [select] it lowers to. *)
+      let alias_ty =
+        match tys with
+        | Some [ (Src.Alias _ as t) ] -> Some (valtype ctx t)
+        | _ -> None
+      in
       let sel_ty =
         match tys with
+        | Some [ Src.Alias _ ] -> None
         | Some [ t ] -> ( match valtype ctx t with I32 -> None | t -> Some t)
         | Some ts ->
             List.iter (fun t -> ignore (valtype ctx t : Ast.valtype)) ts;
@@ -4528,7 +4565,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
           (* With no width tag ([None]) the untyped select is deliberately
              ADAPTIVE — its arms are — so it is [Contextual], not a gap; a
              tagged one gets the tag recorded by [push_num] itself. *)
-          Stack.push_num width (contextual (with_loc (Select (cond, e1, e2)))))
+          let sel = contextual (with_loc (Select (cond, e1, e2))) in
+          Stack.push_num width
+            (match alias_ty with Some t -> ascribe_to t sel | None -> sel))
   | Throw t ->
       let input, _ = tag_arity ctx t in
       let* args = Stack.grab input in
@@ -5708,6 +5747,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    attributes = [];
                  }))
     | Start _ | Export _ -> None
+    | Type_alias { id; typ } ->
+        Some (Type_alias { name = alias_name ctx id; typ = valtype ctx typ })
     (* A [(@feature "name")] annotation becomes a [#![feature = "name"]] inner
        attribute. *)
     | Feature_annotation name ->
@@ -5907,7 +5948,7 @@ let elaborate_implicit_types ctx fields =
       (* Groups are flattened below, so only their [Import] members reach here. *)
       | Import_group1 _ | Import_group2 _ | Types _ | Import _ | Memory _
       | Table _ | Export _ | Start _ | Data _ | String_global _
-      | Feature_annotation _ | Module_if_annotation _ ->
+      | Feature_annotation _ | Type_alias _ | Module_if_annotation _ ->
           ())
     (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
@@ -6023,6 +6064,8 @@ let register_names ctx export_tbl fields =
             register_type ctx export_tbl Tag id exports typ
         | String_global { id; _ } ->
             Sequence.register ctx.globals export_tbl (Some Global) (Some id) []
+        | Type_alias { id; _ } ->
+            Sequence.register ctx.aliases export_tbl None (Some id) []
         | Module_if_annotation { then_fields; else_fields; cond } ->
             with_cond ctx ~location:field.info cond true (fun () ->
                 pass1 then_fields.desc);
@@ -6059,7 +6102,7 @@ let register_names ctx export_tbl fields =
               else_fields
         | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
         | Table _ | Tag _ | String_global _ | Import_group1 _ | Import_group2 _
-        | Feature_annotation _ ->
+        | Feature_annotation _ | Type_alias _ ->
             ())
       (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
   in
@@ -6263,13 +6306,13 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
       let forbid_numeric_table = forbid_numeric && count_tables fields > 1 in
       let ctx =
         let common_namespace = Namespace.make () in
+        let type_namespace = Namespace.make ~kind:`Type () in
         let cond_diag = Wax_utils.Diagnostic.collector () in
         {
           diagnostics;
-          types =
-            Sequence.make ~forbid_numeric ~diagnostics
-              (Namespace.make ~kind:`Type ())
-              "t";
+          types = Sequence.make ~forbid_numeric ~diagnostics type_namespace "t";
+          aliases =
+            Sequence.make ~forbid_numeric ~diagnostics type_namespace "t";
           struct_fields = CondTbl.make ();
           moved_fields = Hashtbl.create 4;
           globals =

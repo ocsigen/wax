@@ -130,8 +130,8 @@ let rec field_desc (f : location modulefield) =
                      Ast.annotated) -> { b with desc = map_fields b.desc })
               else_fields;
         }
-  | ( Type _ | Module_annotation _ | Import _ | Import_group _ | Global _
-    | Tag _ | Memory _ | Data _ | Table _ | Elem _ ) as f ->
+  | ( Type _ | Type_alias _ | Module_annotation _ | Import _ | Import_group _
+    | Global _ | Tag _ | Memory _ | Data _ | Table _ | Elem _ ) as f ->
       f
 
 let module_ (m : location module_) : location module_ =

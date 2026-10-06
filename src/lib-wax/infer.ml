@@ -71,6 +71,12 @@ type inferred_valtype = {
      [[mut i8]] or [fn(..) -> ..]) rather than the meaningless synthetic name.
      [None] for every other type. *)
   anon_comptype : comptype option;
+  (* The value-type alias the type was declared with, when the value comes
+     straight from a declaration written with one (a local, a parameter, a
+     global, a field, a call result): the type stands for that alias in every
+     configuration, so a declaration inferred from it can name the alias rather
+     than the type it stands for in this one. [None] otherwise. *)
+  alias : ident option;
 }
 
 type inferred_type =
@@ -153,13 +159,14 @@ and collecting = {
    by the caller), so a type embedded in a diagnostic message shares that
    message's theme and layout. The flexible-literal families render as their own
    [Type]-styled words; concrete types delegate to the shared [Output]. *)
-let rec output_inferred_type_styled sp ty =
+let rec output_inferred_type_styled ?(aliases = false) sp ty =
   let open Wax_utils in
   let word s = Styled_printer.print_styled sp Colors.Type s in
   match Cell.get ty with
   (* A block result still being inferred renders as the annotation under test (the
      type a reader, e.g. a mismatched [br]/catch, is checked against), not [any]. *)
-  | Collecting { declared = Some d; _ } -> output_inferred_type_styled sp d
+  | Collecting { declared = Some d; _ } ->
+      output_inferred_type_styled ~aliases sp d
   | Unknown | Error | Collecting _ -> word "any"
   | UnknownRef -> word "&_"
   | Null -> word "null"
@@ -175,13 +182,17 @@ let rec output_inferred_type_styled sp ty =
   | Int8 -> word "i8"
   | Float -> word "float"
   | Valtype { anon_comptype = Some c; _ } -> Output.comptype_styled sp c
+  | Valtype { alias = Some a; _ } when aliases ->
+      Output.valtype_styled sp (Alias a)
   | Valtype ty -> Output.valtype_styled sp ty.typ
 
 (* The plain-string rendering, for the stack/debug printers and the editor's
-   hover string: run the styled renderer with an uncoloured theme. *)
+   hover string: run the styled renderer with an uncoloured theme. A value of an
+   alias's type is named by the alias, which the reader wrote, rather than by
+   the type it stands for in the configuration the typer is in. *)
 let inferred_type_string ty =
   Wax_utils.Printer.run_string (fun p ->
-      output_inferred_type_styled
+      output_inferred_type_styled ~aliases:true
         (Wax_utils.Styled_printer.create ~printer:p
            ~theme:Wax_utils.Colors.no_color
            ~trivia:(Wax_utils.Trivia.empty ())
@@ -201,10 +212,17 @@ let is_unknown_or_error ty =
    is never re-resolved during inference (only floating cells are unified into a
    concrete type), so a base-type cell's value is invariant and one shared cell
    per type is safe — no need to reallocate one on every use. *)
-let i32_valtype = { typ = I32; internal = I32; anon_comptype = None }
-let i64_valtype = { typ = I64; internal = I64; anon_comptype = None }
-let f32_valtype = { typ = F32; internal = F32; anon_comptype = None }
-let f64_valtype = { typ = F64; internal = F64; anon_comptype = None }
+let i32_valtype =
+  { typ = I32; internal = I32; anon_comptype = None; alias = None }
+
+let i64_valtype =
+  { typ = I64; internal = I64; anon_comptype = None; alias = None }
+
+let f32_valtype =
+  { typ = F32; internal = F32; anon_comptype = None; alias = None }
+
+let f64_valtype =
+  { typ = F64; internal = F64; anon_comptype = None; alias = None }
 
 (* Wrap a (fully resolved) value type in a fresh cell. *)
 let valtype_cell v = Cell.make (Valtype v)

@@ -253,6 +253,15 @@ module.exports = grammar({
 
     rec_type: $ => seq('rec', '{', repeat($.type_definition), '}'),
 
+    // type name = value_type ;   (a value-type alias, parser.mly's `type_alias`)
+    type_alias: $ => seq(
+      'type',
+      field('name', $.identifier),
+      '=',
+      field('type', $._value_type),
+      ';',
+    ),
+
     // ---------------------------------------------------------------------
     // Expressions
     // ---------------------------------------------------------------------
@@ -838,6 +847,7 @@ module.exports = grammar({
     _module_field: $ => choice(
       $.rec_type,
       $.type_definition,
+      $.type_alias,
       $.inner_attribute,
       $._attributed_definition,
       $.import_field,

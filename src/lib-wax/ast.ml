@@ -20,6 +20,7 @@ type ident = (string, location) annotated
 
 include Wax_wasm.Ast.Make_types (struct
   type idx = ident
+  type alias = ident
 
   (* Each element carries a source location spanning the whole entry (e.g. a
      struct field [name: type]), so a trailing comment can attach to it even
@@ -387,6 +388,9 @@ type 'info elemmode = EPassive | EActive of ident * 'info instr
 
 type 'info modulefield =
   | Type of rectype
+  (* A value-type alias, [type t = v;]: the name [t] then stands for the value
+     type [v] wherever a value type is expected. *)
+  | Type_alias of { name : ident; typ : valtype }
   | Func of {
       name : ident;
       typ : ident option;

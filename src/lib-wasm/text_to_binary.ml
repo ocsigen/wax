@@ -99,6 +99,13 @@ module Map =
       type ctx = context
 
       let idx ctx i = resolve_idx ctx.types i
+
+      (* Every alias use was expanded up front ([module_]); one left over names
+         no alias. *)
+      let alias _ _ (a : T.alias) =
+        raise
+          (Unresolved_reference (a.info, "Unknown type alias $" ^ a.desc ^ "."))
+
       let params _ f a = Array.map (fun p -> f (snd p.Ast.desc)) a
       let fields _ f a = Array.map (fun e -> f (snd e.Ast.desc)) a
       let members _ f a = Array.map (fun e -> f (snd e.Ast.desc)) a
@@ -538,6 +545,13 @@ let invert_map map =
 let module_ (m : 'info T.module_) : 'info B.module_ =
   Wax_utils.Debug.timed "to-binary" @@ fun () ->
   let module_name, fields = m in
+  (* A value-type alias has no binary form: expand every use to the value type
+     it stands for, dropping the definitions. A use that does not expand is
+     left for the type conversion to report, so that an alias defined under a
+     conditional annotation reports the conditional, in pass 1, instead. *)
+  let fields =
+    Ast_utils.expand_type_aliases ~unbound:(fun a -> T.Alias a) fields
+  in
 
   (* Pass 1: Build Context *)
   let ctx = empty_context in
@@ -625,7 +639,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             ( { ctx with globals = fst (add_name ctx.globals (Some id)) },
               acc_func_types )
         | T.Module_if_annotation _ -> raise (Conditional_in_binary f.Ast.info)
-        | T.Start _ | T.Export _ | T.Feature_annotation _ ->
+        | T.Start _ | T.Export _ | T.Feature_annotation _ | T.Type_alias _ ->
             (ctx, acc_func_types))
       (ctx, func_types_by_idx) fields
   in

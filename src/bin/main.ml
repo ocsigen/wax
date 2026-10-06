@@ -83,23 +83,32 @@ let specialize_wat ?ctx ~color ~text defines ast =
     ast
 
 (* Expand the [@string]/[@char] annotations of a text module into core wasm
-   ([array.new_fixed] / [i32.const]). A leftover conditional annotation has no
-   core-wasm form; report it as a located diagnostic (rather than an uncaught
-   exception) and suggest resolving it. *)
+   ([array.new_fixed] / [i32.const]), and its value-type aliases into the types
+   they stand for. A leftover conditional annotation has no core-wasm form;
+   report it as a located diagnostic (rather than an uncaught exception) and
+   suggest resolving it. *)
 let desugar_wat ~color ~source ast =
   Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme ~source
     (fun d ->
-      try Wax_wasm.Desugar.module_ ast
-      with Wax_wasm.Desugar.Conditional_remains location ->
-        Wax_utils.Diagnostic.report d ~location ~severity:Error
-          ~message:
-            (Wax_utils.Message.text
-               "A conditional annotation cannot be desugared to plain \
-                WebAssembly text.")
-          ~hint:
-            (Wax_utils.Message.text "Resolve the conditionals with -D/--define.")
-          ();
-        Wax_utils.Diagnostic.abort ())
+      try Wax_wasm.Desugar.module_ ast with
+      | Wax_wasm.Desugar.Conditional_remains location ->
+          Wax_utils.Diagnostic.report d ~location ~severity:Error
+            ~message:
+              (Wax_utils.Message.text
+                 "A conditional annotation cannot be desugared to plain \
+                  WebAssembly text.")
+            ~hint:
+              (Wax_utils.Message.text
+                 "Resolve the conditionals with -D/--define.")
+            ();
+          Wax_utils.Diagnostic.abort ()
+      | Wax_wasm.Desugar.Unbound_alias location ->
+          Wax_utils.Diagnostic.report d ~location ~severity:Error
+            ~message:
+              (Wax_utils.Message.text
+                 "This type alias has no definition to expand it to.")
+            ();
+          Wax_utils.Diagnostic.abort ())
 
 type fold_mode = Auto | Fold | Unfold
 

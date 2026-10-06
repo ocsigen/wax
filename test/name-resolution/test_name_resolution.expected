@@ -48,3 +48,12 @@ member @ 2:17-2:21 -> size: fn() -> i32, grow: fn(&?func, i32) -> i32, fill: fn(
 "k"      @ 3:9-3:10  -> 2:5-2:6  [type k = cont ft;]
 member @ 3:20-3:26 -> resume: fn(i32) -> i32, resume_throw: fn(tag(payload)) -> i32, resume_throw_ref: fn(&?exn) -> i32, switch: fn(tag: tag) -> ()
 
+=== type alias ===
+"c"      @ 3:41-3:42 -> 3:7-3:8  [&cell]
+"cell"   @ 3:11-3:15 -> 2:5-2:9  [type cell = { v: mut word };]
+"w"      @ 3:46-3:47 -> 3:31-3:32  [word]
+"word"   @ 2:21-2:25 -> 1:45-1:49, 1:16-1:20
+"word"   @ 3:20-3:24 -> 1:45-1:49, 1:16-1:20
+"word"   @ 3:34-3:38 -> 1:45-1:49, 1:16-1:20
+member @ 3:43-3:44 -> v: mut word
+

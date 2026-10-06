@@ -63,6 +63,9 @@ module Map =
       type ctx = unit
 
       let idx () i = index i
+
+      (* An alias stays one: WAT has value-type aliases too. *)
+      let alias () _ (a : Wax_lang.Ast.alias) : Text.valtype = Alias a
     end)
 
 let heaptype h = Map.heaptype () h
@@ -1299,8 +1302,21 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
       | F32 -> folded loc (Const (F32 s)) []
       | F64 -> folded loc (Const (F64 s)) []
       | _ -> assert false)
+  (* A [?:] ascribed an alias is a [select] of that type, whichever type the
+     alias stands for. *)
+  | Cast ({ desc = Select (cond, then_, else_); _ }, Ascribed (Alias _ as t)) ->
+      let code_then = instruction ret ctx then_ in
+      let code_else = instruction ret ctx else_ in
+      let code_cond = instruction ret ctx cond in
+      folded loc
+        (Select (Some [ valtype t ]))
+        (code_then @ code_else @ code_cond)
   (* A type ascription [(e : t)] is a static assertion: no instruction. *)
   | Cast (expr, Ascribed _) -> instruction ret ctx expr
+  (* A cast to an alias is a cast to the type the typer resolved it to. *)
+  | Cast (expr, Valtype (Alias _)) when expr_opt_valtype i <> None ->
+      instruction ret ctx
+        { i with desc = Cast (expr, Valtype (Option.get (expr_opt_valtype i))) }
   | Cast (expr, cast_ty) when cont_cast_target ctx cast_ty ->
       instruction ret ctx expr
   | Cast (expr, cast_ty) -> (
@@ -1724,7 +1740,7 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
                survives (the freshly-parsed re-parse has none), else i32, so
                the statement still lowers an add/compare of the source's shape
                instead of asserting — as the poisoned-cast fallback does. *)
-            | Some (Ref _) | None -> (
+            | Some (Ref _ | Alias _) | None -> (
                 match a.desc with
                 (* The operand's own printed ascription survives a re-parse
                    where a record cannot ([(_ as i64) + _], the crossed-capture
@@ -2312,7 +2328,8 @@ let reorder_defines (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
   match f.desc with
   | Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _ -> true
   | Import _ | Import_group1 _ | Import_group2 _ | Types _ | Export _ | Start _
-  | Elem _ | Data _ | Feature_annotation _ | Module_if_annotation _ ->
+  | Elem _ | Data _ | Feature_annotation _ | Type_alias _
+  | Module_if_annotation _ ->
       false
 
 let reorder_is_import (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
@@ -2520,7 +2537,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
     | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
     | Data { name; _ } ->
         Option.iter (fun n -> Hashtbl.replace ctx.datas n.Annot.desc ()) name
-    | Tag _ | Conditional _ | Module_annotation _ -> ()
+    | Tag _ | Type_alias _ | Conditional _ | Module_annotation _ -> ()
   in
   walk_fields fields;
   (* Record unconditionally-declared types as reuse targets for synthesized
@@ -2856,6 +2873,8 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                          let idx, s = rt.Annot.desc in
                          Ast.no_loc (Some idx, subtype (resolve_subtype idx s)))
                        rectype)
+              | Type_alias { name; typ } ->
+                  Text.Type_alias { id = name; typ = valtype typ }
               | Global { name; mut; typ; def; attributes } ->
                   let typ =
                     match typ with

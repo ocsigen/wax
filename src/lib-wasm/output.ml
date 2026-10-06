@@ -248,6 +248,14 @@ let reftype { nullable; typ } =
       let r = [ heaptype typ ] in
       list (type_ "ref" :: (if nullable then type_ "null" :: r else r))
 
+(* A value-type alias use, [(@type $id)]. *)
+let type_alias_use a =
+  list
+    [
+      atom ~style:Annotation "@type";
+      id ~style:Annotation ~loc:a.Ast.info a.Ast.desc;
+    ]
+
 let valtype (t : valtype) =
   match t with
   | I32 -> type_ "i32"
@@ -256,6 +264,7 @@ let valtype (t : valtype) =
   | F64 -> type_ "f64"
   | V128 -> type_ "v128"
   | Ref ty -> reftype ty
+  | Alias a -> type_alias_use a
 
 let packedtype t = match t with I8 -> type_ "i8" | I16 -> type_ "i16"
 
@@ -1447,6 +1456,13 @@ let rec modulefield f =
               len = Some (i + 2);
               s = "\"" ^ s ^ "\"";
             };
+        ]
+  | Type_alias { id = i; typ } ->
+      list ~loc
+        [
+          atom ~style:Annotation "@type";
+          id ~style:Annotation ~loc:i.Ast.info i.Ast.desc;
+          valtype typ;
         ]
   | Module_if_annotation { cond; then_fields; else_fields } ->
       let clause head fields =
