@@ -134,16 +134,6 @@ let is_pure_binary_method = function
    cast ([as &T]) may trap and is conservatively treated as non-total (the
    never-trapping [extern.convert_any] is spelled the same way but not
    distinguished here). Mirrors the Wasm validator's [classify]. *)
-(* [t] with an alias use replaced by the value type it stands for, as written
-   (see [Typing.unalias]); an unknown or poisoned alias is kept. *)
-let rec unalias ctx (t : valtype) =
-  match t with
-  | Alias a -> (
-      match Hashtbl.find_opt ctx.type_context.aliases.tbl a.desc with
-      | Some { alias_typ; poisoned = false; _ } -> unalias ctx alias_typ
-      | Some { poisoned = true; _ } | None -> t)
-  | I32 | I64 | F32 | F64 | V128 | Ref _ -> t
-
 let rec cast_is_total ctx = function
   | Ast.Signedtype { typ; strict; _ } -> (
       match typ with `F32 | `F64 -> true | `I32 | `I64 -> not strict)
@@ -151,7 +141,7 @@ let rec cast_is_total ctx = function
   (* An alias, as the type it stands for; one that stands for none (an error,
      already reported) is taken to be a reference type, which may trap. *)
   | Valtype (Alias _ as t) -> (
-      match unalias ctx t with
+      match unalias ctx.type_context t with
       | Alias _ -> false
       | t -> cast_is_total ctx (Valtype t))
   | Valtype (V128 | Ref _) | Functype _ -> false
