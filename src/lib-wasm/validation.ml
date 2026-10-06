@@ -1401,6 +1401,9 @@ type type_context = {
   record_references : bool;
   (* The configuration's value-type aliases ([(@type $id t)]), by name. *)
   aliases : (string, alias) Hashtbl.t;
+  (* Every use of an alias, with where it is made from, for the
+     [unused-field] analysis, as [type_references] for types. *)
+  mutable alias_references : (origin * string) list;
 }
 
 (* A value-type alias definition. Its value type is resolved at each use, as if
@@ -1607,6 +1610,8 @@ let alias_definition d ctx (a : Ast.Text.name) =
   | Some { poisoned = true; _ } -> None
   | Some al ->
       al.used <- true;
+      if ctx.record_references && ctx.origin <> Ignored then
+        ctx.alias_references <- (ctx.origin, a.desc) :: ctx.alias_references;
       Some al
   | None ->
       Error.unbound_alias d ~location:a.info a.desc
@@ -6434,6 +6439,32 @@ let unused_fields ctx =
          (Hashtbl.fold
             (fun i (def_idx, _) acc -> (i, def_idx) :: acc)
             ctx.types.type_defs []));
+    (* An alias is used where it is expanded: from something that can run, or
+       by a live type's definition. *)
+    let live = function
+      | Root -> true
+      | From_function f -> Hashtbl.mem live_functions f
+      | From_type t -> Hashtbl.mem live_types t
+      | Ignored -> false
+    in
+    let live_aliases = Hashtbl.create 8 in
+    List.iter
+      (fun (origin, name) ->
+        if live origin then Hashtbl.replace live_aliases name ())
+      ctx.types.alias_references;
+    Hashtbl.fold
+      (fun name al l ->
+        if
+          al.poisoned
+          || Hashtbl.mem live_aliases name
+          || intentional_name (Some name)
+        then l
+        else (name, al.alias_loc) :: l)
+      ctx.types.aliases []
+    |> List.sort (fun (_, (l : Ast.location)) (_, (l' : Ast.location)) ->
+        compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
+    |> List.iter (fun (name, location) ->
+        Error.unused_field ctx.diagnostics ~location "type alias" (Some name));
     (* A mutable global never assigned could be immutable. A global that is not
        used at all is already reported as [unused-field], so do not pile a second
        diagnostic on the same declaration. *)
@@ -6641,6 +6672,7 @@ let validate_configuration ?(warn_unused = true)
       canonical_type_references = [];
       record_references = warn_unused;
       aliases = Hashtbl.create 8;
+      alias_references = [];
     }
   in
   source_aliases := type_context.aliases;

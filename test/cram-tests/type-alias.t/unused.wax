@@ -1,0 +1,11 @@
+type unused = i64;
+type _quiet = i64;
+type in_dead = i64;
+type in_dead_type = i64;
+type via_chain = i32;
+type chain = via_chain;
+type in_live = i64;
+type dead_s = { f: in_dead_type };
+fn dead(x: in_dead) {}
+#[export = "live"]
+fn live(x: in_live, y: chain) {}

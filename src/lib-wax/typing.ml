@@ -13019,9 +13019,31 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
                   Error.unused_field ctx.diagnostics ~location:name.info "type"
                     name)
               rectype
-        | Data _ | Elem _ | Type_alias _ | Module_annotation _ | Conditional _
-          ->
-            ())
+        (* An alias is used where it is expanded: from something that can run,
+           or by a live type's definition. *)
+        | Type_alias { name; _ } ->
+            let live = function
+              | Root -> true
+              | From_function f -> Hashtbl.mem live_functions f
+              | From_type t -> Hashtbl.mem live_types t
+              | Ignored -> false
+            in
+            (* An alias in error (poisoned, or not registered) was reported. *)
+            let valid =
+              match Tbl.find_no_mark ctx.type_context.aliases name with
+              | Some al -> not al.poisoned
+              | None -> false
+            in
+            if
+              valid
+              && (not (intentional name))
+              && not
+                   (List.exists live
+                      (Tbl.referrers ctx.type_context.aliases name.desc))
+            then
+              Error.unused_field ctx.diagnostics ~location:name.info
+                "type alias" name
+        | Data _ | Elem _ | Module_annotation _ | Conditional _ -> ())
       fields
   end;
   ( ctx.type_context.types,

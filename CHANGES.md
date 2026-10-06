@@ -17,7 +17,8 @@ grammar keeps none, and both are versioned independently of the toolchain.
   so code that only passes such values around no longer has to be written
   once per configuration. A value read from a declaration written with an
   alias has the alias's type, so a local whose type is inferred from it is
-  declared with the alias, and editors show the alias. Aliases convert
+  declared with the alias, and editors show the alias. The `unused-field`
+  warning reports an alias nothing reachable uses. Aliases convert
   between Wax and WAT, conditional ones included. Compiling to the binary
   format, or `--desugar`, replaces them by the types they stand for.
 - A conditional-compilation variable must now be named by a valid Wax

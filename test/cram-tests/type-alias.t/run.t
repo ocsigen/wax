@@ -357,6 +357,90 @@ Errors in alias definitions are reported once, at the definition.
   11 │ 
   [128]
 
+An alias nothing reachable uses is reported, as an unused type is: one used
+only by a function that never runs, or by a type nothing uses, is unused too.
+The analysis is the same on both sides.
+
+  $ wax check -W unused-field=warning unused.wax
+  Warning [unused-field]: The type alias 'unused' is never used.
+   ──➤  unused.wax:1:6
+  1 │ type unused = i64;
+    ·      ^^^^^^
+  2 │ type _quiet = i64;
+  3 │ type in_dead = i64;
+  Warning [unused-field]: The type alias 'in_dead' is never used.
+   ──➤  unused.wax:3:6
+  1 │ type unused = i64;
+  2 │ type _quiet = i64;
+  3 │ type in_dead = i64;
+    ·      ^^^^^^^
+  4 │ type in_dead_type = i64;
+  5 │ type via_chain = i32;
+  Warning [unused-field]: The type alias 'in_dead_type' is never used.
+   ──➤  unused.wax:4:6
+  2 │ type _quiet = i64;
+  3 │ type in_dead = i64;
+  4 │ type in_dead_type = i64;
+    ·      ^^^^^^^^^^^^
+  5 │ type via_chain = i32;
+  6 │ type chain = via_chain;
+  Warning [unused-field]: The type 'dead_s' is never used.
+    ──➤  unused.wax:8:6
+   6 │ type chain = via_chain;
+   7 │ type in_live = i64;
+   8 │ type dead_s = { f: in_dead_type };
+     ·      ^^^^^^
+   9 │ fn dead(x: in_dead) {}
+  10 │ #[export = "live"]
+  Warning [unused-field]: The function 'dead' is never used.
+    ──➤  unused.wax:9:4
+   7 │ type in_live = i64;
+   8 │ type dead_s = { f: in_dead_type };
+   9 │ fn dead(x: in_dead) {}
+     ·    ^^^^
+  10 │ #[export = "live"]
+  11 │ fn live(x: in_live, y: chain) {}
+  $ wax -f wat unused.wax -o unused.wat
+  $ wax check -W unused-field=warning unused.wat
+  Warning [unused-field]: The function '$dead' is never used.
+    ──➤  unused.wat:9:7
+   7 │ (@type $in_live i64)
+   8 │ (type $dead_s (struct (field $f (@type $in_dead_type))))
+   9 │ (func $dead (param $x (@type $in_dead)))
+     ·       ^^^^^
+  10 │ (func $live (export "live")
+  11 │   (param $x (@type $in_live)) (param $y (@type $chain))
+  Warning [unused-field]: The type '$dead_s' is never used.
+    ──➤  unused.wat:8:1
+   6 │ (@type $chain (@type $via_chain))
+   7 │ (@type $in_live i64)
+   8 │ (type $dead_s (struct (field $f (@type $in_dead_type))))
+     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 │ (func $dead (param $x (@type $in_dead)))
+  10 │ (func $live (export "live")
+  Warning [unused-field]: The type alias '$unused' is never used.
+   ──➤  unused.wat:1:8
+  1 │ (@type $unused i64)
+    ·        ^^^^^^^
+  2 │ (@type $_quiet i64)
+  3 │ (@type $in_dead i64)
+  Warning [unused-field]: The type alias '$in_dead' is never used.
+   ──➤  unused.wat:3:8
+  1 │ (@type $unused i64)
+  2 │ (@type $_quiet i64)
+  3 │ (@type $in_dead i64)
+    ·        ^^^^^^^^
+  4 │ (@type $in_dead_type i64)
+  5 │ (@type $via_chain i32)
+  Warning [unused-field]: The type alias '$in_dead_type' is never used.
+   ──➤  unused.wat:4:8
+  2 │ (@type $_quiet i64)
+  3 │ (@type $in_dead i64)
+  4 │ (@type $in_dead_type i64)
+    ·        ^^^^^^^^^^^^^
+  5 │ (@type $via_chain i32)
+  6 │ (@type $chain (@type $via_chain))
+
 An alias is expanded where it is used: one used in a type defined before the
 type it names is an error there.
 
