@@ -509,6 +509,38 @@ alias, and has the right type in every configuration.
     (return (call $caml_copy_nativeint (local.get $b)))
   )
 
+Two values of the same alias's type join at that type, in a conditional
+expression or at a block's exits. A select of an alias's type lowers to a
+select of that type, and a cast to an alias of a value of that type is the
+identity, which lowers to nothing.
+
+  $ wax -f wat joins.wax
+  (@if $p
+    (@then (@type $n i64) (@type $r externref))
+    (@else (@type $n i32) (@type $r anyref))
+  )
+  (import "m" "get" (func $get (result (@type $n))))
+  (import "m" "getr" (func $getr (result (@type $r))))
+  (func $f (export "f")
+    (param $c i32) (param $a (@type $n)) (param $b (@type $n))
+    (param $x (@type $r))
+    (local $s (@type $n)) (local $t (@type $n)) (local $w (@type $n))
+    (local $v (@type $r)) (local $z (@type $r))
+    (local.set $s
+      (select (result (@type $n)) (local.get $a) (local.get $b) (local.get $c)))
+    (local.set $t
+      (if (result (@type $n)) (local.get $c)
+        (then (local.get $a))
+        (else (local.get $b))))
+    (local.set $w
+      (block $l (result (@type $n))
+        (if (local.get $c) (then (br $l (local.get $a))))
+        (local.get $b)))
+    (local.set $v (local.get $x))
+    (local.set $z
+      (select (result (@type $r)) (local.get $x) (call $getr) (local.get $c)))
+  )
+
 Code whose lowering depends on the type an alias stands for, such as an
 arithmetic operation, only lowers in a resolved configuration.
 
