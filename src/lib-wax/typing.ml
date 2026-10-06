@@ -2744,12 +2744,12 @@ let conditional_alias ctx (a : ident) =
 
 (* A select of a conditional alias's type is ascribed it, so that it lowers to a
    [select] of that type: a reference in one configuration may be a number in
-   another. Not when converting from Wasm, which writes the ascription itself
-   (see [From_wasm]). *)
+   another. Not when converting from Wasm, [--faithful] or not, which writes
+   the ascription itself (see [From_wasm]). *)
 let ascribe_conditional_select ctx (sel : _ instr) ty =
   match Cell.get ty with
   | Valtype { alias = Some a; _ }
-    when (not ctx.simplify) && conditional_alias ctx a ->
+    when (not (ctx.simplify || ctx.faithful)) && conditional_alias ctx a ->
       { sel with desc = Cast (sel, Ascribed (Alias a)) }
   | _ -> sel
 
