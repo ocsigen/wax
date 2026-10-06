@@ -72,7 +72,17 @@
 ; ---------------------------------------------------------------------------
 ; Types
 ; ---------------------------------------------------------------------------
-(primitive_type (identifier) @type.builtin)
+(primitive_type (identifier) @type)
+
+; A value, storage or conversion type name is a builtin; any other name in a
+; type position is a value-type alias, a user type.
+((primitive_type (identifier) @type.builtin)
+  (#any-of? @type.builtin
+    "i32" "i64" "f32" "f64" "v128" "i8" "i16"
+    "i32_s" "i32_u" "i32_s_strict" "i32_u_strict"
+    "i64_s" "i64_u" "i64_s_strict" "i64_u_strict"
+    "f32_s" "f32_u" "f64_s" "f64_u"))
+
 (type_identifier) @type
 
 ; Abstract heap types are builtins, not user types.
