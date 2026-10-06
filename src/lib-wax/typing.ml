@@ -1821,7 +1821,28 @@ let check_alias_definitions d (ctx : type_context) type_names =
   List.sort by_position !cyclic
   |> List.iter (fun al ->
       Error.cyclic_alias d ~location:al.alias_name.info al.alias_name;
-      Tbl.override ctx.aliases al.alias_name { al with poisoned = true })
+      Tbl.override ctx.aliases al.alias_name { al with poisoned = true });
+  (* An alias defined as a conditional one is conditional too, wherever it is
+     defined: it stands for whatever that one does. *)
+  let rec reaches_conditional seen (ty : valtype) =
+    match ty with
+    | Alias a -> (
+        (not (List.mem a.desc seen))
+        &&
+        match Tbl.find_no_mark ctx.aliases a with
+        | Some al ->
+            al.conditional || reaches_conditional (a.desc :: seen) al.alias_typ
+        | None -> false)
+    | I32 | I64 | F32 | F64 | V128 | Ref _ -> false
+  in
+  let promoted = ref [] in
+  Tbl.iter ctx.aliases (fun name al ->
+      if (not al.conditional) && reaches_conditional [ name ] al.alias_typ then
+        promoted := al :: !promoted);
+  List.iter
+    (fun al ->
+      Tbl.override ctx.aliases al.alias_name { al with conditional = true })
+    !promoted
 
 (* Check the alias definitions no use resolved, in source order, reporting
    their errors at the definition. *)
@@ -2696,6 +2717,17 @@ let conditional_alias ctx (a : ident) =
   match Tbl.find_no_mark ctx.type_context.aliases a with
   | Some al -> al.conditional
   | None -> false
+
+(* A select of a conditional alias's type is ascribed it, so that it lowers to a
+   [select] of that type: a reference in one configuration may be a number in
+   another. Not when converting from Wasm, which writes the ascription itself
+   (see [From_wasm]). *)
+let ascribe_conditional_select ctx (sel : _ instr) ty =
+  match Cell.get ty with
+  | Valtype { alias = Some a; _ }
+    when (not ctx.simplify) && conditional_alias ctx a ->
+      { sel with desc = Cast (sel, Ascribed (Alias a)) }
+  | _ -> sel
 
 let internalize_valtype ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
@@ -5270,16 +5302,7 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
             None
       in
       let* sel = return_expression i (Select (i1', i2', i3')) ty in
-      (* A select of an alias's type is ascribed it, so that it lowers to a
-         [select] of that type: a reference in one configuration may be a number
-         in another. Not when converting from Wasm, which writes the ascription
-         itself (see [From_wasm]). *)
-      return
-        (match Cell.get ty with
-        | Valtype { alias = Some a; _ }
-          when (not ctx.simplify) && conditional_alias ctx a ->
-            { sel with desc = Cast (sel, Ascribed (Alias a)) }
-        | _ -> sel)
+      return (ascribe_conditional_select ctx sel ty)
 
 and descriptor_target ctx ~location ~nullable d =
   (* The custom-descriptors casts/branches write only the descriptor operand [d];
@@ -9985,7 +10008,8 @@ and check_instruction ctx expected (i : location instr) =
         | None -> expected
       in
       let* node = return_expression i (Select (i1', i2', i3')) ty in
-      return (node, join_reinfer ctx reinf2 reinf3)
+      return
+        (ascribe_conditional_select ctx node ty, join_reinfer ctx reinf2 reinf3)
   | _ ->
       let* i' = instruction ctx i in
       (* Snapshot the value's own type BEFORE [check_type] mutates the cell: this

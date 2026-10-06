@@ -1,0 +1,17 @@
+#[if(p)]
+{
+    type n = i32;
+}
+#[else]
+{
+    type n = &?eq;
+}
+type m = n;
+#[export]
+fn sel(a: m, b: m, c: i32) -> m {
+    return c ? a : b;
+}
+#[export]
+fn sel2(a: n, b: n, c: i32) -> n {
+    return c ? a : b;
+}
