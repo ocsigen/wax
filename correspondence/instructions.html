@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e05eb11b.js";
+            window.path_to_searchindex_js = "../searchindex-6ef34b37.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-15e75985.js"></script>
@@ -568,6 +568,7 @@ that can be dropped.</p>
 </tbody>
 </table>
 </div>
+<p>The struct type of <code>val.field</code> is the type of <code>val</code>, where <code>field</code> is looked up by name. A subtype may name an inherited field differently from its supertype, so converting a <code>struct.get</code> or <code>struct.set</code> whose operand has such a subtype ascribes it the instruction’s type, <code>(val : &amp;?t).field</code>, which keeps the field the instruction names.</p>
 <p>A packed (<code>i8</code>/<code>i16</code>) struct field or array element read sign- or zero-extends to <code>i32</code> via the <code>as i32_s</code>/<code>as i32_u</code> cast, as shown above (<code>struct.get_s</code>/<code>_u</code>, <code>array.get_s</code>/<code>_u</code>). Widening straight to <code>i64</code> (<code>val.field as i64_s</code> or <code>arr[idx] as i64_u</code>) emits the packed read followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</p>
 <h2 id="simd-vector-instructions"><a class="header" href="#simd-vector-instructions">SIMD (Vector) Instructions</a></h2>
 <p><code>v128</code> vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: <code>i32x4.add</code> becomes <code>add_i32x4</code>, <code>f32x4.sqrt</code> becomes <code>sqrt_f32x4</code>, and the whole-vector <code>v128.and</code> becomes <code>and_v128</code>. Signed/unsigned variants keep the <code>_s</code>/<code>_u</code> (<code>min_s_i8x16</code>, <code>extract_lane_u_i8x16</code>). The constant lane immediates of the value-receiver operations (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands; the lane index of a memory lane access is instead the labelled <code>lane:</code> argument (see the loads and stores below).</p>
