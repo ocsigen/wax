@@ -227,6 +227,8 @@ alias stands for a number in one configuration and a reference in the other.
           };
       (c?l:y : n);
   }
+  $ wax --faithful -f wax select.wat | grep 'c?l'
+      (c?l:y : n);
   $ wax -f wat select.wax
   (@if $p (@then (@type $n i64)) (@else (@type $n (ref null $s))))
   (type $s (struct (field $f (mut (@type $n)))))
