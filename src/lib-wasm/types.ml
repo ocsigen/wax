@@ -19,6 +19,7 @@ end
 module Internal = struct
   module X = struct
     type idx = Id.t
+    type alias = Ast.no_alias
     type 'a annotated_array = 'a array
     type 'a opt_annotated_array = 'a array
   end
@@ -42,6 +43,7 @@ type ref_index = Def of Id.t | Rec of int
 module Normalized = struct
   module X = struct
     type idx = ref_index
+    type alias = Ast.no_alias
     type 'a annotated_array = 'a array
     type 'a opt_annotated_array = 'a array
   end
@@ -145,6 +147,7 @@ module N_to_I =
       type ctx = ref_index -> Id.t
 
       let idx f i = f i
+      let alias _ _ (a : N.alias) = match a with _ -> .
       let params _ f a = Array.map f a
       let fields _ f a = Array.map f a
       let members _ f a = Array.map f a

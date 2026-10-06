@@ -141,7 +141,7 @@
     1x Expecting '..', '}', or a structure type field.
        <_>This '{' opens the enclosing construct.
     2x Expecting ':', ';', or a function type.
-    2x Expecting ':', or '='.
+    3x Expecting ':', or '='.
    15x Expecting ':'.
     1x Expecting ';', '=', or '@'.
     2x Expecting ';', '=', or memory limits.
@@ -172,7 +172,7 @@
     4x Expecting ';', or '{'.
     2x Expecting ';', or a function type.
     2x Expecting ';', or memory limits.
-    8x Expecting ';'.
+   13x Expecting ';'.
     2x Expecting '=', ']', or an attribute guard.
        <_>This '[' opens the enclosing construct.
     1x Expecting '=', or '@'.
@@ -203,9 +203,10 @@
    13x Expecting ']'.
        <_>This '[' opens the enclosing construct.
     4x Expecting 'catch'.
-    1x Expecting 'describes', 'descriptor', 'open', or a composite type.
-    1x Expecting 'describes', 'descriptor', or a composite type.
-    1x Expecting 'descriptor', or a composite type.
+    1x Expecting 'describes', 'descriptor', 'open', a composite type, or a value type.
+    2x Expecting 'describes', 'descriptor', 'open', or a composite type.
+    2x Expecting 'describes', 'descriptor', or a composite type.
+    2x Expecting 'descriptor', or a composite type.
     1x Expecting 'descriptor', or an identifier.
     2x Expecting 'else', 'if', 'import', or an identifier.
     1x Expecting 'if'.
@@ -227,7 +228,7 @@
     1x Expecting a block type.
     8x Expecting a block, or a block type.
    25x Expecting a block.
-    2x Expecting a composite type.
+    4x Expecting a composite type.
     4x Expecting a condition expression.
     1x Expecting a condition literal.
     3x Expecting a condition.
@@ -255,7 +256,7 @@
     2x Expecting a string.
     3x Expecting a tag name.
     1x Expecting a then-branch.
-    9x Expecting a type name.
+   13x Expecting a type name.
     7x Expecting a value type.
     2x Expecting an address type.
     3x Expecting an attribute expression.

@@ -82,7 +82,7 @@ let encode_scalar (ty : Ast.Text.storagetype) s =
   | Value I64 -> le_bytes 8 (int64 s)
   | Value F32 -> le_bytes 4 (Int64.of_int32 (float32_bits s))
   | Value F64 -> le_bytes 8 (Int64.bits_of_float (float64 s))
-  | Value (V128 | Ref _) -> assert false
+  | Value (V128 | Ref _ | Alias _) -> assert false
 
 let encode_datavalelem : Ast.Text.datavalelem -> string = function
   | Str s -> s

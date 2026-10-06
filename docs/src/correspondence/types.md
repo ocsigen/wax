@@ -19,6 +19,18 @@ Wax types map directly to WebAssembly types.
 Exact references (`&!<t>` / `&?!<t>`, gated on `-X custom-descriptors`) are
 explained in the [language guide](../language.md#exact-references).
 
+## Type Aliases
+
+A value-type alias names a value type. WAT writes it with annotations: `(@type $t v)` defines it, and `(@type $t)` stands for it wherever a value type is expected.
+
+| Wasm | Wax |
+|------|-----|
+| `(@type $word i64)` | `type word = i64;` |
+| `(param $x (@type $word))` | `x: word` |
+| `(field $f (mut (@type $word)))` | `f: mut word` |
+
+An alias is defined at the module level, possibly under a conditional annotation, so that it stands for a different type in each configuration. Both forms convert to each other, conditional aliases included. A `select` typed with an alias, `(select (result (@type $t)) …)`, becomes the ascribed conditional expression `(c ? a : b : t)`. The binary format has no aliases: compiling to it, or desugaring with `--desugar`, replaces each one by the type it stands for. See the [language guide](../language.md#type-aliases).
+
 ## Storage Types
 
 Storage types are used in fields of structs and arrays to define packed data.

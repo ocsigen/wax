@@ -717,6 +717,7 @@ let rec token_rec ctx lexbuf =
   | "(@then" -> THEN_ANNOT
   | "(@else" -> ELSE_ANNOT
   | "(@feature" -> FEATURE_ANNOT
+  | "(@type" -> TYPE_ANNOT
   (* Branch-hinting proposal: [(@metadata.code.branch_hint "\00"|"\01")]. *)
   | "(@metadata.code.branch_hint" -> BRANCH_HINT_ANNOT
   (* Compilation-hints proposal, the instruction-level sections. *)
@@ -740,6 +741,7 @@ let rec token_rec ctx lexbuf =
       else if s = "then" then THEN_ANNOT
       else if s = "else" then ELSE_ANNOT
       else if s = "feature" then FEATURE_ANNOT
+      else if s = "type" then TYPE_ANNOT
       else if s = "metadata.code.branch_hint" then BRANCH_HINT_ANNOT
       else if s = "metadata.code.instr_freq" then INSTR_FREQ_ANNOT
       else if s = "metadata.code.call_targets" then CALL_TARGETS_ANNOT

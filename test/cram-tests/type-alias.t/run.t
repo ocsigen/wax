@@ -1,0 +1,450 @@
+A value-type alias names a value type: [(@type $t v)] defines it in WAT and
+[(@type $t)] uses it wherever a value type is expected; Wax writes
+[type t = v;] and a bare [t]. Defined under a conditional annotation, an alias
+stands for a different type in each configuration, so code that only moves
+such values around is written once.
+
+Each configuration of the module is checked.
+
+  $ wax check nativeint.wat
+
+Resolving the conditional keeps the alias in text output, and expands it in
+the binary format.
+
+  $ wax -D portable_int=true -f wat nativeint.wat
+  (@type $nativeint i64)
+  (import "nativeint" "Nativeint_val"
+    (func $Nativeint_val (param (ref eq)) (result (@type $nativeint)))
+  )
+  (import "nativeint" "caml_copy_nativeint"
+    (func $caml_copy_nativeint (param (@type $nativeint)) (result (ref eq)))
+  )
+  (type $digits (array (mut (@type $nativeint))))
+  (func $id (export "id") (param $v (ref eq)) (result (ref eq))
+    (local $n (@type $nativeint))
+    (local.set $n (call $Nativeint_val (local.get $v)))
+    (call $caml_copy_nativeint (local.get $n))
+  )
+  (func $digit (export "digit") (param $d (ref $digits)) (result (ref eq))
+    (call $caml_copy_nativeint (array.get $digits (local.get $d) (i32.const 0)))
+  )
+  $ wax -D portable_int=false -f wasm nativeint.wat -o nativeint.wasm
+  $ wax -f wat nativeint.wasm
+  (type $digits (array (mut i32)))
+  (type (func (param (ref eq)) (result i32)))
+  (type (func (param i32) (result (ref eq))))
+  (type (func (param (ref eq)) (result (ref eq))))
+  (type (func (param (ref $digits)) (result (ref eq))))
+  (import "nativeint" "Nativeint_val"
+    (func $Nativeint_val (param (ref eq)) (result i32))
+  )
+  (import "nativeint" "caml_copy_nativeint"
+    (func $caml_copy_nativeint (param i32) (result (ref eq)))
+  )
+  (func $id (param $v (ref eq)) (result (ref eq))
+    (local $n i32)
+    local.get $v
+    call $Nativeint_val
+    local.set $n
+    local.get $n
+    call $caml_copy_nativeint
+  )
+  (func $digit (param $d (ref $digits)) (result (ref eq))
+    local.get $d
+    i32.const 0
+    array.get $digits
+    call $caml_copy_nativeint
+  )
+  (export "id" (func $id))
+  (export "digit" (func $digit))
+
+Desugaring expands the aliases into plain WebAssembly text.
+
+  $ wax -D portable_int=true --desugar -f wat nativeint.wat
+  (import "nativeint" "Nativeint_val"
+    (func $Nativeint_val (param (ref eq)) (result i64))
+  )
+  (import "nativeint" "caml_copy_nativeint"
+    (func $caml_copy_nativeint (param i64) (result (ref eq)))
+  )
+  (type $digits (array (mut i64)))
+  (func $id (export "id") (param $v (ref eq)) (result (ref eq))
+    (local $n i64)
+    (local.set $n (call $Nativeint_val (local.get $v)))
+    (call $caml_copy_nativeint (local.get $n))
+  )
+  (func $digit (export "digit") (param $d (ref $digits)) (result (ref eq))
+    (call $caml_copy_nativeint (array.get $digits (local.get $d) (i32.const 0)))
+  )
+
+A conditional alias has no single expansion, so desugaring needs -D.
+
+  $ wax --desugar -f wat nativeint.wat
+  Error: A conditional annotation cannot be desugared to plain WebAssembly text.
+   ──➤  nativeint.wat:2:3
+  1 │ (module
+  2 │   (@if $portable_int
+    · ╭─^
+  3 │    (@then (@type $nativeint i64))
+    · │
+  4 │    (@else (@type $nativeint i32)))
+    · ╰────────────────────────────────^
+  5 │   (import "nativeint" "Nativeint_val"
+  6 │     (func $Nativeint_val (param (ref eq)) (result (@type $nativeint))))
+  Hint: Resolve the conditionals with -D/--define.
+  [128]
+
+WAT and Wax round-trip with their aliases, conditional ones included: Wax
+declares an alias-typed local with its alias, keeping it valid in every
+configuration.
+
+  $ wax -f wax nativeint.wat | tee nativeint.wax
+  #[if(portable_int)]
+  {
+      type nativeint = i64;
+  }
+  #[else]
+  {
+      type nativeint = i32;
+  }
+  import "nativeint" {
+      fn Nativeint_val(&eq) -> nativeint;
+      fn caml_copy_nativeint(nativeint) -> &eq;
+  }
+  type digits = [mut nativeint];
+  #[export]
+  fn id(v: &eq) -> &eq {
+      let n: nativeint = Nativeint_val(v);
+      caml_copy_nativeint(n);
+  }
+  #[export]
+  fn digit(d: &digits) -> &eq {
+      caml_copy_nativeint(d[0]);
+  }
+  $ wax -f wat nativeint.wax
+  (@if $portable_int
+    (@then (@type $nativeint i64))
+    (@else (@type $nativeint i32))
+  )
+  (import "nativeint" "Nativeint_val"
+    (func $Nativeint_val (param (ref eq)) (result (@type $nativeint)))
+  )
+  (import "nativeint" "caml_copy_nativeint"
+    (func $caml_copy_nativeint (param (@type $nativeint)) (result (ref eq)))
+  )
+  (type $digits (array (mut (@type $nativeint))))
+  (func $id (export "id") (param $v (ref eq)) (result (ref eq))
+    (local $n (@type $nativeint))
+    (local.set $n (call $Nativeint_val (local.get $v)))
+    (call $caml_copy_nativeint (local.get $n))
+  )
+  (func $digit (export "digit") (param $d (ref $digits)) (result (ref eq))
+    (call $caml_copy_nativeint (array.get $digits (local.get $d) (i32.const 0)))
+  )
+
+An alias may stand for reference types of different hierarchies, here an
+[externref] or a reference to a byte array, and be used as a struct field or a
+parameter, the code specific to one representation going under the
+conditional.
+
+  $ wax check strings.wat
+  $ wax -f wax strings.wat | tee strings.wax
+  type bytes = [mut i8];
+  #[if(use_js_string)]
+  {
+      type str = &?extern;
+  }
+  #[else]
+  {
+      type str = &bytes;
+  }
+  type custom_operations = { id: str, len: i32 };
+  #[if(use_js_string)]
+  {
+      import "js"
+      #[import = "length"]
+      fn str_length(&?extern) -> i32;
+  }
+  #[else]
+  {
+      fn str_length(s: &bytes) -> i32 {
+          s.length();
+      }
+  }
+  #[export]
+  fn ops_length(o: &custom_operations) -> i32 {
+      str_length(o.id);
+  }
+  fn nat(x: str) -> i32 {
+      #[if(use_js_string)]
+      {
+          return !x;
+      }
+      #[else]
+      {
+          return x.length();
+      }
+  }
+  $ wax -f wat strings.wax -o strings-rt.wat
+  $ wax check strings-rt.wat
+  $ wax -D use_js_string=true -f wasm strings.wat -o strings.wasm
+  $ wax -f wat strings.wasm
+  (type $bytes (array (mut i8)))
+  (type $custom_operations (struct (field $id externref) (field $len i32)))
+  (type (func (param externref) (result i32)))
+  (type (func (param (ref $custom_operations)) (result i32)))
+  (import "js" "length" (func $str_length (param externref) (result i32)))
+  (func $ops_length (param $o (ref $custom_operations)) (result i32)
+    local.get $o
+    struct.get $custom_operations $id
+    call $str_length
+  )
+  (func $nat (param $x externref) (result i32)
+    local.get $x
+    ref.is_null
+    return
+  )
+  (export "ops_length" (func $ops_length))
+
+A select typed with an alias keeps that type as an ascription in Wax: the
+alias stands for a number in one configuration and a reference in the other.
+
+  $ wax -f wax select.wat | tee select.wax
+  #[if(p)]
+  {
+      type n = i64;
+  }
+  #[else]
+  {
+      type n = &?s;
+  }
+  type s = { f: mut n };
+  #[export]
+  fn f(x: n, y: n, c: i32) -> n {
+      let l: n =
+          do n {
+              x;
+          };
+      (c?l:y : n);
+  }
+  $ wax -f wat select.wax
+  (@if $p (@then (@type $n i64)) (@else (@type $n (ref null $s))))
+  (type $s (struct (field $f (mut (@type $n)))))
+  (func $f (export "f")
+    (param $x (@type $n)) (param $y (@type $n)) (param $c i32)
+    (result (@type $n))
+    (local $l (@type $n))
+    (local.set $l (block (result (@type $n)) (local.get $x)))
+    (select (result (@type $n)) (local.get $l) (local.get $y) (local.get $c))
+  )
+
+Errors in alias definitions are reported once, at the definition.
+
+  $ wax check errors.wat
+  Error: Unknown type: index '$missing' is not bound.
+    ──➤  errors.wat:8:20
+   6 │   (@type $c1 (@type $c2))
+   7 │   (@type $c2 (@type $c1))
+   8 │   (@type $bad (ref $missing))
+     ·                    ^^^^^^^^
+   9 │   (func (param (@type $nope)) (param (@type $c1)))
+  10 │   (func (param (@type $bad)) (param (@type $bad))))
+  Error: The type alias '$c1' is defined in terms of itself.
+   ──➤  errors.wat:6:10
+  4 │   (@type $a i64)
+  5 │   (@type $t i32)
+  6 │   (@type $c1 (@type $c2))
+    ·          ^^^
+  7 │   (@type $c2 (@type $c1))
+  8 │   (@type $bad (ref $missing))
+  Error: The type alias '$c2' is defined in terms of itself.
+   ──➤  errors.wat:7:10
+  5 │   (@type $t i32)
+  6 │   (@type $c1 (@type $c2))
+  7 │   (@type $c2 (@type $c1))
+    ·          ^^^
+  8 │   (@type $bad (ref $missing))
+  9 │   (func (param (@type $nope)) (param (@type $c1)))
+  Error: The type alias '$a' is already defined.
+   ──➤  errors.wat:4:10
+  1 │ (module
+  2 │   (type $t (struct))
+  3 │   (@type $a i32)
+    ·          ^^ previously defined here
+  4 │   (@type $a i64)
+    ·          ^^
+  5 │   (@type $t i32)
+  6 │   (@type $c1 (@type $c2))
+  Error: The type alias '$t' has the name of a type definition.
+   ──➤  errors.wat:5:10
+  1 │ (module
+  2 │   (type $t (struct))
+    ·         ^^ type defined here
+  3 │   (@type $a i32)
+  4 │   (@type $a i64)
+  5 │   (@type $t i32)
+    ·          ^^
+  6 │   (@type $c1 (@type $c2))
+  7 │   (@type $c2 (@type $c1))
+  Error: Unknown type alias '$nope'.
+    ──➤  errors.wat:9:23
+   7 │   (@type $c2 (@type $c1))
+   8 │   (@type $bad (ref $missing))
+   9 │   (func (param (@type $nope)) (param (@type $c1)))
+     ·                       ^^^^^
+  10 │   (func (param (@type $bad)) (param (@type $bad))))
+  11 │ 
+  [128]
+  $ wax check errors.wax
+  Error: A type alias named 'a' is already bound.
+   ──➤  errors.wax:3:6
+  1 │ type t = {};
+  2 │ type a = i32;
+    ·      ^ previously bound here
+  3 │ type a = i64;
+    ·      ^
+  4 │ type t = i32;
+  5 │ type c1 = c2;
+  Error: A type named 't' is already bound.
+   ──➤  errors.wax:4:6
+  1 │ type t = {};
+    ·      ^ previously bound here
+  2 │ type a = i32;
+  3 │ type a = i64;
+  4 │ type t = i32;
+    ·      ^
+  5 │ type c1 = c2;
+  6 │ type c2 = c1;
+  Error: 'i32' is a reserved built-in type name.
+    ──➤  errors.wax:8:6
+   6 │ type c2 = c1;
+   7 │ type bad = &missing;
+   8 │ type i32 = i64;
+     ·      ^^^
+   9 │ fn f(x: nope, y: c1, z: t) {}
+  10 │ fn g(x: bad, y: bad) {}
+  Error: The type 'missing' is not bound.
+   ──➤  errors.wax:7:13
+  5 │ type c1 = c2;
+  6 │ type c2 = c1;
+  7 │ type bad = &missing;
+    ·             ^^^^^^^
+  8 │ type i32 = i64;
+  9 │ fn f(x: nope, y: c1, z: t) {}
+  Error: The type alias 'c1' is defined in terms of itself.
+   ──➤  errors.wax:5:6
+  3 │ type a = i64;
+  4 │ type t = i32;
+  5 │ type c1 = c2;
+    ·      ^^
+  6 │ type c2 = c1;
+  7 │ type bad = &missing;
+  Error: The type alias 'c2' is defined in terms of itself.
+   ──➤  errors.wax:6:6
+  4 │ type t = i32;
+  5 │ type c1 = c2;
+  6 │ type c2 = c1;
+    ·      ^^
+  7 │ type bad = &missing;
+  8 │ type i32 = i64;
+  Error: 'nope' is not a value type or a type alias.
+    ──➤  errors.wax:9:9
+   7 │ type bad = &missing;
+   8 │ type i32 = i64;
+   9 │ fn f(x: nope, y: c1, z: t) {}
+     ·         ^^^^
+  10 │ fn g(x: bad, y: bad) {}
+  11 │ 
+  [128]
+
+An alias is expanded where it is used: one used in a type defined before the
+type it names is an error there.
+
+  $ wax check forward.wat
+  Error: Unknown type: index '$t' is not bound.
+   ──➤  forward.wat:3:34
+  1 │ (module
+  2 │   (@type $r (ref null $t))
+    ·                       ^^ in the type alias definition
+  3 │   (type $s (struct (field (@type $r))))
+    ·                                  ^^
+  4 │   (type $t (struct))
+  5 │   (func (export "f") (param (@type $r))))
+  [128]
+  $ wax check forward.wax
+  Error: The type 't' is not bound.
+   ──➤  forward.wax:2:15
+  1 │ type r = &?t;
+    ·            ^ in the type alias definition
+  2 │ type s = { f: r };
+    ·               ^
+  3 │ type t = {};
+  4 │ #[export = "f"]
+  Error: 't' is not a value type or a type alias.
+   ──➤  forward.wax:5:15
+  3 │ type t = {};
+  4 │ #[export = "f"]
+  5 │ fn f(x: r, y: t) {}
+    ·               ^
+  6 │ 
+  Hint: A reference to type 't' is written '&t'.
+  [128]
+
+A value read from a declaration written with an alias has the alias's type,
+so a local, a global or a block result inferred from it is declared with the
+alias, and has the right type in every configuration.
+
+  $ wax -f wat inferred.wax
+  (@if $portable_int
+    (@then (@type $nativeint i64))
+    (@else (@type $nativeint i32))
+  )
+  (import "nativeint" "Nativeint_val"
+    (func $Nativeint_val (param $v (ref eq)) (result (@type $nativeint)))
+  )
+  (import "nativeint" "caml_copy_nativeint"
+    (func $caml_copy_nativeint (param $n (@type $nativeint)) (result (ref eq)))
+  )
+  (import "nativeint" "zero" (global $zero (@type $nativeint)))
+  (type $cell (struct (field $v (mut (@type $nativeint)))))
+  (type $digits (array (mut (@type $nativeint))))
+  (global $z (@type $nativeint) (global.get $zero))
+  (func $copy (export "copy") (param $v (ref eq)) (result (ref eq))
+    (local $n (@type $nativeint))
+    (local.set $n (call $Nativeint_val (local.get $v)))
+    (return (call $caml_copy_nativeint (local.get $n)))
+  )
+  (func $field (export "field")
+    (param $c (ref $cell)) (param $d (ref $digits)) (result (ref eq))
+    (local $x (@type $nativeint)) (local $y (@type $nativeint))
+    (local $b (@type $nativeint))
+    (local.set $x (struct.get $cell $v (local.get $c)))
+    (local.set $y (array.get $digits (local.get $d) (i32.const 0)))
+    (local.set $b (block (result (@type $nativeint)) (local.get $x)))
+    (struct.set $cell $v (local.get $c) (local.get $y))
+    (return (call $caml_copy_nativeint (local.get $b)))
+  )
+
+Code whose lowering depends on the type an alias stands for, such as an
+arithmetic operation, only lowers in a resolved configuration.
+
+  $ wax check shared.wax
+  $ wax -f wat shared.wax
+  Error:
+    Type mismatch: this produces a value of type '(@type $nativeint)', but type
+    'i64' is expected.
+   ──➤  shared.wax:4:12
+  2 │ #[export = "succ"]
+  3 │ fn succ(x: nativeint) -> nativeint {
+  4 │     return x + 1;
+    ·            ^
+  5 │ }
+  6 │ 
+  Hint: reachable when not $portable_int
+  [128]
+  $ wax -D portable_int=false -f wat shared.wax
+  (@type $nativeint i32)
+  (func $succ (export "succ")
+    (param $x (@type $nativeint)) (result (@type $nativeint))
+    (return (i32.add (local.get $x) (i32.const 1)))
+  )

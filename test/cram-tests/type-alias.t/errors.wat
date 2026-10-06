@@ -1,0 +1,10 @@
+(module
+  (type $t (struct))
+  (@type $a i32)
+  (@type $a i64)
+  (@type $t i32)
+  (@type $c1 (@type $c2))
+  (@type $c2 (@type $c1))
+  (@type $bad (ref $missing))
+  (func (param (@type $nope)) (param (@type $c1)))
+  (func (param (@type $bad)) (param (@type $bad))))

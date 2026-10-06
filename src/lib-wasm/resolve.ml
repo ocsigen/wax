@@ -127,6 +127,10 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
   let tags = make_space Tag in
   let elems = make_space Elem in
   let datas = make_space Data in
+  (* Value-type aliases have no index space of their own in the module, but a
+     name space distinct from the types': [(@type $t)] and [(ref $t)] never
+     designate the same definition. *)
+  let aliases = make_space Type in
   (* Per struct type: its field-name space, keyed by the type's index and id. *)
   let fields_by_index : (int, space) Hashtbl.t = Hashtbl.create 16 in
   let fields_by_name : (string, space) Hashtbl.t = Hashtbl.create 16 in
@@ -144,7 +148,10 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
   in
   let use_valtype ?loc (v : Text.valtype) =
     Option.iter (fun l -> record ~type_slot:Valtype l (fun () -> [])) loc;
-    match v with Text.Ref r -> use_heaptype r.Text.typ | _ -> ()
+    match v with
+    | Text.Ref r -> use_heaptype r.Text.typ
+    | Text.Alias a -> use aliases { desc = Text.Id a.desc; info = a.info }
+    | Text.I32 | Text.I64 | Text.F32 | Text.F64 | Text.V128 -> ()
   in
   let use_typeuse ((idx_opt, ft_opt) : Text.typeuse) =
     Option.iter (use types) idx_opt;
@@ -440,6 +447,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
         | Text.Module_if_annotation { then_fields; else_fields; _ } ->
             declare then_fields.desc;
             Option.iter (fun b -> declare b.desc) else_fields
+        | Text.Type_alias { id; _ } -> ignore (register aliases (Some id) None)
         | Text.Export _ | Text.Start _ | Text.Feature_annotation _ -> ())
       fields
   in
@@ -538,6 +546,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
             in
             use sp index
         | Text.Start idx -> use funcs idx
+        | Text.Type_alias { typ; _ } -> use_valtype typ
         | Text.Feature_annotation _ -> ()
         | Text.Module_if_annotation { then_fields; else_fields; _ } ->
             resolve then_fields.desc;

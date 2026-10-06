@@ -82,6 +82,7 @@
     "any" "eq" "i31" "struct" "array" "none"))
 
 (type_definition name: (identifier) @type)
+(type_alias name: (identifier) @type)
 
 ; ---------------------------------------------------------------------------
 ; Functions, parameters, fields, labels

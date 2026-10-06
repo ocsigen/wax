@@ -38,6 +38,10 @@ type inferred_valtype = {
           array, an inline function-type cast target — the referenced composite
           type, which diagnostics render inline (e.g. [[mut i8]]) instead of the
           meaningless synthetic [<..>] name kept in [typ]. [None] otherwise. *)
+  alias : Ast.ident option;
+      (** The value-type alias the type was declared with, when the value comes
+          straight from such a declaration (see [infer.ml]). [None] otherwise.
+      *)
 }
 
 type inferred_type =
@@ -127,15 +131,18 @@ and collecting = {
 }
 
 val output_inferred_type_styled :
-  Wax_utils.Styled_printer.t -> inferred_type Cell.t -> unit
+  ?aliases:bool -> Wax_utils.Styled_printer.t -> inferred_type Cell.t -> unit
 (** Render an inferred type into a styled printer, so it shares a diagnostic
     message's colour theme and width (an unresolved one prints as [any]). This
-    is what the typer's [Message] [typ] combinator is built on. *)
+    is what the typer's [Message] [typ] combinator is built on. With [aliases]
+    (default [false]), a type declared with a value-type alias is named by the
+    alias rather than by the type it stands for; a diagnostic, reported for one
+    configuration, names the type itself. *)
 
 val inferred_type_string : inferred_type Cell.t -> string
 (** Render an inferred type as plain (uncoloured) text — for the editor's hover
-    string and the stack/debug printers. Diagnostics use
-    {!output_inferred_type_styled} instead. *)
+    string and the stack/debug printers — naming a type declared with an alias
+    by the alias. Diagnostics use {!output_inferred_type_styled} instead. *)
 
 val is_unknown_or_error : inferred_type Cell.t -> bool
 (** Whether a cell resolves to [Unknown], [Error] or [UnknownRef] — the common

@@ -124,16 +124,26 @@ module Tbl : sig
     used : (string, origin) Hashtbl.t;
     recorded : (string * origin, unit) Hashtbl.t;
     current : origin ref;
-    hover : 'a -> hover_target option;
+    hover : string -> 'a -> hover_target option;
   }
 end
 
 type types = (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t
 (** The module's type table: each name to its interned index and subtype. *)
 
+type alias = {
+  alias_name : Ast.ident;
+  alias_typ : Ast.valtype;
+  poisoned : bool;
+  mutable used : bool;
+}
+(** A value-type alias definition, [type t = v;] (see [typing_env.ml]). *)
+
 type type_context = {
   internal_types : Wax_wasm.Types.t;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
+  aliases : alias Tbl.t;
+  written : (string, Ast.subtype) Hashtbl.t;
   features : Wax_utils.Feature.set;
   mutable subtyping_info_cache : Wax_wasm.Types.subtyping_info option;
 }

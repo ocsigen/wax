@@ -345,6 +345,8 @@ server](#language-server)).
       existing `(array (mut i8))` type when the module has one and otherwise pins
       a synthesised one. A module-level `(@string …)` global becomes an ordinary
       global.
+    - Replaces each value-type alias use `(@type $t)` by the value type it
+      stands for, and drops the `(@type $t …)` definitions.
     - Synthesises the declarative element segment (`(elem declare func …)`) that
       Wax's lenient reader lets a module omit for a function used by `ref.func`
       only inside a body, so the output passes strict/spec reference validation.
