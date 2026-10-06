@@ -1741,7 +1741,8 @@ let add_type d (ctx : type_context) ty =
    types, which may use them, so a name a type of [type_names] (by name, to its
    definition) also bears is reported here, at the alias, which is then not
    registered. *)
-let add_alias d (ctx : type_context) type_names (name : ident) typ =
+let add_alias d (ctx : type_context) type_names ~conditional (name : ident) typ
+    =
   if List.mem name.desc reserved_type_names then
     Error.reserved_type_name d ~location:name.info name;
   match Hashtbl.find_opt type_names name.desc with
@@ -1749,7 +1750,13 @@ let add_alias d (ctx : type_context) type_names (name : ident) typ =
       Error.name_already_bound d ~location:name.info ~prev_loc "type" name
   | None ->
       Tbl.add d ctx.aliases name
-        { alias_name = name; alias_typ = typ; poisoned = false; used = false }
+        {
+          alias_name = name;
+          alias_typ = typ;
+          conditional;
+          poisoned = false;
+          used = false;
+        }
 
 (* Report each alias whose definition names no type of [type_names], or leads
    back to itself: it is in error wherever it is used, so it is reported once,
@@ -2646,6 +2653,14 @@ let declared_alias cell =
   match Cell.get cell with
   | Valtype { alias = Some a; _ } -> Some (Alias a)
   | _ -> None
+
+(* Whether the alias [a] is defined under a conditional annotation: it may then
+   stand for a reference in one configuration and a number in another, and a
+   construct of its type lowers to a form that holds in every configuration. *)
+let conditional_alias ctx (a : ident) =
+  match Tbl.find_no_mark ctx.type_context.aliases a with
+  | Some al -> al.conditional
+  | None -> false
 
 let internalize_valtype ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
@@ -5226,7 +5241,8 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
          itself (see [From_wasm]). *)
       return
         (match Cell.get ty with
-        | Valtype { alias = Some a; _ } when not ctx.simplify ->
+        | Valtype { alias = Some a; _ }
+          when (not ctx.simplify) && conditional_alias ctx a ->
             { sel with desc = Cast (sel, Ascribed (Alias a)) }
         | _ -> sel)
 
@@ -7090,7 +7106,8 @@ and type_cast ctx i =
         let typ =
           match (typ, Cell.get (expression_type ctx i')) with
           | Valtype (Alias a), Valtype { alias = Some a'; _ }
-            when a.desc = a'.desc && not ctx.simplify ->
+            when a.desc = a'.desc && (not ctx.simplify)
+                 && conditional_alias ctx a ->
               Ascribed (Alias a)
           | _ -> typ
         in
@@ -12527,13 +12544,23 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
             rectype
       | _ -> ())
     fields;
-  walk_fields
-    (fun (field : (_ modulefield, _) annotated) ->
-      match field.desc with
-      | Type_alias { name; typ } ->
-          add_alias diagnostics type_context type_names name typ
-      | _ -> ())
-    fields;
+  let rec walk_aliases ~conditional fields =
+    List.iter
+      (fun (field : (_ modulefield, _) annotated) ->
+        match field.desc with
+        | Type_alias { name; typ } ->
+            add_alias diagnostics type_context type_names ~conditional name typ
+        | Conditional { then_fields; else_fields; _ } ->
+            if select field.info then
+              walk_aliases ~conditional:true then_fields.desc
+            else
+              Option.iter
+                (fun e -> walk_aliases ~conditional:true e.Annot.desc)
+                else_fields
+        | _ -> ())
+      fields
+  in
+  walk_aliases ~conditional:false fields;
   check_alias_definitions diagnostics type_context type_names;
   walk_fields
     (fun (field : (_ modulefield, _) annotated) ->

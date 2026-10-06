@@ -134,6 +134,7 @@ type types = (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t
 type alias = {
   alias_name : Ast.ident;
   alias_typ : Ast.valtype;
+  conditional : bool;
   poisoned : bool;
   mutable used : bool;
 }

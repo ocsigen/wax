@@ -189,10 +189,13 @@ type types = (Wax_wasm.Types.ref_index * subtype) Tbl.t
    written there, and an error that resolution meets is reported at the use. A
    [poisoned] alias, whose definition is in error (reported there: it is cyclic
    or names no type), stands for no value type. One that is never [used] is
-   checked at the end of type checking. *)
+   checked at the end of type checking. A [conditional] one, defined under a
+   conditional annotation, may stand for another type in another
+   configuration; any other is mere notation. *)
 type alias = {
   alias_name : Ast.ident;
   alias_typ : Ast.valtype;
+  conditional : bool;
   poisoned : bool;
   mutable used : bool;
 }
