@@ -1,0 +1,16 @@
+#[if(p)]
+{
+    type word = i64;
+}
+#[else]
+{
+    type word = i32;
+}
+#[export]
+fn c1(x: &func) -> &func {
+    return x as &fn() -> word;
+}
+#[export]
+fn c2(x: &func) -> &func {
+    return x as &fn() -> i64;
+}

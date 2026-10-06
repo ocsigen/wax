@@ -4530,6 +4530,11 @@ let anon_function_type ctx (sign : functype) =
         Buffer.add_char buf '&';
         if nullable then Buffer.add_char buf '?';
         ht typ
+    (* A conditional alias names a type of its own, which holds in every
+       configuration: [fn() -> word] is not [fn() -> i64], though [word] may be
+       [i64] in the configuration typed. Any other alias is mere notation. *)
+    | Alias a when conditional_alias ctx a ->
+        Buffer.add_string buf ("@" ^ a.desc)
     | Alias a -> (
         match unalias ctx.type_context t with
         (* An unknown alias, already reported: the type is never built. *)
