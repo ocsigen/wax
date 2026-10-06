@@ -204,13 +204,13 @@ type type_context = {
   internal_types : Wax_wasm.Types.t;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
   aliases : alias Tbl.t;
+      (* The value-type aliases, in the types' namespace: a name is a type or an
+         alias, not both. *)
   written : (string, subtype) Hashtbl.t;
-  (* Each type definition as written, aliases included: [types] holds them
+      (* Each type definition as written, aliases included: [types] holds them
          expanded, for the code that takes them apart, and this for the values
          read through them to record the alias they were declared with (see
-         [Infer.inferred_valtype]). *)
-  (* The value-type aliases, in the types' namespace: a name is a type or an
-         alias, not both. *)
+         [Infer.inferred_valtype]), and for the lowering. *)
   features : Wax_utils.Feature.set;
       (* The enabled optional features / proposals, and which are used. *)
   mutable subtyping_info_cache : Wax_wasm.Types.subtyping_info option;
