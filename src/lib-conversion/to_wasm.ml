@@ -29,6 +29,9 @@ type ctx = {
      synthesized type (e.g. [<string>]) can reuse an existing declared one
      (e.g. [bytes = [mut i8]]) instead of being materialized afresh. *)
   reuse_types : (subtype, string) Hashtbl.t;
+  (* The value-type aliases defined outside any conditional annotation, by name:
+     mere notation, expanded in a [reuse_types] key (see [reuse_key]). *)
+  plain_aliases : (string, valtype) Hashtbl.t;
   types : Wax_lang.Typing.types;
   diagnostics : Wax_utils.Diagnostic.context;
 }
@@ -562,6 +565,49 @@ let fresh_trycatch_labels ret ~avoid n =
   let arm_names, used = arms (avoid @ ret.labels) 0 in
   (arm_names, fresh used "join")
 
+(* The key a type is reused by: its definition as written, with each alias
+   defined outside any conditional annotation replaced by the type it stands
+   for, and each one defined under a conditional kept, by name alone (not its
+   location). Two definitions with the same key are the same type in every
+   configuration; one that is the same type only in the configuration typed
+   (an alias standing for [i64] there, compared with [i64]) is not reused. *)
+let reuse_key ctx (st : subtype) =
+  let rec valtype (t : valtype) : valtype =
+    match t with
+    | Alias a -> (
+        match Hashtbl.find_opt ctx.plain_aliases a.desc with
+        | Some def -> valtype def
+        | None -> Alias (Ast.no_loc a.desc))
+    | I32 | I64 | F32 | F64 | V128 | Ref _ -> t
+  in
+  let field (f : fieldtype) =
+    match f.typ with
+    | Value v -> { f with typ = Value (valtype v) }
+    | Packed _ -> f
+  in
+  let typ : comptype =
+    match st.typ with
+    | Func { params; results } ->
+        Func
+          {
+            params =
+              Array.map
+                (fun (p : (_ * valtype, _) Ast.Annot.annotated) ->
+                  { p with desc = (fst p.desc, valtype (snd p.desc)) })
+                params;
+            results = Array.map valtype results;
+          }
+    | Struct fields ->
+        Struct
+          (Array.map
+             (fun (f : (_ * fieldtype, _) Ast.Annot.annotated) ->
+               { f with desc = (fst f.desc, field (snd f.desc)) })
+             fields)
+    | Array f -> Array (field f)
+    | Cont _ -> st.typ
+  in
+  { st with typ }
+
 (* The per-module [type_remap] (see [index]). A reference to an internal,
    synthesized type (its name starts with ['<']) is rewritten to a structurally
    equal declared type if one is in scope, so a redundant type is not emitted —
@@ -580,7 +626,7 @@ let make_type_remap ctx : Text.name -> Text.name =
     match Wax_lang.Typing.get_type_definition ctx.diagnostics ctx.types nm with
     | None -> nm
     | Some subtype -> (
-        match Hashtbl.find_opt ctx.reuse_types subtype with
+        match Hashtbl.find_opt ctx.reuse_types (reuse_key ctx subtype) with
         | Some existing -> { nm with desc = existing }
         | None ->
             if not (Hashtbl.mem ctx.extra_types nm.desc) then
@@ -2464,10 +2510,18 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
       referenced_functions = Hashtbl.create 16;
       extra_types = Hashtbl.create 16;
       reuse_types = Hashtbl.create 16;
+      plain_aliases = Hashtbl.create 8;
       types;
       diagnostics;
     }
   in
+  List.iter
+    (fun (field : (_ modulefield, _) Ast.Annot.annotated) ->
+      match field.desc with
+      | Type_alias { name; typ } ->
+          Hashtbl.replace ctx.plain_aliases name.desc typ
+      | _ -> ())
+    fields;
   (* A [..] splice keeps its sentinel in the module AST; the full fields live in
      the (expanded) type table. Resolve the expanded subtype for a spliced struct
      so lowering sees the inherited fields; every other type is already complete
@@ -2553,18 +2607,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
               Array.fold_left
                 (fun acc rt ->
                   let idx, subtype = rt.Annot.desc in
-                  (* Keyed as the typer stores it, with its aliases expanded:
-                     that is how [make_type_remap] looks a synthesized type up,
-                     and a declared type written with an alias must still be
-                     found. *)
-                  let subtype =
-                    match
-                      Wax_lang.Typing.get_type_definition ctx.diagnostics
-                        ctx.types idx
-                    with
-                    | Some s -> s
-                    | None -> resolve_subtype idx subtype
-                  in
+                  let subtype = reuse_key ctx (resolve_subtype idx subtype) in
                   if idx.desc <> "" && idx.desc.[0] <> '<' then
                     (subtype, idx.desc) :: acc
                   else acc)

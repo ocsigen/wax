@@ -1603,7 +1603,12 @@ let expand_splices d (ctx : type_context) ty =
                       | Wax_wasm.Types.Rec j ->
                           if j < i then Some (member_type expanded.(j))
                           else None
-                      | Def _ -> Some parent
+                      (* As written, aliases included: the inherited fields
+                         are written here as the parent writes them. *)
+                      | Def _ ->
+                          Some
+                            (Option.value ~default:parent
+                               (Hashtbl.find_opt ctx.written sup.desc))
                     in
                     match parent with
                     | Some { typ = Struct pf; _ } -> Some pf
@@ -1831,6 +1836,18 @@ let check_unused_aliases d (ctx : type_context) =
     !unused
   |> List.iter (fun al ->
       ignore (valtype d ctx al.alias_typ : Internal.valtype option))
+
+(* The type table handed to the lowering: each definition as written, aliases
+   included. The typer reads them with their aliases expanded ([add_type]), to
+   take them apart; the lowering emits them, and must not bake in what an alias
+   stands for in the configuration it was typed in. *)
+let lowering_types (ctx : type_context) : type_table =
+  let tbl = Hashtbl.copy ctx.types.tbl in
+  Hashtbl.filter_map_inplace
+    (fun name (r, st) ->
+      Some (r, Option.value ~default:st (Hashtbl.find_opt ctx.written name)))
+    tbl;
+  { ctx.types with tbl }
 
 (*** The module context ***)
 
@@ -13121,7 +13138,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
         | Data _ | Elem _ | Module_annotation _ | Conditional _ -> ())
       fields
   end;
-  ( ctx.type_context.types,
+  ( lowering_types ctx.type_context,
     (* The cell-annotated tree ([inferred_module_annotation]); [f] resolves it to
        storage types for the deferred Wasm/WAT conversion, while the editor reads
        the cells directly. A validation-only pass ([~build:false]) runs the

@@ -1,0 +1,17 @@
+#[if(p)]
+{
+    type n = i64;
+}
+#[else]
+{
+    type n = i32;
+}
+type t = fn() -> n;
+#[export]
+fn c(x: &func) -> &func {
+    return x as &fn() -> i64;
+}
+#[export]
+fn h(x: &t) -> &t {
+    return x;
+}
