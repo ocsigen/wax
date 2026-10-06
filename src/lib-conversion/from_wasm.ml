@@ -438,6 +438,10 @@ type ctx = {
   struct_fields : (Sequence.t * string list) CondTbl.t;
       (* Per branch, like [type_defs]: a struct type declared in both arms of
          an [(@if …)] may have different fields in each. *)
+  moved_fields : (string * string, unit) Hashtbl.t;
+      (* Each (struct type, field name) whose field a subtype names differently,
+         in any branch: Wax looks a field up by name in the receiver's type, so
+         reading it through a subtype would find another field, or none. *)
   globals : Sequence.t;
   functions : Sequence.t;
   memories : Sequence.t;
@@ -796,6 +800,32 @@ let struct_fields ctx type_name =
   | exception Not_found ->
       conversion_error ctx ~location:type_name.Ast.info
         (Wax_utils.Message.text "This type should be a struct type.")
+
+(* Record in [ctx.moved_fields] each field of an ancestor (from [supertype] up)
+   that a struct subtype whose fields are named [names] names differently. *)
+let record_moved_fields ctx supertype (names : string array) =
+  let rec ancestors sup =
+    match sup with
+    | None -> ()
+    | Some sup -> (
+        match Sequence.get ctx.types sup with
+        | exception (Unresolved_reference _ | Numeric_ref_in_conditional _) ->
+            ()
+        | { Ast.desc = parent; _ } -> (
+            match CondTbl.find ctx.struct_fields ctx.cond_asm parent with
+            | exception Not_found -> ()
+            | _, parent_names ->
+                List.iteri
+                  (fun i n ->
+                    if i >= Array.length names || names.(i) <> n then
+                      Hashtbl.replace ctx.moved_fields (parent, n) ())
+                  parent_names;
+                ancestors
+                  (match CondTbl.find ctx.type_defs ctx.cond_asm parent with
+                  | (st : Src.subtype) -> st.supertype
+                  | exception Not_found -> None)))
+  in
+  ancestors supertype
 
 (* Decompilation ergonomics: when a reconstructed struct's leading fields exactly
    match (name and type) its supertype's full field list, replace that prefix
@@ -2991,6 +3021,20 @@ let pin_receiver ctx type_name ~siblings (recv : _ Ast.instr) =
       | Some recv' -> return recv'
       | None -> return (pin recv))
 
+(* As [pin_receiver], for the receiver of a field access: a field some subtype
+   names differently (see [ctx.moved_fields]) is looked up in the access's own
+   type only if the receiver has it, so the receiver is ascribed that type. A
+   [ref.cast] pin would do, but the simplification drops an up-cast, and then
+   the field is looked up in the receiver's own type: another field, or none.
+   The ascription states the type without an instruction, as the source has
+   none. A hole is pinned as usual: it has no type of its own to look in. *)
+let pin_field_receiver ctx type_name (name : Ast.ident) ~siblings recv =
+  match recv.Ast.desc with
+  | Ast.Hole -> pin_receiver ctx type_name ~siblings recv
+  | _ when Hashtbl.mem ctx.moved_fields (type_name.Ast.desc, name.desc) ->
+      return (ascribe_to (Ref { nullable = true; typ = Type type_name }) recv)
+  | _ -> pin_receiver ctx type_name ~siblings recv
+
 (* Pin the reference HIERARCHY of an operand that leaves it open: a hole is
    polymorphic, and [!e] ([ref.as_non_null]) only forwards its operand's type. The
    pin is pushed down to the hole ITSELF rather than wrapped around the [!] —
@@ -3611,7 +3655,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let type_name = idx ctx `Type t in
       let name = Sequence.get (fst (struct_fields ctx type_name)) f in
       let* arg = Stack.pop in
-      let* arg = pin_receiver ctx type_name ~siblings:[] arg in
+      let* arg = pin_field_receiver ctx type_name name ~siblings:[] arg in
       let e = with_loc (StructGet (arg, name)) in
       Stack.push 1
         (match s with
@@ -3629,7 +3673,7 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let name = Sequence.get (fst (struct_fields ctx type_name)) f in
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
-      let* e1 = pin_receiver ctx type_name ~siblings:[ e2 ] e1 in
+      let* e1 = pin_field_receiver ctx type_name name ~siblings:[ e2 ] e1 in
       Stack.push 0 (with_loc (StructSet (e1, name, e2)))
   | ArrayNew t ->
       let* len = Stack.pop in
@@ -5870,6 +5914,7 @@ let register_names ctx export_tbl fields =
                             (get_annot t) [])
                         l
                     in
+                    record_moved_fields ctx ty.supertype fields;
                     CondTbl.add ctx.struct_fields ctx.cond_asm name
                       (seq, Array.to_list fields))
               rectype
@@ -6147,6 +6192,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
               (Namespace.make ~kind:`Type ())
               "t";
           struct_fields = CondTbl.make ();
+          moved_fields = Hashtbl.create 4;
           globals =
             Sequence.make ~forbid_numeric ~diagnostics common_namespace "g";
           functions =

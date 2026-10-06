@@ -372,6 +372,8 @@ that can be dropped.
 | `array.set $t` | `arr[idx] = val` |
 | `array.len` | `arr.length()` |
 
+The struct type of `val.field` is the type of `val`, where `field` is looked up by name. A subtype may name an inherited field differently from its supertype, so converting a `struct.get` or `struct.set` whose operand has such a subtype ascribes it the instruction's type, `(val : &?t).field`, which keeps the field the instruction names.
+
 A packed (`i8`/`i16`) struct field or array element read sign- or zero-extends to `i32` via the `as i32_s`/`as i32_u` cast, as shown above (`struct.get_s`/`_u`, `array.get_s`/`_u`). Widening straight to `i64` (`val.field as i64_s` or `arr[idx] as i64_u`) emits the packed read followed by `i64.extend_i32_s`/`_u`.
 
 ## SIMD (Vector) Instructions

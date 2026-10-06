@@ -10,6 +10,11 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Fixes
 
+- Converting WAT or Wasm to Wax no longer changes which field a `struct.get`
+  or `struct.set` reads or writes when the value's type is a subtype that
+  names the field differently (or names another field the same): the
+  receiver is ascribed the instruction's type, `(x : &?s1).f`, so the field
+  is looked up there.
 - Converting between WAT and Wax no longer fails with "This reference resolves
   to nothing" when a struct type is declared in both branches of an `(@if …)`
   (or `#[if]`) with different fields. Each branch now uses its own field names.
