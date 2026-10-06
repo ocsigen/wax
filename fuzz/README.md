@@ -64,6 +64,7 @@ fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast l
 fuzz/wax-lower-fuzz.sh           # Wax-only lowering: `become <intrinsic>` == `return <intrinsic>`, `x op= e` == `x = x op e` (byte-identical wasm)
 fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness); GEN=N for generated conditions
 fuzz/cond-fromwasm-fuzz.sh       # from_wasm (wat->wax) of conditional modules: an entity referenced only inside (@if) must not be dropped
+fuzz/alias-fuzz.sh [count]       # alias the value types wax seeds declare (plain, and conditional): the module must not change
 
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
@@ -121,7 +122,7 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `bottom-fuzz.sh`, `null-mutate.sh`, `ref-width.sh`, `adaptive-width.sh`,
 `atomic-width.sh`, `pin-reach.sh`, `op-width.sh`, `backing-scan.sh`,
 `recover-shapes.sh`, `width-record.sh`,
-`block-exits.sh`, `subtype-lattice.sh` and `wax-lower-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+`block-exits.sh`, `subtype-lattice.sh`, `wax-lower-fuzz.sh` and `alias-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 **`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
@@ -334,6 +335,25 @@ intrinsic method dispatch as `.clz()`, so their type-specific logic lives in
 lowering/validation, not the checker. What remains cold in `typing.ml` is
 `resume`/`cont_bind` (their handler-block typing is awkward to generate) and the
 rarer reference forms — the genuine tail of the returns curve.
+
+## Value-type aliases (`alias-fuzz.sh`)
+
+No corpus contains a value-type alias (the seeds are decompiled from Wasm, which
+has none), so `alias-fuzz.sh` makes them: the `fuzz_alias` tool rewrites a wax
+seed, replacing some of the value types its declarations write (signatures,
+locals, globals, fields, imports; never a cast target) by aliases of them. That
+changes nothing about the module, so the binary must be the seed's
+(`ALIAS_DIFF`) and still compile (`ALIAS_REJECT`). Then again with the alias
+definitions placed, identically, in both branches of an `#[if(fz_cond)]`: each
+`-D` configuration must compile to the seed's binary (`COND_DIFF`); unresolved,
+the module must convert to WAT that validates and specializes to the seed's
+binary (`COND_REJECT`), and back to Wax that still compiles (`COND_ROUNDTRIP`).
+
+"The seed's binary" allows two harmless differences (see `same_module`): a select
+of a conditional alias's type is a typed `select` where the seed's is untyped
+(the alias might be a reference in another configuration), and resolving
+conditionals may rebuild the declarative element segment differently. The
+calibration plant, lowering every alias as `i32`, is caught on most seeds.
 
 ## Conditional compilation
 
