@@ -22,8 +22,9 @@
 # unreachable-fuzz.sh, FAULT_LOCALITY_COUNT drives fault-locality.sh, and
 # CONST_CONTEXT_COUNT drives const-context.sh, BOTTOM_COUNT drives bottom-fuzz.sh
 # (its random tail; the core is exhaustive), and NULL_MUTATE_COUNT drives
-# null-mutate.sh (module count; PER mutations each), and MUTATE_VALIDATE_COUNT
-# drives mutate-validate.sh (the hand-written-Wax soundness oracle).
+# null-mutate.sh (module count; PER mutations each), MUTATE_VALIDATE_COUNT
+# drives mutate-validate.sh (the hand-written-Wax soundness oracle), and
+# ALIAS_FUZZ_COUNT drives alias-fuzz.sh (value-type aliases).
 # COUNT and SMITH are still accepted as legacy coarse
 # overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools; node
 # and the reference interpreter (REF) unlock the execution oracles (campaigns
@@ -53,6 +54,7 @@ const_context="${CONST_CONTEXT_COUNT:-${legacy_count:-400}}"
 bottom_tail="${BOTTOM_COUNT:-${legacy_count:-3000}}"
 null_mutate="${NULL_MUTATE_COUNT:-${legacy_count:-200}}"
 mutate_validate="${MUTATE_VALIDATE_COUNT:-${legacy_count:-3000}}"
+alias_fuzz="${ALIAS_FUZZ_COUNT:-${legacy_count:-1000}}"
 if [ "${QUICK:-0}" = 1 ]; then
   smith=40
   corpus_smith=40
@@ -70,6 +72,7 @@ if [ "${QUICK:-0}" = 1 ]; then
   bottom_tail=60
   null_mutate=30
   mutate_validate=100
+  alias_fuzz=60
 fi
 
 command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
@@ -78,7 +81,7 @@ command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
 }
 
 echo "nightly campaigns — SEED=$SEED  (replay this run with: SEED=$SEED fuzz/nightly.sh)" >&2
-echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz cross-proposal=$cross_proposal unreachable=$unreachable fault-locality=$fault_locality const-context=$const_context bottom=$bottom_tail null-mutate=$null_mutate" >&2
+echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate validate-fuzz=$validate_fuzz cross-proposal=$cross_proposal unreachable=$unreachable fault-locality=$fault_locality const-context=$const_context bottom=$bottom_tail null-mutate=$null_mutate alias-fuzz=$alias_fuzz" >&2
 
 fail=0 passed=0 skipped=0 failed_list=""
 
@@ -223,6 +226,10 @@ run_campaign "COUNT=$null_mutate" null-mutate.sh
 # accepts — the binary it emits validates. Needs the wax seed corpus (built
 # above) and the reference interpreter, so it belongs here and not in check.sh.
 run_campaign mutate-validate.sh "$mutate_validate"
+# Value-type aliases, which no corpus contains (Wasm has none): aliasing the
+# types a seed declares, unconditionally or identically in both branches of a
+# conditional, must leave the module unchanged. Needs the wax seed corpus.
+run_campaign alias-fuzz.sh "$alias_fuzz"
 
 # The GRIDS lane: deterministic exhaustive sweeps. They enumerate their own
 # inputs (backing-scan builds each cell from a template; recover-shapes lowers

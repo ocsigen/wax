@@ -46,8 +46,9 @@
 
 ; Private developer/test executables, not installed (no public names):
 ; run_wasm_testsuite drives the spec suite (see test/dune); fuzz_mutate is the
-; AST mutator behind fuzz/mutate-wax.sh and fuzz_gen the AST generator behind
-; fuzz/type-fuzz.sh.
+; AST mutator behind fuzz/mutate-wax.sh, fuzz_gen the AST generator behind
+; fuzz/type-fuzz.sh, and fuzz_alias the value-type aliaser behind
+; fuzz/alias-fuzz.sh.
 
 ; run_wasm_testsuite uses Domain (OCaml 5.0+); the spec-suite tests it drives
 ; require 5.0+ anyway (see the matching gate on the test/dune rules). Gating it
@@ -60,7 +61,7 @@
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix))
 
 (executables
- (names fuzz_mutate fuzz_gen fuzz_recover)
+ (names fuzz_mutate fuzz_gen fuzz_recover fuzz_alias)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
 
 ; dump_mnemonics prints the WAT lexer's keyword table (one mnemonic per line);
