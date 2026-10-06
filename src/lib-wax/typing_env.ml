@@ -243,6 +243,12 @@ type module_context = {
          hand-written Wax (formatting, or compiling to Wasm) casts are kept as
          written. *)
   suggest : bool;
+  build_errors : (int * int, Ast.location * Ast.ident) Hashtbl.t option;
+      (* When the typed module is built, to be lowered as one module for every
+         configuration (rather than only checked): where to record a construct
+         with no form that holds in every configuration, by its span. Such a
+         construct is fine in each configuration, so only the build reports it,
+         once, whichever runs met it (see [f_infer_with_shape]). *)
   select : location -> bool;
   (* The branch this run types at each conditional annotation (a field-level
          [#[if]] block or a statement-level one), by the conditional's own span:
