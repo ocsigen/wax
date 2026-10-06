@@ -351,8 +351,11 @@ binary, up to type identity (`COND_REJECT`), and back to Wax that still compiles
 (`COND_ROUNDTRIP`).
 
 Last, with the `#[else]` branch defining each alias as a neighbouring type
-(`i32`/`i64`, `f32`/`f64`, the other nullability) and cast targets aliased too,
-the module means something different in each configuration. Converting it
+(`i32`/`i64`, `f32`/`f64`; for a reference, the other nullability, a related
+struct type or the other hierarchy), cast targets aliased too, some statements
+placed in one or both branches of an `#[if(fz_cond_2)]`, and sometimes two field
+names of a struct subtype swapped, the module means something different in each
+configuration. Converting it
 unresolved and then specializing must agree with specializing directly
 (`COMMUTE`): for each configuration that compiles on its own, the converted
 module must compile under the same `-D` to the same module. "The same" is up to
@@ -361,7 +364,14 @@ a type store both modules share and the definitions are left out, so a function
 typed with an alias getting a type of its own, equal to one the other module
 reuses, is no difference, while a reference to a different type is. Disabling
 the conversion error for a literal typed by a differing alias is caught (4
-findings on 400 seeds).
+findings on 400 seeds), and so is recording the literals' types in the
+conversion's typing runs, which cover each branch but not each combination of
+two variables, rather than in the checking runs (2 findings on 1000 seeds,
+both in the combination left out). Disabling the error for a field access whose
+position differs between configurations is not caught: it needs a subtype that
+renames an inherited field, accessed through an alias of its supertype, which
+the corpus never combines (a crafted seed hits it in 2 of 60 runs);
+`type-alias.t` tests it.
 
 "The seed's binary" allows two harmless differences (see `same_module`): a select
 of a conditional alias's type is a typed `select` where the seed's is untyped
