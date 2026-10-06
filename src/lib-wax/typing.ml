@@ -1630,8 +1630,12 @@ let expand_splices d (ctx : type_context) ty =
    built-ins must stay unambiguous ([&i64] is the value type, [atomic::fence]
    the intrinsic, …). The valtypes, the abstract heap types (the parser's
    [absheaptype_tbl] set), and the [atomic] intrinsic namespace ([v128]/[i64]
-   are already valtypes; [cont] is a keyword). [From_wasm] renames a [$type]
-   that collides (see [Namespace.reserved_heap_types]). *)
+   are already valtypes; [cont] is a keyword). Also the packed storage types
+   and the conversion target names ([i32_s], …), which a value-type alias
+   (sharing the types' namespace) would otherwise shadow where a storage or
+   cast type is written: an alias [i8] of [i32] would read back as the packed
+   [i8]. [From_wasm] renames a [$type] that collides (see
+   [Namespace.reserved_heap_types]). *)
 let reserved_type_names =
   [
     "i32";
@@ -1639,6 +1643,20 @@ let reserved_type_names =
     "f32";
     "f64";
     "v128" (* the value types *);
+    "i8";
+    "i16" (* the packed storage types *);
+    "i32_s";
+    "i32_u";
+    "i32_s_strict";
+    "i32_u_strict";
+    "i64_s";
+    "i64_u";
+    "i64_s_strict";
+    "i64_u_strict";
+    "f32_s";
+    "f32_u";
+    "f64_s";
+    "f64_u" (* the conversion targets *);
     "any";
     "array";
     "eq";
