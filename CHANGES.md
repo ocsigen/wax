@@ -29,6 +29,11 @@ grammar keeps none, and both are versioned independently of the toolchain.
   names the field differently (or names another field the same): the
   receiver is ascribed the instruction's type, `(x : &?s1).f`, so the field
   is looked up there.
+- Converting WAT or Wasm to Wax no longer fails with "Decompiler width
+  invariant violated" when code outside a conditional annotation reads a
+  value whose type differs between its branches: a call to a function, or
+  through a function type, declared with an `i64` result in one branch and an
+  `i32` one in the other, a global or a struct field declared likewise.
 - Converting between WAT and Wax no longer fails with "This reference resolves
   to nothing" when a struct type is declared in both branches of an `(@if …)`
   (or `#[if]`) with different fields. Each branch now uses its own field names.

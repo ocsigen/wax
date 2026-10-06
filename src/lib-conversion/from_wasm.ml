@@ -405,6 +405,18 @@ module CondTbl = struct
         | Some (_, v) -> v
         | None -> snd (List.hd entries))
 
+  (* The assumptions of the declarations of [name] whose branch is reachable
+     under [asm], when there are several: the reference does not select a
+     single branch. [[]] when it does. *)
+  let compatible_conds tbl asm name =
+    match Hashtbl.find_opt tbl name with
+    | None | Some [ _ ] -> []
+    | Some entries ->
+        List.filter_map
+          (fun (c, _) ->
+            if Cond.is_satisfiable (Cond.and_ asm c) then Some c else None)
+          entries
+
   (* All declarations whose branch is reachable under [asm]. More than one
      means the reference does not select a single branch. *)
   let compatible tbl asm name =
@@ -493,7 +505,7 @@ type ctx = {
   local_valtypes : (string, Ast.valtype) Hashtbl.t;
       (* The Wax type of each local (parameters included), keyed by the Wax name;
          a fresh table per function, like [locals] itself. *)
-  global_valtypes : (string, Ast.valtype) Hashtbl.t;
+  global_valtypes : Ast.valtype CondTbl.t;
       (* The same for the module's globals, imported ones included, filled while
          their names are registered (before any body is converted, so a forward
          reference resolves).
@@ -732,11 +744,11 @@ let globaltype st = muttype valtype st
    resolution. *)
 let record_global_valtype ctx (typ : Src.globaltype) name =
   match typ.Wax_wasm.Ast.typ with
-  | I32 -> Hashtbl.replace ctx.global_valtypes name Ast.I32
-  | I64 -> Hashtbl.replace ctx.global_valtypes name Ast.I64
-  | F32 -> Hashtbl.replace ctx.global_valtypes name Ast.F32
-  | F64 -> Hashtbl.replace ctx.global_valtypes name Ast.F64
-  | V128 -> Hashtbl.replace ctx.global_valtypes name Ast.V128
+  | I32 -> CondTbl.add ctx.global_valtypes ctx.cond_asm name Ast.I32
+  | I64 -> CondTbl.add ctx.global_valtypes ctx.cond_asm name Ast.I64
+  | F32 -> CondTbl.add ctx.global_valtypes ctx.cond_asm name Ast.F32
+  | F64 -> CondTbl.add ctx.global_valtypes ctx.cond_asm name Ast.F64
+  | V128 -> CondTbl.add ctx.global_valtypes ctx.cond_asm name Ast.V128
   | Ref _ -> ()
 
 (*** Type lookup and arity ***)
@@ -756,6 +768,32 @@ let with_cond ctx ~location cond positive f =
   let c = Cond.of_cond ctx.cond_env ctx.cond_diag ~location cond in
   ctx.cond_asm <- Cond.and_ saved (if positive then c else Cond.not_ c);
   Fun.protect ~finally:(fun () -> ctx.cond_asm <- saved) f
+
+(* A width claim on a node, [Varies] when it depends on the configuration. *)
+type claim = Claim of Ast.valtype option | Varies
+
+(* The width claim [f] computes for a reference to a name declared, in the
+   branches [conds] are the assumptions of (see [CondTbl.compatible_conds]),
+   with different types: [f] is run in each of these branches, where every
+   lookup it makes sees that branch's declarations, and its claim is kept only
+   when they all agree. A function imported with an [i64] result in one branch
+   and an [i32] one in the other, called from code both share, states no width
+   there: the type checker resolves it in each configuration. *)
+let uniform_claim ctx conds f =
+  match conds with
+  | [] -> Claim (f ())
+  | conds -> (
+      let saved = ctx.cond_asm in
+      let claims =
+        List.map
+          (fun c ->
+            ctx.cond_asm <- Cond.and_ saved c;
+            Fun.protect ~finally:(fun () -> ctx.cond_asm <- saved) f)
+          conds
+      in
+      match claims with
+      | t :: rest when List.for_all (fun t' -> t' = t) rest -> Claim t
+      | _ -> Varies)
 
 let lookup_type (type typ) ctx (kind : typ kind) idx : typ =
   let get seq tbl idx =
@@ -1191,6 +1229,35 @@ let bare_hole () : _ Ast.instr = contextual (Ast.no_loc_instr Ast.Hole)
    {!functype_value_result}); a void, multi-value or reference-returning call is
    left as is. *)
 let expect_value_result ty e = match ty with Some t -> expect t e | None -> e
+
+(* Record a claim (see [uniform_claim]): a type that depends on the
+   configuration is [Contextual], considered and deliberately left unclaimed. *)
+let expect_claim claim e =
+  match claim with
+  | Claim ty -> expect_value_result ty e
+  | Varies -> contextual e
+
+(* The branches [uniform_claim] runs a claim in for a reference to the type
+   [i], or to the type a typeuse names. *)
+let type_conds ctx (i : Src.idx) =
+  match Sequence.get ctx.types i with
+  | name -> CondTbl.compatible_conds ctx.type_defs ctx.cond_asm name.desc
+  | exception (Unresolved_reference _ | Numeric_ref_in_conditional _) -> []
+
+let typeuse_conds ctx ((i, _) : Src.typeuse) =
+  match i with Some i -> type_conds ctx i | None -> []
+
+(* The numeric type recorded for the global [name] in the current branch. *)
+let global_valtype ctx name =
+  try Some (CondTbl.find ctx.global_valtypes ctx.cond_asm name)
+  with Not_found -> None
+
+(* The claim on a read of the global [name]: its type may depend on the
+   configuration (a global declared in each branch of a conditional). *)
+let global_claim ctx name =
+  uniform_claim ctx
+    (CondTbl.compatible_conds ctx.global_valtypes ctx.cond_asm name) (fun () ->
+      global_valtype ctx name)
 
 (* Record the address type of the memory or table [name] on [e] — the result type of
    its [size]/[grow] (see [ctx.address_types]). *)
@@ -2218,9 +2285,10 @@ let rec backing_class_of ctx ~from_top (b : _ Ast.instr) =
       match Hashtbl.find_opt ctx.local_valtypes n.Ast.desc with
       | Some t -> valtype_class ctx t
       | None -> (
-          match Hashtbl.find_opt ctx.global_valtypes n.Ast.desc with
-          | Some t -> valtype_class ctx t
-          | None -> Ref_class { hier = `Func; eq = false }))
+          match global_claim ctx n.Ast.desc with
+          | Claim (Some t) -> valtype_class ctx t
+          | Claim None -> Ref_class { hier = `Func; eq = false }
+          | Varies -> Unknown_class))
   | _ -> Unknown_class
 
 (* Whether [b] is settled by its own printed form in the hierarchy [src] (a
@@ -3242,9 +3310,7 @@ let expect_local ctx (name : (string, _) Ast.annotated) e =
   | None -> e
 
 let expect_global ctx (name : (string, _) Ast.annotated) e =
-  match Hashtbl.find_opt ctx.global_valtypes name.Ast.desc with
-  | Some t -> expect t e
-  | None -> e
+  expect_claim (global_claim ctx name.Ast.desc) e
 
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let* () = instruction_desc ctx i in
@@ -3663,7 +3729,13 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
            yields an i32 whatever the field's width; an unsigned read of a
            non-packed field yields the field's own type. Record either. *)
         | None ->
-            expect_value_result (struct_field_value_type ctx type_name name) e
+            expect_claim
+              (uniform_claim ctx
+                 (CondTbl.compatible_conds ctx.type_defs ctx.cond_asm
+                    type_name.desc) (fun () ->
+                   struct_field_value_type ctx type_name
+                     (Sequence.get (fst (struct_fields ctx type_name)) f)))
+              e
         | Some signage ->
             expect I32
               (with_loc
@@ -3714,8 +3786,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         (match s with
         (* As [StructGet], for the array's element type. *)
         | None ->
-            expect_value_result
-              (array_element_value_type ctx (idx ctx `Type t))
+            expect_claim
+              (uniform_claim ctx (type_conds ctx t) (fun () ->
+                   array_element_value_type ctx (idx ctx `Type t)))
               e
         | Some signage ->
             expect I32
@@ -3742,18 +3815,23 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
              Hashtbl.replace ctx.multi_ref_results name.Ast.desc
                (result_classes ctx results)
          | None -> ());
+      let claim =
+        uniform_claim ctx
+          (CondTbl.compatible_conds ctx.function_types ctx.cond_asm name.desc
+          @ typeuse_conds ctx tu)
+          (fun () -> typeuse_value_result ctx (lookup_type ctx Func f))
+      in
       Stack.push output
-        (expect_value_result
-           (typeuse_value_result ctx tu)
-           (with_loc (Call (with_loc (Get name), args))))
+        (expect_claim claim (with_loc (Call (with_loc (Get name), args))))
   | CallRef t ->
       let input, output = type_arity ctx t in
-      let result_ty = type_value_result ctx t in
+      let claim =
+        uniform_claim ctx (type_conds ctx t) (fun () -> type_value_result ctx t)
+      in
       let* f = Stack.pop in
       let* f = pin_callee ctx t f in
       let* args = Stack.grab input in
-      Stack.push output
-        (expect_value_result result_ty (with_loc (Call (f, args))))
+      Stack.push output (expect_claim claim (with_loc (Call (f, args))))
   | ReturnCall f ->
       let input, _ = function_arity ctx f in
       let* args = Stack.grab input in
@@ -4012,10 +4090,11 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
       let* index = Stack.pop in
       let* args = Stack.grab input in
       let f = indirect_callee ctx with_loc tab tu index in
-      Stack.push output
-        (expect_value_result
-           (typeuse_value_result ctx tu)
-           (with_loc (Call (f, args))))
+      let claim =
+        uniform_claim ctx (typeuse_conds ctx tu) (fun () ->
+            typeuse_value_result ctx tu)
+      in
+      Stack.push output (expect_claim claim (with_loc (Call (f, args))))
   | ReturnCallIndirect (tab, tu) ->
       let input, _ = typeuse_arity ctx tu in
       let* index = Stack.pop in
@@ -6219,7 +6298,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
           starts = Hashtbl.create 16;
           locals = Sequence.make ~diagnostics common_namespace "x";
           local_valtypes = Hashtbl.create 16;
-          global_valtypes = Hashtbl.create 16;
+          global_valtypes = CondTbl.make ();
           labels = LabelStack.make ();
           label_arities = [];
           block_params = [||];
