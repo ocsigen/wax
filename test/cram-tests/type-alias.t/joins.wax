@@ -1,0 +1,27 @@
+#[if(p)]
+{
+    type n = i64;
+    type r = &?extern;
+}
+#[else]
+{
+    type n = i32;
+    type r = &?any;
+}
+import "m" {
+    fn get() -> n;
+    fn getr() -> r;
+}
+#[export = "f"]
+fn f(c: i32, a: n, b: n, x: r) {
+    let s = c ? a : b;
+    let t = if c { a } else { b };
+    let w = 'l: do {
+        if c {
+            br 'l a;
+        }
+        b
+    };
+    let v = x as r;
+    let z = c ? x : getr();
+}
