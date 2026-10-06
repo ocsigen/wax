@@ -2553,7 +2553,18 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
               Array.fold_left
                 (fun acc rt ->
                   let idx, subtype = rt.Annot.desc in
-                  let subtype = resolve_subtype idx subtype in
+                  (* Keyed as the typer stores it, with its aliases expanded:
+                     that is how [make_type_remap] looks a synthesized type up,
+                     and a declared type written with an alias must still be
+                     found. *)
+                  let subtype =
+                    match
+                      Wax_lang.Typing.get_type_definition ctx.diagnostics
+                        ctx.types idx
+                    with
+                    | Some s -> s
+                    | None -> resolve_subtype idx subtype
+                  in
                   if idx.desc <> "" && idx.desc.[0] <> '<' then
                     (subtype, idx.desc) :: acc
                   else acc)

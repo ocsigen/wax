@@ -1,0 +1,7 @@
+type word = i32;
+type t = fn() -> word;
+fn get() -> word {
+    42;
+}
+#[export]
+const f = get;
