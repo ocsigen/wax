@@ -357,6 +357,38 @@ Errors in alias definitions are reported once, at the definition.
   11 │ 
   [128]
 
+An alias may not take the name of a built-in type, a packed storage type or a
+conversion target included: an alias [i8] would read back as the packed [i8].
+A WAT alias with such a name is renamed on its way to Wax.
+
+  $ wax check reserved.wax
+  Error: 'i8' is a reserved built-in type name.
+   ──➤  reserved.wax:1:6
+  1 │ type i8 = i32;
+    ·      ^^
+  2 │ type i32_s = i64;
+  3 │ 
+  Error: 'i32_s' is a reserved built-in type name.
+   ──➤  reserved.wax:2:6
+  1 │ type i8 = i32;
+  2 │ type i32_s = i64;
+    ·      ^^^^^
+  3 │ 
+  [128]
+  $ wax -f wax reserved.wat | tee reserved-rt.wax
+  type i8_2 = i32;
+  type s = { f: mut i8_2 };
+  #[export]
+  fn mk(x: i32) -> &s {
+      { f: x };
+  }
+  $ wax -f wat reserved-rt.wax
+  (@type $i8_2 i32)
+  (type $s (struct (field $f (mut (@type $i8_2)))))
+  (func $mk (export "mk") (param $x i32) (result (ref $s))
+    (struct.new $s (local.get $x))
+  )
+
 An alias nothing reachable uses is reported, as an unused type is: one used
 only by a function that never runs, or by a type nothing uses, is unused too.
 The analysis is the same on both sides.

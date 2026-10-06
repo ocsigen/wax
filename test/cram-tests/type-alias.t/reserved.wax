@@ -1,0 +1,2 @@
+type i8 = i32;
+type i32_s = i64;
