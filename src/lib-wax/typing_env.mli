@@ -153,6 +153,11 @@ type type_context = {
 (** The module-wide type space and its memoised subtyping info (see the field
     comments in [typing_env.ml]). *)
 
+val unalias : type_context -> Ast.valtype -> Ast.valtype
+(** [unalias ctx t] is [t] with an alias use replaced by the value type it
+    stands for, as its definition writes it; an unknown or cyclic alias is kept
+    (it was reported). *)
+
 type missing_batch = {
   mutable hole_reported : bool;
   hole_actual : int;
