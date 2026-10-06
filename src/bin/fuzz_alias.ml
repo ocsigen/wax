@@ -7,12 +7,18 @@
    module. Cast targets are left alone: a cast is an instruction, not a
    declaration.
 
-   Usage: fuzz_alias <file.wax> [seed] [conditional-variable]
+   Usage: fuzz_alias <file.wax> [seed] [conditional-variable [differ]]
 
    With a conditional variable [v], the alias definitions are placed in both
    branches of an [#[if(v)]], identically: the module means the same thing in
    either configuration, but the aliases are conditional ones, which the
    toolchain must keep and lower to a form that holds in every configuration.
+
+   With [differ], the [#[else]] branch defines each alias as a neighbouring type
+   instead (i32 and i64, f32 and f64, a reference with the other nullability),
+   and cast targets are aliased too: the module then means something different
+   in each configuration, if it is valid at all, and converting it unresolved
+   must agree with converting each configuration (see fuzz/alias-fuzz.sh).
 
    Aliasing changes nothing about the module, so the oracle compares: the binary
    must be byte-identical to the original's (after [-D] for a conditional run),
@@ -91,6 +97,9 @@ let comptype (c : comptype) : comptype =
   | Array f -> Array (fieldtype f)
   | Cont _ -> c
 
+(* Whether cast targets are aliased too (the [differ] mode). *)
+let casts = ref false
+
 let rec instr (i : 'a instr) : 'a instr =
   let desc =
     Wax_lang.Ast_utils.map_desc ~instr ~block:(List.map instr) i.desc
@@ -99,9 +108,21 @@ let rec instr (i : 'a instr) : 'a instr =
     match desc with
     | Let (bindings, init) ->
         Let (List.map (fun (n, t) -> (n, Option.map alias_of t)) bindings, init)
+    | Cast (e, Valtype t) when !casts -> Cast (e, Valtype (alias_of t))
     | _ -> desc
   in
   { i with desc }
+
+(* A type of the same kind as [t], for the [#[else]] definition of a [differ]
+   run. *)
+let neighbour (t : valtype) : valtype =
+  match t with
+  | I32 -> I64
+  | I64 -> I32
+  | F32 -> F64
+  | F64 -> F32
+  | Ref r -> Ref { r with nullable = not r.nullable }
+  | V128 | Alias _ -> t
 
 let import_decl (d : (import_decl, location) annotated) =
   let kind =
@@ -154,11 +175,13 @@ let () =
   let conditional =
     if Array.length Sys.argv > 3 then Some Sys.argv.(3) else None
   in
+  let differ = Array.length Sys.argv > 4 && Sys.argv.(4) = "differ" in
+  casts := differ;
   state := (seed * 2) + 1;
   let src = In_channel.with_open_bin file In_channel.input_all in
   let m, _ctx = WaxParser.parse_from_string ~color ~filename:file src in
   let m = List.map field m in
-  let defs =
+  let defs_with f =
     List.rev_map
       (fun name ->
         let typ =
@@ -167,9 +190,10 @@ let () =
             aliases None
           |> Option.get
         in
-        no_loc (Type_alias { name = no_loc name; typ }))
+        no_loc (Type_alias { name = no_loc name; typ = f typ }))
       !order
   in
+  let defs = defs_with Fun.id in
   let defs =
     match (conditional, defs) with
     | _, [] | None, _ -> defs
@@ -180,7 +204,8 @@ let () =
                {
                  cond = Wax_wasm.Ast.Cond_var (no_loc v);
                  then_fields = no_loc defs;
-                 else_fields = Some (no_loc defs);
+                 else_fields =
+                   Some (no_loc (if differ then defs_with neighbour else defs));
                });
         ]
   in

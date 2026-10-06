@@ -64,7 +64,7 @@ fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast l
 fuzz/wax-lower-fuzz.sh           # Wax-only lowering: `become <intrinsic>` == `return <intrinsic>`, `x op= e` == `x = x op e` (byte-identical wasm)
 fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness); GEN=N for generated conditions
 fuzz/cond-fromwasm-fuzz.sh       # from_wasm (wat->wax) of conditional modules: an entity referenced only inside (@if) must not be dropped
-fuzz/alias-fuzz.sh [count]       # alias the value types wax seeds declare (plain, and conditional): the module must not change
+fuzz/alias-fuzz.sh [count]       # alias the value types wax seeds declare (plain, conditional): the module must not change; differing branches: -D must commute with conversion
 
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
@@ -347,7 +347,21 @@ changes nothing about the module, so the binary must be the seed's
 definitions placed, identically, in both branches of an `#[if(fz_cond)]`: each
 `-D` configuration must compile to the seed's binary (`COND_DIFF`); unresolved,
 the module must convert to WAT that validates and specializes to the seed's
-binary (`COND_REJECT`), and back to Wax that still compiles (`COND_ROUNDTRIP`).
+binary, up to type identity (`COND_REJECT`), and back to Wax that still compiles
+(`COND_ROUNDTRIP`).
+
+Last, with the `#[else]` branch defining each alias as a neighbouring type
+(`i32`/`i64`, `f32`/`f64`, the other nullability) and cast targets aliased too,
+the module means something different in each configuration. Converting it
+unresolved and then specializing must agree with specializing directly
+(`COMMUTE`): for each configuration that compiles on its own, the converted
+module must compile under the same `-D` to the same module. "The same" is up to
+type identity, as `fuzz_canon` renders it: each type is named by its identity in
+a type store both modules share and the definitions are left out, so a function
+typed with an alias getting a type of its own, equal to one the other module
+reuses, is no difference, while a reference to a different type is. Disabling
+the conversion error for a literal typed by a differing alias is caught (4
+findings on 400 seeds).
 
 "The seed's binary" allows two harmless differences (see `same_module`): a select
 of a conditional alias's type is a typed `select` where the seed's is untyped
