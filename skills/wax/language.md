@@ -1957,7 +1957,7 @@ fn get(c: &cell) -> word {
 }
 ```
 
-An alias stands for its value type: `word` and `i64` are the same type, and a cast to `word` is a cast to `i64`. The value type may be a reference type or another alias, but an alias is not a heap type: a reference names the type it refers to (`&cell`), never an alias. A name a type definition already uses cannot be an alias, and a reference to a type is written with `&`: in a value-type position, a type's bare name is an error.
+An alias stands for its value type: `word` and `i64` are the same type, and a cast to `word` is a cast to `i64`. The value type may be a reference type or another alias, but an alias is not a heap type: a reference names the type it refers to (`&cell`), never an alias. A name a type definition already uses cannot be an alias, nor can the name of a built-in type (`i32`, the packed `i8` and `i16`, a conversion target like `i32_s`, `any`, …), and a reference to a type is written with `&`: in a value-type position, a type's bare name is an error.
 
 Aliases are most useful with [conditional compilation](#conditional-compilation). Defined differently in the two branches of an `#[if]`, an alias stands for a different type in each configuration, so code that only passes such values around is written once:
 
