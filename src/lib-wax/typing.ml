@@ -4050,6 +4050,11 @@ let join_value_types ctx ty1 ty2 =
   | (Float | Valtype { internal = I64 | F32 | F64; _ }), LargeInt ->
       Cell.merge ty1 ty2 (Cell.get ty1);
       Some ty1
+  (* Two values of the same alias's type have that type in every
+     configuration. *)
+  | Valtype { alias = Some a1; _ }, Valtype { alias = Some a2; _ }
+    when a1.desc = a2.desc ->
+      Some ty2
   | Valtype { typ = typ1; _ }, Valtype { typ = typ2; _ } -> (
       match val_lub ctx typ1 typ2 with
       | Some ty -> internalize ctx ty
@@ -5214,7 +5219,16 @@ let rec instruction ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
               ~loc1:i2.info ~loc2:i3.info ty1 ty2;
             None
       in
-      return_expression i (Select (i1', i2', i3')) ty
+      let* sel = return_expression i (Select (i1', i2', i3')) ty in
+      (* A select of an alias's type is ascribed it, so that it lowers to a
+         [select] of that type: a reference in one configuration may be a number
+         in another. Not when converting from Wasm, which writes the ascription
+         itself (see [From_wasm]). *)
+      return
+        (match Cell.get ty with
+        | Valtype { alias = Some a; _ } when not ctx.simplify ->
+            { sel with desc = Cast (sel, Ascribed (Alias a)) }
+        | _ -> sel)
 
 and descriptor_target ctx ~location ~nullable d =
   (* The custom-descriptors casts/branches write only the descriptor operand [d];
@@ -7063,6 +7077,17 @@ and type_cast ctx i =
           match restore_inner with
           | Some inner_t -> { i' with desc = Cast (i', inner_t) }
           | None -> i'
+        in
+        (* A cast to an alias of a value that already has the alias's type is
+           the identity in every configuration: the lowering emits nothing for
+           it, as for an ascription, since no single instruction would do in
+           every configuration. *)
+        let typ =
+          match (typ, Cell.get (expression_type ctx i')) with
+          | Valtype (Alias a), Valtype { alias = Some a'; _ }
+            when a.desc = a'.desc && not ctx.simplify ->
+              Ascribed (Alias a)
+          | _ -> typ
         in
         return_expression i (Cast (i', typ)) ty
   | CastDesc (value, nullable, d) ->
