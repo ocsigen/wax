@@ -506,6 +506,53 @@ fn sum_list(head: &?list) -> i32 {
 }
 ```
 
+## Type Aliases
+
+A value-type alias defined differently in the two branches of a conditional
+stands for a different type in each configuration, so code that only passes
+such a value around is written once. A local initialized from it is declared
+with the alias.
+
+### Wax
+
+```wax
+#[if(portable_int)]
+{
+    type nativeint = i64;
+}
+#[else]
+{
+    type nativeint = i32;
+}
+
+import "nativeint" {
+    fn Nativeint_val(v: &eq) -> nativeint;
+    fn caml_copy_nativeint(n: nativeint) -> &eq;
+}
+
+#[export = "copy"]
+fn copy(v: &eq) -> &eq {
+    let n = Nativeint_val(v);
+    return caml_copy_nativeint(n);
+}
+```
+
+### Equivalent WAT
+
+```wat
+(@if $portable_int
+  (@then (@type $nativeint i64))
+  (@else (@type $nativeint i32)))
+(import "nativeint" "Nativeint_val"
+  (func $Nativeint_val (param $v (ref eq)) (result (@type $nativeint))))
+(import "nativeint" "caml_copy_nativeint"
+  (func $caml_copy_nativeint (param $n (@type $nativeint)) (result (ref eq))))
+(func $copy (export "copy") (param $v (ref eq)) (result (ref eq))
+  (local $n (@type $nativeint))
+  (local.set $n (call $Nativeint_val (local.get $v)))
+  (return (call $caml_copy_nativeint (local.get $n))))
+```
+
 ## Named Module
 
 A `#![module = "..."]` inner attribute names the module.
