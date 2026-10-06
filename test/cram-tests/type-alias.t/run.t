@@ -640,6 +640,20 @@ with.
   (global $f (export "f") (ref $<func:get>) (ref.func $get))
   (type $<func:get> (func (result (@type $word))))
 
+An inline function type written with a conditional alias is a type of its own,
+not the one the alias stands for in the configuration typed.
+
+  $ wax -f wat inline-fn.wax
+  (@if $p (@then (@type $word i64)) (@else (@type $word i32)))
+  (func $c1 (export "c1") (param $x (ref func)) (result (ref func))
+    (return (ref.cast (ref $"<fn:->@word;>") (local.get $x)))
+  )
+  (func $c2 (export "c2") (param $x (ref func)) (result (ref func))
+    (return (ref.cast (ref $"<fn:->I;>") (local.get $x)))
+  )
+  (type $"<fn:->@word;>" (func (result (@type $word))))
+  (type $"<fn:->I;>" (func (result i64)))
+
 A struct inheriting its supertype's fields with [..] inherits them as written,
 aliases included.
 
