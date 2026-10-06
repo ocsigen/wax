@@ -21,6 +21,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
   warning reports an alias nothing reachable uses. Aliases convert
   between Wax and WAT, conditional ones included. Compiling to the binary
   format, or `--desugar`, replaces them by the types they stand for.
+- A type may no longer be named after a packed storage type or a conversion
+  target (`i8`, `i16`, `i32_s`, …), as it already could not be named after a
+  value type; the conversion from WAT renames such a type.
 - A conditional-compilation variable must now be named by a valid Wax
   identifier, in WAT (`(@if $name …)`) and with `-D`. A name that is not one,
   such as `$portable-int`, used to be accepted but could not be converted to
