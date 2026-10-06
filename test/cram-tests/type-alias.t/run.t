@@ -541,6 +541,22 @@ identity, which lowers to nothing.
       (select (result (@type $r)) (local.get $x) (call $getr) (local.get $c)))
   )
 
+The locals of a multi-value binding, and the result of a block operand left
+unwritten, take the aliases of the types they are inferred from too.
+
+  $ wax -f wat operands.wax
+  (@if $p (@then (@type $n i64)) (@else (@type $n i32)))
+  (type $ft (func (param (@type $n))))
+  (type $k (cont $ft))
+  (import "m" "two" (func $two (result (@type $n) (@type $n))))
+  (func $f (export "f") (param $c (ref $k)) (param $a (@type $n))
+    (local $y (@type $n)) (local $x (@type $n))
+    (call $two)
+    (local.set $y)
+    (local.set $x)
+    (resume $k (block (result (@type $n)) (local.get $a)) (local.get $c))
+  )
+
 Code whose lowering depends on the type an alias stands for, such as an
 arithmetic operation, only lowers in a resolved configuration.
 
