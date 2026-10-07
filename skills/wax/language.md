@@ -2033,6 +2033,8 @@ Error: This instruction has type float but is expected to have type i32.
 Hint: reachable when not debug
 ```
 
+Converting a module whose conditionals are not all resolved gives one module for every configuration, so code outside a conditional is converted once. A field access there is rejected when its value's struct type differs between configurations and the field is at a different position in them (a subtype may name an inherited field differently): one `struct.get` cannot read the right field in each. `wax check` accepts it, as each configuration is fine on its own; write the access in the branches of a conditional, or resolve the conditionals with `-D`.
+
 
 <!-- docs/src/features.md -->
 

@@ -960,6 +960,18 @@ module Error = struct
     report context ~location
       ((text "There is no field named" ++ name x) ^^ text ".")
 
+  let configuration_dependent_field context ~location x =
+    report context ~location
+      ~hint:
+        (text
+           "Access it in the branches of a conditional, or resolve the \
+            conditionals with -D.")
+      (text "The field" ++ name x
+      ++ text
+           "is at a different position in the struct types this value has \
+            under different conditional annotations, so this access has no \
+            single WebAssembly form.")
+
   let invalid_cast context ~location ty' =
     report context ~location
       (text "This value of type" ++ typ ty'
@@ -12039,11 +12051,78 @@ let check_attributes diagnostics
     ~import_ok:false ~priority_ok
     (field_attributes field.desc)
 
+(*** Field positions that depend on the configuration ***)
+
+(* Record in [tbl], by the span of each struct field access of [typed_fields],
+   the receiver's struct type and the field's position in it, in this
+   configuration. A module lowered as one for every configuration takes the
+   receiver's type from one run, so [report_field_positions] rejects an access
+   the configurations disagree on. Recorded by the checking runs, one per
+   configuration, rather than the build's, which only cover each branch. *)
+let record_field_positions ctx tbl typed_fields =
+  let field (l : location) (recv : _ instr) (f : ident) =
+    match fst recv.info with
+    | [| cell |] -> (
+        match Cell.get cell with
+        | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> (
+            match Tbl.find_no_mark ctx.type_context.types ty with
+            | Some (_, { typ = Struct fields; _ }) -> (
+                let index =
+                  snd
+                    (Array.fold_left
+                       (fun (k, found) fd ->
+                         ( k + 1,
+                           if found = None && (field_name fd).desc = f.desc then
+                             Some k
+                           else found ))
+                       (0, None) fields)
+                in
+                match index with
+                | Some k ->
+                    let key = (l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
+                    let seen =
+                      match Hashtbl.find_opt tbl key with
+                      | Some (_, _, seen) -> seen
+                      | None -> []
+                    in
+                    if not (List.mem (ty.desc, k) seen) then
+                      Hashtbl.replace tbl key (l, f, (ty.desc, k) :: seen)
+                | None -> ())
+            | _ -> ())
+        | _ -> ())
+    | _ -> ()
+  in
+  Ast_utils.iter_module_instr
+    (fun (i : _ instr) ->
+      match i.desc with
+      | StructGet (recv, f) | StructSet (recv, f, _) ->
+          field (snd i.info) recv f
+      | _ -> ())
+    typed_fields
+
+(* Report, once, each field access of [tbl] (see [record_field_positions]) with
+   no form that holds in every configuration. An access is fine when the field
+   is at the same position in every type the receiver has: the lowering's
+   [struct.get] of one is then valid on the others (the types are related by
+   subtyping, or validating the lowered module reports it), and a type
+   redefined per configuration is named, so its field resolves in each. *)
+let report_field_positions diagnostics tbl =
+  Hashtbl.fold (fun _ e l -> e :: l) tbl []
+  |> List.sort (fun ((l : location), _, _) ((l' : location), _, _) ->
+      compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
+  |> List.iter (fun ((location : location), f, seen) ->
+      if
+        List.exists
+          (fun (t, k) -> List.exists (fun (t', k') -> t <> t' && k <> k') seen)
+          seen
+      then Error.configuration_dependent_field diagnostics ~location f)
+
 (*** Type-checking a configuration ***)
 
-let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
-    ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
-    ?(faithful = false) ?(features = Wax_utils.Feature.default ())
+let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
+    ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
+    ?(member_completions = None) ?(faithful = false)
+    ?(features = Wax_utils.Feature.default ())
     ?(select =
       fun (_ : location) -> invalid_arg "Typing: unplanned conditional")
     ?(guard = fun (_ : location) -> true) ~simplify diagnostics fields =
@@ -12400,6 +12479,9 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?(suggest = false)
      in source order. *)
   Typing_lint.flush_deferred_lints ctx;
   let typed_fields = functions ctx phased_fields in
+  Option.iter
+    (fun tbl -> record_field_positions ctx tbl typed_fields)
+    field_positions;
   (* Report module fields that are defined but never referenced (the module-level
      analog of an unused local). A field is exempt if its name starts with [_], if
      it is exported or is the start function (both externally reachable), or if it
@@ -13123,8 +13205,8 @@ let plan_shape ~guards (fields : location module_) :
    so a diagnostic is reported once with the assumption under which it is
    reachable. Only the diagnostics matter here, so the typed module is not
    built ([~build:false]). *)
-let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
-    diagnostics (fields : location module_) shape =
+let check_configurations ?field_positions ~warn_unused ~features ~simplify
+    ~suggest ~faithful diagnostics (fields : location module_) shape =
   let module P = Wax_wasm.Cond_plan in
   let plan = P.make ~exhaustive:true diagnostics shape in
   (* A branch no configuration reaches is a property of the module, not of a
@@ -13143,8 +13225,9 @@ let check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
         let cctx = Wax_utils.Diagnostic.collector ~parent:diagnostics () in
         let select = P.select plan run in
         ignore
-          (type_configuration ~build:false ~warn_unused ~suggest ~features
-             ~faithful ~simplify ~select ~guard:select cctx fields
+          (type_configuration ~build:false ?field_positions ~warn_unused
+             ~suggest ~features ~faithful ~simplify ~select ~guard:select cctx
+             fields
             : _ * _);
         (Wax_utils.Diagnostic.collected cctx, P.assumption plan run))
       (P.runs plan)
@@ -13322,8 +13405,8 @@ let dedupe_sinks ~resolve_links ~pun_spans ~member_completions =
     member_completions
 
 let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
-    ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
-    ?(member_completions = None) ?(faithful = false)
+    ?(suggest = false) ?(lowering = true) ?(resolve_links = None)
+    ?(pun_spans = None) ?(member_completions = None) ?(faithful = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields shape =
   let has_conditional = shape <> [] in
   if not has_conditional then
@@ -13333,8 +13416,16 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
     in
     ({ current = types; by_branch = Hashtbl.create 0 }, typed)
   else begin
-    check_configurations ~warn_unused ~features ~simplify ~suggest ~faithful
-      diagnostics fields shape;
+    (* Each configuration is checked on its own; what holds in each but not
+       as one module, a field access whose position differs between them, is
+       the lowering's to report, once. Not when converting from Wasm, whose
+       typed module is printed as Wax rather than lowered. *)
+    let field_positions =
+      if lowering && not simplify then Some (Hashtbl.create 16) else None
+    in
+    check_configurations ?field_positions ~warn_unused ~features ~simplify
+      ~suggest ~faithful diagnostics fields shape;
+    Option.iter (report_field_positions diagnostics) field_positions;
     (* Build the typed module (consumed only by the deferred WAT conversion and
        the editor; validation-only paths use [check] and never reach here) with
        the conditionals preserved: one run per configuration the module's
@@ -13466,13 +13557,13 @@ let prepare_module_check ~warn_unused diagnostics features fields =
   shape
 
 let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
-    ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
-    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
-    fields =
+    ?(lowering = true) ?(resolve_links = None) ?(pun_spans = None)
+    ?(member_completions = None) ?(faithful = false)
+    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   let shape = prepare_module_check ~warn_unused diagnostics features fields in
-  f_infer_with_shape ~simplify ~warn_unused ~suggest ~resolve_links ~pun_spans
-    ~member_completions ~faithful ~features diagnostics fields shape
+  f_infer_with_shape ~simplify ~warn_unused ~suggest ~lowering ~resolve_links
+    ~pun_spans ~member_completions ~faithful ~features diagnostics fields shape
 
 let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
     ?(faithful = false) ?(width_check = `Off)

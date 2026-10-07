@@ -10,6 +10,12 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Fixes
 
+- Converting a Wax module without resolving its conditional annotations no
+  longer reads the wrong field when a field access, outside a conditional, is
+  on a value whose struct type differs between the branches and has the field
+  at a different position (a subtype that renames an inherited field). The
+  access is now rejected, as it has no single WebAssembly form; `-D` or an
+  access in each branch converts.
 - Converting WAT or Wasm to Wax no longer changes which field a `struct.get`
   or `struct.set` reads or writes when the value's type is a subtype that
   names the field differently (or names another field the same): the

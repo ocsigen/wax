@@ -125,4 +125,23 @@ let () =
     ~only:(fun (c : Editor_common.completion) ->
       c.k_name = "any" || c.k_name = "func" || c.k_name = "x" || c.k_name = "g")
     "fn g() -> i32 { let x = 5; let y = x & 0; y }\n" "x & ";
-  print_newline ()
+  print_newline ();
+
+  (* A field access whose field is at another position in another
+     configuration is fine in each: [wax check] accepts it, and only
+     converting the module as one for every configuration rejects it. The
+     editor reports what [wax check] does. *)
+  Printf.printf "=== diagnostics (configuration-dependent field position) ===\n";
+  let diags =
+    Wax_editor.check_string
+      "type s1 = open { f: i32 };\n\
+       type s2: s1 = { a: i32, f: i32 };\n\
+       #[if(p)] { fn make() -> &s1 { return {s1| f: 1}; } }\n\
+       #[else] { fn make() -> &s2 { return {s2| a: 1, f: 2}; } }\n\
+       #[export] fn get() -> i32 { return make().f; }\n"
+  in
+  List.iter
+    (fun (d : Editor_common.diag) ->
+      Printf.printf "  %s %s\n" (show_loc d.location) d.message)
+    diags;
+  Printf.printf "  (%d diagnostics)\n" (List.length diags)

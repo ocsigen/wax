@@ -113,10 +113,12 @@ let format_string src =
    runs in recovery mode ([set_recovery]), which suppresses the "not bound"
    cascades from the dropped constructs.
 
-   [f_infer] emits the same diagnostics as [Typing.check] — for a
-   conditional-free module both run the one checking pass, and for [#[if]]
-   modules both run the path-sensitive [check_configurations]; [f_infer] only
-   does an extra throwaway-collector pass to build the tree. So routing
+   [f_infer ~lowering:false] emits the same diagnostics as [Typing.check] —
+   for a conditional-free module both run the one checking pass, and for
+   [#[if]] modules both run the path-sensitive [check_configurations];
+   [f_infer] only does an extra throwaway-collector pass to build the tree.
+   ([~lowering:false] leaves out what only converting the module unresolved
+   rejects, a construct whose form differs between configurations.) So routing
    diagnostics through it leaves them unchanged and gets the tree for free. *)
 type analysis = {
   a_syntax : diag list;
@@ -165,8 +167,9 @@ let analyze_uncached src =
           Some
             (snd
                (Wax_lang.Typing.f_infer ~warn_unused:true ~suggest:true
-                  ~resolve_links:(Some links) ~pun_spans:(Some puns)
-                  ~member_completions:(Some members) d ast))
+                  ~lowering:false ~resolve_links:(Some links)
+                  ~pun_spans:(Some puns) ~member_completions:(Some members) d
+                  ast))
         with Wax_utils.Diagnostic.Aborted -> None
       in
       {

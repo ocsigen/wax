@@ -1,0 +1,18 @@
+type s1 = open { f: i32 };
+type s2: s1 = { a: i32, f: i32 };
+#[if(p)]
+{
+    fn make() -> &s1 {
+        return {s1| f: 1};
+    }
+}
+#[else]
+{
+    fn make() -> &s2 {
+        return {s2| a: 1, f: 2};
+    }
+}
+#[export]
+fn get() -> i32 {
+    return make().f;
+}

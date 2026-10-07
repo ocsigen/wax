@@ -96,6 +96,7 @@ val f_infer :
   ?simplify:bool ->
   ?warn_unused:bool ->
   ?suggest:bool ->
+  ?lowering:bool ->
   ?resolve_links:reference list ref option ->
   ?pun_spans:Ast.location list ref option ->
   ?member_completions:(Ast.location * Members.member_receiver) list ref option ->
@@ -109,6 +110,13 @@ val f_infer :
     resolution, and both emit the same diagnostics. Lets a consumer render types
     the way diagnostics do (via {!Infer.output_inferred_type}); used by the
     editor for hover.
+
+    With [lowering] (the default), the typed tree is for lowering as one module
+    for every configuration of its conditional annotations, and a construct that
+    has a different form in different configurations (a field access whose field
+    is at a different position, say) is reported: {!check} accepts it, since
+    each configuration is fine on its own. The editor passes [false], so it
+    reports what {!check} does.
 
     When [resolve_links] is a [Some ref], every name and label reference
     resolved while type checking is appended to it as a {!reference} (use span
