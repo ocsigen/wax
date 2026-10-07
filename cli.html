@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6ef34b37.js";
+            window.path_to_searchindex_js = "searchindex-7cac207f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -253,6 +253,8 @@ left). Comments inside a removed branch are dropped.</li>
 <li>The value kind is inferred: a bare <em>NAME</em> (or <code>NAME=true</code> / <code>NAME=false</code>)
 sets a boolean; <code>NAME=N.N.N</code> (three integers) sets a version; any other
 <code>NAME=VALUE</code> sets a string.</li>
+<li><em>NAME</em> must be a valid Wax identifier (a keyword is allowed); another
+name is a command-line error, as no conditional could name it.</li>
 <li>Repeatable, to set several variables. Has no effect on Wasm binary input
 (which carries no conditionals).</li>
 </ul>

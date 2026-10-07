@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6ef34b37.js";
+            window.path_to_searchindex_js = "searchindex-7cac207f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -1641,6 +1641,7 @@ ocaml_version &gt;= (5, 1, 0)
 </code></pre>
 </li>
 </ul>
+<p>A variable is named by an identifier, which may be a keyword (<code>#[if(loop)]</code>). Its name is shared with WebAssembly text, where it is written <code>$debug</code>, and with <a href="cli.html"><code>-D</code></a>, so a WAT variable whose name is not a valid Wax identifier, such as <code>$portable-int</code>, is rejected.</p>
 <p>A branch groups any number of items, so several can be guarded at once:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[if(debug)]</span>
 {
@@ -1684,6 +1685,7 @@ ocaml_version &gt;= (5, 1, 0)
  ──➤  example.wax:4:16
 Hint: reachable when not debug
 </code></pre>
+<p>Converting a module whose conditionals are not all resolved gives one module for every configuration, so code outside a conditional is converted once. A field access there is rejected when its value’s struct type differs between configurations and the field is at a different position in them (a subtype may name an inherited field differently): one <code>struct.get</code> cannot read the right field in each. <code>wax check</code> accepts it, as each configuration is fine on its own; write the access in the branches of a conditional, or resolve the conditionals with <code>-D</code>.</p>
 
                     </main>
 
