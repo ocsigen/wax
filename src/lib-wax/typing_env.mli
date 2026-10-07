@@ -21,9 +21,11 @@ type inferred_module_annotation =
 type hover_target =
   | Value_type of Infer.inferred_valtype
   | Type_def of Ast.subtype
+  | Alias_def of (Ast.location * Ast.valtype) list
       (** What a resolved reference summarises for a hover on a name that is not
-          itself an expression: a variable's type, or a referenced type's
-          definition. *)
+          itself an expression: a variable's type, a referenced type's
+          definition, or a type alias's definitions (each that a configuration
+          picks), by location. *)
 
 type reference = {
   use : Ast.location;

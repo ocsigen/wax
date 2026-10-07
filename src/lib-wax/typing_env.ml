@@ -27,7 +27,10 @@ type inferred_module_annotation = inferred_type Cell.t array * Ast.location
    data, not a rendered string — nothing is formatted until a hover actually
    asks (the editor renders the one it needs), so a check pays only a boxing per
    reference. *)
-type hover_target = Value_type of inferred_valtype | Type_def of subtype
+type hover_target =
+  | Value_type of inferred_valtype
+  | Type_def of subtype
+  | Alias_def of (location * valtype) list
 
 type reference = {
   use : Ast.location;
