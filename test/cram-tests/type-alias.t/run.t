@@ -687,8 +687,8 @@ configuration is fine, but the module converted as a whole cannot hold it.
   $ wax check cast.wax
   $ wax -f wat cast.wax
   Error:
-    This cast to the type alias 'n' has no single WebAssembly form: the alias is
-    defined under a conditional annotation.
+    This cast to the type alias 'n' has no single WebAssembly form: the alias
+    stands for different types under a conditional annotation.
     ──➤  cast.wax:11:12
    9 │ #[export]
   10 │ fn c(x: &?any) -> n {
@@ -697,8 +697,7 @@ configuration is fine, but the module converted as a whole cannot hold it.
   12 │ }
   13 │ 
   Hint:
-    Cast in the branches of a conditional, to the types the alias stands for, or
-    resolve the conditionals with -D.
+    Cast in the branches of a conditional, or resolve the conditionals with -D.
   [128]
   $ wax -D p=false -f wat cast.wax
   (@type $n anyref)
@@ -742,6 +741,73 @@ When every branch defines the alias as the same type, the literal has one form.
     (local $x (@type $n))
     (local.set $x (i32.const 0))
     (return (local.get $x))
+  )
+
+Each configuration is checked, not only the ones the conversion types: here
+the literal is an f32 only when neither p nor q holds.
+
+  $ wax -f wat literal-nested.wax
+  Error:
+    This literal takes the type of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+    ──➤  literal-nested.wax:16:16
+  14 │     #[else]
+  15 │     {
+  16 │         _: n = 2.5;
+     ·                ^^^
+  17 │     }
+  18 │ }
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
+  [128]
+
+A null typed by a conditional alias is a null of the alias's type, which may
+be in a different hierarchy in each configuration. A negative literal is
+reported whole.
+
+  $ wax -f wat null.wax
+  Error:
+    This literal takes the type of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+    ──➤  null.wax:11:12
+   9 │ #[export]
+  10 │ fn f() {
+  11 │     _: n = null;
+     ·            ^^^^
+  12 │ }
+  13 │ 
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
+  [128]
+  $ wax -f wat negative.wax
+  Error:
+    This literal takes the type of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+    ──➤  negative.wax:11:12
+   9 │ #[export]
+  10 │ fn f() {
+  11 │     _: n = -1;
+     ·            ^^
+  12 │ }
+  13 │ 
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
+  [128]
+
+A cast that has one target wherever it occurs converts.
+
+  $ wax -f wat cast-branches.wax
+  (@if $p (@then (@type $n (ref eq))) (@else (@type $n (ref any))))
+  (func $c (export "c") (param $x (ref any)) (result (@type $n))
+    (@if $p
+      (@then (return (ref.cast (ref eq) (local.get $x))))
+      (@else (return (ref.cast (ref any) (local.get $x)))))
   )
 
 Code whose lowering depends on the type an alias stands for, such as an

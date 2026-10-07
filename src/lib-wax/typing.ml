@@ -981,13 +981,13 @@ module Error = struct
     report context ~location
       ~hint:
         (text
-           "Cast in the branches of a conditional, to the types the alias \
-            stands for, or resolve the conditionals with -D.")
+           "Cast in the branches of a conditional, or resolve the conditionals \
+            with -D.")
       (text "This cast to the type alias"
       ++ name x
       ++ text
-           "has no single WebAssembly form: the alias is defined under a \
-            conditional annotation.")
+           "has no single WebAssembly form: the alias stands for different \
+            types under a conditional annotation.")
 
   let conditional_alias_literal context ~location x =
     report context ~location
@@ -7189,26 +7189,14 @@ and type_cast ctx i =
         (* A cast to an alias of a value that already has the alias's type is
            the identity in every configuration: the lowering emits nothing for
            it, as for an ascription, since no single instruction would do in
-           every configuration. *)
+           every configuration. (Any other cast to a conditional alias is
+           checked by [record_configuration_forms].) *)
         let typ =
           match (typ, Cell.get (expression_type ctx i')) with
           | Valtype (Alias a), Valtype { alias = Some a'; _ }
             when a.desc = a'.desc && (not ctx.simplify)
                  && conditional_alias ctx a ->
               Ascribed (Alias a)
-          (* Any other cast to a conditional alias is an instruction that
-             depends on the configuration ([ref.cast eqref] in one, [anyref] in
-             another), which a module lowered for every configuration at once
-             cannot hold. *)
-          | Valtype (Alias a), _
-            when (not ctx.simplify) && conditional_alias ctx a ->
-              Option.iter
-                (fun tbl ->
-                  Hashtbl.replace tbl
-                    (i.info.loc_start.pos_cnum, i.info.loc_end.pos_cnum)
-                    (i.info, a, `Cast))
-                ctx.build_errors;
-              typ
           | _ -> typ
         in
         return_expression i (Cast (i', typ)) ty
@@ -12522,15 +12510,48 @@ let check_attributes diagnostics
     ~import_ok:false ~priority_ok
     (field_attributes field.desc)
 
-(*** Field positions that depend on the configuration ***)
+(*** Forms that depend on the configuration ***)
 
-(* Record in [tbl], by the span of each struct field access of [typed_fields],
-   the receiver's struct type and the field's position in it, in this
-   configuration. A module lowered as one for every configuration takes the
-   receiver's type from one run, so [report_field_positions] rejects an access
-   the configurations disagree on. Recorded by the checking runs, one per
-   configuration, rather than the build's, which only cover each branch. *)
-let record_field_positions ctx tbl typed_fields =
+(* What a construct lowers to in each configuration checked, for one whose form
+   may depend on the configuration: a literal or null typed by a conditional
+   alias (its type, printed), a cast to one (its target type), a struct field
+   access (the receiver's struct type and the field's position). *)
+type configuration_form =
+  | Literal_form of ident * string list
+  | Cast_form of ident * string list
+  | Field_form of ident * (string * int) list
+
+(* Record in [tbl], by span, the form each such construct of [typed_fields]
+   takes in this configuration. A module lowered as one for every
+   configuration takes each form from one run, so
+   [report_configuration_forms] rejects a construct the configurations
+   disagree on. Recorded by the checking runs, one per configuration, rather
+   than the build's, which only cover each branch. (Where a literal's type
+   reaches the lowered module, as a local's or a result's, validating it
+   checks the constant anyway; a dropped one is checked only here.) *)
+let record_configuration_forms ctx tbl typed_fields =
+  let add ?at (l : location) form =
+    let key = (l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
+    let at = Option.value ~default:l at in
+    let at, prev =
+      match Hashtbl.find_opt tbl key with
+      | Some ((at' : location), prev) ->
+          ( (if at'.loc_start.pos_cnum <= at.loc_start.pos_cnum then at' else at),
+            Some prev )
+      | None -> (at, None)
+    in
+    Hashtbl.replace tbl key (at, form prev)
+  in
+  let union v l = if List.mem v l then l else v :: l in
+  let typed_by ?at (l : location) cell =
+    match Cell.get cell with
+    | Valtype { alias = Some a; typ; _ } when conditional_alias ctx a ->
+        let t = Output.valtype_string typ in
+        add ?at l (function
+          | Some (Literal_form (_, seen)) -> Literal_form (a, union t seen)
+          | _ -> Literal_form (a, [ t ]))
+    | _ -> ()
+  in
   let field (l : location) (recv : _ instr) (f : ident) =
     match fst recv.info with
     | [| cell |] -> (
@@ -12550,14 +12571,10 @@ let record_field_positions ctx tbl typed_fields =
                 in
                 match index with
                 | Some k ->
-                    let key = (l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
-                    let seen =
-                      match Hashtbl.find_opt tbl key with
-                      | Some (_, _, seen) -> seen
-                      | None -> []
-                    in
-                    if not (List.mem (ty.desc, k) seen) then
-                      Hashtbl.replace tbl key (l, f, (ty.desc, k) :: seen)
+                    add l (function
+                      | Some (Field_form (_, seen)) ->
+                          Field_form (f, union (ty.desc, k) seen)
+                      | _ -> Field_form (f, [ (ty.desc, k) ]))
                 | None -> ())
             | _ -> ())
         | _ -> ())
@@ -12565,33 +12582,55 @@ let record_field_positions ctx tbl typed_fields =
   in
   Ast_utils.iter_module_instr
     (fun (i : _ instr) ->
-      match i.desc with
-      | StructGet (recv, f) | StructSet (recv, f, _) ->
-          field (snd i.info) recv f
+      let l = snd i.info in
+      match (i.desc, fst i.info) with
+      | (Int _ | Float _ | Null), [| cell |] -> typed_by l cell
+      (* A negative literal is reported whole, [-1] rather than [1]. *)
+      | UnOp ({ desc = Neg; _ }, ({ desc = Int _ | Float _; _ } as lit)), _ -> (
+          match fst lit.info with
+          | [| cell |] -> typed_by ~at:l (snd lit.info) cell
+          | _ -> ())
+      | Cast (_, Valtype (Alias a)), [| cell |] when conditional_alias ctx a
+        -> (
+          match Cell.get cell with
+          | Valtype { typ; _ } ->
+              let t = Output.valtype_string typ in
+              add l (function
+                | Some (Cast_form (_, seen)) -> Cast_form (a, union t seen)
+                | _ -> Cast_form (a, [ t ]))
+          | _ -> ())
+      | StructGet (recv, f), _ | StructSet (recv, f, _), _ -> field l recv f
       | _ -> ())
     typed_fields
 
-(* Report, once, each field access of [tbl] (see [record_field_positions]) with
-   no form that holds in every configuration. An access is fine when the field
-   is at the same position in every type the receiver has: the lowering's
-   [struct.get] of one is then valid on the others (the types are related by
-   subtyping, or validating the lowered module reports it), and a type
-   redefined per configuration is named, so its field resolves in each. *)
-let report_field_positions diagnostics tbl =
+(* Report, once, each construct of [tbl] (see [record_configuration_forms])
+   with no form that holds in every configuration. A field access is fine when
+   the field is at the same position in every type the receiver has: the
+   lowering's [struct.get] of one is then valid on the others (the types are
+   related by subtyping, or validating the lowered module reports it), and a
+   type redefined per configuration is named, so its field resolves in each. *)
+let report_configuration_forms diagnostics tbl =
   Hashtbl.fold (fun _ e l -> e :: l) tbl []
-  |> List.sort (fun ((l : location), _, _) ((l' : location), _, _) ->
+  |> List.sort (fun ((l : location), _) ((l' : location), _) ->
       compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
-  |> List.iter (fun ((location : location), f, seen) ->
-      if
-        List.exists
-          (fun (t, k) -> List.exists (fun (t', k') -> t <> t' && k <> k') seen)
-          seen
-      then Error.configuration_dependent_field diagnostics ~location f)
+  |> List.iter (fun ((location : location), form) ->
+      match form with
+      | Literal_form (a, _ :: _ :: _) ->
+          Error.conditional_alias_literal diagnostics ~location a
+      | Cast_form (a, _ :: _ :: _) ->
+          Error.conditional_alias_cast diagnostics ~location a
+      | Field_form (f, seen)
+        when List.exists
+               (fun (t, k) ->
+                 List.exists (fun (t', k') -> t <> t' && k <> k') seen)
+               seen ->
+          Error.configuration_dependent_field diagnostics ~location f
+      | Literal_form _ | Cast_form _ | Field_form _ -> ())
 
 (*** Type-checking a configuration ***)
 
-let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
-    ?build_errors ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
+let type_configuration ?(warn_unused = false) ?(build = true) ?forms
+    ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
     ?(member_completions = None) ?(faithful = false)
     ?(features = Wax_utils.Feature.default ())
     ?(select =
@@ -12731,7 +12770,6 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
       member_completions;
       simplify;
       suggest;
-      build_errors;
       select;
       faithful;
     }
@@ -12988,41 +13026,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?field_positions
      in source order. *)
   Typing_lint.flush_deferred_lints ctx;
   let typed_fields = functions ctx phased_fields in
-  Option.iter
-    (fun tbl -> record_field_positions ctx tbl typed_fields)
-    field_positions;
-  (* A literal whose type is a conditional alias's is a constant of that
-     configuration's type ([f32.const] in one, [f64.const] in another), which
-     a module lowered for every configuration at once cannot hold when the
-     types differ. Record the type each run gives it. (Where the alias's type
-     reaches the lowered module, as a local's or a result's, validating it
-     checks the constant anyway; a dropped one is checked only here.) *)
-  Option.iter
-    (fun tbl ->
-      Ast_utils.iter_module_instr
-        (fun (i : _ instr) ->
-          match (i.desc, fst i.info) with
-          | (Int _ | Float _), [| cell |] -> (
-              match Cell.get cell with
-              | Valtype { alias = Some a; internal; _ }
-                when (not ctx.simplify) && conditional_alias ctx a ->
-                  let l = snd i.info in
-                  let key = (l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
-                  let seen =
-                    match Hashtbl.find_opt tbl key with
-                    | Some (_, _, `Literal seen) -> seen
-                    | _ -> []
-                  in
-                  Hashtbl.replace tbl key
-                    ( l,
-                      a,
-                      `Literal
-                        (if List.mem internal seen then seen
-                         else internal :: seen) )
-              | _ -> ())
-          | _ -> ())
-        typed_fields)
-    build_errors;
+  Option.iter (fun tbl -> record_configuration_forms ctx tbl typed_fields) forms;
   (* Check the alias definitions no use resolved. A reference they make is no
      use of what it names. *)
   (let current = ctx.type_context.aliases.current in
@@ -13781,8 +13785,8 @@ let plan_shape ~guards (fields : location module_) :
    so a diagnostic is reported once with the assumption under which it is
    reachable. Only the diagnostics matter here, so the typed module is not
    built ([~build:false]). *)
-let check_configurations ?field_positions ~warn_unused ~features ~simplify
-    ~suggest ~faithful diagnostics (fields : location module_) shape =
+let check_configurations ?forms ~warn_unused ~features ~simplify ~suggest
+    ~faithful diagnostics (fields : location module_) shape =
   let module P = Wax_wasm.Cond_plan in
   let plan = P.make ~exhaustive:true diagnostics shape in
   (* A branch no configuration reaches is a property of the module, not of a
@@ -13801,9 +13805,8 @@ let check_configurations ?field_positions ~warn_unused ~features ~simplify
         let cctx = Wax_utils.Diagnostic.collector ~parent:diagnostics () in
         let select = P.select plan run in
         ignore
-          (type_configuration ~build:false ?field_positions ~warn_unused
-             ~suggest ~features ~faithful ~simplify ~select ~guard:select cctx
-             fields
+          (type_configuration ~build:false ?forms ~warn_unused ~suggest
+             ~features ~faithful ~simplify ~select ~guard:select cctx fields
             : _ * _);
         (Wax_utils.Diagnostic.collected cctx, P.assumption plan run))
       (P.runs plan)
@@ -13993,15 +13996,15 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
     ({ current = types; by_branch = Hashtbl.create 0 }, typed)
   else begin
     (* Each configuration is checked on its own; what holds in each but not
-       as one module, a field access whose position differs between them, is
+       as one module, the form a construct takes differing between them, is
        the lowering's to report, once. Not when converting from Wasm, whose
        typed module is printed as Wax rather than lowered. *)
-    let field_positions =
+    let forms =
       if lowering && not simplify then Some (Hashtbl.create 16) else None
     in
-    check_configurations ?field_positions ~warn_unused ~features ~simplify
-      ~suggest ~faithful diagnostics fields shape;
-    Option.iter (report_field_positions diagnostics) field_positions;
+    check_configurations ?forms ~warn_unused ~features ~simplify ~suggest
+      ~faithful diagnostics fields shape;
+    Option.iter (report_configuration_forms diagnostics) forms;
     (* Build the typed module (consumed only by the deferred WAT conversion and
        the editor; validation-only paths use [check] and never reach here) with
        the conditionals preserved: one run per configuration the module's
@@ -14015,7 +14018,6 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
         (Wax_utils.Diagnostic.collector ())
         (plan_shape ~guards:false fields)
     in
-    let build_errors = Hashtbl.create 4 in
     let results =
       List.map
         (fun run ->
@@ -14023,21 +14025,11 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
             type_configuration
               ~select:(Wax_wasm.Cond_plan.select plan run)
               ~resolve_links ~pun_spans ~member_completions ~faithful ~features
-              ~simplify ~build_errors
+              ~simplify
               (Wax_utils.Diagnostic.collector ())
               fields ))
         (Wax_wasm.Cond_plan.runs plan)
     in
-    (* Each run checked a configuration; what holds in none as one module is
-       the build's to report, once. *)
-    Hashtbl.fold (fun _ e l -> e :: l) build_errors []
-    |> List.sort (fun ((l : location), _, _) ((l' : location), _, _) ->
-        compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
-    |> List.iter (fun ((location : location), a, kind) ->
-        match kind with
-        | `Cast -> Error.conditional_alias_cast diagnostics ~location a
-        | `Literal [ _ ] -> ()
-        | `Literal _ -> Error.conditional_alias_literal diagnostics ~location a);
     dedupe_sinks ~resolve_links ~pun_spans ~member_completions;
     stitch plan results
   end

@@ -1,0 +1,12 @@
+#[if(p)]
+{
+    type n = &?eq;
+}
+#[else]
+{
+    type n = &?extern;
+}
+#[export]
+fn f() {
+    _: n = null;
+}

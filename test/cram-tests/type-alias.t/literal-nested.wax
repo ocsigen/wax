@@ -1,0 +1,18 @@
+#[if(p)]
+{
+    type n = f64;
+}
+#[else]
+{
+    type n = f32;
+}
+#[export]
+fn f() {
+    #[if(q)]
+    {
+    }
+    #[else]
+    {
+        _: n = 2.5;
+    }
+}
