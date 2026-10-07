@@ -174,4 +174,24 @@ let () =
     (fun (d : Editor_common.diag) ->
       Printf.printf "  %s %s\n" (show_loc d.location) d.message)
     diags;
-  Printf.printf "  (%d diagnostics)\n" (List.length diags)
+  Printf.printf "  (%d diagnostics)\n" (List.length diags);
+  print_newline ();
+
+  (* A type alias defined in each branch: a hover on a use shows each
+     definition, and its completion candidate lists both types. *)
+  let asrc =
+    "#[if(p)] { type n = i64; } #[else] { type n = i32; }\n\
+     fn f(x: n) -> n { x }\n"
+  in
+  Printf.printf "=== hover (use of a conditional type alias) ===\n";
+  (match Wax_editor.hover_string asrc 1 8 with
+  | Some h ->
+      Printf.printf "  %s\n"
+        (String.concat "\n  " (String.split_on_char '\n' h.h_type))
+  | None -> Printf.printf "  (none)\n");
+  complete "=== completion (conditional type alias) ==="
+    ~only:(fun (c : Editor_common.completion) -> c.k_name = "n")
+    asrc "fn f(x: ";
+  Wax_editor.completion_string asrc 1 8 []
+  |> List.iter (fun (c : Editor_common.completion) ->
+      if c.k_name = "n" then Printf.printf "  detail: %s\n" c.k_detail)
