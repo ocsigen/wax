@@ -810,6 +810,36 @@ A cast that has one target wherever it occurs converts.
       (@else (return (ref.cast (ref any) (local.get $x)))))
   )
 
+A field access on a value whose struct type differs between configurations
+reads the field at the position it has in one of them. The struct types are
+related by subtyping, so that access is valid in every configuration, but it
+reads the wrong field where the field moved (see also cond-field-position.t).
+
+  $ wax check field.wax
+  $ wax -f wat field.wax
+  Error:
+    The field 'f' is at a different position in the struct types this value has
+    under different conditional annotations, so this access has no single
+    WebAssembly form.
+    ──➤  field.wax:13:12
+  11 │ #[export]
+  12 │ fn get(x: n) -> i32 {
+  13 │     return x.f;
+     ·            ^^^
+  14 │ }
+  15 │ 
+  Hint:
+    Access it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat field-same.wax
+  (type $s1 (sub (struct (field $f i32))))
+  (type $s2 (sub final $s1 (struct (field $f i32) (field $g i32))))
+  (@if $p (@then (@type $n (ref $s1))) (@else (@type $n (ref $s2))))
+  (func $get (export "get") (param $x (@type $n)) (result i32)
+    (return (struct.get $s1 $f (local.get $x)))
+  )
+
 Code whose lowering depends on the type an alias stands for, such as an
 arithmetic operation, only lowers in a resolved configuration.
 
