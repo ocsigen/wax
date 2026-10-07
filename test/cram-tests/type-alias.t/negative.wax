@@ -1,0 +1,12 @@
+#[if(p)]
+{
+    type n = i64;
+}
+#[else]
+{
+    type n = i32;
+}
+#[export]
+fn f() {
+    _: n = -1;
+}
