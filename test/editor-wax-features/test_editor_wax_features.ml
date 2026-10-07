@@ -157,4 +157,21 @@ let () =
   Wax_editor.completion_string fsrc 1 13 []
   |> List.iter (fun (c : Editor_common.completion) ->
       if c.k_name = "h" then
-        Printf.printf "  %s:%s %s\n" c.k_name c.k_kind c.k_detail)
+        Printf.printf "  %s:%s %s\n" c.k_name c.k_kind c.k_detail);
+  print_newline ();
+
+  (* A cast to a type alias that stands for a different type in each branch is
+     fine in each configuration: [wax check] accepts it, and only converting
+     the module as one for every configuration rejects it. The editor reports
+     what [wax check] does. *)
+  Printf.printf "=== diagnostics (cast to a conditional alias) ===\n";
+  let diags =
+    Wax_editor.check_string
+      "#[if(p)] { type n = &?eq; } #[else] { type n = &?any; }\n\
+       #[export] fn c(x: &?any) -> n { return x as n; }\n"
+  in
+  List.iter
+    (fun (d : Editor_common.diag) ->
+      Printf.printf "  %s %s\n" (show_loc d.location) d.message)
+    diags;
+  Printf.printf "  (%d diagnostics)\n" (List.length diags)

@@ -57,3 +57,6 @@
 
 === completion (function defined in each branch) ===
   h:function fn() -> i64 | fn() -> i32
+
+=== diagnostics (cast to a conditional alias) ===
+  (0 diagnostics)
