@@ -1103,10 +1103,31 @@ let module_completions src ast target bindings =
         | _ -> List.map (fun c -> (c, guard)) (field_completions field))
       fields
   in
-  defs Wax_wasm.Cond_solver.true_ ast
-  |> List.filter_map (fun (c, guard) ->
-      if Wax_wasm.Cond_solver.is_satisfiable (!ctx &&& guard) then Some c
-      else None)
+  let candidates =
+    defs Wax_wasm.Cond_solver.true_ ast
+    |> List.filter_map (fun (c, guard) ->
+        if Wax_wasm.Cond_solver.is_satisfiable (!ctx &&& guard) then Some c
+        else None)
+  in
+  (* A name defined in several branches is one candidate, its detail listing
+     each definition's ([fn() -> i64 | fn() -> i32] for a function, say). *)
+  let details = Hashtbl.create 16 in
+  List.iter
+    (fun c ->
+      let k = (c.k_name, c.k_kind) in
+      let l = Option.value ~default:[] (Hashtbl.find_opt details k) in
+      if not (List.mem c.k_detail l) then
+        Hashtbl.replace details k (l @ [ c.k_detail ]))
+    candidates;
+  List.filter_map
+    (fun c ->
+      let k = (c.k_name, c.k_kind) in
+      Option.map
+        (fun l ->
+          Hashtbl.remove details k;
+          { c with k_detail = String.concat " | " l })
+        (Hashtbl.find_opt details k))
+    candidates
 
 let is_ident_char c =
   (c >= 'a' && c <= 'z')

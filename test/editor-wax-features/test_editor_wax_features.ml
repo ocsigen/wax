@@ -144,4 +144,17 @@ let () =
     (fun (d : Editor_common.diag) ->
       Printf.printf "  %s %s\n" (show_loc d.location) d.message)
     diags;
-  Printf.printf "  (%d diagnostics)\n" (List.length diags)
+  Printf.printf "  (%d diagnostics)\n" (List.length diags);
+  print_newline ();
+
+  (* A function defined in each branch with a different signature is one
+     completion candidate, listing both. *)
+  Printf.printf "=== completion (function defined in each branch) ===\n";
+  let fsrc =
+    "#[if(p)] { fn h() -> i64 { 0 } } #[else] { fn h() -> i32 { 0 } }\n\
+     fn g() { _ = h(); }\n"
+  in
+  Wax_editor.completion_string fsrc 1 13 []
+  |> List.iter (fun (c : Editor_common.completion) ->
+      if c.k_name = "h" then
+        Printf.printf "  %s:%s %s\n" c.k_name c.k_kind c.k_detail)

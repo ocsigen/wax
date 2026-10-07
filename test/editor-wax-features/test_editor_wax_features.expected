@@ -54,3 +54,6 @@
 
 === diagnostics (configuration-dependent field position) ===
   (0 diagnostics)
+
+=== completion (function defined in each branch) ===
+  h:function fn() -> i64 | fn() -> i32

@@ -16,6 +16,13 @@ grammar keeps none, and both are versioned independently of the toolchain.
   Wax. A keyword is a valid name, and Wax now accepts it in a condition
   (`#[if(loop)]`).
 
+### Editors
+
+- Completion offers a name defined in several branches of a conditional
+  annotation once, with each definition's detail: a function defined with an
+  `i64` result in one branch and an `i32` one in the other shows
+  `fn() -> i64 | fn() -> i32`, where only the first was shown.
+
 ### Fixes
 
 - Converting a Wax module without resolving its conditional annotations no
