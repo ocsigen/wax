@@ -1,0 +1,14 @@
+type s1 = open { f: i32 };
+type s2: s1 = { a: i32, f: i32 };
+#[if(p)]
+{
+    type n = &s1;
+}
+#[else]
+{
+    type n = &s2;
+}
+#[export]
+fn get(x: n) -> i32 {
+    return x.f;
+}
