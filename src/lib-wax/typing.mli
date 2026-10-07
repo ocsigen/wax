@@ -114,9 +114,9 @@ val f_infer :
     With [lowering] (the default), the typed tree is for lowering as one module
     for every configuration of its conditional annotations, and a construct that
     has a different form in different configurations (a field access whose field
-    is at a different position, say) is reported: {!check} accepts it, since
-    each configuration is fine on its own. The editor passes [false], so it
-    reports what {!check} does.
+    is at a different position, or a literal typed by a conditional type alias,
+    say) is reported: {!check} accepts it, since each configuration is fine on
+    its own. The editor passes [false], so it reports what {!check} does.
 
     When [resolve_links] is a [Some ref], every name and label reference
     resolved while type checking is appended to it as a {!reference} (use span
