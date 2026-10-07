@@ -76,10 +76,12 @@ val reserved_type_names : string list
 type hover_target =
   | Value_type of Infer.inferred_valtype
   | Type_def of Ast.subtype
+  | Alias_def of (Ast.location * Ast.valtype) list
       (** What a resolved reference summarises for a hover on a name that is not
-          itself an expression: a variable's type, or a referenced type's
-          definition. Kept as data so the consumer renders only the one it needs
-          (a check formats nothing). *)
+          itself an expression: a variable's type, a referenced type's
+          definition, or a type alias's definitions (each that a configuration
+          picks), by location. Kept as data so the consumer renders only the one
+          it needs (a check formats nothing). *)
 
 type reference = {
   use : Ast.location;

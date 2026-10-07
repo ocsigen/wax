@@ -31,6 +31,14 @@ let render_hover ~name = function
   | Typing.Type_def st ->
       let field = Ast.no_loc (Ast.no_loc name, st) in
       String.trim (Output.run_string (fun p -> Output.subtype p field))
+  | Typing.Alias_def defs ->
+      String.concat " / "
+        (List.map
+           (fun (_, t) ->
+             "type " ^ name ^ " = "
+             ^ Output.run_string (fun p -> Output.valtype p t)
+             ^ ";")
+           defs)
 
 let resolve name src =
   Printf.printf "=== %s ===\n" name;

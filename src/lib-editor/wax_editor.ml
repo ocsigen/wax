@@ -322,6 +322,14 @@ let render_hover_target ~name = function
       let field = Wax_lang.Ast.no_loc (Wax_lang.Ast.no_loc name, st) in
       String.trim
         (Wax_lang.Output.run_string (fun p -> Wax_lang.Output.subtype p field))
+  | Wax_lang.Typing.Alias_def defs ->
+      String.concat "\n"
+        (List.map
+           (fun (_, t) ->
+             "type " ^ name ^ " = "
+             ^ Wax_lang.Output.run_string (fun p -> Wax_lang.Output.valtype p t)
+             ^ ";")
+           defs)
 
 (* Hover types (Wax only). Reads the cell-annotated tree [analyze] built (every
    node's [info] is the inference cells for the values it leaves on the stack,

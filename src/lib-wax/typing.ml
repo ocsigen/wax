@@ -14,6 +14,7 @@ type inferred_module_annotation = Typing_env.inferred_module_annotation
 type hover_target = Typing_env.hover_target =
   | Value_type of inferred_valtype
   | Type_def of subtype
+  | Alias_def of (location * valtype) list
 
 type reference = Typing_env.reference = {
   use : Ast.location;
@@ -12652,7 +12653,11 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
     {
       internal_types = Wax_wasm.Types.create ();
       types = Tbl.make ~hover:(hover_of_type written) ~current namespace "type";
-      aliases = Tbl.make ~current namespace "type alias";
+      aliases =
+        Tbl.make
+          ~hover:(fun _ al ->
+            Some (Alias_def [ (al.alias_name.info, al.alias_typ) ]))
+          ~current namespace "type alias";
       written;
       features;
       subtyping_info_cache = None;
@@ -13969,8 +13974,21 @@ let dedupe_sinks ~resolve_links ~pun_spans ~member_completions =
                       (List.exists (fun d' -> span d' = span d) r'.definitions))
                   r.definitions
               in
+              (* A conditional alias's use is resolved to a different
+                 definition by each run: the hover lists them all. *)
+              let hover =
+                match (r'.hover, r.hover) with
+                | Some (Alias_def l), Some (Alias_def l') ->
+                    Some
+                      (Alias_def
+                         (List.sort_uniq
+                            (fun ((a : location), _) ((b : location), _) ->
+                              compare a.loc_start.pos_cnum b.loc_start.pos_cnum)
+                            (l @ l')))
+                | h, _ -> h
+              in
               Hashtbl.replace tbl k
-                { r' with definitions = r'.definitions @ fresh })
+                { r' with definitions = r'.definitions @ fresh; hover })
         !links;
       links := List.rev_map (Hashtbl.find tbl) !order)
     resolve_links;

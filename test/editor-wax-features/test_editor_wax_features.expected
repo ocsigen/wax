@@ -60,3 +60,10 @@
 
 === diagnostics (cast to a conditional alias) ===
   (0 diagnostics)
+
+=== hover (use of a conditional type alias) ===
+  type n = i64;
+  type n = i32;
+=== completion (conditional type alias) ===:
+  n:type
+  detail: i64 | i32
