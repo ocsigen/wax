@@ -21,9 +21,30 @@ type input = {
       (** Source map for this module's code section, merged into the result. *)
 }
 
+type dependency = {
+  name : string;
+  export : string option;
+  import : (string * string) option;
+  reaches : string list;
+  root : bool;
+}
+(** A node of the dependency graph used for dead code elimination, in the format
+    of binaryen's [wasm-metadce]: [export] and [import] associate the node with
+    an export and an import of the linked module; [reaches] lists the nodes this
+    node depends on (by name). *)
+
+val parse_dependencies : string -> dependency list
+(** Parse a dependency graph in the JSON format of [wasm-metadce]: a list of
+    objects with a [name] field and optional [export], [import] (a pair
+    [[module, name]]), [reaches] (a list of node names) and [root] fields.
+    Raises [Yojson.Json_error] or [Yojson.Basic.Util.Type_error] on malformed
+    input. *)
+
 val f :
   ?rename_export:(string -> string -> string option) ->
   ?distinct_named_types:bool ->
+  ?dependencies:dependency list ->
+  ?names:bool ->
   ?source_map:bool ->
   input list ->
   output_file:string ->
@@ -45,11 +66,25 @@ val f :
     output. The map is returned either way, so a caller that places it itself
     (under another name, or in memory) leaves this off.
 
+    With [dependencies], dead code is removed: only the exports reachable from
+    the root nodes of the dependency graph are kept (identified by their name in
+    the merged module), an import node being reached when the corresponding
+    import is used, and only the functions, globals, tags, types, passive data
+    segments and imports reachable from these exports or from the start
+    functions are kept. Declarative element segments, and passive ones that are
+    not used, only keep the functions that are reachable otherwise. Removing
+    dead code changes neither tables, memories, nor active segments.
+
+    [names] (default [true]) controls whether the name section is emitted.
+
     [distinct_named_types] (default [false]) makes type deduplication
     name-aware: two structurally-equal types are coalesced into one output type
     only when they also share the same type name and field names; otherwise the
     later one is emitted as a separate, structurally-identical copy so its names
     survive. Off by default, matching wasm-merge's purely structural merge. *)
+
+val imports : string -> (string * string) list
+(** The imports of a Wasm module, as pairs (module name, name). *)
 
 val get_instruction_offsets : filename:string -> string -> int list * int
 (** [get_instruction_offsets ~filename buf] returns the byte offset of every

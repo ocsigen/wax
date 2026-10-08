@@ -831,7 +831,22 @@ let check format_opt strict color warnings features debug error_format defines
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 128
 
-let link output_file source_map distinct_named_types inputs =
+let link output_file source_map distinct_named_types dependencies inputs =
+  let dependencies =
+    Option.map
+      (fun file ->
+        try
+          Wax_linker.Wasm_link.parse_dependencies
+            (In_channel.with_open_bin file In_channel.input_all)
+        with
+        | Sys_error msg ->
+            Printf.eprintf "Error: %s\n" msg;
+            exit 128
+        | Yojson.Json_error msg | Yojson.Basic.Util.Type_error (msg, _) ->
+            Printf.eprintf "Error: malformed dependency graph %s: %s\n" file msg;
+            exit 128)
+      dependencies
+  in
   let inputs =
     List.map
       (fun (module_name, file) ->
@@ -850,8 +865,8 @@ let link output_file source_map distinct_named_types inputs =
   match
     try
       Ok
-        (Wax_linker.Wasm_link.f ~distinct_named_types ~source_map inputs
-           ~output_file)
+        (Wax_linker.Wasm_link.f ~distinct_named_types ?dependencies ~source_map
+           inputs ~output_file)
     with
     | Wax_utils.Diagnostic.Aborted -> exit 128
     | exn -> Error (Printexc.to_string exn)
@@ -1066,6 +1081,19 @@ let link_distinct_named_types =
      default (purely structural deduplication)."
   in
   Arg.(value & flag & info [ "distinct-named-types" ] ~doc)
+
+(* Dead code elimination *)
+let link_dependencies =
+  let doc =
+    "Remove dead code, keeping only the exports reachable from the root nodes \
+     of the dependency graph in $(docv), and what they use. The graph uses the \
+     JSON format of binaryen's $(b,wasm-metadce): a list of nodes, each with a \
+     $(b,name), and optionally an $(b,export) name or an $(b,import) \
+     ($(b,[\"module\", \"name\"])) it stands for, the names of the nodes it \
+     $(b,reaches), and whether it is a $(b,root). An import node is reached \
+     when the import is used."
+  in
+  Arg.(value & opt (some file) None & info [ "dependencies" ] ~docv:"FILE" ~doc)
 
 (* Define the --define/-D option (set conditional-compilation variables) *)
 let define_option =
@@ -1456,8 +1484,9 @@ let link_term =
   let+ output = link_output_file
   and+ source_map = source_map_option
   and+ distinct_named_types = link_distinct_named_types
+  and+ dependencies = link_dependencies
   and+ inputs = link_inputs in
-  link output source_map distinct_named_types inputs
+  link output source_map distinct_named_types dependencies inputs
 
 let link_cmd =
   let doc = "Link WebAssembly binary modules together" in

@@ -21,7 +21,7 @@ Where bugs can hide, and how visible they currently are:
 |---|---|---|
 | Binary parsing / writing (LEB128, sections) | `Read`, `Write`, `Scan.scanner` | Yes — the built-in validator (`wax -v`) and `wasm-tools validate` reject malformed output |
 | Rec-type canonicalisation across modules | `Read.add_rectype`, `types_store` / `output_table`, structural hashing/equality | Mostly — wrong merging usually breaks validation, but *failing to merge* equivalent groups, or falsely merging α-equivalent ones, may validate and still be wrong or bloated |
-| Import/export subtype checks | `subtype`, `val_subtype`, `reftype_eq`, `valtype_eq`, `type_id_eq`, `check_limits`, `check_export_import_types` | Partially — too-lenient checks are masked when the output is re-validated; error paths (e.g. "export in a later module") need explicit tests |
+| Import/export subtype checks | `subtype`, `val_subtype`, `reftype_eq`, `valtype_eq`, `type_id_eq`, `check_limits`, `check_export_import_types` | Partially — too-lenient checks are masked when the output is re-validated; error paths need explicit tests |
 | Index remapping in code bodies | `Scan.scanner`, `Scan.func`, `build_mappings` | Yes — wrong indices almost always fail validation or tests |
 | Byte-shift bookkeeping (LEB width changes) | `Scan.push_resize`, the resize entries pushed in the code-section loop of `f` | **No** — only affects source maps; covered now by Phase 1/2, nothing else checks them |
 | Source map rewriting | `Source_map.resize_mappings` | Now checked by Phase 1 (PBT) and Phase 2 (boundary checker) |
@@ -118,8 +118,10 @@ crafted pair already exercises every subsection the disassembler surfaces.
 duplicate exports, incompatible import/export types, import loops,
 `metadata.code.*` hint merging (all four sections, including a call-target
 payload renumbered across modules and an offset moved by a widened LEB),
-name-aware type coalescing (`--distinct-named-types`), and forward global
-references (both directions, table and global initializers). What is still
+name-aware type coalescing (`--distinct-named-types`), forward global
+references (a table initializer reading a global that linking internalises is
+rejected; global initializers are reordered, and a cycle is reported) and dead
+code elimination (`link-dce.t`). What is still
 missing are the remaining LEB-width boundary cases and the finer
 subtyping/canonicalisation arms below.
 
@@ -190,8 +192,9 @@ both `Wasm_link.f` and `wasm-merge`, check both validate, and run the resulting
 programs — observable behaviour must match. Structural comparison (export list,
 import residue, canonicalised type sections) is best-effort; behavioural
 equality is the reliable check. Divergences are informative in both directions —
-`TODO.md` already records two (forward-global rejection, exact-import
-conservatism) where the linker deliberately differs from `wasm-merge`.
+`TODO.md` already records two (table initializers reading an internalised
+global, exact-import conservatism) where the linker deliberately differs from
+`wasm-merge`.
 
 ## 9. Phase 8 — Split-and-relink fuzzing — **todo**
 
