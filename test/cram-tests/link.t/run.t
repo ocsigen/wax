@@ -234,24 +234,45 @@ of the order the modules are given in:
   $ wax -v -f wasm -o /dev/null gcode_linked.wasm && echo OK
   OK
 
-But a global *initializer* may only read a preceding global, so reading a global
-import that resolves to a later module is rejected, naming the import, and no
-output file is left behind:
+A global *initializer* may only read a preceding global. When it reads a global
+import that resolves to a later module, the globals are reordered so that the
+definition comes first:
   $ cat > ginit.wat <<EOF
   > (module
   >   (import "p" "g" (global \$g i32))
-  >   (global \$h i32 (global.get \$g)))
+  >   (global \$h (export "h") i32 (global.get \$g)))
   > EOF
   $ wax ginit.wat -o ginit.wasm
   $ wax link -o ginit_linked.wasm c:ginit.wasm p:gprov.wasm
+  $ wax ginit_linked.wasm -f wat | grep -E 'global|export'
+  (global i32
+  (global $h i32
+    global.get 0
+  (export "h" (global $h))
+  (export "g" (global 0))
+  $ wax -v -f wasm -o /dev/null ginit_linked.wasm && echo OK
+  OK
+
+Initializers that read each other in a cycle cannot be ordered, which is
+reported:
+  $ cat > cyc1.wat <<EOF
+  > (module
+  >   (import "b" "gb" (global \$gb i32))
+  >   (global (export "ga") i32 (global.get \$gb)))
+  > EOF
+  $ cat > cyc2.wat <<EOF
+  > (module
+  >   (import "a" "ga" (global \$ga i32))
+  >   (global (export "gb") i32 (global.get \$ga)))
+  > EOF
+  $ wax cyc1.wat -o cyc1.wasm
+  $ wax cyc2.wat -o cyc2.wasm
+  $ wax link -o cyc_linked.wasm a:cyc1.wasm b:cyc2.wasm
   Error:
-    In module "ginit.wasm", a global initializer reads the global import "p" /
-    "g", which linking resolves to a definition in the later module
-    "gprov.wasm". A global initializer may only read a preceding global, so the
-    linked module would be invalid.
+    The initializers of some globals of modules "cyc1.wasm" and "cyc2.wasm" read
+    each other in a cycle. A global initializer may only read a preceding
+    global, so these globals cannot be ordered.
   [128]
-  $ test -e ginit_linked.wasm && echo PRESENT || echo ABSENT
-  ABSENT
 
 Given in the other order (exporter first) the same modules link:
   $ wax link -o ginit_ok.wasm p:gprov.wasm c:ginit.wasm

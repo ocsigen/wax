@@ -551,17 +551,16 @@ let remap_call_targets func_map payload =
           (Wax_wasm.Hints.call_targets_payload
              (List.map (fun (idx, pct) -> (func_map.(idx), pct)) targets))
 
-(* Raised by a constant-initializer scan (table or global section) when the
-   initializer reads a global that the merged module cannot legally reference at
-   that point — a forward reference that would make the output invalid. The
-   offending global's *source* index (module-local) is carried so the catch site
-   can name the offending import. Signalled through the [global] map: the caller
-   sets the sentinel [-1] for every disallowed global, which [global_map] turns
-   into this exception. The two callers differ only in which globals they forbid:
-   the table scan rejects any global that linking internalises (a resolved
-   import, emitted after the whole table section); the global scan rejects only a
-   resolved import bound to a *later* module (whose definition follows this
-   module's globals in the output). *)
+(* Raised by the table-section scan when a table initializer reads a global that
+   the merged module cannot legally reference at that point: a global that
+   linking internalises (a resolved import) is emitted after the whole table
+   section, so reading it would be a forward reference and make the output
+   invalid. The offending global's *source* index (module-local) is carried so
+   the catch site can name the offending import. Signalled through the [global]
+   map: the caller sets the sentinel [-1] for every disallowed global, which
+   [global_map] turns into this exception. (Global initializers need no such
+   check: the globals are ordered so that an initializer only reads preceding
+   globals.) *)
 exception Init_reads_forward_global of int
 
 module Scan = struct
@@ -650,7 +649,32 @@ module Scan = struct
      It returns one closure per section kind it knows how to scan; they all
      capture this call's mutable state ([start], [buf], …), so a caller selects
      the closure it needs and ignores the others. *)
-  let scanner ?(mark_instructions = false) report mark maps buf code =
+  (* The references an analysis scan reports (see [scanner]'s [visit]). *)
+  type ref_kind =
+    [ `Func
+    | `Ref_func (* function referenced by [ref.func] *)
+    | `Global
+    | `Tag
+    | `Elem
+    | `Data
+    | `Type ]
+
+  type scanner = {
+    table_section : count:int -> int -> unit;
+    elem_section : count:int -> int -> unit;
+    data_section : count:int -> int -> unit;
+    func : int -> unit;
+    local_namemap : int -> unit;
+    global : int -> int;
+    global_entry : int -> int;
+  }
+
+  (* In [analysis] mode, nothing is written: the scanner only reports, through
+     [visit], the references to functions, globals, tags, element and data
+     segments and types (with the module-local index). The single-entry
+     function [global] returns the position following the entry. *)
+  let scanner ?(mark_instructions = false) ?(analysis = false)
+      ?(visit = fun (_ : ref_kind) (_ : int) -> ()) report mark maps buf code =
     let rec output_uint buf i =
       if i < 128 then Buffer.add_char buf (Char.chr i)
       else (
@@ -664,6 +688,8 @@ module Scan = struct
         output_sint buf (i asr 7))
     in
     let start = ref 0 in
+    (* Set in analysis mode: indices are not rewritten. *)
+    let skipping = ref analysis in
     let in_func = ref false in
     let get pos = Char.code (String.get code pos) in
     let rec int pos = if get pos >= 128 then int (pos + 1) else pos + 1 in
@@ -698,11 +724,12 @@ module Scan = struct
       pos' + i
     in
     let flush' pos pos' =
-      if !start < pos then Buffer.add_substring buf code !start (pos - !start);
+      if (not analysis) && !start < pos then
+        Buffer.add_substring buf code !start (pos - !start);
       start := pos'
     in
     let flush pos = flush' pos pos in
-    let rewrite map pos =
+    let rewrite visit map pos =
       let pos', idx =
         let i = get pos in
         if i < 128 then (pos + 1, i)
@@ -710,48 +737,62 @@ module Scan = struct
           let i' = get (pos + 1) in
           if i' < 128 then (pos + 2, (i' lsl 7) + (i land 0x7f)) else uint32 pos
       in
-      let idx' = map idx in
-      if idx <> idx' then (
-        flush' pos pos';
-        let p = Buffer.length buf in
-        output_uint buf idx';
-        let p' = Buffer.length buf in
-        let dp = p' - p in
-        let dpos = pos' - pos in
-        (* The width change reshapes the immediate spanning [pos, pos'); it
+      visit idx;
+      if !skipping then pos'
+      else
+        let idx' = map idx in
+        if idx <> idx' then (
+          flush' pos pos';
+          let p = Buffer.length buf in
+          output_uint buf idx';
+          let p' = Buffer.length buf in
+          let dp = p' - p in
+          let dpos = pos' - pos in
+          (* The width change reshapes the immediate spanning [pos, pos'); it
            shifts the bytes that *follow* it, so the resize is recorded at
            [pos'] (positions < pos' are unaffected). [rewrite_signed] and
            [memarg] report at [pos'] for the same reason. *)
-        if dp <> dpos then report pos' (dp - dpos));
-      pos'
+          if dp <> dpos then report pos' (dp - dpos));
+        pos'
     in
-    let rewrite_signed map pos =
+    let rewrite_signed visit map pos =
       let pos', idx =
         let i = get pos in
         if i < 64 then (pos + 1, i)
         else if i < 128 then (pos + 1, i - 128)
         else sint32 pos
       in
-      let idx' = map idx in
-      if idx <> idx' then (
-        flush' pos pos';
-        let p = Buffer.length buf in
-        output_sint buf idx';
-        let p' = Buffer.length buf in
-        let dp = p' - p in
-        let dpos = pos' - pos in
-        if dp <> dpos then report pos' (dp - dpos));
-      pos'
+      visit idx;
+      if !skipping then pos'
+      else
+        let idx' = map idx in
+        if idx <> idx' then (
+          flush' pos pos';
+          let p = Buffer.length buf in
+          output_sint buf idx';
+          let p' = Buffer.length buf in
+          let dp = p' - p in
+          let dpos = pos' - pos in
+          if dp <> dpos then report pos' (dp - dpos));
+        pos'
     in
+    let no_visit _ = () in
+    let visit_func idx = visit `Func idx in
+    let visit_ref_func idx = visit `Ref_func idx in
+    let visit_global idx = visit `Global idx in
+    let visit_elem idx = visit `Elem idx in
+    let visit_data idx = visit `Data idx in
+    let visit_tag idx = visit `Tag idx in
+    let visit_type idx = visit `Type idx in
     let typ_map idx = maps.typ.(idx) in
-    let typeidx pos = rewrite typ_map pos in
-    let signed_typeidx pos = rewrite_signed typ_map pos in
+    let typeidx pos = rewrite visit_type typ_map pos in
+    let signed_typeidx pos = rewrite_signed visit_type typ_map pos in
     let func_map idx = maps.func.(idx) in
-    let funcidx pos = rewrite func_map pos in
+    let funcidx pos = rewrite visit_func func_map pos in
     let table_map idx = maps.table.(idx) in
-    let tableidx pos = rewrite table_map pos in
+    let tableidx pos = rewrite no_visit table_map pos in
     let mem_map idx = maps.mem.(idx) in
-    let memidx pos = rewrite mem_map pos in
+    let memidx pos = rewrite no_visit mem_map pos in
     let global_map idx =
       (* [-1] marks a global a constant-initializer scan must reject (see
          [Init_reads_forward_global]); a real map only holds valid indices, so
@@ -760,13 +801,13 @@ module Scan = struct
       if v < 0 then raise (Init_reads_forward_global idx);
       v
     in
-    let globalidx pos = rewrite global_map pos in
+    let globalidx pos = rewrite visit_global global_map pos in
     let elem_map idx = maps.elem.(idx) in
-    let elemidx pos = rewrite elem_map pos in
+    let elemidx pos = rewrite visit_elem elem_map pos in
     let data_map idx = maps.data.(idx) in
-    let dataidx pos = rewrite data_map pos in
+    let dataidx pos = rewrite visit_data data_map pos in
     let tag_map idx = maps.tag.(idx) in
-    let tagidx pos = rewrite tag_map pos in
+    let tagidx pos = rewrite visit_tag tag_map pos in
     let labelidx = int in
     let localidx = int in
     let laneidx pos = pos + 1 in
@@ -814,7 +855,7 @@ module Scan = struct
     let memarg pos =
       let pos', c = uint32 pos in
       if c < 64 then (
-        if mem_map 0 <> 0 then (
+        if (not !skipping) && mem_map 0 <> 0 then (
           flush' pos pos';
           let p = Buffer.length buf in
           output_uint buf (c + 64);
@@ -900,7 +941,8 @@ module Scan = struct
       | 0xD1 (* ref.is_null *) | 0xD3 (* ref.eq *) | 0xD4 (* ref.as_non_null *)
         ->
           pos + 1 |> instructions
-      | 0xD2 (* ref.func *) -> pos + 1 |> funcidx |> instructions
+      | 0xD2 (* ref.func *) ->
+          pos + 1 |> rewrite visit_ref_func func_map |> instructions
       | 0xE0 (* cont.new *) -> pos + 1 |> typeidx |> instructions
       | 0xE1 (* cont.bind *) -> pos + 1 |> typeidx |> typeidx |> instructions
       | 0xE2 (* suspend *) -> pos + 1 |> tagidx |> instructions
@@ -1084,9 +1126,11 @@ module Scan = struct
       pos |> valtype |> mut
     in
     let global pos = pos |> globaltype |> expr in
-    let global_section ~count pos =
+    let global_entry pos =
       start := pos;
-      pos |> repeat count global |> flush
+      let pos' = global pos in
+      flush pos';
+      pos'
     in
     let elemkind pos =
       assert (get pos = 0);
@@ -1102,7 +1146,7 @@ module Scan = struct
        which describes only the instruction stream, and a segment lives in the
        element section, never in a function body.) *)
     let active_elem ~flag ~mid element pos =
-      if table_map 0 = 0 then pos + 1 |> expr |> vector element
+      if !skipping || table_map 0 = 0 then pos + 1 |> expr |> vector element
       else (
         flush' pos (pos + 1);
         Buffer.add_char buf flag;
@@ -1134,7 +1178,7 @@ module Scan = struct
           (* Active data segment with an implicit memory (kind 0) names memory 0;
              rewrite to the explicit-memory form (kind 2) when linking moves this
              module's memory 0 elsewhere. *)
-          if mem_map 0 = 0 then pos + 1 |> expr |> bytes
+          if !skipping || mem_map 0 = 0 then pos + 1 |> expr |> bytes
           else (
             flush' pos (pos + 1);
             Buffer.add_char buf '\x02';
@@ -1157,57 +1201,47 @@ module Scan = struct
       start := pos;
       pos |> vector local_nameassoc |> flush
     in
-    ( table_section,
-      global_section,
-      elem_section,
-      data_section,
-      func,
-      local_namemap )
+    {
+      table_section;
+      elem_section;
+      data_section;
+      func;
+      local_namemap;
+      global;
+      global_entry;
+    }
 
   let table_section positions maps buf s =
-    let table_section, _, _, _, _, _ =
-      scanner
-        (fun _ _ -> ())
-        (fun pos -> push_position positions pos)
-        maps buf s
-    in
-    table_section
+    (scanner
+       (fun _ _ -> ())
+       (fun pos -> push_position positions pos)
+       maps buf s)
+      .table_section
 
-  let global_section positions maps buf s =
-    let _, global_section, _, _, _, _ =
-      scanner
-        (fun _ _ -> ())
-        (fun pos -> push_position positions pos)
-        maps buf s
-    in
-    global_section
+  let global_entry maps buf s =
+    (scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s).global_entry
 
   let elem_section maps buf s =
-    let _, _, elem_section, _, _, _ =
-      scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s
-    in
-    elem_section
+    (scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s).elem_section
 
   let data_section maps buf s =
-    let _, _, _, data_section, _, _ =
-      scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s
-    in
-    data_section
+    (scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s).data_section
 
   let func resize_data maps buf s =
-    let _, _, _, _, func, _ =
-      scanner
-        (fun pos delta -> push_resize resize_data pos delta)
-        (fun _ -> ())
-        maps buf s
-    in
-    func
+    (scanner
+       (fun pos delta -> push_resize resize_data pos delta)
+       (fun _ -> ())
+       maps buf s)
+      .func
 
   let local_namemap buf s =
-    let _, _, _, _, _, local_namemap =
-      scanner (fun _ _ -> ()) (fun _ -> ()) default_maps buf s
-    in
-    local_namemap
+    (scanner (fun _ _ -> ()) (fun _ -> ()) default_maps buf s).local_namemap
+
+  let analysis ~visit s =
+    scanner ~analysis:true ~visit
+      (fun _ _ -> ())
+      (fun _ -> ())
+      default_maps (Buffer.create 0) s
 end
 
 type t = {
@@ -1500,6 +1534,9 @@ let write_namemap ~resolved_imports ~unresolved_imports ~name_sections
           incr count;
           Write.nameassoc buf idx name)
     import_names;
+  (* Entries must be sorted by index, which may differ from the input order
+     (globals are reordered) *)
+  let entries = ref [] in
   Array.iteri
     (fun i name_section ->
       if Read.find_section name_section section_id then
@@ -1511,14 +1548,18 @@ let write_namemap ~resolved_imports ~unresolved_imports ~name_sections
         for _ = 1 to n do
           let idx = Read.uint ch in
           let len = Read.uint ch in
-          if idx >= import_count then (
-            incr count;
-            Write.uint buf mapping.(idx);
-            Write.uint buf len;
-            Buffer.add_substring buf ch.buf ch.pos len);
+          if idx >= import_count then
+            entries := (mapping.(idx), ch.buf, ch.pos, len) :: !entries;
           ch.pos <- ch.pos + len
         done)
     name_sections;
+  List.iter
+    (fun (idx, s, pos, len) ->
+      incr count;
+      Write.uint buf idx;
+      Write.uint buf len;
+      Buffer.add_substring buf s pos len)
+    (List.sort (fun (i, _, _, _) (i', _, _, _) -> compare i i') !entries);
   add_subsection name_section_buffer ~id:section_id ~count:!count buf
 
 (* Merge the indirect name maps (locals, labels) of each input, remapping the
@@ -1579,6 +1620,279 @@ let rec resolve d depth ~files ~intfs ~subtyping_info ~exports ~kind i
         entry
     with Not_found -> (i', index))
   else (i', index)
+
+(* Raised by [priority_topological_sort] when the dependencies form a cycle,
+   with the nodes that could not be ordered. *)
+exception Cycle of int list
+
+(* Order the nodes [0 .. n - 1] so that each node comes after the nodes it
+   depends on, choosing the node with the highest priority whenever there is a
+   choice (then the lowest index). *)
+let priority_topological_sort ~n ~deps ~priority =
+  let module S = Set.Make (struct
+    type t = int * int
+
+    let compare (p, i) (p', i') =
+      match compare p' p with 0 -> compare i i' | c -> c
+  end) in
+  let pending = Array.make n 0 in
+  let successors = Array.make n [] in
+  for i = 0 to n - 1 do
+    List.iter
+      (fun j ->
+        if j <> i then (
+          pending.(i) <- pending.(i) + 1;
+          successors.(j) <- i :: successors.(j)))
+      (deps i)
+  done;
+  let ready = ref S.empty in
+  for i = 0 to n - 1 do
+    if pending.(i) = 0 then ready := S.add (priority i, i) !ready
+  done;
+  let order = Array.make n 0 in
+  for k = 0 to n - 1 do
+    if S.is_empty !ready then
+      raise
+        (Cycle
+           (List.filter (fun i -> pending.(i) > 0) (List.init n (fun i -> i))));
+    let ((_, i) as elt) = S.min_elt !ready in
+    ready := S.remove elt !ready;
+    order.(k) <- i;
+    List.iter
+      (fun j ->
+        pending.(j) <- pending.(j) - 1;
+        if pending.(j) = 0 then ready := S.add (priority j, j) !ready)
+      successors.(i)
+  done;
+  order
+
+(* Positions of the entries of a section, given a function that skips one
+   entry. *)
+let section_entries (contents : Read.t) id skip =
+  if Read.find_section contents id then
+    let count = Read.uint contents.ch in
+    let pos = ref contents.ch.pos in
+    Array.init count (fun _ ->
+        let p = !pos in
+        pos := skip p;
+        p)
+  else [||]
+
+(* Raised by [order_globals] when global initializers read each other in a
+   cycle, with the globals (module, local index) involved. *)
+exception Global_initializer_cycle of (int * int) list
+
+(* Order the live global definitions so that the initializer of a global only
+   refers to earlier globals, choosing the most used globals first. *)
+let order_globals ~resolved_imports ~live ~global_counts ~global_deps =
+  let global_import_count i =
+    Array.length (get_exportable_info resolved_imports.(i) Global)
+  in
+  let definition i j =
+    if j < global_import_count i then
+      match (get_exportable_info resolved_imports.(i) Global).(j) with
+      | Resolved (i', j') when j' >= global_import_count i' -> Some (i', j')
+      | Resolved _ | Unresolved _ -> None
+    else Some (i, j)
+  in
+  let global_ids =
+    Array.map (fun l -> Array.make (Array.length l.global) (-1)) live
+  in
+  let nodes = ref [] in
+  let n = ref 0 in
+  Array.iteri
+    (fun i l ->
+      Array.iteri
+        (fun j is_live ->
+          if is_live && j >= global_import_count i then (
+            global_ids.(i).(j) <- !n;
+            incr n;
+            nodes := (i, j) :: !nodes))
+        l.global)
+    live;
+  let nodes = Array.of_list (List.rev !nodes) in
+  let node_id i j =
+    match definition i j with
+    | Some (i', j') -> global_ids.(i').(j')
+    | None -> -1
+  in
+  let priorities = Array.make (Array.length nodes) 0 in
+  Array.iteri
+    (fun i counts ->
+      Array.iteri
+        (fun j c ->
+          let id = node_id i j in
+          if id >= 0 then priorities.(id) <- priorities.(id) + c)
+        counts)
+    global_counts;
+  let order =
+    try
+      priority_topological_sort ~n:(Array.length nodes)
+        ~deps:(fun id ->
+          let i, j = nodes.(id) in
+          List.filter
+            (fun id -> id >= 0)
+            (List.map (fun j' -> node_id i j') global_deps.(i).(j)))
+        ~priority:(fun id -> priorities.(id))
+    with Cycle l ->
+      raise (Global_initializer_cycle (List.map (fun id -> nodes.(id)) l))
+  in
+  Array.map (fun id -> nodes.(id)) order
+
+type ordering = {
+  globals : (int * int) array;
+      (** Global definitions (module, local index), in order *)
+  global_positions : int array array;
+      (** Position of each global definition in the input modules *)
+}
+
+(* Keep the order of the input, except for globals whose initializer refers to
+   a global defined later. *)
+let order_global_definitions ~files ~resolved_imports =
+  let import_count i =
+    Array.length (get_exportable_info resolved_imports.(i) Global)
+  in
+  let live =
+    Array.mapi
+      (fun i { contents; _ } ->
+        let count =
+          if Read.find_section contents 6 then Read.uint contents.ch else 0
+        in
+        {
+          func = [||];
+          table = [||];
+          mem = [||];
+          global = Array.make (import_count i + count) true;
+          tag = [||];
+        })
+      files
+  in
+  let global_deps =
+    Array.map (fun l -> Array.make (Array.length l.global) []) live
+  in
+  let current_global = ref 0 in
+  let global_positions =
+    Array.mapi
+      (fun i { contents; _ } ->
+        let scanner =
+          Scan.analysis
+            ~visit:(fun kind idx ->
+              match kind with
+              | `Global ->
+                  global_deps.(i).(!current_global) <-
+                    idx :: global_deps.(i).(!current_global)
+              | _ -> ())
+            contents.ch.buf
+        in
+        let k = ref (import_count i) in
+        section_entries contents 6 (fun pos ->
+            current_global := !k;
+            incr k;
+            scanner.global pos))
+      files
+  in
+  let global_counts =
+    Array.map (fun l -> Array.make (Array.length l.global) 0) live
+  in
+  {
+    globals = order_globals ~resolved_imports ~live ~global_counts ~global_deps;
+    global_positions;
+  }
+
+(* Output indices of the globals, in the order given by [ordering]. *)
+let compute_global_mappings ~files ~resolved_imports ~unresolved_imports
+    ordering =
+  let imports i = get_exportable_info resolved_imports.(i) Global in
+  let global_mappings =
+    Array.mapi
+      (fun i _ ->
+        Array.make
+          (Array.length (imports i) + Array.length ordering.global_positions.(i))
+          (-1))
+      files
+  in
+  let offset = get_exportable_info unresolved_imports Global in
+  Array.iteri
+    (fun n (i, j) -> global_mappings.(i).(j) <- offset + n)
+    ordering.globals;
+  (* Imports resolve to definitions or to unresolved imports *)
+  Array.iteri
+    (fun i _ ->
+      Array.iteri
+        (fun j status ->
+          match status with
+          | Unresolved u -> global_mappings.(i).(j) <- u
+          | Resolved _ -> ())
+        (imports i))
+    files;
+  Array.iteri
+    (fun i _ ->
+      Array.iteri
+        (fun j status ->
+          match status with
+          | Resolved (i', j') ->
+              global_mappings.(i).(j) <- global_mappings.(i').(j')
+          | Unresolved _ -> ())
+        (imports i))
+    files;
+  global_mappings
+
+(* Write the global definitions in the order given by [ordering] *)
+let write_globals ~files ~resolved_imports ~type_maps ~func_mappings
+    ~global_mappings ~(positions : Scan.position_data array) ~buf ordering =
+  let imports i = get_exportable_info resolved_imports.(i) Global in
+  let scanners =
+    Array.mapi
+      (fun i { contents; _ } ->
+        let p = ordering.global_positions.(i) in
+        positions.(i).pos <- p;
+        positions.(i).i <- Array.length p;
+        Scan.global_entry
+          {
+            Scan.default_maps with
+            typ = type_maps.(i);
+            func = func_mappings.(i);
+            global = global_mappings.(i);
+          }
+          buf contents.ch.buf)
+      files
+  in
+  Array.iter
+    (fun (i, j) ->
+      ignore
+        (scanners.(i)
+           ordering.global_positions.(i).(j - Array.length (imports i))
+          : int))
+    ordering.globals;
+  Array.length ordering.globals
+
+(* Global initializers read each other in a cycle (an invalid input, which
+   linking cannot fix): report it, naming the modules involved. *)
+let report_global_cycle d files l =
+  let modules =
+    List.map
+      (fun i -> str files.(i).file)
+      (List.sort_uniq compare (List.map fst l))
+  in
+  Wax_utils.Diagnostic.report d ~location:dummy_loc ~severity:Error
+    ~message:
+      Wax_utils.Message.(
+        text "The initializers of some globals of"
+        ++ (match modules with [ _ ] -> text "module" | _ -> text "modules")
+        ++ (match List.rev modules with
+          | last :: (_ :: _ as rem) ->
+              List.fold_left ( ++ )
+                (List.hd (List.rev rem))
+                (List.tl (List.rev rem))
+              ++ text "and" ++ last
+          | _ -> List.hd modules)
+        ++ text "read each other in a cycle"
+        ^^ text "."
+           ++ text
+                "A global initializer may only read a preceding global, so \
+                 these globals cannot be ordered.")
+    ();
+  Wax_utils.Diagnostic.abort ()
 
 type input = {
   module_name : string;
@@ -1763,30 +2077,21 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
 
       (* Global index maps, computed before the table section because a table's
          initializer expression may read a global ([(table … (global.get $g))]);
-         the global bodies themselves are emitted later, in section 6. This
-         reads each module's section-6 count but does not scan its bodies.
-
-         [build_mappings] is two-pass, so a global import resolving to a *later*
-         module maps correctly regardless of input order (unlike functions,
-         globals used to be laid out in a single forward pass that rejected such
-         an import outright). Whether the resulting forward reference is actually
-         invalid depends on *where* the global is read: only a constant
-         initializer requires its operands to precede it, so the check is
-         deferred to the table/global scans below rather than made here. *)
-      let global_counts =
-        Array.map
-          (fun { contents; _ } ->
-            if Read.find_section contents 6 then Read.uint contents.ch else 0)
-          files
+         the global bodies themselves are emitted later, in section 6, in an
+         order where each initializer only reads preceding globals. *)
+      let ordering =
+        try order_global_definitions ~files ~resolved_imports
+        with Global_initializer_cycle l -> report_global_cycle d files l
       in
       let global_mappings =
-        build_mappings resolved_imports unresolved_imports Global global_counts
+        compute_global_mappings ~files ~resolved_imports ~unresolved_imports
+          ordering
       in
-      (* A table or global initializer in module [i] read a global at source
-         index [idx] that the merged layout cannot place before it (signalled by
+      (* A table initializer in module [i] read a global at source index [idx]
+         that the merged layout cannot place before it (signalled by
          [Init_reads_forward_global]). [idx] is always a resolved global import
          here, so name that import and the module its definition lands in. *)
-      let reject_forward_global kind i idx =
+      let reject_forward_global i idx =
         let import = (get_exportable_info intfs.(i).imports Global).(idx) in
         let i' =
           match (get_exportable_info resolved_imports.(i) Global).(idx) with
@@ -1796,34 +2101,17 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
         Wax_utils.Diagnostic.report d ~location:dummy_loc ~severity:Error
           ~message:
             Wax_utils.Message.(
-              let import_ = import_atom import.module_ import.name in
-              match kind with
-              | `Table ->
-                  (text "In module" ++ str files.(i).file)
-                  ^^ text ","
-                     ++ text "a table initializer reads the global import"
-                     ++ import_
-                  ^^ text ","
-                     ++ text "which linking resolves to a definition in module"
-                     ++ str files.(i').file
-                  ^^ text "."
-                     ++ text
-                          "A table initializer may only read an imported \
-                           global, so the linked module would be invalid."
-              | `Global ->
-                  (text "In module" ++ str files.(i).file)
-                  ^^ text ","
-                     ++ text "a global initializer reads the global import"
-                     ++ import_
-                  ^^ text ","
-                     ++ text
-                          "which linking resolves to a definition in the later \
-                           module"
-                     ++ str files.(i').file
-                  ^^ text "."
-                     ++ text
-                          "A global initializer may only read a preceding \
-                           global, so the linked module would be invalid.")
+              (text "In module" ++ str files.(i).file)
+              ^^ text ","
+                 ++ text "a table initializer reads the global import"
+                 ++ import_atom import.module_ import.name
+              ^^ text ","
+                 ++ text "which linking resolves to a definition in module"
+                 ++ str files.(i').file
+              ^^ text "."
+                 ++ text
+                      "A table initializer may only read an imported global, \
+                       so the linked module would be invalid.")
           ();
         Wax_utils.Diagnostic.abort ()
       in
@@ -1861,7 +2149,7 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
             fun buf s ~count pos ->
               try scan buf s ~count pos
               with Init_reads_forward_global idx ->
-                reject_forward_global `Table i idx)
+                reject_forward_global i idx)
       in
       let table_mappings =
         build_mappings resolved_imports unresolved_imports Table table_counts
@@ -1899,45 +2187,15 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
       in
 
       (* 6: global (index maps already computed above) *)
-      Array.iteri
-        (fun i { contents; _ } ->
-          if Read.find_section contents 6 then
-            let count = Read.uint contents.ch in
-            (* A global initializer may only read a *preceding* global. A global
-               import that linking resolves to a *later* module's definition
-               would follow this module's globals in the output, so mark it [-1]
-               to reject such a read ([Init_reads_forward_global]); a read of a
-               non-forward global never hits the sentinel. *)
-            let imports = get_exportable_info resolved_imports.(i) Global in
-            let import_count = Array.length imports in
-            let global =
-              Array.mapi
-                (fun j idx ->
-                  if
-                    j < import_count
-                    &&
-                    match imports.(j) with
-                    | Resolved (i', _) -> i' > i
-                    | Unresolved _ -> false
-                  then -1
-                  else idx)
-                global_mappings.(i)
-            in
-            try
-              Scan.global_section positions.(i)
-                {
-                  Scan.default_maps with
-                  typ = Read.get_type_mapping types contents;
-                  func = func_mappings.(i);
-                  global;
-                }
-                buf contents.ch.buf contents.ch.pos ~count
-            with Init_reads_forward_global idx ->
-              reject_forward_global `Global i idx)
-        files;
-      add_section out_ch ~id:6
-        ~count:(Array.fold_left ( + ) 0 global_counts)
-        buf;
+      let global_count =
+        write_globals ~files ~resolved_imports
+          ~type_maps:
+            (Array.map
+               (fun { contents; _ } -> Read.get_type_mapping types contents)
+               files)
+          ~func_mappings ~global_mappings ~positions ~buf ordering
+      in
+      add_section out_ch ~id:6 ~count:global_count buf;
       check_exports_against_imports d ~intfs ~subtyping_info ~resolved_imports
         ~files ~kind:Global ~to_desc:(fun i j : importdesc option ->
           let offset =
@@ -2360,7 +2618,7 @@ let get_instruction_offsets ~filename buf =
         let code (ch : Wax_wasm.Wasm_parser.ch) =
           let size = Read.uint ch in
           let pos' = ch.pos in
-          let _, _, _, _, func, _ =
+          let { Scan.func; _ } =
             Scan.scanner ~mark_instructions:true
               (fun _ _ -> ())
               mark identity_maps (Buffer.create 0) ch.buf
