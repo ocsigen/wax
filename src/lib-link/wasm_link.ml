@@ -1962,7 +1962,9 @@ type liveness = {
   unresolved : bool array exportable_info;
   keep_export : string -> bool;
       (** Whether an export (by output name) is kept *)
-  ordering : ordering;  (** How to order types and globals *)
+  ordering : ordering;
+      (** How to order types and globals; when removing dead code, the most used
+          ones get the smallest indices *)
   undeclared_functions : (int * int) list;
       (** Functions referenced by [ref.func] in function bodies which would not
           be declared anymore in the output, since the global initializers or
@@ -2083,6 +2085,7 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
     (* Types (by output slot): a type is live with its whole rec group *)
     let type_count = Read.output_type_count types in
     let type_live = Array.make type_count false in
+    let type_counts = Array.make type_count 0 in
     let group_of_slot = Array.make type_count (-1) in
     let group_array = Array.of_list groups in
     Array.iteri
@@ -2090,6 +2093,7 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
         Array.iteri (fun j _ -> group_of_slot.(base + j) <- g) rectype)
       group_array;
     let rec mark_type t =
+      type_counts.(t) <- type_counts.(t) + 1;
       if not type_live.(t) then (
         let base, rectype = group_array.(group_of_slot.(t)) in
         Array.iteri (fun j _ -> type_live.(base + j) <- true) rectype;
@@ -2199,6 +2203,7 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
                       if !in_function then ref_funcs := (i, idx) :: !ref_funcs);
                   mark i Func idx
               | `Global ->
+                  global_counts.(i).(idx) <- global_counts.(i).(idx) + 1;
                   (match !current_global with
                   | Some j -> global_deps.(i).(j) <- idx :: global_deps.(i).(j)
                   | None -> ());
@@ -2262,9 +2267,30 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
       | Segment (i, j) -> ignore (scanners.(i).elem segment_positions.(i).(j))
       | Data_segment (i, j) -> ignore (scanners.(i).data data_positions.(i).(j))
     done;
-    (* The live type groups, in output order *)
+    (* Order the type groups: a group can only refer to earlier groups *)
     let live_groups =
-      Array.of_list (List.filter (fun (base, _) -> type_live.(base)) groups)
+      Array.of_list
+        (List.filter
+           (fun (g, _) -> type_live.(fst group_array.(g)))
+           (List.mapi (fun g x -> (g, x)) groups))
+    in
+    let group_ids = Array.make (Array.length group_array) (-1) in
+    Array.iteri (fun n (g, _) -> group_ids.(g) <- n) live_groups;
+    let type_order =
+      priority_topological_sort ~n:(Array.length live_groups)
+        ~deps:(fun n ->
+          let l = ref [] in
+          iter_types
+            (fun t -> l := group_ids.(group_of_slot.(t)) :: !l)
+            (snd (snd live_groups.(n)));
+          !l)
+        ~priority:(fun n ->
+          let base, rectype = snd live_groups.(n) in
+          let count = ref 0 in
+          Array.iteri
+            (fun j _ -> count := !count + type_counts.(base + j))
+            rectype;
+          !count)
     in
     let global_order =
       order_globals ~resolved_imports ~live ~global_counts ~global_deps
@@ -2323,7 +2349,8 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
       keep_export = (fun name -> Hashtbl.mem kept_exports name);
       ordering =
         {
-          type_groups = Array.map fst live_groups;
+          type_groups =
+            Array.map (fun n -> fst (snd live_groups.(n))) type_order;
           globals = global_order;
           global_positions;
         };

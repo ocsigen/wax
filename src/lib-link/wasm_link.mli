@@ -72,8 +72,10 @@ val f :
     import is used, and only the functions, globals, tags, types, passive data
     segments and imports reachable from these exports or from the start
     functions are kept. Declarative element segments, and passive ones that are
-    not used, only keep the functions that are reachable otherwise. Removing
-    dead code changes neither tables, memories, nor active segments.
+    not used, only keep the functions that are reachable otherwise. Types and
+    globals are then also ordered so that the most used ones get the smallest
+    indices. Removing dead code changes neither tables, memories, nor active
+    segments.
 
     [names] (default [true]) controls whether the name section is emitted.
 

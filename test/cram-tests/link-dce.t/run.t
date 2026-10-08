@@ -128,6 +128,31 @@ indices, since its type may be removed:
   $ wax -v -f wasm -o /dev/null passive_linked.wasm && echo OK
   OK
 
+When removing dead code, the most used globals get the smallest indices (and so
+the shortest encoding):
+  $ cat > gord.wat <<EOF
+  > (module
+  >   (global \$rare (mut i32) (i32.const 1))
+  >   (global \$base i32 (i32.const 3))
+  >   (global \$derived i32 (global.get \$base))
+  >   (global \$often (mut i32) (i32.const 2))
+  >   (func (export "main") (result i32)
+  >     (global.set \$rare (global.get \$derived))
+  >     (global.set \$often (i32.const 4))
+  >     (drop (global.get \$often))
+  >     (drop (global.get \$often))
+  >     (global.get \$often)))
+  > EOF
+  $ wax gord.wat -o gord.wasm
+  $ wax link --dependencies deps.json -o gord_linked.wasm a:gord.wasm
+  $ wax gord_linked.wasm -f wat | grep '(global'
+  (global $often (mut i32)
+  (global $rare (mut i32)
+  (global $base i32
+  (global $derived i32
+  $ wax -v -f wasm -o /dev/null gord_linked.wasm && echo OK
+  OK
+
 Source maps: the mappings of a removed function are dropped, and the ones of the
 functions after it are shifted. Here the second function of `sm1` is removed:
   $ cat > sm1.wat <<EOF
