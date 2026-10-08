@@ -788,7 +788,11 @@ module Scan = struct
       | 0x6D (* eq *)
       | 0x6C (* i31 *)
       | 0x6B (* struct *)
-      | 0x6A (* array *) ->
+      | 0x6A (* array *)
+      | 0x69 (* exn *)
+      | 0x74 (* noexn *)
+      | 0x68 (* cont *)
+      | 0x75 (* nocont *) ->
           pos + 1
       | c -> failwith (Printf.sprintf "Bad heap type 0x%02X@." c)
     in
@@ -1027,6 +1031,7 @@ module Scan = struct
       | 0x07 (* catch *) -> pos + 1 |> tagidx |> instructions |> opt_catch
       | 0x19 (* catch_all *) ->
           pos + 1 |> instructions |> block_end |> instructions
+      | 0x18 (* delegate *) -> pos + 1 |> labelidx |> instructions
       | _ -> pos |> block_end |> instructions
     and catch pos =
       match get pos with

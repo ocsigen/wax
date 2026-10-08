@@ -257,3 +257,20 @@ Given in the other order (exporter first) the same modules link:
   $ wax link -o ginit_ok.wasm p:gprov.wasm c:ginit.wasm
   $ wax -v -f wasm -o /dev/null ginit_ok.wasm && echo OK
   OK
+
+The linker decodes the `delegate` instruction of legacy exception handling (here
+in a binary module, as the text format does not support it). The module is:
+(module (tag $e (param i32)) (table 1 exnref)
+(func (export "f") (result i32)
+(try $l (result i32) (do (try (result i32) (do (throw $e (i32.const 3)))
+(delegate $l))) (catch $e))))
+  $ printf '\000\141\163\155\001\000\000\000\001\011\002\140\001\177\000\140\000\001\177\003\002\001\001\004\004\001\151\000\001\015\003\001\000\000\007\005\001\001\146\000\000\012\021\001\017\000\006\177\006\177\101\003\010\000\030\000\007\000\013\013' > legacy.wasm
+  $ cat > tag.wat <<EOF
+  > (module (tag \$t))
+  > EOF
+  $ wax tag.wat -o tag.wasm
+  $ wax link -o legacy_linked.wasm a:tag.wasm b:legacy.wasm
+
+The tag is renumbered (`throw 1`, `catch 1`) on both sides of the `delegate`:
+  $ python3 -c "print(bytes.fromhex('067f067f41030801180007010b0b') in open('legacy_linked.wasm', 'rb').read())"
+  True
