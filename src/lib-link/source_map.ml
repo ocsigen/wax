@@ -267,8 +267,8 @@ type resize_data = {
 
 type input = Vlq64.input = { string : string; mutable pos : int; len : int }
 
-let resize_mappings (resize_data : resize_data) mappings =
-  if String.equal mappings "" || resize_data.i = 0 then mappings
+let resize_mappings ?(drop = []) (resize_data : resize_data) mappings =
+  if String.equal mappings "" || (resize_data.i = 0 && drop = []) then mappings
   else begin
     let src =
       { Vlq64.string = mappings; pos = 0; len = String.length mappings }
@@ -292,6 +292,56 @@ let resize_mappings (resize_data : resize_data) mappings =
     let pending_col = ref 0 in
     let pending_name = ref 0 in
     let emitted = ref false in
+    (* The ranges still to come of [drop] (sorted, disjoint) *)
+    let drop = ref drop in
+    (* When a segment of the current range has been dropped, the output
+       column of the start of the range; and whether the last segment
+       emitted has an origin *)
+    let range_start = ref None in
+    let last_has_origin = ref false in
+    let advance col =
+      while !idx < resize_data.i && col >= resize_data.pos.(!idx) do
+        shift := !shift + resize_data.delta.(!idx);
+        idx := !idx + 1
+      done
+    in
+    let emit_segment new_col tail =
+      if !emitted then Buffer.add_char buf ',';
+      emitted := true;
+      Vlq64.encode buf (new_col - !new_col_acc);
+      new_col_acc := new_col;
+      last_has_origin := tail <> []
+    in
+    (* The segment which terminates a function, without origin, is located
+       at the start of the next function. If it is dropped with the next
+       function, the location of the last segment emitted would extend past
+       its function: we emit a segment without origin at the start of the
+       range instead. *)
+    let end_range () =
+      (match !range_start with
+      | Some new_col when !last_has_origin && new_col >= 0 ->
+          emit_segment new_col []
+      | Some _ | None -> ());
+      range_start := None
+    in
+    let rec leave_ranges col =
+      match !drop with
+      | (_, end_) :: rem when col >= end_ ->
+          end_range ();
+          drop := rem;
+          leave_ranges col
+      | _ -> ()
+    in
+    (* Called before advancing to [col] *)
+    let dropped col =
+      match !drop with
+      | (start, _) :: _ when col >= start ->
+          if Option.is_none !range_start then (
+            advance start;
+            range_start := Some (start + !shift));
+          true
+      | _ -> false
+    in
     (* The generated-column field is already decoded; read the remaining fields
        of the current segment (0 for a bare column, 3, or 4 with a name), up to
        the next separator or the end. *)
@@ -336,17 +386,13 @@ let resize_mappings (resize_data : resize_data) mappings =
       if src.pos < src.len && Vlq64.in_alphabet src.string.[src.pos] then begin
         col := !col + Vlq64.decode src;
         let tail = read_tail () in
-        while !idx < resize_data.i && !col >= resize_data.pos.(!idx) do
-          shift := !shift + resize_data.delta.(!idx);
-          idx := !idx + 1
-        done;
+        leave_ranges !col;
+        let in_range = dropped !col in
+        advance !col;
         let new_col = !col + !shift in
-        if new_col < 0 then accumulate tail
+        if in_range || new_col < 0 then accumulate tail
         else begin
-          if !emitted then Buffer.add_char buf ',';
-          emitted := true;
-          Vlq64.encode buf (new_col - !new_col_acc);
-          new_col_acc := new_col;
+          emit_segment new_col tail;
           emit_tail tail
         end
       end;
@@ -356,12 +402,13 @@ let resize_mappings (resize_data : resize_data) mappings =
       end
     in
     segment ();
+    end_range ();
     Buffer.contents buf
   end
 
-let resize resize_data (sm : Standard.t) =
+let resize ?drop resize_data (sm : Standard.t) =
   let mappings = Mappings.to_string sm.mappings in
-  let mappings = resize_mappings resize_data mappings in
+  let mappings = resize_mappings ?drop resize_data mappings in
   { sm with mappings = Mappings.of_string_unsafe mappings }
 
 let is_empty { Standard.mappings; _ } = Mappings.is_empty mappings

@@ -101,16 +101,68 @@ let find_index pred list =
   in
   loop 0 list
 
+(* The byte ranges [start, end) of the function bodies of a module *)
+let function_body_ranges buf =
+  let pos = ref 8 in
+  let uint () =
+    let rec loop shift acc =
+      let b = Char.code buf.[!pos] in
+      incr pos;
+      let acc = acc lor ((b land 0x7f) lsl shift) in
+      if b < 128 then acc else loop (shift + 7) acc
+    in
+    loop 0 0
+  in
+  let ranges = ref [||] in
+  while !pos < String.length buf do
+    let id = Char.code buf.[!pos] in
+    incr pos;
+    let size = uint () in
+    let next = !pos + size in
+    (if id = 10 then
+       let count = uint () in
+       ranges :=
+         Array.init count (fun _ ->
+             let size = uint () in
+             let start = !pos in
+             pos := start + size;
+             (start, !pos)));
+    pos := next
+  done;
+  !ranges
+
+(* Usage: check_sourcemap [--removed INPUT:N]... OUTPUT_WASM OUTPUT_MAP INPUT...
+
+   [--removed INPUT:N] states that the [N]-th function defined by [INPUT] (in
+   the order of its code section) was removed by dead code elimination: its
+   instructions have no counterpart in the output, and its mappings must be
+   absent from the output map. *)
 let () =
-  if Array.length Sys.argv < 4 then (
+  let removed = ref [] in
+  let rec parse_args = function
+    | "--removed" :: spec :: rem ->
+        (match String.rindex_opt spec ':' with
+        | Some i ->
+            removed :=
+              ( String.sub spec 0 i,
+                int_of_string
+                  (String.sub spec (i + 1) (String.length spec - i - 1)) )
+              :: !removed
+        | None -> failwith ("bad --removed argument " ^ spec));
+        parse_args rem
+    | l -> l
+  in
+  let args = parse_args (List.tl (Array.to_list Sys.argv)) in
+  if List.length args < 3 then (
     Printf.eprintf
-      "Usage: %s <output_wasm> <output_map> <input_wasm_1> [<input_wasm_2> ...]\n"
+      "Usage: %s [--removed <input_wasm>:<n>]... <output_wasm> <output_map> \
+       <input_wasm_1> [<input_wasm_2> ...]\n"
       Sys.argv.(0);
     exit 1);
-  let output_wasm = Sys.argv.(1) in
-  let output_map = Sys.argv.(2) in
-  let inputs =
-    List.init (Array.length Sys.argv - 3) (fun i -> Sys.argv.(3 + i))
+  let output_wasm, output_map, inputs =
+    match args with
+    | output_wasm :: output_map :: inputs -> (output_wasm, output_map, inputs)
+    | _ -> assert false
   in
 
   let output_buf = read_file output_wasm in
@@ -130,9 +182,25 @@ let () =
   List.iter2
     (fun input_wasm section ->
       let input_buf = read_file input_wasm in
-      let input_offsets, _ =
+      let all_input_offsets, _ =
         Wasm_link.get_instruction_offsets ~filename:input_wasm input_buf
       in
+      (* Leave out the instructions of the removed functions *)
+      let removed_ranges =
+        let ranges = function_body_ranges input_buf in
+        List.filter_map
+          (fun (file, n) -> if file = input_wasm then Some ranges.(n) else None)
+          !removed
+      in
+      let is_removed pos =
+        List.exists
+          (fun (start, end_) -> pos >= start && pos < end_)
+          removed_ranges
+      in
+      let input_offsets =
+        List.filter (fun pos -> not (is_removed pos)) all_input_offsets
+      in
+      let kept_mappings = ref 0 in
 
       let input_map_file = input_wasm ^ ".map" in
       (if Sys.file_exists input_map_file then
@@ -143,68 +211,88 @@ let () =
 
          List.iter
            (fun input_m ->
-             match
-               find_index (fun pos -> pos = input_m.gen_col) input_offsets
-             with
-             | None ->
-                 Printf.eprintf
-                   "Warning: input mapping at %d in %s is not on instruction \
-                    boundary\n"
-                   input_m.gen_col input_wasm
-             | Some local_idx -> (
-                 let expected_output_col =
-                   List.nth output_offsets (!global_instr_idx + local_idx)
-                 in
-                 let rel_expected_col = expected_output_col - section.offset in
-                 match
-                   List.find_opt
-                     (fun m -> m.gen_col = rel_expected_col)
-                     section.mappings
-                 with
-                 | None ->
-                     Printf.eprintf
-                       "Error: mapping for instruction %d in %s (input offset \
-                        %d, expected output offset %d) not found in output \
-                        source map\n"
-                       local_idx input_wasm input_m.gen_col expected_output_col;
-                     exit 1
-                 | Some output_m ->
-                     let get_opt_val arr idx_opt =
-                       Option.map (List.nth arr) idx_opt
-                     in
-                     let input_src = get_opt_val sources input_m.src_file in
-                     let output_src =
-                       get_opt_val section.sources output_m.src_file
-                     in
-                     if input_src <> output_src then (
+             if is_removed input_m.gen_col then ()
+             else (
+               if Option.is_some input_m.src_file then incr kept_mappings;
+               match
+                 find_index (fun pos -> pos = input_m.gen_col) input_offsets
+               with
+               | None ->
+                   Printf.eprintf
+                     "Warning: input mapping at %d in %s is not on instruction \
+                      boundary\n"
+                     input_m.gen_col input_wasm
+               | Some local_idx -> (
+                   let expected_output_col =
+                     List.nth output_offsets (!global_instr_idx + local_idx)
+                   in
+                   let rel_expected_col =
+                     expected_output_col - section.offset
+                   in
+                   match
+                     List.find_opt
+                       (fun m -> m.gen_col = rel_expected_col)
+                       section.mappings
+                   with
+                   | None ->
                        Printf.eprintf
-                         "Error: source mismatch for input offset %d: expected \
-                          %s, got %s\n"
-                         input_m.gen_col
-                         (Option.value ~default:"None" input_src)
-                         (Option.value ~default:"None" output_src);
-                       exit 1);
-                     if
-                       input_m.src_line <> output_m.src_line
-                       || input_m.src_col <> output_m.src_col
-                     then (
-                       Printf.eprintf
-                         "Error: line/col mismatch for input offset %d\n"
-                         input_m.gen_col;
-                       exit 1);
-                     let input_name = get_opt_val names input_m.src_name in
-                     let output_name =
-                       get_opt_val section.names output_m.src_name
-                     in
-                     if input_name <> output_name then (
-                       Printf.eprintf
-                         "Error: name mismatch for input offset %d: expected \
-                          %s, got %s\n"
-                         input_m.gen_col
-                         (Option.value ~default:"None" input_name)
-                         (Option.value ~default:"None" output_name);
-                       exit 1)))
+                         "Error: mapping for instruction %d in %s (input \
+                          offset %d, expected output offset %d) not found in \
+                          output source map\n"
+                         local_idx input_wasm input_m.gen_col
+                         expected_output_col;
+                       exit 1
+                   | Some output_m ->
+                       let get_opt_val arr idx_opt =
+                         Option.map (List.nth arr) idx_opt
+                       in
+                       let input_src = get_opt_val sources input_m.src_file in
+                       let output_src =
+                         get_opt_val section.sources output_m.src_file
+                       in
+                       if input_src <> output_src then (
+                         Printf.eprintf
+                           "Error: source mismatch for input offset %d: \
+                            expected %s, got %s\n"
+                           input_m.gen_col
+                           (Option.value ~default:"None" input_src)
+                           (Option.value ~default:"None" output_src);
+                         exit 1);
+                       if
+                         input_m.src_line <> output_m.src_line
+                         || input_m.src_col <> output_m.src_col
+                       then (
+                         Printf.eprintf
+                           "Error: line/col mismatch for input offset %d\n"
+                           input_m.gen_col;
+                         exit 1);
+                       let input_name = get_opt_val names input_m.src_name in
+                       let output_name =
+                         get_opt_val section.names output_m.src_name
+                       in
+                       if input_name <> output_name then (
+                         Printf.eprintf
+                           "Error: name mismatch for input offset %d: expected \
+                            %s, got %s\n"
+                           input_m.gen_col
+                           (Option.value ~default:"None" input_name)
+                           (Option.value ~default:"None" output_name);
+                         exit 1))))
            input_mappings);
+
+      (* Mappings without origin only end the previous location: the linker
+         adds one where a removed function started, which is not an
+         instruction boundary. The others must point at instructions. *)
+      let origin_mappings =
+        List.filter (fun m -> Option.is_some m.src_file) section.mappings
+      in
+      (* The mappings of removed functions must not remain *)
+      if List.length origin_mappings <> !kept_mappings then (
+        Printf.eprintf
+          "Error: the output map has %d mappings for %s, but %d were expected\n"
+          (List.length origin_mappings)
+          input_wasm !kept_mappings;
+        exit 1);
 
       List.iter
         (fun output_m ->
@@ -214,7 +302,7 @@ let () =
               "Error: output mapping at offset %d points inside an instruction\n"
               abs_col;
             exit 1))
-        section.mappings;
+        origin_mappings;
 
       global_instr_idx := !global_instr_idx + List.length input_offsets)
     inputs parsed_sections;

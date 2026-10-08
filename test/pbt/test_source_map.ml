@@ -4,72 +4,101 @@ module Vlq64 = Wax_utils.Source_map.Vlq64
 (* Naive reference implementation. Structurally independent of the streaming
    [resize_mappings] (split on ',', full [decode_l] per segment) but with the
    same specification, including folding a dropped segment's source/original
-   fields into the next survivor that emits them. *)
-let naive_resize_mappings resize_data mappings =
-  if mappings = "" || resize_data.i = 0 then mappings
+   fields into the next survivor that emits them, and emitting a segment
+   without origin at the start of a [drop] range whose segments were dropped
+   when the last segment emitted before it has an origin. *)
+let naive_resize_mappings ?(drop = []) resize_data mappings =
+  if mappings = "" || (resize_data.i = 0 && drop = []) then mappings
   else
     let segments = String.split_on_char ',' mappings in
+    let shift_at col =
+      let shift = ref 0 in
+      for k = 0 to resize_data.i - 1 do
+        if resize_data.pos.(k) <= col then
+          shift := !shift + resize_data.delta.(k)
+      done;
+      !shift
+    in
     let col_acc = ref 0 in
     let new_col_acc = ref 0 in
     let pending_source = ref 0 in
     let pending_line = ref 0 in
     let pending_col = ref 0 in
     let pending_name = ref 0 in
-    let new_segments =
-      List.filter_map
-        (fun segment ->
-          if segment = "" then None
-          else
-            let fields =
-              Vlq64.decode_l segment ~pos:0 ~len:(String.length segment)
-            in
-            match fields with
-            | [] -> assert false
-            | relative_col :: tail ->
-                let col = !col_acc + relative_col in
-                col_acc := col;
-                let shift = ref 0 in
-                for k = 0 to resize_data.i - 1 do
-                  if resize_data.pos.(k) <= col then
-                    shift := !shift + resize_data.delta.(k)
-                done;
-                let new_col = col + !shift in
-                if new_col < 0 then (
-                  (match tail with
-                  | source :: line :: column :: rest -> (
-                      pending_source := !pending_source + source;
-                      pending_line := !pending_line + line;
-                      pending_col := !pending_col + column;
-                      match rest with
-                      | name :: _ -> pending_name := !pending_name + name
-                      | [] -> ())
-                  | _ -> ());
-                  None)
-                else
-                  let new_relative_col = new_col - !new_col_acc in
-                  new_col_acc := new_col;
-                  let buf = Buffer.create 16 in
-                  Vlq64.encode buf new_relative_col;
-                  (match tail with
-                  | [] -> ()
-                  | source :: line :: column :: rest -> (
-                      Vlq64.encode buf (source + !pending_source);
-                      Vlq64.encode buf (line + !pending_line);
-                      Vlq64.encode buf (column + !pending_col);
-                      pending_source := 0;
-                      pending_line := 0;
-                      pending_col := 0;
-                      match rest with
-                      | [] -> ()
-                      | name :: rest ->
-                          Vlq64.encode buf (name + !pending_name);
-                          pending_name := 0;
-                          List.iter (Vlq64.encode buf) rest)
-                  | fields -> List.iter (Vlq64.encode buf) fields);
-                  Some (Buffer.contents buf))
-        segments
+    let output = ref [] in
+    let last_has_origin = ref false in
+    let ranges = ref drop in
+    let range_dropped = ref false in
+    let emit new_col tail =
+      let buf = Buffer.create 16 in
+      Vlq64.encode buf (new_col - !new_col_acc);
+      new_col_acc := new_col;
+      last_has_origin := tail <> [];
+      (match tail with
+      | [] -> ()
+      | source :: line :: column :: rest -> (
+          Vlq64.encode buf (source + !pending_source);
+          Vlq64.encode buf (line + !pending_line);
+          Vlq64.encode buf (column + !pending_col);
+          pending_source := 0;
+          pending_line := 0;
+          pending_col := 0;
+          match rest with
+          | [] -> ()
+          | name :: rest ->
+              Vlq64.encode buf (name + !pending_name);
+              pending_name := 0;
+              List.iter (Vlq64.encode buf) rest)
+      | fields -> List.iter (Vlq64.encode buf) fields);
+      output := Buffer.contents buf :: !output
     in
-    String.concat "," new_segments
+    let close_range () =
+      (match !ranges with
+      | (s, _) :: _ when !range_dropped && !last_has_origin ->
+          let new_col = s + shift_at s in
+          if new_col >= 0 then emit new_col []
+      | _ -> ());
+      range_dropped := false
+    in
+    List.iter
+      (fun segment ->
+        if segment <> "" then
+          let fields =
+            Vlq64.decode_l segment ~pos:0 ~len:(String.length segment)
+          in
+          match fields with
+          | [] -> assert false
+          | relative_col :: tail ->
+              let col = !col_acc + relative_col in
+              col_acc := col;
+              let rec leave () =
+                match !ranges with
+                | (_, e) :: rem when col >= e ->
+                    close_range ();
+                    ranges := rem;
+                    leave ()
+                | _ -> ()
+              in
+              leave ();
+              let in_range =
+                match !ranges with (s, _) :: _ -> col >= s | [] -> false
+              in
+              if in_range then range_dropped := true;
+              let new_col = col + shift_at col in
+              if new_col < 0 || in_range then
+                match tail with
+                | source :: line :: column :: rest -> (
+                    pending_source := !pending_source + source;
+                    pending_line := !pending_line + line;
+                    pending_col := !pending_col + column;
+                    match rest with
+                    | name :: _ -> pending_name := !pending_name + name
+                    | [] -> ())
+                | _ -> ()
+              else emit new_col tail)
+      segments;
+    close_range ();
+    String.concat "," (List.rev !output)
 
 (* QCheck Test *)
 let test_resize =
@@ -120,6 +149,65 @@ let test_resize =
       let res1 = resize_mappings rd mappings in
       let res2 = naive_resize_mappings rd mappings in
       res1 = res2)
+
+(* The same, also dropping the segments in random (sorted, disjoint) ranges of
+   input columns, as done for the bodies of removed functions *)
+let test_resize_drop =
+  let gen =
+    let open QCheck.Gen in
+    int_range (-100) (-1) >>= fun first_delta ->
+    list (pair (int_range 1 50) (int_range 0 10)) >>= fun rest ->
+    let n = 1 + List.length rest in
+    let pos = Array.make n 0 in
+    let delta = Array.make n 0 in
+    delta.(0) <- first_delta;
+    let curr_pos = ref 0 in
+    List.iteri
+      (fun idx (pos_diff, d) ->
+        curr_pos := !curr_pos + pos_diff;
+        pos.(idx + 1) <- !curr_pos;
+        delta.(idx + 1) <- d)
+      rest;
+    let rd = { i = n; pos; delta } in
+    list (pair (int_range 0 100) (int_range 1 100)) >>= fun gaps ->
+    let drop =
+      let start = ref 0 in
+      List.map
+        (fun (gap, len) ->
+          let s = !start + gap in
+          start := s + len;
+          (s, s + len))
+        gaps
+    in
+    int_range 0 (200 - first_delta) >>= fun first_rel_col ->
+    list (int_range 1 100) >>= fun rest_rel_cols ->
+    list_size (return (1 + List.length rest_rel_cols)) bool >>= fun named ->
+    let make_segment rel_col named =
+      let buf = Buffer.create 16 in
+      Vlq64.encode buf rel_col;
+      Buffer.add_string buf (if named then "ABCD" else "ABC");
+      Buffer.contents buf
+    in
+    let segments =
+      List.map2 make_segment (first_rel_col :: rest_rel_cols) named
+    in
+    return (rd, drop, String.concat "," segments)
+  in
+  let print (rd, drop, mappings) =
+    Printf.sprintf
+      "resize_data: (i=%d, pos=[%s], delta=[%s])\ndrop: [%s]\nmappings: %s" rd.i
+      (String.concat ";"
+         (List.map string_of_int (Array.to_list (Array.sub rd.pos 0 rd.i))))
+      (String.concat ";"
+         (List.map string_of_int (Array.to_list (Array.sub rd.delta 0 rd.i))))
+      (String.concat ";"
+         (List.map (fun (s, e) -> Printf.sprintf "%d-%d" s e) drop))
+      mappings
+  in
+  QCheck.Test.make ~name:"resize_mappings ~drop matches naive implementation"
+    ~count:1000 (QCheck.make ~print gen) (fun (rd, drop, mappings) ->
+      resize_mappings ~drop rd mappings
+      = naive_resize_mappings ~drop rd mappings)
 
 (* Idempotence sanity check: resizing with empty resize_data is identity *)
 let test_empty =
@@ -365,6 +453,14 @@ let test_iter_sources () =
 
 let () =
   test_iter_sources ();
-  let suite = [ test_resize; test_resize_semantic; test_empty; test_shift ] in
+  let suite =
+    [
+      test_resize;
+      test_resize_drop;
+      test_resize_semantic;
+      test_empty;
+      test_shift;
+    ]
+  in
   let result = QCheck_runner.run_tests suite in
   if result <> 0 then exit result
