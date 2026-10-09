@@ -18,4 +18,5 @@
  (deps
   %{bin:wax}
   %{dep:../check-sourcemap/check_sourcemap.exe}
+  %{dep:../link-filter/link_filter.exe}
   (glob_files_rec %{project_root}/docs/src/*.md)))

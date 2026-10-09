@@ -647,8 +647,10 @@ module Scan = struct
 
   (* A live entry refers to an entry which was found dead: the liveness
      analysis missed a reference *)
-  let dead_reference idx =
-    failwith (Printf.sprintf "Wasm linker: reference to removed entity %d" idx)
+  let dead_reference ~file kind idx =
+    failwith
+      (Printf.sprintf "Wasm linker: in module %s, reference to removed %s %d"
+         file kind idx)
 
   (* The byte-level rewriter at the heart of linking. It walks a section payload
      in [code], copies bytes verbatim into [buf], and renumbers every embedded
@@ -691,7 +693,8 @@ module Scan = struct
      functions ([table], [global], [elem], [data]) return the position
      following the entry. *)
   let scanner ?(mark_instructions = false) ?(analysis = false)
-      ?(visit = fun (_ : ref_kind) (_ : int) -> ()) report mark maps buf code =
+      ?(visit = fun (_ : ref_kind) (_ : int) -> ()) ?(file = "") report mark
+      maps buf code =
     let rec output_uint buf i =
       if i < 128 then Buffer.add_char buf (Char.chr i)
       else (
@@ -748,7 +751,7 @@ module Scan = struct
       start := pos'
     in
     let flush pos = flush' pos pos in
-    let rewrite visit map pos =
+    let rewrite kind visit map pos =
       let pos', idx =
         let i = get pos in
         if i < 128 then (pos + 1, i)
@@ -760,7 +763,7 @@ module Scan = struct
       if !skipping then pos'
       else
         let idx' = map idx in
-        if idx' < 0 then dead_reference idx;
+        if idx' < 0 then dead_reference ~file kind idx;
         if idx <> idx' then (
           flush' pos pos';
           let p = Buffer.length buf in
@@ -775,7 +778,7 @@ module Scan = struct
           if dp <> dpos then report pos' (dp - dpos));
         pos'
     in
-    let rewrite_signed visit map pos =
+    let rewrite_signed kind visit map pos =
       let pos', idx =
         let i = get pos in
         if i < 64 then (pos + 1, i)
@@ -786,7 +789,7 @@ module Scan = struct
       if !skipping then pos'
       else
         let idx' = map idx in
-        if idx' < 0 then dead_reference idx;
+        if idx' < 0 then dead_reference ~file kind idx;
         if idx <> idx' then (
           flush' pos pos';
           let p = Buffer.length buf in
@@ -806,14 +809,14 @@ module Scan = struct
     let visit_tag idx = visit `Tag idx in
     let visit_type idx = visit `Type idx in
     let typ_map idx = maps.typ.(idx) in
-    let typeidx pos = rewrite visit_type typ_map pos in
-    let signed_typeidx pos = rewrite_signed visit_type typ_map pos in
+    let typeidx pos = rewrite "type" visit_type typ_map pos in
+    let signed_typeidx pos = rewrite_signed "type" visit_type typ_map pos in
     let func_map idx = maps.func.(idx) in
-    let funcidx pos = rewrite visit_func func_map pos in
+    let funcidx pos = rewrite "function" visit_func func_map pos in
     let table_map idx = maps.table.(idx) in
-    let tableidx pos = rewrite no_visit table_map pos in
+    let tableidx pos = rewrite "table" no_visit table_map pos in
     let mem_map idx = maps.mem.(idx) in
-    let memidx pos = rewrite no_visit mem_map pos in
+    let memidx pos = rewrite "memory" no_visit mem_map pos in
     let global_map idx =
       (* [-1] marks a global a table-initializer scan must reject (see
          [Init_reads_forward_global]). Elsewhere, it is the mapping of a global
@@ -823,13 +826,13 @@ module Scan = struct
       if v < 0 then raise (Init_reads_forward_global idx);
       v
     in
-    let globalidx pos = rewrite visit_global global_map pos in
+    let globalidx pos = rewrite "global" visit_global global_map pos in
     let elem_map idx = maps.elem.(idx) in
-    let elemidx pos = rewrite visit_elem elem_map pos in
+    let elemidx pos = rewrite "element segment" visit_elem elem_map pos in
     let data_map idx = maps.data.(idx) in
-    let dataidx pos = rewrite visit_data data_map pos in
+    let dataidx pos = rewrite "data segment" visit_data data_map pos in
     let tag_map idx = maps.tag.(idx) in
-    let tagidx pos = rewrite visit_tag tag_map pos in
+    let tagidx pos = rewrite "tag" visit_tag tag_map pos in
     let labelidx = int in
     let localidx = int in
     let laneidx pos = pos + 1 in
@@ -964,7 +967,7 @@ module Scan = struct
         ->
           pos + 1 |> instructions
       | 0xD2 (* ref.func *) ->
-          pos + 1 |> rewrite visit_ref_func func_map |> instructions
+          pos + 1 |> rewrite "function" visit_ref_func func_map |> instructions
       | 0xE0 (* cont.new *) -> pos + 1 |> typeidx |> instructions
       | 0xE1 (* cont.bind *) -> pos + 1 |> typeidx |> typeidx |> instructions
       | 0xE2 (* suspend *) -> pos + 1 |> tagidx |> instructions
@@ -1304,24 +1307,24 @@ module Scan = struct
       data;
     }
 
-  let table_section positions maps buf s =
-    (scanner
+  let table_section ~file positions maps buf s =
+    (scanner ~file
        (fun _ _ -> ())
        (fun pos -> push_position positions pos)
        maps buf s)
       .table_section
 
-  let global_entry maps buf s =
-    (scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s).global_entry
+  let global_entry ~file maps buf s =
+    (scanner ~file (fun _ _ -> ()) (fun _ -> ()) maps buf s).global_entry
 
-  let elem_section maps buf s =
-    (scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s).elem_section
+  let elem_section ~file maps buf s =
+    (scanner ~file (fun _ _ -> ()) (fun _ -> ()) maps buf s).elem_section
 
-  let data_section maps buf s =
-    (scanner (fun _ _ -> ()) (fun _ -> ()) maps buf s).data_section
+  let data_section ~file maps buf s =
+    (scanner ~file (fun _ _ -> ()) (fun _ -> ()) maps buf s).data_section
 
-  let func resize_data maps buf s =
-    (scanner
+  let func ~file resize_data maps buf s =
+    (scanner ~file
        (fun pos delta -> push_resize resize_data pos delta)
        (fun _ -> ())
        maps buf s)
@@ -1545,6 +1548,16 @@ let defined_entity ~intfs ~kind ~get i j =
   let offset = Array.length (get_exportable_info intfs.(i).Read.imports kind) in
   if j < offset then None else Some (get i (j - offset))
 
+(* The live entries of [data]. The [live] flags also cover the imports, which
+   come first. *)
+let filter_live ~live data =
+  let offset = Array.length live - Array.length data in
+  let l = ref [] in
+  for j = Array.length data - 1 downto 0 do
+    if live.(j + offset) then l := data.(j) :: !l
+  done;
+  Array.of_list !l
+
 let write_simple_section d ~live ~intfs ~subtyping_info ~resolved_imports
     ~unresolved_imports ~files ~out_ch ~kind ~read ~to_type ~write =
   let data = Array.map (fun f -> read f.contents) files in
@@ -1553,12 +1566,7 @@ let write_simple_section d ~live ~intfs ~subtyping_info ~resolved_imports
       (Array.to_list
          (Array.mapi
             (fun i data ->
-              let live = get_exportable_info live.(i) kind in
-              let offset = Array.length live - Array.length data in
-              Array.of_list
-                (List.filteri
-                   (fun j _ -> live.(j + offset))
-                   (Array.to_list data)))
+              filter_live ~live:(get_exportable_info live.(i) kind) data)
             data))
   in
   if Array.length entries <> 0 then write out_ch entries;
@@ -1651,8 +1659,17 @@ let write_namemap ~resolved_imports ~unresolved_imports ~name_sections
           incr count;
           Write.nameassoc buf idx name)
     import_names;
-  (* Entries must be sorted by index, which may differ from the input order
-     (globals are reordered) *)
+  let write_entry idx s pos len =
+    incr count;
+    Write.uint buf idx;
+    Write.uint buf len;
+    Buffer.add_substring buf s pos len
+  in
+  (* Entries must be sorted by index. Only globals are reordered: the other
+     entries are already in the right order. *)
+  let reordered =
+    match kind with Global -> true | Func | Table | Memory | Tag -> false
+  in
   let entries = ref [] in
   Array.iteri
     (fun i name_section ->
@@ -1666,16 +1683,14 @@ let write_namemap ~resolved_imports ~unresolved_imports ~name_sections
           let idx = Read.uint ch in
           let len = Read.uint ch in
           if idx >= import_count && mapping.(idx) >= 0 then
-            entries := (mapping.(idx), ch.buf, ch.pos, len) :: !entries;
+            if reordered then
+              entries := (mapping.(idx), ch.buf, ch.pos, len) :: !entries
+            else write_entry mapping.(idx) ch.buf ch.pos len;
           ch.pos <- ch.pos + len
         done)
     name_sections;
   List.iter
-    (fun (idx, s, pos, len) ->
-      incr count;
-      Write.uint buf idx;
-      Write.uint buf len;
-      Buffer.add_substring buf s pos len)
+    (fun (idx, s, pos, len) -> write_entry idx s pos len)
     (List.sort (fun (i, _, _, _) (i', _, _, _) -> compare i i') !entries);
   add_subsection name_section_buffer ~id:section_id ~count:!count buf
 
@@ -1972,6 +1987,36 @@ type liveness = {
           exports which declared them have been removed *)
 }
 
+(* The functions in [candidates] which are not declared in [declared] or by an
+   export which is kept ([kept i name] for an export [name] of module [i]),
+   each listed once *)
+let undeclared_functions ~resolved_imports ~intfs ~kept ~declared candidates =
+  let key i j =
+    let imports = get_exportable_info resolved_imports.(i) Func in
+    if j < Array.length imports then
+      match imports.(j) with
+      | Resolved (i', j') -> (i', j')
+      | Unresolved u -> (-1, u)
+    else (i, j)
+  in
+  let declared_keys = Hashtbl.create 128 in
+  let declare (i, j) = Hashtbl.replace declared_keys (key i j) () in
+  List.iter declare declared;
+  Array.iteri
+    (fun i intf ->
+      List.iter
+        (fun (name, idx) -> if kept i name then declare (i, idx))
+        intf.Read.exports.func)
+    intfs;
+  List.filter
+    (fun (i, j) ->
+      let k = key i j in
+      if Hashtbl.mem declared_keys k then false
+      else (
+        Hashtbl.replace declared_keys k ();
+        true))
+    candidates
+
 (* Compute which entries are reachable from the roots: the start functions, the
    exports that are kept, tables, active data and element segments. If
    [dependencies] is provided, the exports that are kept are the ones reachable
@@ -2066,6 +2111,46 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
               scanner.global pos))
         files
     in
+    let undeclared_functions =
+      (* Everything is kept but the exports dropped by [exported_names]. Rather
+         than scanning the function bodies for [ref.func] instructions, we
+         declare all the functions which were only declared by such an
+         export. *)
+      let candidates =
+        List.concat
+          (Array.to_list
+             (Array.mapi
+                (fun i intf ->
+                  List.filter_map
+                    (fun (name, idx) ->
+                      match exported_names i name with
+                      | Some _ -> None
+                      | None -> Some (i, idx))
+                    intf.Read.exports.func)
+                intfs))
+      in
+      match candidates with
+      | [] -> []
+      | _ :: _ ->
+          let declared = ref [] in
+          Array.iteri
+            (fun i { contents; _ } ->
+              let scanner =
+                Scan.analysis
+                  ~visit:(fun kind idx ->
+                    match kind with
+                    | `Func | `Ref_func -> declared := (i, idx) :: !declared
+                    | `Global | `Tag | `Elem | `Data | `Type -> ())
+                  contents.ch.buf
+              in
+              ignore (section_entries contents 4 scanner.table);
+              ignore (section_entries contents 6 scanner.global);
+              ignore (section_entries contents 9 scanner.elem))
+            files;
+          undeclared_functions ~resolved_imports ~intfs
+            ~kept:(fun i name -> Option.is_some (exported_names i name))
+            ~declared:!declared candidates
+    in
     {
       live;
       segments;
@@ -2079,7 +2164,7 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
             order_globals ~resolved_imports ~live ~global_counts ~global_deps;
           global_positions;
         };
-      undeclared_functions = [];
+      undeclared_functions;
     }
   else
     let stack = Stack.create () in
@@ -2102,7 +2187,8 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
     in
     Option.iter mark_type start_type;
     (* Functions referenced by [ref.func] in function bodies, and functions
-       declared in global initializers *)
+       declared in global initializers, table initializers and live element
+       segments *)
     let ref_funcs = ref [] in
     let declared = ref [] in
     let in_function = ref false in
@@ -2196,12 +2282,14 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
           Scan.analysis
             ~visit:(fun kind idx ->
               match kind with
-              | `Func -> mark i Func idx
+              | `Func ->
+                  (* Outside function bodies, only element segments refer to
+                     functions this way *)
+                  if not !in_function then declared := (i, idx) :: !declared;
+                  mark i Func idx
               | `Ref_func ->
-                  (match !current_global with
-                  | Some _ -> declared := (i, idx) :: !declared
-                  | None ->
-                      if !in_function then ref_funcs := (i, idx) :: !ref_funcs);
+                  if !in_function then ref_funcs := (i, idx) :: !ref_funcs
+                  else declared := (i, idx) :: !declared;
                   mark i Func idx
               | `Global ->
                   global_counts.(i).(idx) <- global_counts.(i).(idx) + 1;
@@ -2300,47 +2388,29 @@ let compute_liveness ~files ~(types : Read.types) ~groups ~resolved_imports
        in an element segment (all are kept, with their live functions), in an
        export, or in a global initializer. *)
     let undeclared_functions =
-      let key i j =
-        let imports = get_exportable_info resolved_imports.(i) Func in
-        if j < Array.length imports then
-          match imports.(j) with
-          | Resolved (i', j') -> (i', j')
-          | Unresolved u -> (-1, u)
-        else (i, j)
-      in
-      let declared_keys = Hashtbl.create 128 in
-      let declare (i, j) = Hashtbl.replace declared_keys (key i j) () in
-      List.iter declare !declared;
+      (* The segments which are not live are kept as declarations of their live
+         functions *)
       Array.iteri
         (fun i { contents; _ } ->
           let scanner =
             Scan.analysis
               ~visit:(fun kind idx ->
                 match kind with
-                | `Func | `Ref_func -> declare (i, idx)
+                | `Func | `Ref_func -> declared := (i, idx) :: !declared
                 | `Global | `Tag | `Elem | `Data | `Type -> ())
               contents.ch.buf
           in
-          ignore (section_entries contents 4 scanner.table);
-          ignore (section_entries contents 9 scanner.elem))
+          Array.iteri
+            (fun j pos ->
+              if not segments.(i).(j) then ignore (scanner.elem pos))
+            segment_positions.(i))
         files;
-      Array.iteri
-        (fun i intf ->
-          List.iter
-            (fun (name, idx) ->
-              match exported_names i name with
-              | Some name when Hashtbl.mem kept_exports name -> declare (i, idx)
-              | _ -> ())
-            intf.Read.exports.func)
-        intfs;
-      List.filter
-        (fun (i, j) ->
-          let k = key i j in
-          if Hashtbl.mem declared_keys k then false
-          else (
-            Hashtbl.replace declared_keys k ();
-            true))
-        !ref_funcs
+      undeclared_functions ~resolved_imports ~intfs
+        ~kept:(fun i name ->
+          match exported_names i name with
+          | Some name -> Hashtbl.mem kept_exports name
+          | None -> false)
+        ~declared:!declared !ref_funcs
     in
     {
       live;
@@ -2403,12 +2473,12 @@ let write_globals ~files ~resolved_imports ~type_maps ~func_mappings
   let imports i = get_exportable_info resolved_imports.(i) Global in
   let scanners =
     Array.mapi
-      (fun i { contents; _ } ->
+      (fun i { contents; file; _ } ->
         (* Copy, so that [positions] does not alias the ordering *)
         let p = Array.copy ordering.global_positions.(i) in
         positions.(i).pos <- p;
         positions.(i).i <- Array.length p;
-        Scan.global_entry
+        Scan.global_entry ~file
           {
             Scan.default_maps with
             typ = type_maps.(i);
@@ -2455,16 +2525,30 @@ let report_global_cycle d (files : t array) l =
     ();
   Wax_utils.Diagnostic.abort ()
 
+(* Number the live entries consecutively, across all the arrays. Dead entries
+   are mapped to -1. Also return the number of live entries of each array. *)
 let compact live =
   let n = ref 0 in
-  Array.map
-    (fun l ->
-      if l then (
-        let idx = !n in
-        incr n;
-        idx)
-      else -1)
-    live
+  let counts = Array.make (Array.length live) 0 in
+  let mappings =
+    Array.mapi
+      (fun i live ->
+        let first = !n in
+        let mapping =
+          Array.map
+            (fun l ->
+              if l then (
+                let idx = !n in
+                incr n;
+                idx)
+              else -1)
+            live
+        in
+        counts.(i) <- !n - first;
+        mapping)
+      live
+  in
+  (mappings, counts)
 
 let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
     ?dependencies ?(names = true) ?source_map:(emit_source_map = false) files
@@ -2669,13 +2753,13 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
       in
       (* Renumber the imports which are kept *)
       let unresolved_mappings =
-        map_exportable_info (fun _ l -> compact l) liveness.unresolved
+        map_exportable_info
+          (fun kind l ->
+            let mappings, counts = compact [| l |] in
+            set_exportable_info unresolved_imports kind counts.(0);
+            mappings.(0))
+          liveness.unresolved
       in
-      iter_exportable_info
-        (fun kind map ->
-          set_exportable_info unresolved_imports kind
-            (Array.fold_left (fun n idx -> if idx >= 0 then n + 1 else n) 0 map))
-        unresolved_mappings;
       Array.iter
         (fun statuses ->
           iter_exportable_info
@@ -2724,13 +2808,7 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
         let l =
           Array.to_list
             (Array.mapi
-               (fun i types ->
-                 let live = live.(i).func in
-                 let offset = Array.length live - Array.length types in
-                 Array.of_list
-                   (List.filteri
-                      (fun j _ -> live.(j + offset))
-                      (Array.to_list types)))
+               (fun i types -> filter_live ~live:live.(i).func types)
                functions)
         in
         let l =
@@ -2822,7 +2900,7 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
                 global_mappings.(i)
             in
             let scan =
-              Scan.table_section positions.(i)
+              Scan.table_section ~file:files.(i).file positions.(i)
                 { maps with func = func_mappings.(i); global }
             in
             fun buf s ~count pos ->
@@ -2966,7 +3044,7 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
       let elem_counts =
         write_section_with_scan ~type_maps ~files ~out_ch ~buf ~id:9
           ~scan:(fun i maps buf s ->
-            Scan.elem_section
+            Scan.elem_section ~file:files.(i).file
               {
                 maps with
                 func = func_mappings.(i);
@@ -2990,22 +3068,8 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
       let elem_mappings = build_simple_mappings ~counts:elem_counts in
 
       (* 12: data count *)
-      let data_mappings =
-        let count = ref 0 in
-        Array.map
-          (Array.map (fun l ->
-               if l then (
-                 let idx = !count in
-                 incr count;
-                 idx)
-               else -1))
-          liveness.data
-      in
-      let data_count =
-        Array.fold_left
-          (Array.fold_left (fun n idx -> if idx >= 0 then n + 1 else n))
-          0 data_mappings
-      in
+      let data_mappings, data_counts = compact liveness.data in
+      let data_count = Array.fold_left ( + ) 0 data_counts in
       if data_count > 0 then
         ignore (Wax_wasm.Wasm_output.datacount_section out_ch data_count : int);
 
@@ -3020,11 +3084,11 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
       in
       Write.uint code_pieces func_count;
       Array.iteri
-        (fun i { contents; source_map_contents; _ } ->
+        (fun i { contents; source_map_contents; file; _ } ->
           if Read.find_section contents 10 then (
             let pos = Buffer.length code_pieces in
             let scan_func =
-              Scan.func resize_data
+              Scan.func ~file resize_data
                 {
                   typ = type_maps.(i);
                   func = func_mappings.(i);
@@ -3185,7 +3249,7 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
       ignore
         (write_section_with_scan ~type_maps ~files ~out_ch ~buf ~id:11
            ~scan:(fun i maps buf s ->
-             Scan.data_section
+             Scan.data_section ~file:files.(i).file
                {
                  maps with
                  mem = mem_mappings.(i);
@@ -3193,10 +3257,7 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
                }
                buf s
                ~keep:(fun j -> liveness.data.(i).(j)))
-           ~written:(fun i _ ->
-             Array.fold_left
-               (fun n l -> if l then n + 1 else n)
-               0 liveness.data.(i))
+           ~written:(fun i _ -> data_counts.(i))
            ()
           : int array);
 
