@@ -69,6 +69,12 @@ grammar keeps none, and both are versioned independently of the toolchain.
   Converting a 2.8 MB Wasm binary to Wax, or back, went from about 2.5 minutes
   to about 12 seconds.
 
+### Library
+
+- `Wax.output_binary` takes a `?label_names` argument; passing `false` leaves
+  label names out of the `name` section. Binaryen's `wasm-opt` does not know
+  this subsection and warns about it.
+
 ## 0.2.0
 
 ### Language

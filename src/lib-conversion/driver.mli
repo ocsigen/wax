@@ -98,8 +98,10 @@ val wax_to_binary :
 val output_binary :
   out_channel:out_channel ->
   ?source_map:bool ->
+  ?label_names:bool ->
   Wax_wasm.Ast.location Wax_wasm.Ast.Binary.module_ ->
   unit
 (** [output_binary ~out_channel ?source_map ast] outputs the Wasm binary AST
     [ast] to [out_channel]. A source map is additionally generated if
-    [source_map] is true. *)
+    [source_map] is true. Label names are left out of the name section if
+    [label_names] is false (default [true]). *)

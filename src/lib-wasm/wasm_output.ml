@@ -1393,8 +1393,8 @@ let output_code_metadata_section out_channel name
 (*** The module writer ***)
 
 let module_ ~out_channel ?output_file ?(source_map = false)
-    ?(coalesce_imports = false) ?(features = Wax_utils.Feature.default ())
-    (m : Ast.location module_) =
+    ?(label_names = true) ?(coalesce_imports = false)
+    ?(features = Wax_utils.Feature.default ()) (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
@@ -1782,7 +1782,8 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   (* Function names *)
   output_indirect_name_subsection 0x02 m.names.locals b_names;
   (* Local names *)
-  output_indirect_name_subsection 0x03 m.names.labels b_names;
+  if label_names then
+    output_indirect_name_subsection 0x03 m.names.labels b_names;
   (* Label names *)
   output_name_subsection 0x04 m.names.types b_names;
   (* Type names *)

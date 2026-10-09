@@ -109,5 +109,5 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
   to_binary ~color ~source:(Some text) wasm_ast
 
-let output_binary ~out_channel ?(source_map = false) ast =
-  Wax_wasm.Wasm_output.module_ ~out_channel ~source_map ast
+let output_binary ~out_channel ?(source_map = false) ?(label_names = true) ast =
+  Wax_wasm.Wasm_output.module_ ~out_channel ~source_map ~label_names ast
