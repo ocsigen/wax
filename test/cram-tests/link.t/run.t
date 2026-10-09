@@ -295,3 +295,47 @@ in a binary module, as the text format does not support it). The module is:
 The tag is renumbered (`throw 1`, `catch 1`) on both sides of the `delegate`:
   $ python3 -c "print(bytes.fromhex('067f067f41030801180007010b0b') in open('legacy_linked.wasm', 'rb').read())"
   True
+
+An import that resolves to another module's export of an import which remains
+unresolved stays an import of the merged module. So a table initializer can
+read it:
+  $ cat > reexport.wat <<EOF
+  > (module
+  >   (import "env" "g" (global \$g funcref))
+  >   (export "g" (global \$g)))
+  > EOF
+  $ cat > tableinit.wat <<EOF
+  > (module
+  >   (import "reexport" "g" (global \$g funcref))
+  >   (table (export "t") 1 funcref (global.get \$g)))
+  > EOF
+  $ wax reexport.wat -o reexport.wasm
+  $ wax tableinit.wat -o tableinit.wasm
+  $ wax link -o tableinit_linked.wasm reexport:reexport.wasm tableinit:tableinit.wasm
+  $ wax tableinit_linked.wasm -f wat
+  (import "env" "g" (global $g funcref))
+  (table 1 funcref
+    global.get $g
+  )
+  (export "g" (global $g))
+  (export "t" (table 0))
+  $ wax tableinit_linked.wasm -f wat --validate > /dev/null && echo VALID
+  VALID
+
+and so can a global initializer of an earlier module:
+  $ cat > globalinit.wat <<EOF
+  > (module
+  >   (import "reexport" "g" (global \$g funcref))
+  >   (global (export "h") funcref (global.get \$g)))
+  > EOF
+  $ wax globalinit.wat -o globalinit.wasm
+  $ wax link -o globalinit_linked.wasm globalinit:globalinit.wasm reexport:reexport.wasm
+  $ wax globalinit_linked.wasm -f wat
+  (import "env" "g" (global $g funcref))
+  (global funcref
+    global.get $g
+  )
+  (export "h" (global 1))
+  (export "g" (global $g))
+  $ wax globalinit_linked.wasm -f wat --validate > /dev/null && echo VALID
+  VALID

@@ -1173,33 +1173,43 @@ module Scan = struct
       assert (get pos = 0);
       pos + 1
     in
-    (* An active element segment with an implicit table (kinds 0 and 4) names
-       table 0. When linking moves this module's table 0 to another output index,
-       rewrite the segment to its explicit-table form (kinds 2 and 6): swap the
-       [flag], insert the remapped index after it, and insert the element type
-       ([mid]: an elemkind or a reftype) that the explicit form carries before the
-       element vector. [pos] is the flag byte. (Unlike [memarg], this needs no
-       [report] of the LEB-width change: resize bookkeeping feeds the source map,
-       which describes only the instruction stream, and a segment lives in the
-       element section, never in a function body.) *)
-    let active_elem ~flag ~mid element pos =
-      if !skipping || table_map 0 = 0 then pos + 1 |> expr |> vector element
+    (* An active segment with an implicit table or memory (element kinds 0
+       and 4, data kind 0) names index 0. When linking moves this module's
+       table 0 or memory 0 to another output index, rewrite the segment to its
+       explicit form (element kinds 2 and 6, data kind 2): swap the [flag],
+       insert the remapped index after it, and, for an element segment, insert
+       the element type ([mid]: an elemkind or a reftype) that the explicit form
+       carries before the element vector. [pos] is the flag byte. (Unlike
+       [memarg], this needs no [report] of the LEB-width change: resize
+       bookkeeping feeds the source map, which describes only the instruction
+       stream, and a segment never lives in a function body.) *)
+    let active_segment ~map ~flag ?mid rest pos =
+      if !skipping || map 0 = 0 then pos + 1 |> expr |> rest
       else (
         flush' pos (pos + 1);
         Buffer.add_char buf flag;
-        output_uint buf (table_map 0);
+        output_uint buf (map 0);
         let after_expr = pos + 1 |> expr in
-        flush' after_expr after_expr;
-        Buffer.add_char buf mid;
-        after_expr |> vector element)
+        Option.iter
+          (fun mid ->
+            flush' after_expr after_expr;
+            Buffer.add_char buf mid)
+          mid;
+        after_expr |> rest)
     in
     let elem pos =
       match get pos with
-      | 0 -> pos |> active_elem ~flag:'\x02' ~mid:'\x00' funcidx
+      | 0 ->
+          pos
+          |> active_segment ~map:table_map ~flag:'\x02' ~mid:'\x00'
+               (vector funcidx)
       | 1 -> pos + 1 |> elemkind |> vector funcidx
       | 2 -> pos + 1 |> tableidx |> expr |> elemkind |> vector funcidx
       | 3 -> pos + 1 |> elemkind |> vector funcidx
-      | 4 -> pos |> active_elem ~flag:'\x06' ~mid:'\x70' expr
+      | 4 ->
+          pos
+          |> active_segment ~map:table_map ~flag:'\x06' ~mid:'\x70'
+               (vector expr)
       | 5 -> pos + 1 |> reftype |> vector expr
       | 6 -> pos + 1 |> tableidx |> expr |> reftype |> vector expr
       | 7 -> pos + 1 |> reftype |> vector expr
@@ -1211,16 +1221,7 @@ module Scan = struct
     in
     let data pos =
       match get pos with
-      | 0 ->
-          (* Active data segment with an implicit memory (kind 0) names memory 0;
-             rewrite to the explicit-memory form (kind 2) when linking moves this
-             module's memory 0 elsewhere. *)
-          if !skipping || mem_map 0 = 0 then pos + 1 |> expr |> bytes
-          else (
-            flush' pos (pos + 1);
-            Buffer.add_char buf '\x02';
-            output_uint buf (mem_map 0);
-            pos + 1 |> expr |> bytes)
+      | 0 -> pos |> active_segment ~map:mem_map ~flag:'\x02' bytes
       | 1 -> pos + 1 |> bytes
       | 2 -> pos + 1 |> memidx |> expr |> bytes
       | c -> failwith (Printf.sprintf "Bad data segment 0x%02X" c)
@@ -1344,9 +1345,9 @@ type t = {
 }
 
 (* Fate of one import after resolution. [Resolved (m, k)]: it binds to entity
-   [k] (in the kind's local index space) of input module [m]. [Unresolved i]:
-   it stays an import of the merged module, at index [i] among that kind's
-   residual imports. *)
+   [k] (in the kind's local index space) of input module [m], a definition of
+   [m], never one of its imports. [Unresolved i]: it stays an import of the
+   merged module, at index [i] among that kind's residual imports. *)
 type import_status = Resolved of int * int | Unresolved of int
 
 let check_limits export import =
@@ -1897,8 +1898,8 @@ let order_globals ~resolved_imports ~live ~global_counts ~global_deps =
   let definition i j =
     if j < global_import_count i then
       match (get_exportable_info resolved_imports.(i) Global).(j) with
-      | Resolved (i', j') when j' >= global_import_count i' -> Some (i', j')
-      | Resolved _ | Unresolved _ -> None
+      | Resolved (i', j') -> Some (i', j')
+      | Unresolved _ -> None
     else Some (i, j)
   in
   let global_ids =
@@ -2586,26 +2587,35 @@ let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
             map_exportable_info
               (fun kind imports ->
                 let exports = get_exportable_info exports kind in
+                let unresolved import =
+                  match Hashtbl.find tbl import with
+                  | status -> status
+                  | exception Not_found ->
+                      let idx = get_exportable_info unresolved_imports kind in
+                      let status = Unresolved idx in
+                      Hashtbl.replace tbl import status;
+                      set_exportable_info unresolved_imports kind (1 + idx);
+                      set_exportable_info import_list kind
+                        (import :: get_exportable_info import_list kind);
+                      status
+                in
                 Array.map
                   (fun (import : import) ->
                     match
                       resolve d 0 ~files ~intfs ~subtyping_info ~exports ~kind i
                         import
                     with
-                    | i', idx -> Resolved (i', idx)
-                    | exception Not_found -> (
-                        match Hashtbl.find tbl import with
-                        | status -> status
-                        | exception Not_found ->
-                            let idx =
-                              get_exportable_info unresolved_imports kind
-                            in
-                            let status = Unresolved idx in
-                            Hashtbl.replace tbl import status;
-                            set_exportable_info unresolved_imports kind (1 + idx);
-                            set_exportable_info import_list kind
-                              (import :: get_exportable_info import_list kind);
-                            status))
+                    | i', idx ->
+                        (* The export of an import of module [i'] which
+                           remains unresolved: use this import directly, so
+                           that [Resolved] always names a definition *)
+                        let imports' =
+                          get_exportable_info intfs.(i').Read.imports kind
+                        in
+                        if idx < Array.length imports' then
+                          unresolved imports'.(idx)
+                        else Resolved (i', idx)
+                    | exception Not_found -> unresolved import)
                   imports)
               intf.Read.imports)
           intfs
