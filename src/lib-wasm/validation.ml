@@ -3074,10 +3074,12 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
             ~br_source:result_source ~params:params' ~results ~br_params:results
             b.Ast.desc)
         catches;
+      (* A [catch_all] handler starts on an empty stack: the try's parameters
+         were consumed by its body. *)
       Option.iter
         (fun b ->
-          block ctx loc label ~used ~param_source ~result_source
-            ~br_source:result_source ~params ~results ~br_params:results
+          block ctx loc label ~used ~param_source:[||] ~result_source
+            ~br_source:result_source ~params:[||] ~results ~br_params:results
             b.Ast.desc)
         catch_all;
       push_results ~loc ~source:result_source results
