@@ -28,6 +28,10 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - A legacy `try` taking block parameters is no longer rejected when it has a
   `catch_all` handler: the handler was wrongly expected to receive the
   parameters, which the body consumes.
+- A structured `try` without a result type now takes it from its context, as
+  `try_legacy` does: a value it yields as a function's result, for example, is
+  no longer typed `i32` when the function returns `f32`, which made a literal
+  in dead code after a `throw` a type error.
 - Converting a Wax module without resolving its conditional annotations no
   longer reads the wrong field when a field access, outside a conditional, is
   on a value whose struct type differs between the branches and has the field

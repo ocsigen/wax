@@ -9569,6 +9569,41 @@ and check_instruction ctx expected (i : location instr) =
           [| result_cell |]
       in
       return (node, reinfer)
+  | TryCatch { label; typ; block = { desc = body; _ } as blkloc; arms }
+    when has_expectation expected ->
+      (* As [Try] above. Only the last arm's completion delivers the try's
+         value (the earlier ones fall into the next arm), but typing the arms
+         against the inferring cell [r] collects it like the body's. *)
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let result_cell = context_result_cell ctx typ ~expected in
+      let body', r =
+        block_keep_bool ctx i.info label ~result:result_cell
+          ~br_params:[| result_cell |] body
+      in
+      let arms' = type_trycatch_arms ctx label ~results:[| r |] arms in
+      let kept_annotation =
+        typ.results <> [||]
+        && not
+             (ctx.simplify
+             && block_result_redundant ctx typ ~expected ~result_cell)
+      in
+      let reinfer =
+        block_keep_reinfer ctx ~loc:i.info ~result:result_cell ~kept_annotation
+          r
+      in
+      check_subtype ctx ~location:i.info result_cell expected;
+      let typ =
+        context_block_typ ctx ~keyword:"try" i.info.loc_start
+          blkloc.info.loc_start typ ~expected ~result_cell
+      in
+      let* node =
+        return_statement i
+          (TryCatch
+             { label; typ; block = { blkloc with desc = body' }; arms = arms' })
+          [| result_cell |]
+      in
+      return (node, reinfer)
   | Select (i1, i2, i3) when has_expectation expected ->
       (* The expression form of an annotated [if]: push the context's [expected]
          type into both value branches, so a construction there can drop its

@@ -93,7 +93,6 @@ arm's braces, and the try's close:
   $ wax check -W dead-code=hidden -W unused-field=hidden -W unused-result=hidden --error-format short try_arm.wax
   try_arm.wax:8:5: error: Expecting 1 returned value(s) from the stack, but there are 0.
   try_arm.wax:7:15: error: Expecting 1 returned value(s) from the stack, but there are 0.
-  try_arm.wax:4:5: error: An expression is expected here. This instruction returns 0 values.
   [128]
 
 An `if`'s two arms, like a `try`'s two arms above, each deliver the block's
