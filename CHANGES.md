@@ -16,6 +16,14 @@ grammar keeps none, and both are versioned independently of the toolchain.
   Wax. A keyword is a valid name, and Wax now accepts it in a condition
   (`#[if(loop)]`).
 
+### Command line
+
+- New `--try-table` flag: rewrite the legacy exception-handling instructions
+  (`try` with `catch`/`catch_all`) into the standard `try_table`, for engines
+  and tools that only accept the current exception-handling proposal. It works
+  on any input, including WAT and Wasm files using legacy exceptions; on a
+  Wax-to-Wax conversion, each `try_legacy` becomes a structured `try`.
+
 ### Editors
 
 - Completion offers a name defined in several branches of a conditional
@@ -81,6 +89,8 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - `Wax.output_binary` takes a `?label_names` argument; passing `false` leaves
   label names out of the `name` section. Binaryen's `wasm-opt` does not know
   this subsection and warns about it.
+- `Wax.wat_to_binary` and `Wax.wax_to_binary` take `?try_table`, the
+  embedding counterpart of `--try-table`.
 
 ## 0.2.0
 

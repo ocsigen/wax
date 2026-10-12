@@ -1,0 +1,40 @@
+tag a(i32);
+tag b(i32, i64);
+tag c();
+
+// An unannotated try whose result type comes from its context; the dead
+// literal after the throw takes that type too.
+fn inferred(x: f32) -> f32 {
+    try_legacy {
+        throw c();
+        0;
+    } catch {
+        c => { x; }
+        _ => { 1; }
+    }
+}
+
+// The fresh label avoids the function's own labels; a diverging arm needs no
+// exit; several values leave through one branch.
+fn labels(k: i32) -> (i32, i64) {
+    'join: loop {
+        try_legacy {
+            if k { br 'join; }
+        } catch {
+            a => { _ = _; return (1, 2 as i64); }
+            c => { }
+            _ => { }
+        }
+    }
+    try_legacy () -> (i32, i64) {
+        (k, 3 as i64);
+    } catch {
+        b => { _; }
+        _ => { (0, 4 as i64); }
+    }
+}
+
+// In expression position, with a pass-through arm.
+fn expr(k: i32) -> i32 {
+    k + try_legacy i32 { k; } catch { a => { _; } _ => { 0; } }
+}

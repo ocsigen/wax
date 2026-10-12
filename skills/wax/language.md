@@ -1796,6 +1796,10 @@ no `&` forms):
 try_legacy i32 { find(k); } catch { overflow => { _; } _ => { 0; } }
 ```
 
+The `--try-table` flag (see [the CLI reference](cli.md)) rewrites it into a
+structured `try`, so the module uses only the standard instructions: every arm
+but the last ends with a branch to the try's label carrying its value.
+
 ## Stack Switching
 
 *Stack switching* (the WebAssembly typed-continuations proposal) lets a

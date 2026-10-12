@@ -25,6 +25,7 @@ val wat_to_binary :
   ?name_functions:bool ->
   ?validate:bool ->
   ?warn_unused:bool ->
+  ?try_table:bool ->
   filename:string ->
   string ->
   binary_module
@@ -45,12 +46,18 @@ val wat_to_binary :
     local, field or import. Set it to [false] in a build that assembles the same
     sources under several sets of [defines]: a declaration whose only uses are
     conditional is legitimately unused in the configurations that compile them
-    out. *)
+    out.
+
+    When [try_table] is set (default [false]), the legacy exception-handling
+    instructions ([try] with [catch]/[catch_all]) are rewritten into the
+    standard [try_table], so the binary uses only the current exception-handling
+    proposal. *)
 
 val wax_to_binary :
   ?defines:Define.t ->
   ?validate:bool ->
   ?warn_unused:bool ->
+  ?try_table:bool ->
   filename:string ->
   string ->
   binary_module
@@ -61,7 +68,8 @@ val wax_to_binary :
 
     [warn_unused] (default: [validate]) governs the Wax type checker's report of
     an unused local. Unlike the WAT path it applies whatever [validate] is,
-    because the type checker runs either way. *)
+    because the type checker runs either way. [try_table] is as for
+    {!wat_to_binary}: a [try_legacy] compiles to [try_table]. *)
 
 val output_binary :
   out_channel:out_channel ->

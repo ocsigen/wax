@@ -11,13 +11,13 @@ module Define = struct
   let of_list = Wax_wasm.Cond_specialize.of_list
 end
 
-let wat_to_binary ?defines ?name_functions ?validate ?warn_unused ~filename text
-    =
+let wat_to_binary ?defines ?name_functions ?validate ?warn_unused ?try_table
+    ~filename text =
   Wax_conversion.Driver.wat_to_binary ?defines ?name_functions ?validate
-    ?warn_unused ~filename text
+    ?warn_unused ?try_table ~filename text
 
-let wax_to_binary ?defines ?validate ?warn_unused ~filename text =
-  Wax_conversion.Driver.wax_to_binary ?defines ?validate ?warn_unused ~filename
-    text
+let wax_to_binary ?defines ?validate ?warn_unused ?try_table ~filename text =
+  Wax_conversion.Driver.wax_to_binary ?defines ?validate ?warn_unused ?try_table
+    ~filename text
 
 let output_binary = Wax_conversion.Driver.output_binary

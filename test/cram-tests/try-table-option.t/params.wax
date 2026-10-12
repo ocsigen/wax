@@ -1,0 +1,4 @@
+fn f(x: i32) -> i32 {
+    x;
+    try_legacy (i32) -> i32 { _ + 1; } catch { _ => { 0; } }
+}

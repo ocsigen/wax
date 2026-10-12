@@ -101,6 +101,16 @@ let desugar_wat ~color ~source ast =
           ();
         Wax_utils.Diagnostic.abort ())
 
+(* Rewrite the legacy [try]/[catch] instructions of a text module into
+   [try_table] ([--try-table]). The rewrite runs on input that may not have been
+   validated (a same-format conversion, a trusted binary), so an unbound tag is
+   reported as a diagnostic. *)
+let lower_legacy_eh ~try_table ~color ~source ast =
+  if not try_table then ast
+  else
+    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme ~source
+      (fun d -> Wax_wasm.Legacy_eh.module_ d ast)
+
 type fold_mode = Auto | Fold | Unfold
 
 (* Apply the requested folding to a WAT module. Folding runs on input that is
@@ -153,8 +163,8 @@ let usage_error msg =
 (*** Conversion pipelines ***)
 
 let wat_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
-    ~color ~output_color ~fold_mode ~defines ~desugar ~source_map:_ ~faithful:_
-    =
+    ~color ~output_color ~fold_mode ~defines ~desugar ~try_table ~source_map:_
+    ~faithful:_ =
   let ast, ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -164,6 +174,7 @@ let wat_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
+  let ast = lower_legacy_eh ~try_table ~color ~source:(Some text) ast in
   let ast =
     if desugar then desugar_wat ~color ~source:(Some text) ast else ast
   in
@@ -186,8 +197,8 @@ let width_check_mode () =
   if Wax_utils.Debug.is_enabled Width_check then `Report else `Repair
 
 let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
-    ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map:_
-    ~faithful =
+    ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~try_table
+    ~source_map:_ ~faithful =
   let ast, ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -202,6 +213,7 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->
         Wax_wasm.Validation.f ~warn_unused ~features d ast);
+  let ast = lower_legacy_eh ~try_table ~color ~source:(Some text) ast in
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d ->
@@ -225,8 +237,8 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   output_wax ~oc ~color:output_color ~trivia ~tail wax_ast
 
 let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
-    ~color ~output_color ~fold_mode ~defines ~desugar ~source_map:_ ~faithful:_
-    =
+    ~color ~output_color ~fold_mode ~defines ~desugar ~try_table ~source_map:_
+    ~faithful:_ =
   let ast, ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -261,6 +273,9 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
   let wasm_ast =
+    lower_legacy_eh ~try_table ~color ~source:(Some text) wasm_ast
+  in
+  let wasm_ast =
     if desugar then desugar_wat ~color ~source:(Some text) wasm_ast
     else wasm_ast
   in
@@ -272,24 +287,39 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   output_wat ~oc ~color:output_color ~trivia ~tail doc
 
 let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
-    ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map:_
-    ~faithful:_ =
+    ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~try_table
+    ~source_map:_ ~faithful:_ =
   let ast, ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
   let ast = specialize_wax ~ctx ~color ~text defines ast in
-  if validate then
-    Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
-      ~source:(Some text) (fun d -> Wax_lang.Typing.check ~warn_unused d ast);
+  (* No lowering here: [--try-table] rewrites a legacy try into the structured
+     [try] in the source itself. That rewrite is semantic (it needs the result
+     type the typer infers for an unannotated try), so it type-checks the module
+     as a conversion to another format does, which stands for [--validate]. *)
+  let ast =
+    if try_table then
+      Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+        ~source:(Some text) (fun d ->
+          let _, typed = Wax_lang.Typing.f ~warn_unused d ast in
+          Wax_lang.Legacy_eh.module_ d ~typed ast)
+    else (
+      if validate then
+        Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
+          ~source:(Some text) (fun d ->
+            Wax_lang.Typing.check ~warn_unused d ast);
+      ast)
+  in
   let trivia, tail =
     Wax_utils.Trivia.associate ~collect:(Wax_lang.Output.collect ast) ctx
   in
   output_wax ~oc ~color:output_color ~trivia ~tail ast
 
 let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
-    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map ~faithful:_ =
+    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~try_table ~source_map
+    ~faithful:_ =
   let ast, _ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -316,6 +346,9 @@ let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
         (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast_text);
+  let wasm_ast_text =
+    lower_legacy_eh ~try_table ~color ~source:(Some text) wasm_ast_text
+  in
   let wasm_ast_binary =
     Wax_conversion.Driver.to_binary ~color ~source:(Some text) wasm_ast_text
   in
@@ -323,7 +356,8 @@ let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
     ~features wasm_ast_binary
 
 let wat_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
-    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map ~faithful:_ =
+    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~try_table ~source_map
+    ~faithful:_ =
   let ast, _ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -341,6 +375,7 @@ let wat_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->
         Wax_wasm.Validation.f ~warn_unused ~features d ast);
+  let ast = lower_legacy_eh ~try_table ~color ~source:(Some text) ast in
   let wasm_ast_binary =
     Wax_conversion.Driver.to_binary ~color ~source:(Some text) ast
   in
@@ -356,9 +391,18 @@ let parse_wasm ~color ?features ?filename text =
 
 let wasm_to_wasm ~input_file ~output_file ~text ~oc ~validate:_validate
     ~warn_unused:_ ~color ~output_color:_ ~fold_mode:_ ~defines:_ ~desugar:_
-    ~source_map ~faithful:_ =
+    ~try_table ~source_map ~faithful:_ =
   let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wax_wasm.Validation.f ast; *)
+  (* The legacy-exception rewrite works on the text AST: take the binary through
+     it and back. *)
+  let ast =
+    if not try_table then ast
+    else
+      Wax_wasm.Binary_to_text.module_ ast
+      |> lower_legacy_eh ~try_table ~color ~source:None
+      |> Wax_conversion.Driver.to_binary ~color ~source:None
+  in
   (* A binary input carries no authorial text layout for its import section, so
      this is the one path that may compress it: with compact-import-section
      enabled, coalesce runs of same-module imports. *)
@@ -366,8 +410,8 @@ let wasm_to_wasm ~input_file ~output_file ~text ~oc ~validate:_validate
     ~coalesce_imports:true ast
 
 let wasm_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
-    ~color ~output_color ~fold_mode ~defines:_ ~desugar:_ ~source_map:_
-    ~faithful:_ =
+    ~color ~output_color ~fold_mode ~defines:_ ~desugar:_ ~try_table
+    ~source_map:_ ~faithful:_ =
   (* The decoder records the gated features the binary exercises; emit each as
      a [(@feature)] annotation so the text output is self-describing. *)
   let features = Wax_utils.Feature.default () in
@@ -376,13 +420,14 @@ let wasm_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
+  let text_ast = lower_legacy_eh ~try_table ~color ~source:None text_ast in
   let text_ast = fold_module ~fold_mode ~color ~source:None text_ast in
   let trivia = Wax_utils.Trivia.empty () in
   output_wat ~oc ~color:output_color ~trivia (Wax_wasm.Output.prepare text_ast)
 
 let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
-    ~color ~output_color ~fold_mode:_ ~defines:_ ~desugar:_ ~source_map:_
-    ~faithful =
+    ~color ~output_color ~fold_mode:_ ~defines:_ ~desugar:_ ~try_table
+    ~source_map:_ ~faithful =
   (* The decoder records the gated features the binary exercises; each becomes
      a [(@feature)] annotation, converted below to a [#![feature]] attribute,
      so the output recompiles standalone. *)
@@ -392,6 +437,7 @@ let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:None (fun d -> Wax_wasm.Validation.f ~warn_unused d text_ast);
+  let text_ast = lower_legacy_eh ~try_table ~color ~source:None text_ast in
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:None (fun d ->
@@ -504,8 +550,8 @@ let warn_env_info =
 (*** Command implementations ***)
 
 let convert input_file output_file input_format_opt output_format_opt validate
-    strict_validate color source_map fold_mode desugar faithful defines warnings
-    features debug error_format =
+    strict_validate color source_map fold_mode desugar try_table faithful
+    defines warnings features debug error_format =
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
   Wax_utils.Diagnostic.set_format error_format;
   Wax_utils.Feature.set_config features;
@@ -589,7 +635,7 @@ let convert input_file output_file input_format_opt output_format_opt validate
   let text = with_open_in ~color input_file In_channel.input_all in
   with_output @@ fun oc ->
   convert ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
-    ~output_color ~source_map ~fold_mode ~defines ~desugar ~faithful
+    ~output_color ~source_map ~fold_mode ~defines ~desugar ~try_table ~faithful
 
 (* Format files: re-print each in its own format (wat -> wat, wax -> wax, wasm
    -> wasm), detected from the extension unless [format_opt] forces one. With
@@ -628,7 +674,8 @@ let format inplace check format_opt color fold_mode warnings debug error_format
         (same_format_of fmt) ~input_file:None ~output_file:None ~text ~oc:stdout
           ~validate:false ~warn_unused:false ~color
           ~output_color:(Wax_utils.Colors.update_flag ~color)
-          ~source_map:false ~fold_mode ~desugar:false ~faithful:false
+          ~source_map:false ~fold_mode ~desugar:false ~try_table:false
+          ~faithful:false
           ~defines:(Wax_wasm.Cond_specialize.of_list []))
   else begin
     if (not inplace) && (not check) && List.length files <> 1 then
@@ -655,7 +702,8 @@ let format inplace check format_opt color fold_mode warnings debug error_format
             with_open_out ~color output_file (fun oc ->
                 same_format ~input_file:(Some file) ~output_file ~text ~oc
                   ~validate:false ~warn_unused:false ~color ~output_color
-                  ~source_map:false ~fold_mode ~desugar:false ~faithful:false
+                  ~source_map:false ~fold_mode ~desugar:false ~try_table:false
+                  ~faithful:false
                   ~defines:(Wax_wasm.Cond_specialize.of_list []))
           in
           if check then
@@ -923,6 +971,15 @@ let desugar_flag =
      $(b,-D)/$(b,--define))."
   in
   Arg.(value & flag & info [ "desugar" ] ~doc)
+
+let try_table_flag =
+  let doc =
+    "Rewrite the legacy exception-handling instructions ($(b,try) with \
+     $(b,catch)/$(b,catch_all)) into the standard $(b,try_table), wrapping it \
+     in one block per handler. On a Wax-to-Wax conversion, each \
+     $(b,try_legacy) is rewritten into the structured $(b,try) instead."
+  in
+  Arg.(value & flag & info [ "try-table" ] ~doc)
 
 let faithful_flag =
   let doc =
@@ -1255,6 +1312,7 @@ let convert_term =
   and+ source_map = source_map_option
   and+ fold_mode = fold_mode_option
   and+ desugar = desugar_flag
+  and+ try_table = try_table_flag
   and+ faithful = faithful_flag
   and+ defines = define_option
   and+ warnings = warn_option
@@ -1262,8 +1320,8 @@ let convert_term =
   and+ debug = debug_option
   and+ error_format = error_format_option in
   convert input output in_fmt out_fmt validate strict_validate color source_map
-    fold_mode desugar faithful defines warnings features (List.concat debug)
-    error_format
+    fold_mode desugar try_table faithful defines warnings features
+    (List.concat debug) error_format
 
 let format_term =
   let+ inplace = inplace_flag

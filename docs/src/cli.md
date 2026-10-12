@@ -367,6 +367,24 @@ server](#language-server)).
       (proposal) WebAssembly, and removing annotations is orthogonal to
       whether the consumer supports the proposal.
 
+- **`--try-table`**
+    - Rewrite the legacy exception-handling instructions (`try` with
+      `catch`/`catch_all`, from the deprecated legacy proposal) into the
+      standard `try_table`, for engines and tools that only accept the current
+      proposal. Each `try` becomes a `try_table` wrapped in one block per
+      handler: a handler receives its tag's payload as before, and every
+      handler but the last ends with a branch past the others.
+    - Applies to every input format, so a WAT or Wasm module that uses legacy
+      exceptions can be converted. Converted to Wax, the result reads as a
+      structured `try` wherever the decompiler recognizes the shape.
+    - On a Wax-to-Wax conversion, each `try_legacy` is rewritten into a
+      structured `try` instead, keeping the rest of the source as written. The
+      module is type-checked first (the number of values an unannotated
+      `try_legacy` yields comes from its context). A `try_legacy` taking block
+      parameters has no structured counterpart and is rejected.
+    - `rethrow` and `delegate` are not supported by Wax, so every legacy `try`
+      it reads can be rewritten.
+
 - **`--faithful`**
     - Decompile faithfully: turn off the stream-reshaping recoveries, so a
       `wat`/`wasm` module decompiled to Wax recompiles with the same reachable
