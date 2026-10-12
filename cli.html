@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7cac207f.js";
+            window.path_to_searchindex_js = "searchindex-bb2732b7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -630,6 +630,27 @@ still gates during processing; re-ingesting the desugared text needs
 A module <em>using</em> gated constructs is not an error — those are real
 (proposal) WebAssembly, and removing annotations is orthogonal to
 whether the consumer supports the proposal.</li>
+</ul>
+</li>
+<li>
+<p><strong><code>--try-table</code></strong></p>
+<ul>
+<li>Rewrite the legacy exception-handling instructions (<code>try</code> with
+<code>catch</code>/<code>catch_all</code>, from the deprecated legacy proposal) into the
+standard <code>try_table</code>, for engines and tools that only accept the current
+proposal. Each <code>try</code> becomes a <code>try_table</code> wrapped in one block per
+handler: a handler receives its tag’s payload as before, and every
+handler but the last ends with a branch past the others.</li>
+<li>Applies to every input format, so a WAT or Wasm module that uses legacy
+exceptions can be converted. Converted to Wax, the result reads as a
+structured <code>try</code> wherever the decompiler recognizes the shape.</li>
+<li>On a Wax-to-Wax conversion, each <code>try_legacy</code> is rewritten into a
+structured <code>try</code> instead, keeping the rest of the source as written. The
+module is type-checked first (the number of values an unannotated
+<code>try_legacy</code> yields comes from its context). A <code>try_legacy</code> taking block
+parameters has no structured counterpart and is rejected.</li>
+<li><code>rethrow</code> and <code>delegate</code> are not supported by Wax, so every legacy <code>try</code>
+it reads can be rewritten.</li>
 </ul>
 </li>
 <li>

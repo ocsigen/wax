@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7cac207f.js";
+            window.path_to_searchindex_js = "searchindex-bb2732b7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -1504,6 +1504,9 @@ semantics — each arm independently produces the try’s result (no fall-throug
 no <code>&amp;</code> forms):</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">try_legacy</span> <span class="hljs-type">i32</span> { <span class="hljs-title">find</span>(k); } <span class="hljs-keyword">catch</span> { overflow =&gt; { _; } _ =&gt; { <span class="hljs-number">0</span>; } }</span></pre>
 
+<p>The <code>--try-table</code> flag (see <a href="cli.html">the CLI reference</a>) rewrites it into a
+structured <code>try</code>, so the module uses only the standard instructions: every arm
+but the last ends with a branch to the try’s label carrying its value.</p>
 <h2 id="stack-switching"><a class="header" href="#stack-switching">Stack Switching</a></h2>
 <p><em>Stack switching</em> (the WebAssembly typed-continuations proposal) lets a
 computation suspend itself, yield control to a scheduler, and later be resumed.
