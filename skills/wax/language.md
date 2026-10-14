@@ -1952,6 +1952,8 @@ sub-expression, so this same mechanism round-trips stack-style code.
 
 `type name = t;` names the value type `t`. The name can then be written wherever a value type is expected: in a signature, a local or global declaration, a struct or array field, a block result or a cast.
 
+Aliases share the `type` keyword with the definitions of [struct](#structs), [array](#arrays) and [function](#function-types) types, and the right-hand side decides which one a declaration is. A composite type (a struct `{ … }`, an array `[ … ]`, a function type `fn(…)` or a continuation type) defines a type, and a reference to it is written `&name`. A value type (`i32`, `i64`, `f32`, `f64`, `v128`, a reference type `&…`, or another alias) defines an alias, written `name` alone. Only a type definition can have a [supertype](#subtyping) (`type t: s = …`) or be part of a [`rec` group](#recursive-groups).
+
 ```wax,check
 type word = i64;
 type cell = { value: mut word };
