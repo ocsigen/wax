@@ -204,7 +204,8 @@
        <_>This '[' opens the enclosing construct.
     4x Expecting 'catch'.
     1x Expecting 'describes', 'descriptor', 'open', a composite type, or a value type.
-    2x Expecting 'describes', 'descriptor', 'open', or a composite type.
+    1x Expecting 'describes', 'descriptor', 'open', or a composite type (a rec group holds struct, array and function types; a type alias goes outside it).
+    1x Expecting 'describes', 'descriptor', 'open', or a composite type (a type with a supertype is a struct, array or function type; a type alias has none).
     2x Expecting 'describes', 'descriptor', or a composite type.
     2x Expecting 'descriptor', or a composite type.
     1x Expecting 'descriptor', or an identifier.

@@ -656,6 +656,16 @@ module Error = struct
            else did_you_mean suggestions)
         (name x ++ text "is not a value type or a type alias.")
 
+  let alias_as_heap_type context ~location x =
+    report context ~location
+      ~hint:
+        (text "An alias is written where a value type is expected, as"
+        ++ name x ++ text "alone, without '&'.")
+      (name x
+      ++ text
+           "is a type alias, which names a value type, where a type is \
+            expected.")
+
   let cyclic_alias context ~location x =
     report context ~location
       (text "The type alias" ++ name x ++ text "is defined in terms of itself.")
@@ -1261,8 +1271,16 @@ let def_id : Wax_wasm.Types.ref_index -> Wax_wasm.Types.Id.t = function
 
 (* How a source reference appears inside a rec group being registered. *)
 let resolve_type_ref d (ctx : type_context) name =
-  let+@ res = Tbl.find d ctx.types name in
-  fst res
+  match Tbl.find_no_mark ctx.types name with
+  (* A value-type alias shares the types' namespace but names no heap type.
+     The mistaken use still counts as one, so the alias is not also reported
+     unused. *)
+  | None when Option.is_some (Tbl.find_opt ctx.aliases name) ->
+      Error.alias_as_heap_type d ~location:name.info name;
+      None
+  | _ ->
+      let+@ res = Tbl.find d ctx.types name in
+      fst res
 
 (* The canonical index of an already-defined referenced type. *)
 let resolve_type_name d ctx name =

@@ -1029,6 +1029,15 @@ module Error = struct
       (text "The" ++ text kind ++ text "index" ++ ident index.Ast.desc
      ++ text "is already bound.")
 
+  let alias_as_type context ~location name =
+    report context ~location ~severity:Error
+      ~hint:
+        (text "An alias is written where a value type is expected, as"
+         ++ kw ("(@type $" ^ name ^ ")")
+        ^^ text ".")
+      (text "The type alias" ++ ident name
+      ++ text "names a value type, where a type is expected.")
+
   let unbound_alias context ~location name lst =
     report context ~location ~severity:Error ?hint:(did_you_mean lst)
       ((text "Unknown type alias" ++ ident name) ^^ text ".")
@@ -1473,17 +1482,29 @@ let get_type_info d ctx (idx : Ast.Text.idx) =
         match idx.desc with
         | Num x -> Some (Hashtbl.find ctx.index_mapping x)
         | Id id -> Some (Hashtbl.find ctx.label_mapping id)
-      with Not_found ->
-        let lst =
-          match idx.desc with
-          | Num _ -> []
-          | Id id ->
-              Wax_utils.Spell_check.f
-                (fun f -> Hashtbl.iter (fun id' _ -> f id') ctx.label_mapping)
-                id
-        in
-        Error.unbound_index d ~location:idx.info "type" idx lst;
-        None
+      with Not_found -> (
+        match idx.desc with
+        (* A value-type alias shares the types' namespace but names no type.
+           The mistaken use still counts as one, so the alias is not also
+           reported unused. *)
+        | Id id when Hashtbl.mem ctx.aliases id ->
+            (Hashtbl.find ctx.aliases id).used <- true;
+            if ctx.record_references && ctx.origin <> Ignored then
+              ctx.alias_references <- (ctx.origin, id) :: ctx.alias_references;
+            Error.alias_as_type d ~location:idx.info id;
+            None
+        | _ ->
+            let lst =
+              match idx.desc with
+              | Num _ -> []
+              | Id id ->
+                  Wax_utils.Spell_check.f
+                    (fun f ->
+                      Hashtbl.iter (fun id' _ -> f id') ctx.label_mapping)
+                    id
+            in
+            Error.unbound_index d ~location:idx.info "type" idx lst;
+            None)
   in
   (* The single resolution point for every type reference — a typeuse, a named
      reference type wherever one may appear, a supertype or descriptor clause, an
