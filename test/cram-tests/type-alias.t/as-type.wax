@@ -1,0 +1,4 @@
+type n = &?any;
+type t: n = { };
+#[export]
+fn g(x: &n) {}

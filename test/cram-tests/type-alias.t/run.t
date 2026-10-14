@@ -359,6 +359,79 @@ Errors in alias definitions are reported once, at the definition.
   11 │ 
   [128]
 
+An alias names a value type, so it is written alone, never where a type is
+expected: after '&' or as a supertype.
+
+  $ wax check as-type.wax
+  Error:
+    'n' is a type alias, which names a value type, where a type is expected.
+   ──➤  as-type.wax:2:9
+  1 │ type n = &?any;
+  2 │ type t: n = { };
+    ·         ^
+  3 │ #[export]
+  4 │ fn g(x: &n) {}
+  Hint:
+    An alias is written where a value type is expected, as 'n' alone, without
+    '&'.
+  Error:
+    'n' is a type alias, which names a value type, where a type is expected.
+   ──➤  as-type.wax:4:10
+  2 │ type t: n = { };
+  3 │ #[export]
+  4 │ fn g(x: &n) {}
+    ·          ^
+  5 │ 
+  Hint:
+    An alias is written where a value type is expected, as 'n' alone, without
+    '&'.
+  [128]
+  $ wax check as-type.wat
+  Error: The type alias '$n' names a value type, where a type is expected.
+   ──➤  as-type.wat:3:17
+  1 │ (module
+  2 │   (@type $n (ref null any))
+  3 │   (type $t (sub $n (struct)))
+    ·                 ^^
+  4 │   (func (export "g") (param $x (ref $n))))
+  5 │ 
+  Hint: An alias is written where a value type is expected, as '(@type $n)'.
+  Error: The type alias '$n' names a value type, where a type is expected.
+   ──➤  as-type.wat:4:37
+  2 │   (@type $n (ref null any))
+  3 │   (type $t (sub $n (struct)))
+  4 │   (func (export "g") (param $x (ref $n))))
+    ·                                     ^^
+  5 │ 
+  Hint: An alias is written where a value type is expected, as '(@type $n)'.
+  [128]
+
+Type definitions and aliases share the 'type' keyword, but only a type
+definition may have a supertype or sit in a rec group.
+
+  $ wax check supertype.wax
+  Error:
+    Expecting 'describes', 'descriptor', 'open', or a composite type (a type
+    with a supertype is a struct, array or function type; a type alias has
+    none).
+   ──➤  supertype.wax:2:13
+  1 │ type s = open { f: i32 };
+  2 │ type t: s = i64;
+    ·             ^^^
+  3 │ 
+  [128]
+  $ wax check rec.wax
+  Error:
+    Expecting 'describes', 'descriptor', 'open', or a composite type (a rec
+    group holds struct, array and function types; a type alias goes outside it).
+   ──➤  rec.wax:2:14
+  1 │ rec {
+  2 │     type n = i64;
+    ·              ^^^
+  3 │     type s = { f: n };
+  4 │ }
+  [128]
+
 Discarding a cast to an alias is reported as discarding the cast to the type it
 stands for, on both sides.
 

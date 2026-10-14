@@ -1,0 +1,4 @@
+rec {
+    type n = i64;
+    type s = { f: n };
+}

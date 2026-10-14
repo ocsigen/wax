@@ -28,5 +28,7 @@ test/cram-tests/parse-error-messages.t/subject-hint.wax
 test/cram-tests/parse-error-messages.t/subject-multiline-tall.wax
 test/cram-tests/parse-error-messages.t/subject-multiline.wax
 test/cram-tests/parse-error-messages.t/subject.wax
+test/cram-tests/type-alias.t/rec.wax
+test/cram-tests/type-alias.t/supertype.wax
 test/cram-tests/unicode-identifier.t/bad.wax
 test/cram-tests/wax-conditional.t/bad.wax

@@ -1929,7 +1929,7 @@ Expecting '}', or a type definition.
 
 parse: REC LBRACE TYPE IDENT EQUAL WHILE
 
-Expecting 'describes', 'descriptor', 'open', or a composite type.
+Expecting 'describes', 'descriptor', 'open', or a composite type (a rec group holds struct, array and function types; a type alias goes outside it).
 
 parse: REC LBRACE TYPE IDENT WHILE
 
@@ -2285,7 +2285,7 @@ Expecting 'describes', 'descriptor', or a composite type.
 
 parse: TYPE IDENT COLON IDENT EQUAL WHILE
 
-Expecting 'describes', 'descriptor', 'open', or a composite type.
+Expecting 'describes', 'descriptor', 'open', or a composite type (a type with a supertype is a struct, array or function type; a type alias has none).
 
 parse: TYPE IDENT COLON IDENT WHILE
 
