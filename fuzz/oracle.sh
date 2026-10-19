@@ -808,6 +808,12 @@ if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
       # any other rejection at this step still fires. (classify_wax left the
       # conversion's stderr in $ERRLOG.)
       grep -qi "Conditional annotations cannot be emitted" "$ERRLOG" && continue
+      # Likewise a construct valid in every configuration but lowered
+      # differently in some (a field access whose field is at a different
+      # position in each branch's struct type): only lowering the unresolved
+      # module rejects it, by design. The message wraps, hence the flattening.
+      tr -s ' \n' ' ' <"$ERRLOG" | grep -qi "no single WebAssembly form" &&
+        continue
       finding UNDER_REJECT HIGH "$IN" \
         "wax check accepts but ${FMT}->${out} rejects it (typer under-rejects): $(grep -m1 -i error "$ERRLOG" || true)" \
         "$(repro "${check[@]}") && $(repro "${conv[@]}")"
