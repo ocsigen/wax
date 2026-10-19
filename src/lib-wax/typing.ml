@@ -7682,7 +7682,8 @@ and type_block_construct ctx i =
             results)
   | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
     -> (
-      assert (typ.params = [||]);
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       match try_inference ctx i label typ ~body:blkloc ~catches ~catch_all with
       | Some (desc, results) -> return_statement i desc results
       | None ->
@@ -9528,7 +9529,8 @@ and check_instruction ctx expected (i : location instr) =
       return (node, reinfer)
   | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
     when has_expectation expected ->
-      assert (typ.params = [||]);
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
       (* A catch handler also produces the try's value. Type the handlers against
          the same inferring cell [r] as the body, so their values are collected too

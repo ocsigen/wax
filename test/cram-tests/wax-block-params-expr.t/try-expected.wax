@@ -1,0 +1,1 @@
+fn f() -> i32 { let x: i32 = try_legacy (i32) -> i32 { } catch { }; x; }

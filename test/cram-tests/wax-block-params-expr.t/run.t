@@ -25,3 +25,31 @@ type-checker:
     ·                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
   [128]
+
+A legacy try takes the same path, both with and without an expected type:
+
+  $ wax check try.wax
+  Error: A block, loop or if used as an expression cannot take parameters.
+   ──➤  try.wax:1:26
+  1 │ fn f() { _ = 1 as i32 + (try_legacy (i32) -> i32 { } catch { }); }
+    ·                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 │ 
+  Error: Expecting 1 returned value(s) from the stack, but there are 0.
+   ──➤  try.wax:1:62
+  1 │ fn f() { _ = 1 as i32 + (try_legacy (i32) -> i32 { } catch { }); }
+    ·                                                              ^
+  2 │ 
+  [128]
+
+  $ wax check try-expected.wax
+  Error: A block, loop or if used as an expression cannot take parameters.
+   ──➤  try-expected.wax:1:30
+  1 │ fn f() -> i32 { let x: i32 = try_legacy (i32) -> i32 { } catch { }; x; }
+    ·                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 │ 
+  Error: Expecting 1 returned value(s) from the stack, but there are 0.
+   ──➤  try-expected.wax:1:66
+  1 │ fn f() -> i32 { let x: i32 = try_legacy (i32) -> i32 { } catch { }; x; }
+    ·                                                                  ^
+  2 │ 
+  [128]

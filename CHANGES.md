@@ -36,6 +36,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - A legacy `try` taking block parameters is no longer rejected when it has a
   `catch_all` handler: the handler was wrongly expected to receive the
   parameters, which the body consumes.
+- A legacy `try` taking block parameters in expression position is now
+  reported as an error, as a block, loop or `if` there is, instead of
+  crashing the type checker.
 - A structured `try` without a result type now takes it from its context, as
   `try_legacy` does: a value it yields as a function's result, for example, is
   no longer typed `i32` when the function returns `f32`, which made a literal
