@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bad63f02.js";
+            window.path_to_searchindex_js = "../searchindex-9618c18d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-15e75985.js"></script>
@@ -251,7 +251,9 @@ validates (the precise type is a subtype of the original) and behaves
 identically. This affects a <code>local</code> or a <code>const</code> global declared at a
 supertype but only ever assigned a narrower value, a block result type
 declared wider than its body when no consumer pins the wider type, and a
-<code>br_on_cast</code>’s source-type immediate re-inferred from its operand.</p>
+<code>br_on_cast</code>’s source-type immediate re-inferred from its operand. The type
+immediate of an instruction that takes it from its operand, such as
+<code>struct.get</code> or <code>call_ref</code>, may likewise become more precise.</p>
 </li>
 </ol>
 <h2 id="faithful-round-tripping"><a class="header" href="#faithful-round-tripping">Faithful round-tripping</a></h2>
