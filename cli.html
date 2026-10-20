@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bb2732b7.js";
+            window.path_to_searchindex_js = "searchindex-bad63f02.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -318,7 +318,7 @@ quick-fix <code>edit</code> that inserts a <code>_</code> at the name’s start.
 <li>
 <p><code>unused-field</code> (groups <code>unused</code>, <code>correctness</code>): a module field that
 nothing reachable references — a function, global, memory, table, tag,
-type, or a <em>passive</em> data or element segment. An active segment (and a
+type, value-type alias, or a <em>passive</em> data or element segment. An active segment (and a
 declarative one) runs at instantiation, so it counts as used whether or
 not an instruction names it; only a passive segment, reachable solely
 through <code>memory.init</code>/<code>table.init</code> and <code>data.drop</code>/<code>elem.drop</code>, can be
@@ -609,6 +609,8 @@ UTF-8 bytes; an <code>i16</code> string is UTF-16-encoded; an untyped string reu
 existing <code>(array (mut i8))</code> type when the module has one and otherwise pins
 a synthesised one. A module-level <code>(@string …)</code> global becomes an ordinary
 global.</li>
+<li>Replaces each value-type alias use <code>(@type $t)</code> by the value type it
+stands for, and drops the <code>(@type $t …)</code> definitions.</li>
 <li>Synthesises the declarative element segment (<code>(elem declare func …)</code>) that
 Wax’s lenient reader lets a module omit for a function used by <code>ref.func</code>
 only inside a body, so the output passes strict/spec reference validation.

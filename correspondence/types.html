@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bb2732b7.js";
+            window.path_to_searchindex_js = "../searchindex-bad63f02.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-15e75985.js"></script>
@@ -201,6 +201,21 @@
 </div>
 <p>Exact references (<code>&amp;!&lt;t&gt;</code> / <code>&amp;?!&lt;t&gt;</code>, gated on <code>-X custom-descriptors</code>) are
 explained in the <a href="../language.html#exact-references">language guide</a>.</p>
+<h2 id="type-aliases"><a class="header" href="#type-aliases">Type Aliases</a></h2>
+<p>A value-type alias names a value type. WAT writes it with annotations: <code>(@type $t v)</code> defines it, and <code>(@type $t)</code> stands for it wherever a value type is expected.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>(@type $word i64)</code></td><td><code>type word = i64;</code></td></tr>
+<tr><td><code>(param $x (@type $word))</code></td><td><code>x: word</code></td></tr>
+<tr><td><code>(field $f (mut (@type $word)))</code></td><td><code>f: mut word</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>An alias is defined at the module level, possibly under a conditional annotation, so that it stands for a different type in each configuration. Both forms convert to each other, conditional aliases included. A <code>select</code> typed with an alias, <code>(select (result (@type $t)) …)</code>, becomes the ascribed conditional expression <code>(c ? a : b : t)</code>. The binary format has no aliases: compiling to it, or desugaring with <code>--desugar</code>, replaces each one by the type it stands for. See the <a href="../language.html#type-aliases">language guide</a>.</p>
 <h2 id="storage-types"><a class="header" href="#storage-types">Storage Types</a></h2>
 <p>Storage types are used in fields of structs and arrays to define packed data.</p>
 <div class="table-wrapper">

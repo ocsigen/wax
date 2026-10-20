@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bb2732b7.js";
+            window.path_to_searchindex_js = "searchindex-bad63f02.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -1616,6 +1616,53 @@ nothing there for it to pick up:</p>
 <p>When decompiling Wasm or WAT back to Wax, the compiler introduces holes wherever
 an instruction takes an operand from the stack instead of from a nested
 sub-expression, so this same mechanism round-trips stack-style code.</p>
+<h2 id="type-aliases"><a class="header" href="#type-aliases">Type Aliases</a></h2>
+<p><code>type name = t;</code> names the value type <code>t</code>. The name can then be written wherever a value type is expected: in a signature, a local or global declaration, a struct or array field, a block result or a cast.</p>
+<p>Aliases share the <code>type</code> keyword with the definitions of <a href="#structs">struct</a>, <a href="#arrays">array</a> and <a href="#function-types">function</a> types, and the right-hand side decides which one a declaration is. A composite type (a struct <code>{ … }</code>, an array <code>[ … ]</code>, a function type <code>fn(…)</code> or a continuation type) defines a type, and a reference to it is written <code>&amp;name</code>. A value type (<code>i32</code>, <code>i64</code>, <code>f32</code>, <code>f64</code>, <code>v128</code>, a reference type <code>&amp;…</code>, or another alias) defines an alias, written <code>name</code> alone. Only a type definition can have a <a href="#subtyping">supertype</a> (<code>type t: s = …</code>) or be part of a <a href="#recursive-groups"><code>rec</code> group</a>.</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">word</span> = <span class="hljs-type">i64</span>;
+<span class="hljs-keyword">type</span> <span class="hljs-type">cell</span> = { value: <span class="hljs-keyword">mut</span> word };
+
+<span class="hljs-keyword">fn</span> <span class="hljs-title">get</span>(c: &amp;<span class="hljs-type">cell</span>) -&gt; word {
+    <span class="hljs-keyword">return</span> c.<span class="hljs-variable">value</span>;
+}</span></pre>
+
+<p>An alias stands for its value type: <code>word</code> and <code>i64</code> are the same type, and a cast to <code>word</code> is a cast to <code>i64</code>. The value type may be a reference type or another alias, but an alias is not a heap type: a reference names the type it refers to (<code>&amp;cell</code>), never an alias. A name a type definition already uses cannot be an alias, nor can the name of a built-in type (<code>i32</code>, the packed <code>i8</code> and <code>i16</code>, a conversion target like <code>i32_s</code>, <code>any</code>, …), and a reference to a type is written with <code>&amp;</code>: in a value-type position, a type’s bare name is an error.</p>
+<p>Aliases are most useful with <a href="#conditional-compilation">conditional compilation</a>. Defined differently in the two branches of an <code>#[if]</code>, an alias stands for a different type in each configuration, so code that only passes such values around is written once:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[if(portable_int)]</span>
+{
+    <span class="hljs-keyword">type</span> <span class="hljs-type">nativeint</span> = <span class="hljs-type">i64</span>;
+}
+<span class="hljs-meta">#[else]</span>
+{
+    <span class="hljs-keyword">type</span> <span class="hljs-type">nativeint</span> = <span class="hljs-type">i32</span>;
+}
+
+<span class="hljs-keyword">import</span> <span class="hljs-string">"nativeint"</span> {
+    <span class="hljs-keyword">fn</span> <span class="hljs-title">Nativeint_val</span>(v: &amp;<span class="hljs-type">eq</span>) -&gt; nativeint;
+    <span class="hljs-keyword">fn</span> <span class="hljs-title">caml_copy_nativeint</span>(n: nativeint) -&gt; &amp;<span class="hljs-type">eq</span>;
+}
+
+<span class="hljs-keyword">fn</span> <span class="hljs-title">copy</span>(v: &amp;<span class="hljs-type">eq</span>) -&gt; &amp;<span class="hljs-type">eq</span> {
+    <span class="hljs-keyword">let</span> n = <span class="hljs-title">Nativeint_val</span>(v);
+    <span class="hljs-keyword">return</span> <span class="hljs-title">caml_copy_nativeint</span>(n);
+}
+
+<span class="hljs-keyword">fn</span> <span class="hljs-title">succ</span>(n: nativeint) -&gt; nativeint {
+    <span class="hljs-keyword">let</span> r: nativeint;
+    <span class="hljs-meta">#[if(portable_int)]</span>
+    {
+        r = n + <span class="hljs-number">1</span>;
+    }
+    <span class="hljs-meta">#[else]</span>
+    {
+        r = n + <span class="hljs-number">1</span>;
+    }
+    <span class="hljs-keyword">return</span> r;
+}</span></pre>
+
+<p>A value read from a declaration written with an alias (a parameter, a local, a global, a struct field, an array element, a function result) has the alias’s type, and a declaration whose type is inferred from it takes the alias too: the local <code>n</code> above is a <code>nativeint</code>, whichever type that is. Editors show such a value’s type by its alias.</p>
+<p>Code whose instructions depend on the type, such as the addition in <code>succ</code>, goes in the branches of a conditional: WebAssembly has no instruction that adds both an <code>i32</code> and an <code>i64</code>. Its two branches look the same in Wax, but compile to an <code>i64.add</code> and an <code>i32.add</code>. The same holds for a cast to a conditional alias (other than of a value that already has the alias’s type, which is no operation), for a number literal or <code>null</code> that takes its type from one (<code>let x: n = 0;</code> is an <code>i64.const</code> in one configuration and an <code>i32.const</code> in the other), and for a field access on a value whose struct type differs, where the field is at a different position. <code>wax check</code> checks each configuration on its own, so it accepts such code outside a conditional; converting the module without resolving its conditionals, as one module for every configuration, reports it where the configurations disagree. A cast written in each branch of a conditional, or an alias defined as the same type in every branch, is fine. Once <code>-D</code> resolves them, each configuration compiles on its own.</p>
+<p>The aliases carry over to WebAssembly text, where they are written as annotations (see <a href="correspondence/types.html#type-aliases">the correspondence</a>). The binary format has no aliases: compiling to it replaces each one by the type it stands for.</p>
 <h2 id="conditional-compilation"><a class="header" href="#conditional-compilation">Conditional Compilation</a></h2>
 <p>Top-level items can be guarded by conditions, using a Rust-like attribute syntax. <code>#[if(&lt;condition&gt;)] { ... }</code> keeps the braced items only when <code>&lt;condition&gt;</code> holds; an optional <code>#[else] { ... }</code> provides an alternative. The braces are required:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[if(ocaml_version &gt;= (</span><span class="hljs-number">5</span><span class="hljs-meta">, </span><span class="hljs-number">1</span><span class="hljs-meta">, </span><span class="hljs-number">0</span><span class="hljs-meta">))]</span>
@@ -1681,7 +1728,7 @@ ocaml_version &gt;= (5, 1, 0)
     <span class="hljs-keyword">return</span> s;
 }</span></pre>
 
-<p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> (they never coexist), so, for instance, the same name may be defined in both.</p>
+<p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> (they never coexist), so, for instance, the same name may be defined in both. A <a href="#type-aliases">type alias</a> defined in both branches lets the code outside them use a type that differs between configurations.</p>
 <p>Variables can be given values on the command line with <a href="cli.html"><code>-D</code>/<code>--define</code></a>, which specializes the conditionals: a condition that becomes fully determined causes its conditional to be removed (the surviving branch is spliced in), and one that still mentions unset variables is kept with its condition simplified. For example, <code>wax -D debug=true</code> turns <code>#[if(all(debug, target = "wasi"))]</code> into <code>#[if(target = "wasi")]</code>, and <code>wax -D debug=false</code> removes that conditional altogether.</p>
 <p>When type checking is enabled (<code>--validate</code>), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the <code>#[if]</code> and <code>#[else]</code> branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:</p>
 <pre><code>Error: This instruction has type float but is expected to have type i32.
