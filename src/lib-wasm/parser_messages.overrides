@@ -40,7 +40,7 @@ Expecting an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcod
 # state 838: an element expression opened with '(' — an (item …) or a folded
 # instruction.
 parse: LPAREN ELEM ANYREF LPAREN WAIT
-Expecting 'item', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+Expecting 'item' or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
 
 # state 885: a typed data element opened with '('.
 parse: LPAREN DATA STRING LPAREN WAIT
@@ -54,7 +54,7 @@ Expecting 'table', 'offset', 'ref', or an instruction ('block', 'loop', 'if', 't
 # state 1027: after an elem (table …) clause, a '(' opens an offset or a folded
 # instruction.
 parse: LPAREN ELEM LPAREN TABLE NAT RPAREN LPAREN WAIT
-Expecting 'offset', or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
+Expecting 'offset' or an instruction ('block', 'loop', 'if', 'try', 'try_table', or an opcode).
 
 # state 1053: inside a data segment, a '(' opens a memory clause, a typed data
 # element, or a folded (offset) instruction.

@@ -6,7 +6,7 @@ A block-shaped construct is "a block", not "a braced block" / "a blockinstr":
 
   $ wax check block.wax
   Error:
-    Assuming that the condition expression is complete, expecting '=>', or a
+    Assuming that the condition expression is complete, expecting '=>' or a
     block.
    ──➤  block.wax:2:22
   1 │ #[export = "f"]
@@ -34,7 +34,7 @@ are complete"), rather than leaking the raw
 `separated_nonempty_list_trailing(comma,on_clause)`:
 
   $ wax check onclause.wax
-  Error: Expecting ']', or an on-clause.
+  Error: Expecting ']' or an on-clause.
    ──➤  onclause.wax:2:18
   1 │ fn f() {
   2 │   c.resume() on [_ => switch 5]
@@ -66,7 +66,7 @@ token. The lexer gives that token the '(' as its start (so the location really
 begins at the paren), and the hint shrinks the range to that one character:
 
   $ wax check result.wat
-  Error: Expecting ')', or a value type.
+  Error: Expecting ')' or a value type.
    ──➤  result.wat:1:27
   1 │ (module (func (result i32 $x)))
     ·                           ^^
@@ -172,8 +172,8 @@ shape ("the exports are complete", step 4's clean subject_name rendering):
 
   $ wax check global.wat
   Error:
-    Assuming that the exports are complete, expecting a global type, or an
-    inline import.
+    Assuming that the exports are complete, expecting a global type or an inline
+    import.
    ──➤  global.wat:1:19
   1 │ (module (global $g))
     ·                   ^
@@ -186,7 +186,7 @@ hint back at its `(block` opener:
 
   $ wax check block-type.wat
   Error:
-    Assuming that the block type is complete, expecting ')', or instructions.
+    Assuming that the block type is complete, expecting ')' or instructions.
    ──➤  block-type.wat:1:35
   1 │ (module (func (block (result i32) end extra)))
     ·                                   ^^^
@@ -201,7 +201,7 @@ A list-shaped nonterminal is rendered as one element where the user types one
 next: `string_list` → "a string" (here inside a `(@string …)` annotation):
 
   $ wax check string.wat
-  Error: Expecting ')', or a string.
+  Error: Expecting ')' or a string.
    ──➤  string.wat:1:28
   1 │ (module (func (@string "a" 5)))
     ·                            ^
@@ -212,7 +212,7 @@ next: `string_list` → "a string" (here inside a `(@string …)` annotation):
 instruction's arguments):
 
   $ wax check folded.wat
-  Error: Expecting ')', or a folded instruction.
+  Error: Expecting ')' or a folded instruction.
    ──➤  folded.wat:1:52
   1 │ (module (func (i32.add (i32.const 1) (i32.const 2) 3)))
     ·                                                    ^
@@ -223,7 +223,7 @@ instruction's arguments):
 func's optional export clause or id belongs):
 
   $ wax check export-head.wat
-  Error: Expecting an identifier ('$...'), or an inline export.
+  Error: Expecting an identifier ('$...') or an inline export.
    ──➤  export-head.wat:1:15
   1 │ (module (func 5))
     ·               ^
@@ -323,7 +323,7 @@ the whole `let` statement `let x = 1 + 2 * 3` is underlined — a subject with n
 delimiter hint (an `if`/`let` head opens no bracket):
 
   $ wax check subject.wax
-  Error: Assuming that the statement is complete, expecting ';', or '}'.
+  Error: Assuming that the statement is complete, expecting ';' or '}'.
    ──➤  subject.wax:1:28
   1 │ fn f() { let x = 1 + 2 * 3 nop; }
     ·                            ^^^
@@ -398,8 +398,8 @@ gains no subject underline.)
 
   $ wax check global.wat
   Error:
-    Assuming that the exports are complete, expecting a global type, or an
-    inline import.
+    Assuming that the exports are complete, expecting a global type or an inline
+    import.
    ──➤  global.wat:1:19
   1 │ (module (global $g))
     ·                   ^

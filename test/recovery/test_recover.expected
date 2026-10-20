@@ -7,7 +7,7 @@ errors: 2
 === broken body, resync at } then clean re-entry ===
 AST: recovered (2 defs)
 errors: 1
-  1:20-1:21: Expecting '(', or a binding name.
+  1:20-1:21: Expecting '(' or a binding name.
 
 === well-formed input has no errors ===
 AST: recovered (1 defs)
@@ -16,12 +16,12 @@ errors: 0
 === error at end of input ===
 AST: recovered (0 defs)
 errors: 1
-  1:20-1:21: Expecting '(', or a binding name.
+  1:20-1:21: Expecting '(' or a binding name.
 
 === resync on leading 'fn' when no delimiter survives ===
 AST: recovered (1 defs)
 errors: 1
-  1:6-1:7: Expecting ')', or a function parameter.
+  1:6-1:7: Expecting ')' or a function parameter.
 
 === error inside parens, resync at ) ===
 AST: recovered (1 defs)
@@ -47,7 +47,7 @@ errors: 1
 === unhelpful insertion is rejected, not reported ===
 AST: recovered (1 defs)
 errors: 1
-  2:14-2:15: Assuming that the statement is complete, expecting ';', or '}'.
+  2:14-2:15: Assuming that the statement is complete, expecting ';' or '}'.
 
 === skip crosses a nested group to the outer boundary ===
 AST: recovered (1 defs)

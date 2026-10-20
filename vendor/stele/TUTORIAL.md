@@ -223,7 +223,7 @@ statements are complete, ...". The class collapses the two infix operators
 wherever both are legal, so input A tightens to:
 
 ```
-Expecting ')', or an operator.
+Expecting ')' or an operator.
 <2>This '(' opens the enclosing construct.
 ```
 
@@ -295,7 +295,7 @@ $ calc ok.calc
 => 7
 => 9
 $ calc unclosed.calc
-Error: Expecting ')', or an operator.
+Error: Expecting ')' or an operator.
  --> unclosed.calc:1:6
 1 | { (1 }
   ·      ^

@@ -736,6 +736,7 @@ let format_human_list items =
   match List.rev items with
   | [] -> ""
   | [ x ] -> x
+  | [ y; x ] -> x ^ " or " ^ y
   | last :: rest -> String.concat ", " (List.rev rest) ^ ", or " ^ last
 
 (* Curated readable name for a symbol whose auto-derived rendering would be
@@ -747,7 +748,7 @@ let special_name cfg s = Hashtbl.find_opt cfg.names s
 
 (* Collapse a token class (e.g. the many infix operators) into a single readable
    label *before* the <=5 cap, so a state whose FOLLOW is "a closer or any
-   operator" reads "Expecting ')', or an operator." instead of overflowing to the
+   operator" reads "Expecting ')' or an operator." instead of overflowing to the
    generic fallback. The classes are read from the [-config] file ([class LABEL]
    sections); a token in no class returns [None] and keeps its precise spelling.
    The first class the token appears in wins (file order). *)
@@ -808,7 +809,7 @@ let get_readable_name_src cfg terminals s =
 
 (* Rendering for the *Expecting* position. What the user types next is
    one element, so a list-shaped nonterminal is rendered as its singular element
-   ("Expecting ')', or an instruction.") rather than the list ("… or
+   ("Expecting ')' or an instruction.") rather than the list ("… or
    instructions."). For a user-named, list-shaped nonterminal the chase names the
    common element symbol and renders *that* recursively (a terminal by its alias,
    another nonterminal by its own reading — itself possibly list-shaped); every

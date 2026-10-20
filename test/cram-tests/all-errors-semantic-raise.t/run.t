@@ -18,7 +18,7 @@ line is reported too:
     ·          ^^^^^^^^^^^^^^
   2 │ fn b( { }
   3 │ 
-  Error: Expecting ')', or a function parameter.
+  Error: Expecting ')' or a function parameter.
    ──➤  stmt-raise.wax:2:7
   1 │ fn a() { #[else] { 1; } }
   2 │ fn b( { }
@@ -33,7 +33,7 @@ errors are reported (this case already worked via the backstop; it must not
 regress):
 
   $ wax check --all-errors module-else.wax
-  Error: Expecting ')', or a function parameter.
+  Error: Expecting ')' or a function parameter.
    ──➤  module-else.wax:3:7
   1 │ fn a() { }
   2 │ #[else] { fn e() {} }

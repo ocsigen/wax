@@ -4,7 +4,7 @@
     2x Assuming that the array body is complete, expecting ']'.
        <^_>this array body
        <_>This '[' opens the enclosing construct.
-    2x Assuming that the attribute expression is complete, expecting ']', or an attribute guard.
+    2x Assuming that the attribute expression is complete, expecting ']' or an attribute guard.
        <^_>this attribute expression
        <_>This '[' opens the enclosing construct.
     1x Assuming that the attribute expression is complete, expecting ']'.
@@ -14,9 +14,9 @@
        <^_>these attributes
     1x Assuming that the attributes are complete, expecting an import declaration.
        <^_>these attributes
-    2x Assuming that the condition expression is complete, expecting ':', or a block.
+    2x Assuming that the condition expression is complete, expecting ':' or a block.
        <^_>this condition expression
-    2x Assuming that the condition expression is complete, expecting '=>', or a block.
+    2x Assuming that the condition expression is complete, expecting '=>' or a block.
        <^_>this condition expression
     3x Assuming that the condition is complete, expecting ')'.
        <^_>this condition
@@ -33,7 +33,7 @@
     2x Assuming that the expression list is complete, expecting ']'.
        <^_>this expression list
        <_>This '[' opens the enclosing construct.
-    2x Assuming that the function type is complete, expecting ''', or '{'.
+    2x Assuming that the function type is complete, expecting ''' or '{'.
        <^_>this function type
     1x Assuming that the index expression is complete, expecting ']'.
        <^_>this index expression
@@ -56,12 +56,12 @@
     2x Assuming that the statement is complete, expecting ')'.
        <^_>this statement
        <_>This '(' opens the enclosing construct.
-    1x Assuming that the statement is complete, expecting ';', or '}'.
+    1x Assuming that the statement is complete, expecting ';' or '}'.
        <^_>this statement
     5x Assuming that the statement list is complete, expecting '}'.
        <^_>this statement list
        <_>This '{' opens the enclosing construct.
-    1x Assuming that the structure field is complete, expecting ',', or '}'.
+    1x Assuming that the structure field is complete, expecting ',' or '}'.
        <^_>this structure field
        <_>This '{' opens the enclosing construct.
     3x Assuming that the structure is complete, expecting '}'.
@@ -74,65 +74,65 @@
        <^_>this tag signature
     1x Assuming that the then-branch is complete, expecting ':'.
        <^_>this then-branch
+    1x Expecting '!' or '['.
+    1x Expecting '!' or a heap type.
+    2x Expecting '!' or a type name.
     1x Expecting '!', ''', ':', '{', or a function type.
     1x Expecting '!', ':', ';', or a function type.
     1x Expecting '!', '?', 'fn', or a heap type.
     1x Expecting '!', '?', or a heap type.
     1x Expecting '!', 'fn', or a heap type.
-    1x Expecting '!', or '['.
-    1x Expecting '!', or a heap type.
-    2x Expecting '!', or a type name.
-    2x Expecting '&', or '->'.
-    2x Expecting '&', or '=>'.
+    2x Expecting '&' or '->'.
+    2x Expecting '&' or '=>'.
+    1x Expecting ''' or an identifier.
     1x Expecting ''', '->', ';', or '{'.
     1x Expecting ''', ':', '{', or a function type.
     1x Expecting ''', '{', or a function type.
-    1x Expecting ''', or an identifier.
    11x Expecting '''.
+    1x Expecting '(' or a binding name.
     1x Expecting '(', ')', ',', or a comparison operator.
     1x Expecting '(', '=', ']', or an attribute guard.
        <_>This '[' opens the enclosing construct.
-    1x Expecting '(', or a binding name.
     9x Expecting '('.
+    3x Expecting ')' or ','.
+    1x Expecting ')' or a call target.
+    1x Expecting ')' or a call target.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')' or a condition.
+    1x Expecting ')' or a condition.
+       <_>This '(' opens the enclosing construct.
+    3x Expecting ')' or a function parameter.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')' or a let pattern.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')' or a number.
+    1x Expecting ')' or a number.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')' or a parameter type.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')' or a value type.
+       <_>This '(' opens the enclosing construct.
+    2x Expecting ')' or an argument.
+       <_>This '(' opens the enclosing construct.
+    3x Expecting ')' or an expression.
+       <_>This '(' opens the enclosing construct.
     2x Expecting ')', ',', or ':'.
     1x Expecting ')', ',', or a comparison operator.
-    3x Expecting ')', or ','.
-    1x Expecting ')', or a call target.
-    1x Expecting ')', or a call target.
-       <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a condition.
-    1x Expecting ')', or a condition.
-       <_>This '(' opens the enclosing construct.
-    3x Expecting ')', or a function parameter.
-       <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a let pattern.
-       <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a number.
-    1x Expecting ')', or a number.
-       <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a parameter type.
-       <_>This '(' opens the enclosing construct.
-    1x Expecting ')', or a value type.
-       <_>This '(' opens the enclosing construct.
-    2x Expecting ')', or an argument.
-       <_>This '(' opens the enclosing construct.
-    3x Expecting ')', or an expression.
-       <_>This '(' opens the enclosing construct.
     1x Expecting ')'.
        <_>This '(' opens the enclosing construct.
-    1x Expecting '++', or ';'.
+    1x Expecting '++' or ';'.
+    1x Expecting ',' or ':'.
+    3x Expecting ',' or ']'.
+    1x Expecting ',' or ']'.
+       <_>This '[' opens the enclosing construct.
+    1x Expecting ',' or '}'.
+       <_>This '{' opens the enclosing construct.
     1x Expecting ',', ':', '|', or '}'.
        <_>This '{' opens the enclosing construct.
-    1x Expecting ',', or ':'.
-    3x Expecting ',', or ']'.
-    1x Expecting ',', or ']'.
-       <_>This '[' opens the enclosing construct.
-    1x Expecting ',', or '}'.
-       <_>This '{' opens the enclosing construct.
     3x Expecting ','.
+    1x Expecting '->' or ';'.
+    1x Expecting '->' or '{'.
     1x Expecting '->', an operator, a postfix operator ('.', '[', '(', '!', 'as', 'is', 'on', or '?'), or the end of the expression.
-    1x Expecting '->', or ';'.
-    1x Expecting '->', or '{'.
     3x Expecting '->'.
     1x Expecting '..', '}', a descriptor operand, a structure field, or an identifier.
        <_>This '{' opens the enclosing construct.
@@ -140,9 +140,14 @@
        <_>This '{' opens the enclosing construct.
     1x Expecting '..', '}', or a structure type field.
        <_>This '{' opens the enclosing construct.
+    3x Expecting ':' or '='.
     2x Expecting ':', ';', or a function type.
-    3x Expecting ':', or '='.
    15x Expecting ':'.
+    4x Expecting ';' or '='.
+    2x Expecting ';' or 'shared'.
+    4x Expecting ';' or '{'.
+    2x Expecting ';' or a function type.
+    2x Expecting ';' or memory limits.
     1x Expecting ';', '=', or '@'.
     2x Expecting ';', '=', or memory limits.
     2x Expecting ';', '_', '}', or a catch arm.
@@ -167,38 +172,33 @@
     1x Expecting ';', '}', or an import item.
        <_>This '{' opens the enclosing construct.
     1x Expecting ';', a default arm, or a match arm.
-    4x Expecting ';', or '='.
-    2x Expecting ';', or 'shared'.
-    4x Expecting ';', or '{'.
-    2x Expecting ';', or a function type.
-    2x Expecting ';', or memory limits.
    13x Expecting ';'.
-    2x Expecting '=', ']', or an attribute guard.
+    1x Expecting '=' or '@'.
+    1x Expecting '=' or ']'.
        <_>This '[' opens the enclosing construct.
-    1x Expecting '=', or '@'.
-    1x Expecting '=', or ']'.
+    2x Expecting '=', ']', or an attribute guard.
        <_>This '[' opens the enclosing construct.
     4x Expecting '='.
     6x Expecting '=>'.
     1x Expecting '?', a cast type, or a descriptor operand.
     2x Expecting '?', a descriptor operand, or a reference type.
     1x Expecting '@'.
-    2x Expecting '[', or '{'.
+    2x Expecting '[' or '{'.
    10x Expecting '['.
+    1x Expecting ']' or a catch.
+    2x Expecting ']' or a catch.
+       <_>This '[' opens the enclosing construct.
+    1x Expecting ']' or a data value.
+    1x Expecting ']' or a data value.
+       <_>This '[' opens the enclosing construct.
+    1x Expecting ']' or an array body.
+       <_>This '[' opens the enclosing construct.
+    2x Expecting ']' or an expression.
+       <_>This '[' opens the enclosing construct.
+    1x Expecting ']' or an on-clause.
+    1x Expecting ']' or an on-clause.
+       <_>This '[' opens the enclosing construct.
     1x Expecting ']', an array body, or an identifier.
-       <_>This '[' opens the enclosing construct.
-    1x Expecting ']', or a catch.
-    2x Expecting ']', or a catch.
-       <_>This '[' opens the enclosing construct.
-    1x Expecting ']', or a data value.
-    1x Expecting ']', or a data value.
-       <_>This '[' opens the enclosing construct.
-    1x Expecting ']', or an array body.
-       <_>This '[' opens the enclosing construct.
-    2x Expecting ']', or an expression.
-       <_>This '[' opens the enclosing construct.
-    1x Expecting ']', or an on-clause.
-    1x Expecting ']', or an on-clause.
        <_>This '[' opens the enclosing construct.
    13x Expecting ']'.
        <_>This '[' opens the enclosing construct.
@@ -207,27 +207,27 @@
     1x Expecting 'describes', 'descriptor', 'open', or a composite type (a rec group holds struct, array and function types; a type alias goes outside it).
     1x Expecting 'describes', 'descriptor', 'open', or a composite type (a type with a supertype is a struct, array or function type; a type alias has none).
     2x Expecting 'describes', 'descriptor', or a composite type.
-    2x Expecting 'descriptor', or a composite type.
-    1x Expecting 'descriptor', or an identifier.
+    2x Expecting 'descriptor' or a composite type.
+    1x Expecting 'descriptor' or an identifier.
     2x Expecting 'else', 'if', 'import', or an identifier.
     1x Expecting 'if'.
-    2x Expecting 'import', or an identifier.
+    2x Expecting 'import' or an identifier.
     6x Expecting '{'.
     1x Expecting '|'.
-    1x Expecting '}', or a data item.
-    4x Expecting '}', or a data item.
+    1x Expecting '}' or a data item.
+    4x Expecting '}' or a data item.
        <_>This '{' opens the enclosing construct.
-    1x Expecting '}', or a structure field.
+    1x Expecting '}' or a structure field.
        <_>This '{' opens the enclosing construct.
-    1x Expecting '}', or a structure type field.
+    1x Expecting '}' or a structure type field.
        <_>This '{' opens the enclosing construct.
-    1x Expecting '}', or a type definition.
-    1x Expecting '}', or a type definition.
+    1x Expecting '}' or a type definition.
+    1x Expecting '}' or a type definition.
        <_>This '{' opens the enclosing construct.
     8x Expecting '}'.
        <_>This '{' opens the enclosing construct.
+    8x Expecting a block or a block type.
     1x Expecting a block type.
-    8x Expecting a block, or a block type.
    25x Expecting a block.
     4x Expecting a composite type.
     4x Expecting a condition expression.
@@ -239,7 +239,7 @@
     3x Expecting a descriptor operand.
     2x Expecting a field group.
     2x Expecting a field type.
-    1x Expecting a float, or an integer.
+    1x Expecting a float or an integer.
     2x Expecting a function name.
     2x Expecting a function type.
     1x Expecting a heap type.
@@ -247,11 +247,11 @@
     1x Expecting a labeled block: 'do', 'while', 'loop', 'if', 'try', or 'try_legacy'.
     3x Expecting a length expression.
     1x Expecting a number.
-    1x Expecting a parenthesized expression, or an expression.
-    2x Expecting a reference type, or an address type.
+    1x Expecting a parenthesized expression or an expression.
+    2x Expecting a reference type or an address type.
     5x Expecting a reference type.
     4x Expecting a result type.
-    1x Expecting a statement, or an expression.
+    1x Expecting a statement or an expression.
     2x Expecting a statement.
     1x Expecting a storage type.
     2x Expecting a string.
@@ -263,7 +263,7 @@
     3x Expecting an attribute expression.
    64x Expecting an expression.
    12x Expecting an identifier.
-    1x Expecting an index expression, or case labels.
+    1x Expecting an index expression or case labels.
     1x Expecting an index expression.
     6x Expecting an integer.
     1x Expecting an on-clause list.

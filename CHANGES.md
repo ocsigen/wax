@@ -38,6 +38,11 @@ grammar keeps none, and both are versioned independently of the toolchain.
   on any input, including WAT and Wasm files using legacy exceptions; on a
   Wax-to-Wax conversion, each `try_legacy` becomes a structured `try`.
 
+### Diagnostics
+
+- A syntax error that expects one of two things no longer puts a comma before
+  "or": it now reads "expecting ';' or '}'".
+
 ### Editors
 
 - Completion offers a name defined in several branches of a conditional
