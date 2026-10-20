@@ -6924,16 +6924,21 @@ and type_cast ctx i =
          when converting from Wasm ([ctx.simplify], or [ctx.faithful], where the
          decompiler writes the nullable target for want of the operand's type
          and the refinement changes no opcode); otherwise the cast is kept as
-         written. *)
+         written. Only an actual convert is refined: a same-hierarchy cast is
+         a pin, and over a hole that reconnects to a non-null value a
+         non-null pin lowers to a [ref.cast] the source never had. *)
       let arg_non_nullable =
         match Cell.get ty' with
         | Valtype { typ = Ref { nullable = false; _ }; _ } -> true
         | _ -> false
       in
+      let arg_extern = is_extern i' in
       let typ =
         match typ with
         | Valtype (Ref ({ typ = Extern | Any; nullable = true } as r))
-          when (ctx.simplify || ctx.faithful) && arg_non_nullable ->
+          when (ctx.simplify || ctx.faithful)
+               && arg_non_nullable
+               && r.typ = Extern <> arg_extern ->
             Ast.Valtype (Ref { r with nullable = false })
         | _ -> typ
       in
