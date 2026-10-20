@@ -65,7 +65,9 @@ module behaves identically, it just is not byte-for-byte identical.
    identically. This affects a `local` or a `const` global declared at a
    supertype but only ever assigned a narrower value, a block result type
    declared wider than its body when no consumer pins the wider type, and a
-   `br_on_cast`'s source-type immediate re-inferred from its operand.
+   `br_on_cast`'s source-type immediate re-inferred from its operand. The type
+   immediate of an instruction that takes it from its operand, such as
+   `struct.get` or `call_ref`, may likewise become more precise.
 
 ## Faithful round-tripping
 
