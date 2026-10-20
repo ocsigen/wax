@@ -138,6 +138,32 @@ two-cast spelling re-lowers to the original pair:
   i64.extend_i32_s
   i32.load8_s
 
+`extern.convert_any` / `any.convert_extern` preserve non-nullness, so a convert
+of a non-null value is non-null under `--faithful` too, and the decompiled Wax
+type-checks against a non-null consumer.
+
+  $ cat > convert.wat <<'WAT'
+  > (module
+  >   (type $bytes (array (mut i8)))
+  >   (func (export "f") (param i32) (result (ref extern))
+  >     (extern.convert_any (array.new $bytes (i32.const 0) (local.get 0))))
+  >   (func (export "g") (param (ref extern)) (result (ref any))
+  >     (any.convert_extern (local.get 0))))
+  > WAT
+  $ wax -i wat -f wax --faithful convert.wat
+  type bytes = [mut i8];
+  #[export]
+  fn f(x: i32) -> &extern {
+      [bytes|0; x] as &extern;
+  }
+  #[export]
+  fn g(x: &extern) -> &any {
+      x as &any;
+  }
+  $ wax -i wat -f wax --faithful convert.wat | wax -i wax -f wat | grep -oE 'ref\.as_non_null|ref\.cast|(extern|any)\.convert_(any|extern)'
+  extern.convert_any
+  any.convert_extern
+
 `--faithful` applies only to decompilation (wax output); it is a usage error
 otherwise.
 

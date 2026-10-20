@@ -6920,9 +6920,11 @@ and type_cast ctx i =
       let ty'_natural = Cell.get ty' in
       (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
          cast to [&?extern]/[&?any] of a non-nullable argument actually yields
-         [&extern]/[&any]; refine the target accordingly. Like the
-         redundant-cast removal below, this only applies when converting from
-         Wasm ([ctx.simplify]); otherwise the cast is kept as written. *)
+         [&extern]/[&any]; refine the target accordingly. This only applies
+         when converting from Wasm ([ctx.simplify], or [ctx.faithful], where the
+         decompiler writes the nullable target for want of the operand's type
+         and the refinement changes no opcode); otherwise the cast is kept as
+         written. *)
       let arg_non_nullable =
         match Cell.get ty' with
         | Valtype { typ = Ref { nullable = false; _ }; _ } -> true
@@ -6931,7 +6933,7 @@ and type_cast ctx i =
       let typ =
         match typ with
         | Valtype (Ref ({ typ = Extern | Any; nullable = true } as r))
-          when ctx.simplify && arg_non_nullable ->
+          when (ctx.simplify || ctx.faithful) && arg_non_nullable ->
             Ast.Valtype (Ref { r with nullable = false })
         | _ -> typ
       in

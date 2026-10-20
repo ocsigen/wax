@@ -4009,10 +4009,10 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
         | `Floor | `Blocked -> crossed_any
       in
       (* A bare hole is pinned NON-NULL and the convert preserves non-nullness, so
-         the RESULT is non-null too. State that here rather than leaving it to the
-         typer's refinement, which is gated on [simplify] and so does not happen
-         under [--faithful] — there the nullable target made the decompiled Wax
-         ill-typed against a non-null consumer. *)
+         the RESULT is non-null too; a nullable target made the decompiled Wax
+         ill-typed against a non-null consumer under [--faithful]. (The typer's
+         refinement of a convert of a non-null operand now reaches the same
+         result from the pin; stating it here does not depend on it.) *)
       (* An adaptive-null backing keeps the pin NULLABLE: the value the printed
          hole reconnects to is a null, which a non-null pin could not type. *)
       let nullable = backed || adaptive_null || not (is_bare_hole e) in

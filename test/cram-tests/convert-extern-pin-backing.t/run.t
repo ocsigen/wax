@@ -216,7 +216,7 @@ opcode:
       return;
       (_ as &?any)!;
       nop;
-      _ = _ as &?extern;
+      _ = _ as &extern;
   }
 
 Every `ref.as_non_null` is still exactly one opcode, and no `ref.cast` is

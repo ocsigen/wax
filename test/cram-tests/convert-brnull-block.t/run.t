@@ -31,7 +31,7 @@ of its own (it is already in the source hierarchy):
       'l: do &?any {
           unreachable;
           br_on_null 'l (_, _ as &?extern);
-          _ as &?any;
+          _ as &any;
           unreachable;
       }
   }

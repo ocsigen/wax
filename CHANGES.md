@@ -47,6 +47,10 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Fixes
 
+- `--faithful` no longer rejects a module that converts a non-null value
+  with `extern.convert_any` or `any.convert_extern` and uses the result
+  where a non-null reference is expected (a `(ref extern)` function result,
+  for example): the conversion's result was typed nullable.
 - A legacy `try` taking block parameters is no longer rejected when it has a
   `catch_all` handler: the handler was wrongly expected to receive the
   parameters, which the body consumes.
