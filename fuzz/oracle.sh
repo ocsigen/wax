@@ -814,6 +814,13 @@ if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
       # module rejects it, by design. The message wraps, hence the flattening.
       tr -s ' \n' ' ' <"$ERRLOG" | grep -qi "no single WebAssembly form" &&
         continue
+      # And an instruction whose form depends on the type a conditional alias
+      # stands for (the arithmetic on a value typed by one): it is lowered from
+      # one configuration, so validating the lowered module reports it in the
+      # others, against the alias. alias-fuzz.sh's COMMUTE checks this lowering
+      # configuration by configuration.
+      grep -q '(@type \$' "$ERRLOG" && grep -q "reachable when" "$ERRLOG" &&
+        continue
       finding UNDER_REJECT HIGH "$IN" \
         "wax check accepts but ${FMT}->${out} rejects it (typer under-rejects): $(grep -m1 -i error "$ERRLOG" || true)" \
         "$(repro "${check[@]}") && $(repro "${conv[@]}")"
