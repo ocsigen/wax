@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0
+
+- The bundled toolchain follows the language: value-type aliases
+  (`type word = i64;` in Wax, `(@type $word i64)` in WAT) are understood,
+  including ones defined differently in each branch of a conditional
+  annotation. A hover on an alias shows its definition, one per configuration
+  for a conditional alias, and a local whose type comes from an aliased
+  declaration is shown with the alias.
+- Completion offers a name defined in several branches of a conditional
+  annotation once, with each definition's detail
+  (`fn() -> i64 | fn() -> i32`), where only the first was shown.
+- A field access on a value whose struct type differs between conditional
+  branches is checked in every configuration, so the Problems panel reports one
+  that has no single WebAssembly form.
+- The toolchain's fixes and speedups since the previous release: type-checking
+  a large module is much faster, a module with tens of thousands of top-level
+  items no longer crashes the extension, and a syntax error that expects one of
+  two things reads "expecting ';' or '}'".
+
 ## 0.4.0
 
 - Quick fixes (the lightbulb / `Ctrl+.`) for `.wax` and `.wat`: any diagnostic
