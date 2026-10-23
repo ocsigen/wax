@@ -1,4 +1,4 @@
-Error: Expecting ')', or an operator.
+Error: Expecting ')' or an operator.
  --> unclosed.calc:1:6
 1 | { (1 }
   ·      ^

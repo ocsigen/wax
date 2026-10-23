@@ -1,0 +1,204 @@
+; An expression grammar with more operators than the five-item cap, so that
+; several states fall back to "Syntax error". It pins the review commands that
+; the calc example has nothing for (fallbacks, suggest-classes, transitions),
+; the delimiter-hint count of overridden messages, and the clean one-line
+; errors for broken inputs. Accept changes with `dune promote`.
+
+(rule
+ (with-stdout-to
+  ops.auto.messages
+  (run menhir %{dep:parser.mly} --list-errors)))
+
+(rule
+ (target ops.cmly)
+ (deps parser.mly)
+ (action
+  (run menhir %{dep:parser.mly} --cmly --no-code-generation --base ops)))
+
+; A ready-to-paste override for each "Syntax error" state.
+
+(rule
+ (with-stdout-to
+  ops.fallbacks
+  (run stele fallbacks --cmly %{dep:ops.cmly} %{dep:ops.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff ops.fallbacks.expected ops.fallbacks)))
+
+; The operators always occur together, so they are proposed as one class.
+
+(rule
+ (with-stdout-to
+  ops.suggest-classes
+  (run stele suggest-classes --cmly %{dep:ops.cmly} %{dep:ops.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff ops.suggest-classes.expected ops.suggest-classes)))
+
+(rule
+ (with-stdout-to
+  ops.transitions
+  (run stele transitions --cmly %{dep:ops.cmly} %{dep:ops.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff ops.transitions.expected ops.transitions)))
+
+; With two fallbacks overridden: the overrides drop out of the fallback
+; counters, and only the override with a real <N> marker counts as a delimiter
+; hint (the other merely quotes '<' in its prose).
+
+(rule
+ (with-stdout-to
+  ops.stats
+  (run
+   stele
+   stats
+   --cmly
+   %{dep:ops.cmly}
+   --overrides
+   %{dep:ops.overrides}
+   %{dep:ops.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff ops.stats.expected ops.stats)))
+
+; Broken inputs: each must fail with a clean one-line "stele: ..." error and
+; exit 1, never an exception backtrace. missing.config does not exist.
+
+(rule
+ (with-outputs-to
+  errors.actual
+  (progn
+   (echo "== duplicate override\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --overrides
+     %{dep:duplicate.overrides}
+     %{dep:ops.auto.messages}))
+   (echo "== override without a message\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --overrides
+     %{dep:empty.overrides}
+     %{dep:ops.auto.messages}))
+   (echo "== override marker past the stack\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --overrides
+     %{dep:depth.overrides}
+     %{dep:ops.auto.messages}))
+   (echo "== stale override\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --overrides
+     %{dep:stale.overrides}
+     %{dep:ops.auto.messages}))
+   (echo "== unknown config section\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --config
+     %{dep:malformed.config}
+     %{dep:ops.auto.messages}))
+   (echo "== duplicate [names] entry\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --config
+     %{dep:duplicate.config}
+     %{dep:ops.auto.messages}))
+   (echo "== empty [names] value\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --config
+     %{dep:empty-name.config}
+     %{dep:ops.auto.messages}))
+   (echo "== rule in a [class]\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --config
+     %{dep:class-rule.config}
+     %{dep:ops.auto.messages}))
+   (echo "== missing file\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --config
+     missing.config
+     %{dep:ops.auto.messages})))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff errors.expected errors.actual)))
+
+; The hedge's verb agrees with an article-less [names] value: run on the calc
+; example's grammar with singular.config, the hedge reads "Assuming that the
+; statement list is complete, ...".
+
+(rule
+ (with-stdout-to
+  hedge-verb.census
+  (run
+   stele
+   census
+   --cmly
+   %{dep:../../example/calc.cmly}
+   --config
+   %{dep:singular.config}
+   %{dep:../../example/calc.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff hedge-verb.census.expected hedge-verb.census)))

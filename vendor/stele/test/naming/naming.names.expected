@@ -1,0 +1,16 @@
+SYMBOL              RENDERED           SOURCE             EXPECTING  ASSUMING
+COLON               ':'                token alias                1         0
+EOF                 'eof'              token name                 1         0
+ID                  'id'               token name                 2         0
+RBRACE              '}'                token alias                1         0
+SEMI                ';'                token alias                1         0
+access              an access          rule name                  1         0
+block               a block            rule name                  1         0
+fieldType(SEMI)     a type expression  [names]                    1         0
+list(entry)         entries            plural of element          0         1
+main                a main             rule name                  1         0
+option(annotation)  an annotation      element                    0         1
+typeAlias           a type alias       rule name                  1         0
+
+unused [names] entries:
+  (none)

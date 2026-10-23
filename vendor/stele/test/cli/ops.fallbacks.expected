@@ -1,0 +1,108 @@
+##
+## Ends in an error in state: 16.
+##
+## expr -> expr . PLUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . MINUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . STAR expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . SLASH expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . LT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . GT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr GT expr . [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+##
+## The known suffix of the stack is as follows:
+## expr GT expr
+##
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
+main: INT GT INT LPAREN
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+##
+## Ends in an error in state: 19.
+##
+## expr -> expr . PLUS expr [ STAR SLASH SEMI PLUS MINUS LT GT ]
+## expr -> expr . MINUS expr [ STAR SLASH SEMI PLUS MINUS LT GT ]
+## expr -> expr . STAR expr [ STAR SLASH SEMI PLUS MINUS LT GT ]
+## expr -> expr . SLASH expr [ STAR SLASH SEMI PLUS MINUS LT GT ]
+## expr -> expr . LT expr [ STAR SLASH SEMI PLUS MINUS LT GT ]
+## expr -> expr . GT expr [ STAR SLASH SEMI PLUS MINUS LT GT ]
+## stmt -> expr . SEMI [ LPAREN INT EOF ]
+##
+## The known suffix of the stack is as follows:
+## expr
+##
+# Could come next (7): '*', '+', '-', '/', ';', '<', '>'
+main: INT LPAREN
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+##
+## Ends in an error in state: 14.
+##
+## expr -> expr . PLUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . MINUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . STAR expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . SLASH expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . LT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr LT expr . [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . GT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+##
+## The known suffix of the stack is as follows:
+## expr LT expr
+##
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
+main: INT LT INT LPAREN
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+##
+## Ends in an error in state: 12.
+##
+## expr -> expr . PLUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . MINUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr MINUS expr . [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . STAR expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . SLASH expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . LT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . GT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+##
+## The known suffix of the stack is as follows:
+## expr MINUS expr
+##
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
+main: INT MINUS INT LPAREN
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+##
+## Ends in an error in state: 10.
+##
+## expr -> expr . PLUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr PLUS expr . [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . MINUS expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . STAR expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . SLASH expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . LT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . GT expr [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+##
+## The known suffix of the stack is as follows:
+## expr PLUS expr
+##
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
+main: INT PLUS INT LPAREN
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+##
+## Ends in an error in state: 3.
+##
+## expr -> LPAREN expr . RPAREN [ STAR SLASH SEMI RPAREN PLUS MINUS LT GT ]
+## expr -> expr . PLUS expr [ STAR SLASH RPAREN PLUS MINUS LT GT ]
+## expr -> expr . MINUS expr [ STAR SLASH RPAREN PLUS MINUS LT GT ]
+## expr -> expr . STAR expr [ STAR SLASH RPAREN PLUS MINUS LT GT ]
+## expr -> expr . SLASH expr [ STAR SLASH RPAREN PLUS MINUS LT GT ]
+## expr -> expr . LT expr [ STAR SLASH RPAREN PLUS MINUS LT GT ]
+## expr -> expr . GT expr [ STAR SLASH RPAREN PLUS MINUS LT GT ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN expr
+##
+# Could come next (7): ')', '*', '+', '-', '/', '<', '>'
+main: LPAREN INT LPAREN
+<YOUR SYNTAX ERROR MESSAGE HERE>
+

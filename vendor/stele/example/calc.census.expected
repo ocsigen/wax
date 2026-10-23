@@ -1,0 +1,10 @@
+    1x Assuming that the statements are complete, expecting '}'.
+       <^_>these statements
+       <_>This '{' opens the enclosing construct.
+    1x Expecting ')' or an operator.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting ')', ';', or an operator.
+    1x Expecting ';' or an operator.
+    1x Expecting 'eof'.
+    1x Expecting a program: a '{' block.
+    3x Expecting an expression.

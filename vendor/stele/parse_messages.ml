@@ -25,22 +25,20 @@ type entry = {
 (* Utilities *)
 
 let read_lines filename =
-  let lines = ref [] in
-  let chan = open_in filename in
-  try
-    while true do
-      let line = input_line chan in
+  let lines =
+    In_channel.with_open_bin filename In_channel.input_all
+    |> String.split_on_char '\n'
+  in
+  (* A final newline ends the last line rather than starting an empty one. *)
+  let lines =
+    match List.rev lines with "" :: rest -> List.rev rest | _ -> lines
+  in
+  List.map
+    (fun line ->
       let len = String.length line in
-      let line =
-        if len > 0 && line.[len - 1] = '\r' then String.sub line 0 (len - 1)
-        else line
-      in
-      lines := line :: !lines
-    done;
-    List.rev !lines
-  with End_of_file ->
-    close_in chan;
-    List.rev !lines
+      if len > 0 && line.[len - 1] = '\r' then String.sub line 0 (len - 1)
+      else line)
+    lines
 
 let is_blank line = String.trim line = ""
 
@@ -104,7 +102,7 @@ let parse_lr1_item line =
     in
     let rhs_part = String.sub remainder 0 bracket_idx |> String.trim in
     let closing_bracket_idx =
-      try String.index remainder ']'
+      try String.index_from remainder bracket_idx ']'
       with Not_found ->
         failwith ("Missing closing lookahead bracket in: " ^ content)
     in
@@ -237,8 +235,7 @@ let parse_entry sentence_block message_block =
    lines describing the error state) and a message block, separated by blank
    lines. Hand-curated files that group several sentences under one message are
    NOT supported — [pair_blocks] assumes one sentence block per message block. *)
-let parse_file filename =
-  let lines = read_lines filename in
+let parse_lines lines =
   let blocks = split_into_blocks lines in
 
   (* Blocks come in format: SentenceBlock, MessageBlock, SentenceBlock, MessageBlock... *)
@@ -251,3 +248,7 @@ let parse_file filename =
   in
 
   pair_blocks [] blocks
+
+let parse_file filename =
+  try parse_lines (read_lines filename)
+  with Failure msg -> failwith (Printf.sprintf "%s: %s" filename msg)

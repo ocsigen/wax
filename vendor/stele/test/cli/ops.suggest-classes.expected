@@ -1,0 +1,10 @@
+# 6 tokens always accepted together, in 6 states. One label for them
+# brings 6 Expecting lists under the five-item limit and removes 30 items.
+[class <LABEL>]
+GT
+LT
+MINUS
+PLUS
+SLASH
+STAR
+

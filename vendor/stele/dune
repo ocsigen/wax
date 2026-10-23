@@ -6,9 +6,20 @@
  (name main)
  (public_name stele)
  (package stele)
- (modules main parse_messages)
- ; menhirSdk reads the .cmly for exact productions/nullability/aliases; str is
- ; still used by parse_messages.ml to parse the --list-errors comment blocks;
- ; cmdliner drives the subcommand CLI; unix gives the `tune` subcommand
- ; wall-clock timing (this is a build-time host tool, not the wasm runtime lib).
+ (modules
+  main
+  util
+  grammar
+  config
+  naming
+  delimiters
+  overrides
+  generate
+  reports
+  tune
+  parse_messages)
+ ; menhirSdk reads the .cmly for exact productions/nullability/aliases; str
+ ; parses the --list-errors comment blocks and the message markers; cmdliner
+ ; drives the subcommand CLI; unix runs menhir for the `tune` subcommand and
+ ; times it (this is a build-time host tool, not the wasm runtime lib).
  (libraries menhirSdk str cmdliner unix))

@@ -48,11 +48,17 @@ module Make (E : ENGINE) = struct
                that only understands [<N>] fails [int_of_string "^N"] and leaves
                the line inline in the message — graceful degradation. *)
             let is_subject = String.length tag > 0 && tag.[0] = '^' in
-            let depth =
-              int_of_string
-                (if is_subject then String.sub tag 1 (String.length tag - 1)
-                 else tag)
+            (* The depth is plain decimal digits: [<+2>] or [<0x2>] is not a
+               marker, and stays in the message. *)
+            let digits =
+              if is_subject then String.sub tag 1 (String.length tag - 1)
+              else tag
             in
+            if
+              digits = ""
+              || not (String.for_all (fun c -> c >= '0' && c <= '9') digits)
+            then raise Exit;
+            let depth = int_of_string digits in
             match E.get (depth - 1) env with
             | Some el ->
                 let pos1, pos2 = E.positions el in
@@ -78,10 +84,10 @@ module Make (E : ENGINE) = struct
                      ([(then]/[(param]/…) reports the '(' as its start — but a
                      spurious reduction can surface a plain token (e.g. ELEM)
                      sitting just past the '('; in that case walk the source back
-                     over blanks to the delimiter.
+                     over blanks, line breaks included, to the delimiter.
 
                      The underline spans the FULL alias the label names, not a
-                     fixed single character (move 3): a multi-character opener
+                     fixed single character: a multi-character opener
                      like [\[|] underlines both of its characters. The width is
                      read from the alias the label quotes ([This '[|' opens …] ->
                      2, [This '(' opens …] -> 1), so the [<N>] marker itself
@@ -90,7 +96,7 @@ module Make (E : ENGINE) = struct
                      character. *)
                   let cnum = pos1.Lexing.pos_cnum in
                   let is_delim c = c = '(' || c = '[' || c = '{' in
-                  let blank c = c = ' ' || c = '\t' in
+                  let blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
                   let dcnum =
                     if cnum < String.length source && is_delim source.[cnum]
                     then cnum
@@ -110,7 +116,26 @@ module Make (E : ENGINE) = struct
                         | None -> 1)
                     | None -> 1
                   in
-                  let start = { pos1 with Lexing.pos_cnum = dcnum } in
+                  (* When the walk crossed line breaks, move the line number
+                     and the line start back with it. *)
+                  let start =
+                    let crossed = ref 0 and bol = ref pos1.Lexing.pos_bol in
+                    for i = dcnum to cnum - 1 do
+                      if source.[i] = '\n' then incr crossed
+                    done;
+                    if !crossed > 0 then begin
+                      bol := 0;
+                      for i = 0 to dcnum - 1 do
+                        if source.[i] = '\n' then bol := i + 1
+                      done
+                    end;
+                    {
+                      pos1 with
+                      Lexing.pos_cnum = dcnum;
+                      pos_lnum = pos1.Lexing.pos_lnum - !crossed;
+                      pos_bol = !bol;
+                    }
+                  in
                   related :=
                     {
                       loc_start = start;

@@ -1,0 +1,72 @@
+; How rule names become words (see parser.mly): a camelCase rule, a singular
+; noun ending in 's', a list pluralised with -ies, an option as a hedge
+; subject, and [names] entries on a phantom rule's base name and on a generated
+; list. Accept changes with `dune promote`.
+
+(rule
+ (with-stdout-to
+  naming.auto.messages
+  (run menhir %{dep:parser.mly} --list-errors)))
+
+(rule
+ (target naming.cmly)
+ (deps parser.mly)
+ (action
+  (run menhir %{dep:parser.mly} --cmly --no-code-generation --base naming)))
+
+(rule
+ (with-stdout-to
+  naming.actual
+  (run
+   stele
+   generate
+   --no-comments
+   --cmly
+   %{dep:naming.cmly}
+   --config
+   %{dep:naming.config}
+   %{dep:naming.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff naming.expected naming.actual)))
+
+; Which rule produced each name, and that the base-name [names] entry is
+; credited (not reported unused).
+
+(rule
+ (with-stdout-to
+  naming.names
+  (run
+   stele
+   names
+   --cmly
+   %{dep:naming.cmly}
+   --config
+   %{dep:naming.config}
+   %{dep:naming.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff naming.names.expected naming.names)))
+
+; A [names] entry for a generated list names it as a hedge subject.
+
+(rule
+ (with-stdout-to
+  plural.census
+  (run
+   stele
+   census
+   --cmly
+   %{dep:naming.cmly}
+   --config
+   %{dep:plural.config}
+   %{dep:naming.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff plural.census.expected plural.census)))

@@ -1,0 +1,47 @@
+main: SEMI
+
+Expecting a main.
+
+main: TYPE ID COLON ID LBRACE ID COLON ID AT TYPE
+
+Expecting 'id'.
+
+main: TYPE ID COLON ID LBRACE ID COLON ID TYPE
+
+Assuming that the annotation is complete, expecting ';'.
+<^1>this annotation
+
+main: TYPE ID COLON ID LBRACE ID COLON TYPE
+
+Expecting a type expression.
+
+main: TYPE ID COLON ID LBRACE ID TYPE
+
+Expecting ':'.
+
+main: TYPE ID COLON ID LBRACE RBRACE TYPE
+
+Expecting 'eof'.
+
+main: TYPE ID COLON ID LBRACE TYPE
+
+Assuming that the entries are complete, expecting '}'.
+<^1>these entries
+<2>This '{' opens the enclosing construct.
+
+main: TYPE ID COLON ID TYPE
+
+Expecting a block.
+
+main: TYPE ID COLON TYPE
+
+Expecting 'id'.
+
+main: TYPE ID TYPE
+
+Expecting an access.
+
+main: TYPE TYPE
+
+Expecting a type alias.
+

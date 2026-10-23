@@ -1,0 +1,9 @@
+# Two of the fallback states, overridden. The first message mentions '<' in its
+# prose, which must not count as a delimiter hint in `stele stats`; the second
+# carries a real one.
+main: INT LPAREN
+Expecting ';' or an operator, such as '+' or '<'.
+
+main: LPAREN INT LPAREN
+Expecting ')' or an operator.
+<2>This '(' opens the enclosing construct.

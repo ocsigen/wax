@@ -22,8 +22,8 @@
 
 %start <int list> prog
 
-(* Usual arithmetic precedence, so the ambiguous [expr op expr] rules carry no
-   conflicts (a clean template). *)
+(* Usual arithmetic precedence, so the ambiguous [expression op expression]
+   rules carry no conflicts (a clean template). *)
 %left PLUS
 %left STAR
 
@@ -43,10 +43,10 @@ stmts:
   | v = stmt r = stmts { v :: r }
 
 stmt:
-  | e = expr SEMI { e }
+  | e = expression SEMI { e }
 
-expr:
+expression:
   | i = INT { i }
-  | LPAREN e = expr RPAREN { e }
-  | a = expr PLUS b = expr { a + b }
-  | a = expr STAR b = expr { a * b }
+  | LPAREN e = expression RPAREN { e }
+  | a = expression PLUS b = expression { a + b }
+  | a = expression STAR b = expression { a * b }

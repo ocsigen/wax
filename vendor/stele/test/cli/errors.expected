@@ -1,0 +1,27 @@
+== duplicate override
+Parsed 15 entries from ./ops.auto.messages
+stele: overrides ./duplicate.overrides: duplicate entry for "main: INT LPAREN"
+== override without a message
+Parsed 15 entries from ./ops.auto.messages
+stele: overrides ./empty.overrides: entry "main: INT LPAREN" has no message
+== override marker past the stack
+Parsed 15 entries from ./ops.auto.messages
+stele: override for "main: LPAREN INT LPAREN": marker <^9> is out of range: this state only knows the top 2 positions of the parser's stack
+== stale override
+Parsed 15 entries from ./ops.auto.messages
+stele: override for "main: INT INT INT" matches no error state (stale entry — remove or fix it)
+== unknown config section
+Parsed 15 entries from ./ops.auto.messages
+stele: config ./malformed.config:4: unknown section header "[nmes]"
+== duplicate [names] entry
+Parsed 15 entries from ./ops.auto.messages
+stele: config ./duplicate.config:3: [names]: duplicate entry for "expr"
+== empty [names] value
+Parsed 15 entries from ./ops.auto.messages
+stele: config ./empty-name.config:2: [names]: empty value for "expr"
+== rule in a [class]
+Parsed 15 entries from ./ops.auto.messages
+stele: config ./class-rule.config [class an operator]: "expr" is a rule, not a token (a class only groups tokens)
+== missing file
+Parsed 15 entries from ./ops.auto.messages
+stele: missing.config: No such file or directory

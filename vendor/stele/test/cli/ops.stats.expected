@@ -1,0 +1,19 @@
+error states: 15
+with an "Expecting" list: 9
+with an "Assuming" hedge: 0
+hedges assuming 4 or more constructs: 0
+most constructs assumed by one hedge: 0
+overridden: 2
+"Syntax error", nothing to list (not overridden): 0
+"Syntax error", over 5 to list (not overridden): 4
+delimiter hints: 1
+missed delimiter hints (an opener is open, but no hint): 0
+tokens shown as jargon: 0
+rule names shown as jargon: 2
+  expr (an expr)
+  stmt (a stmt)
+states numbered as in the .cmly: 15/15
+listed tokens the parser rejects: 0
+lists missing an accepted token: 0
+accepted tokens missing (total): 0
+names configured: 0, unused: 0

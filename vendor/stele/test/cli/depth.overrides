@@ -1,0 +1,4 @@
+# A hedge-subject marker deeper than the state's known stack suffix.
+main: LPAREN INT LPAREN
+Expecting ')' or an operator.
+<^9>this expression

@@ -1,0 +1,10 @@
+    1x Assuming that the statement list is complete, expecting '}'.
+       <^_>this statement list
+       <_>This '{' opens the enclosing construct.
+    1x Expecting ')', '*', '+', or ';'.
+    1x Expecting ')', '*', or '+'.
+       <_>This '(' opens the enclosing construct.
+    1x Expecting '*', '+', or ';'.
+    1x Expecting 'eof'.
+    1x Expecting a prog.
+    3x Expecting an expression.

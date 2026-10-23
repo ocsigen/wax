@@ -1,0 +1,72 @@
+Transitions per state:
+State 0:
+  main
+State 1:
+  expr
+State 3:
+  GT
+  LT
+  MINUS
+  PLUS
+  RPAREN [depth: 2]
+  SLASH
+  STAR
+State 4:
+  expr
+State 6:
+  expr
+State 9:
+  expr
+State 10:
+  GT [lookahead]
+  LT [lookahead]
+  MINUS [lookahead]
+  PLUS [lookahead]
+  RPAREN [lookahead] [mismatch?]
+  SEMI [lookahead]
+  SLASH [lookahead]
+  STAR [lookahead]
+State 11:
+  expr
+State 12:
+  GT [lookahead]
+  LT [lookahead]
+  MINUS [lookahead]
+  PLUS [lookahead]
+  RPAREN [lookahead] [mismatch?]
+  SEMI [lookahead]
+  SLASH [lookahead]
+  STAR [lookahead]
+State 13:
+  expr
+State 14:
+  GT [lookahead]
+  LT [lookahead]
+  MINUS [lookahead]
+  PLUS [lookahead]
+  RPAREN [lookahead] [mismatch?]
+  SEMI [lookahead]
+  SLASH [lookahead]
+  STAR [lookahead]
+State 15:
+  expr
+State 16:
+  GT [lookahead]
+  LT [lookahead]
+  MINUS [lookahead]
+  PLUS [lookahead]
+  RPAREN [lookahead] [mismatch?]
+  SEMI [lookahead]
+  SLASH [lookahead]
+  STAR [lookahead]
+State 17:
+  EOF [lookahead]
+  stmt
+State 19:
+  GT
+  LT
+  MINUS
+  PLUS
+  SEMI
+  SLASH
+  STAR

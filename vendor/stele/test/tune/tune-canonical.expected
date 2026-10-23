@@ -1,0 +1,25 @@
+grammar: ./parser.mly
+
+This tool tunes one thing: the grammar's %on_error_reduce list. For
+each construct on that list, when the parse fails just after the
+construct is complete, its error message reads "Assuming that the
+<construct> is complete, expecting ..." instead of listing everything
+the construct itself could have continued with. Adding a construct to
+the list trades a plain "Expecting ..." list for that "Assuming ..."
+phrasing; removing one does the reverse.
+
+on the list now (3): block expr list(stmt)
+
+also annotated, but ignored by menhir (%inline symbols, run `stele tune dead`): plus
+
+### DEAD SWEEP: which constructs on the list are not doing anything?
+Removing one that changes no message at all means it can be dropped.
+
+  ---- remove plus
+    DEAD: menhir ignores it (an %inline symbol is never reduced); safe to delete
+  ---- remove block
+    DEAD: every generated message stays byte-identical; safe to delete
+  ---- remove expr
+    DEAD: every generated message stays byte-identical; safe to delete
+  dead constructs found: 3
+

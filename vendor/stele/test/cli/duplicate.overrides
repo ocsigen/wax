@@ -1,0 +1,5 @@
+main: INT LPAREN
+Expecting ';' or an operator.
+
+main: INT LPAREN
+Expecting an operator.

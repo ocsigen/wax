@@ -1,0 +1,13 @@
+    1x Assuming that the annotation is complete, expecting ';'.
+       <^_>this annotation
+    1x Assuming that the entry lines are complete, expecting '}'.
+       <^_>these entry lines
+       <_>This '{' opens the enclosing construct.
+    1x Expecting ':'.
+    1x Expecting 'eof'.
+    2x Expecting 'id'.
+    1x Expecting a block.
+    1x Expecting a field type.
+    1x Expecting a main.
+    1x Expecting a type alias.
+    1x Expecting an access.

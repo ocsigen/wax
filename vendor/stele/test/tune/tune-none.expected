@@ -1,0 +1,40 @@
+grammar: ../cli/parser.mly
+
+This tool tunes one thing: the grammar's %on_error_reduce list. For
+each construct on that list, when the parse fails just after the
+construct is complete, its error message reads "Assuming that the
+<construct> is complete, expecting ..." instead of listing everything
+the construct itself could have continued with. Adding a construct to
+the list trades a plain "Expecting ..." list for that "Assuming ..."
+phrasing; removing one does the reverse.
+
+on the list now (0): (none)
+
+### ADVISOR: should any single construct join or leave the list?
+Trying 0 removal(s) and 4 addition(s), one at a time. Each is scored only
+by how it changes the generated messages; the scores do not add up, so
+apply one, re-run, and see what opens up next.
+
+  summary: improving=1 relocates-overridden=0 mixed=0 harmful=0 dead/no-op=2 neutral=1 skipped=0
+  what each group means, and what to do with it:
+    improving             some message gets better, none gets worse; consider applying
+                          (after naming any jargon it lists)
+    relocates-overridden  its only gains are on states you already hand-wrote
+                          a message for; usually skip (details below)
+    mixed                 helps one way and hurts another; read the wording
+                          changes and judge (details below)
+    harmful               some message gets worse; do not apply
+    dead/no-op            no message changes at all: an annotation on the list
+                          can be dropped, one not on it is not worth adding
+    neutral               messages reshuffle with no net gain or loss; usually skip
+    skipped               menhir rejected the grammar with this move; not applicable
+
+  IMPROVING: each of these makes some message better and none worse,
+  apart from any names it lists as jargon. Review one at a time (the
+  scores do not add up):
+  ---- add expr
+    Four fewer states that give up with a bare "Syntax error" (too many options to list); distinct failure points: 15 → 11.
+    resulting wording changes:
+      -     5x Syntax error
+      +     1x Syntax error
+

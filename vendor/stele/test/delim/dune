@@ -1,9 +1,9 @@
-; Delimiter-coexistence grammar: two bracket
-; pairs sharing the '[' kind — plain '[' ']' and compound '[|' '|]'. It pins the
-; generic opener<->closer pair derivation: the generated messages golden shows
-; '|]' recognised as a closer (move 1), the exact pairs keeping '[' and '[|'
-; distinct under nesting (move 2), and the hint naming the full opener alias,
-; "This '[|' opens …" (move 3). Accept changes with `dune promote`.
+; Delimiter-coexistence grammar: two bracket pairs sharing the '[' kind — plain
+; '[' ']' and compound '[|' '|]'. It pins the generic opener<->closer pair
+; derivation: the generated messages golden shows '|]' recognised as a closer
+; from its alias, the exact pairs keeping '[' and '[|' distinct under nesting,
+; and the hint naming the full opener alias, "This '[|' opens …". Accept
+; changes with `dune promote`.
 
 (library
  (name delim)
@@ -69,11 +69,13 @@
   parser_messages.ml
   (run menhir %{dep:parser.mly} --compile-errors %{dep:delim.messages})))
 
-; 5. A direct runtime-helper unit check: the delimiter-hint underline spans the
-;    FULL alias the label names — one column for '[', two for '[|' — driven
-;    through Parser_error_runtime against a stub engine (no lexer/parser needed
-;    to exercise the width logic, which is engine-agnostic). Pins move 3's
-;    runtime half; the generator half is pinned by delim.expected above.
+; 5. Direct runtime-helper unit checks, driven through Parser_error_runtime
+;    against a stub engine (no lexer/parser needed: marker resolution is
+;    engine-agnostic): the delimiter-hint underline spans the FULL alias the
+;    label names — one column for '[', two for '[|' — and walks back to the
+;    delimiter, across lines if need be; a hedge subject spans the whole
+;    construct and is dropped when it is empty. The generator half of the alias
+;    width is pinned by delim.expected above.
 
 (test
  (name test_underline)

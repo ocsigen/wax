@@ -1,0 +1,11 @@
+# Past decisions on the annotations, replayed by `stele tune calibrate`.
+# Blanks in a name are ignored, as menhir ignores them.
+keep list( stmt )
+removed stmt
+# Stale verdicts, each reported as a disagreement: a rule that no longer
+# exists, an annotation menhir ignores, one recorded as removed that is back
+# on the list, and one that can no longer be added.
+keep renamed_rule
+keep plus
+removed block
+removed renamed_rule

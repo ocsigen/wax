@@ -1,15 +1,16 @@
 ; Toy "calc" grammar and interpreter: a complete, runnable stele example an
-; adopter can copy. A miniature of src/lib-wasm/dune.menhir — menhir
-; --list-errors and --cmly feed the stele generator, whose .messages output
-; menhir --compile-errors turns into a Parser_messages module — plus the pieces
-; that make it *run*: a lexer, the incremental parser (--table), and a driver
-; (calc.ml) that evaluates the program or, on a syntax error, resolves the
-; message's markers through stele.runtime and prints a located diagnostic.
+; adopter can copy. menhir --list-errors and --cmly feed the stele generator,
+; whose .messages output menhir --compile-errors turns into a Parser_messages
+; module; plus the pieces that make it *run*: a lexer, the incremental parser
+; (--table), and a driver (calc.ml) that evaluates the program or, on a syntax
+; error, resolves the message's markers through stele.runtime and prints a
+; located diagnostic.
 ;
 ; Goldens pinned with `dune promote`: the generator views (calc.expected — the
-; four message shapes; calc.stats.expected — the quality ratchet; calc.names),
-; and the driver's own output on one good and three broken inputs (calc.run.*),
-; which is exactly what the tutorial shows.
+; four message shapes; calc.stats.expected — the quality ratchet; calc.census
+; and calc.names), the tuner's advice (calc.tune-advise), and the driver's own
+; output on one good and three broken inputs (calc.run.*), which is exactly
+; what the tutorial shows.
 
 (executable
  (name calc)
@@ -83,8 +84,8 @@
  (action
   (diff calc.stats.expected calc.stats)))
 
-; The names review: every rendered symbol with its provenance
-; (alias / [names] / [class] / auto-derived / quoted-fallback) and per-position
+; The names review: every rendered symbol with the naming rule that produced
+; it (token alias / [names] / [class] / rule name / token name) and per-position
 ; usage, then any [names] entries that fired in neither position. Here `stmts`
 ; is [names]-rendered only as an Assuming subject (0 expecting, 1 assuming) —
 ; the positional subtlety the mode exists to surface — and nothing is unused.
@@ -107,6 +108,52 @@
  (alias runtest)
  (action
   (diff calc.names.expected calc.names)))
+
+; The census: each distinct message once, with its count.
+
+(rule
+ (with-stdout-to
+  calc.census
+  (run
+   stele
+   census
+   --cmly
+   %{dep:calc.cmly}
+   --config
+   %{dep:calc.config}
+   --overrides
+   %{dep:calc.overrides}
+   %{dep:calc.auto.messages})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.census.expected calc.census)))
+
+; The annotation tuner, as the tutorial runs it. Each trial re-runs menhir, so
+; the rule passes it explicitly; the report is deterministic (the timing goes to
+; stderr).
+
+(rule
+ (with-stdout-to
+  calc.tune-advise
+  (run
+   stele
+   tune
+   advise
+   --menhir
+   %{bin:menhir}
+   --grammar
+   %{dep:parser.mly}
+   --config
+   %{dep:calc.config}
+   --overrides
+   %{dep:calc.overrides})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff calc.tune-advise.expected calc.tune-advise)))
 
 ; The config rot guard: a stale [class]/[names]/[opener-nets] entry must fail
 ; the build. calc-rot.config names a token the grammar lacks; the generator

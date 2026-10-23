@@ -1,19 +1,19 @@
-entries: 711
-with an expected list: 692
-using the spurious-reduction template: 73
-entries with cascade depth >= 4: 42
-max cascade depth: 9
+error states: 711
+with an "Expecting" list: 692
+with an "Assuming" hedge: 73
+hedges assuming 4 or more constructs: 42
+most constructs assumed by one hedge: 9
 overridden: 19
-generic fallback (empty expected list, not overridden): 0
-generic fallback (expected list over 5, not overridden): 0
+"Syntax error", nothing to list (not overridden): 0
+"Syntax error", over 5 to list (not overridden): 0
 delimiter hints: 239
-missed delimiter hints (opener on stack, none matched): 0
-jargon-rendered tokens: 0
-jargon-rendered nonterminals: 0
-state/automaton item-set match: 711/711
-unsound claims: 0
-entries with uncovered actions: 23
-uncovered action tokens (total): 1769
+missed delimiter hints (an opener is open, but no hint): 0
+tokens shown as jargon: 0
+rule names shown as jargon: 0
+states numbered as in the .cmly: 711/711
+listed tokens the parser rejects: 0
+lists missing an accepted token: 23
+accepted tokens missing (total): 1769
 names configured: 42, unused: 2
   FLOAT (expecting: unused, assuming: unused)
   INT (expecting: unused, assuming: unused)
