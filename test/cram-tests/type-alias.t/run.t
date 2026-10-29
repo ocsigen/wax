@@ -689,6 +689,40 @@ declared result, as it does in each configuration.
     (block (result (@type $r)) (local.get $x))
   )
 
+So does one passed as an operand: a call argument, a struct field or an array
+element declared with an alias.
+
+  $ wax -f wat slots.wax
+  (@if $p (@then (@type $r (ref extern))) (@else (@type $r externref)))
+  (type $s (struct (field $f (mut (@type $r)))))
+  (type $a (array (mut (@type $r))))
+  (type $ft (func (param (@type $r)) (result (@type $r))))
+  (table $tb 1 (ref null $ft))
+  (func $h (type $ft) (param $x (@type $r)) (result (@type $r)) (local.get $x))
+  (func $f (export "f")
+    (param $x (ref extern)) (param $c i32) (param $fr (ref $ft))
+    (param $sr (ref $s)) (param $ar (ref $a)) (result (@type $r))
+    (drop (call $h (block (result (@type $r)) (local.get $x))))
+    (drop
+      (call_ref $ft (block (result (@type $r)) (local.get $x)) (local.get $fr)))
+    (drop
+      (call_indirect $tb (type $ft)
+        (if (result (@type $r)) (local.get $c)
+          (then (local.get $x))
+          (else (local.get $x))) (i32.const 0)))
+    (drop (struct.new $s (block (result (@type $r)) (local.get $x))))
+    (struct.set $s $f (local.get $sr)
+      (block (result (@type $r)) (local.get $x)))
+    (drop
+      (array.new $a (block (result (@type $r)) (local.get $x)) (i32.const 1)))
+    (drop
+      (array.new_fixed $a 2 (block (result (@type $r)) (local.get $x))
+        (local.get $x)))
+    (array.set $a (local.get $ar) (i32.const 0)
+      (block (result (@type $r)) (local.get $x)))
+    (return_call $h (block (result (@type $r)) (local.get $x)))
+  )
+
 A declared type written with an alias is still the type a function of the
 same signature reuses: the global's type is [$t], not a new function type.
 

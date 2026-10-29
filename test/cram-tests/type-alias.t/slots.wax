@@ -1,0 +1,27 @@
+#[if(p)]
+{
+    type r = &extern;
+}
+#[else]
+{
+    type r = &?extern;
+}
+type s = { f: mut r };
+type a = [mut r];
+type ft = fn(r) -> r;
+table tb: &?ft [1];
+fn h: ft (x: r) -> r {
+    x;
+}
+#[export = "f"]
+fn f(x: &extern, c: i32, fr: &ft, sr: &s, ar: &a) -> r {
+    _ = h(do { x; });
+    _ = fr(do { x; });
+    _ = tb[0](if c { x; } else { x; });
+    _ = { f: do { x; } };
+    sr.f = do { x; };
+    _ = [a|do { x; }; 1];
+    _ = [a|do { x; }, x];
+    ar[0] = do { x; };
+    become h(do { x; });
+}

@@ -2011,6 +2011,13 @@ let written_results ctx name (results : valtype array) =
       f.results
   | _ -> results
 
+(* The same for a signature's parameters, from which an operand passed to them
+   takes the alias they are declared with. *)
+let written_params ctx name (params : _ array) =
+  match written_comptype ctx name with
+  | Some (Func f) when Array.length f.params = Array.length params -> f.params
+  | _ -> params
+
 let written_struct_field ctx name (field : fieldtype) (field_name' : string) =
   match written_comptype ctx name with
   | Some (Struct fields) -> (
@@ -7416,7 +7423,9 @@ and type_aggregate_access ctx i =
                     if not ftyp.mut then
                       Error.immutable ctx.diagnostics ~location:field.info
                         "field";
-                    internalize ctx (unpack_type ftyp)))
+                    internalize ctx
+                      (unpack_type
+                         (written_struct_field ctx ty ftyp field.desc))))
         | Error ->
             (* Receiver already failed to type; recover without a spurious
                "expected struct type". *)
@@ -7521,7 +7530,7 @@ and type_aggregate_access ctx i =
             | Some typ ->
                 if not typ.mut then
                   Error.immutable ctx.diagnostics ~location:i1.info "array";
-                internalize ctx (unpack_type typ)
+                internalize ctx (unpack_type (written_array_field ctx ty typ))
           in
           let* i3' =
             match expected with
@@ -9318,7 +9327,11 @@ and check_instruction ctx expected (i : location instr) =
                          nested struct/array literal can drop its own name. *)
                       let* checked =
                         let i' = field_value name written in
-                        match internalize ctx (unpack_type f) with
+                        match
+                          internalize ctx
+                            (unpack_type
+                               (written_struct_field ctx typ f name.desc))
+                        with
                         | Some cell ->
                             let* i', _ = typed_check ctx cell i' in
                             return i'
@@ -9466,7 +9479,11 @@ and check_instruction ctx expected (i : location instr) =
                         let* l = prev in
                         let* checked =
                           let i' = field_value name written in
-                          match internalize ctx (unpack_type f) with
+                          match
+                            internalize ctx
+                              (unpack_type
+                                 (written_struct_field ctx typ f name.desc))
+                          with
                           | Some cell ->
                               let* i', _ = typed_check ctx cell i' in
                               return i'
@@ -9524,7 +9541,9 @@ and check_instruction ctx expected (i : location instr) =
                preserving the emission order and hole slices. *)
             let elt =
               match lookup_array_type ctx typ with
-              | Some field' -> internalize ctx (unpack_type field')
+              | Some field' ->
+                  internalize ctx
+                    (unpack_type (written_array_field ctx typ field'))
               | None -> None
             in
             let* i1' =
@@ -9582,7 +9601,9 @@ and check_instruction ctx expected (i : location instr) =
               (Cell.make Error)
         | Some typ ->
             let*! field' = lookup_array_type ctx typ in
-            let elt = internalize ctx (unpack_type field') in
+            let elt =
+              internalize ctx (unpack_type (written_array_field ctx typ field'))
+            in
             let* instrs' =
               List.fold_left
                 (fun prev i' ->
@@ -10198,10 +10219,15 @@ and type_indirect_call ctx i i' l =
   in
   let param_types =
     Option.bind functype (fun typ ->
+        let params =
+          match callee_type_name with
+          | Some ty -> written_params ctx ty typ.params
+          | None -> typ.params
+        in
         array_map_opt
           (fun (p : (_, location) Ast.annotated) ->
             internalize ctx (snd p.desc))
-          typ.params)
+          params)
   in
   let type_body =
     let* l' = typed_call_args ctx l param_types in
