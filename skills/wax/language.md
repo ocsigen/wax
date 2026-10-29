@@ -568,6 +568,15 @@ answer = do {
 };
 ```
 
+A block that ends another one and never completes, its value going to an
+enclosing label instead, takes the type of the block it ends:
+
+```wax
+'h: do {
+    try { throw e(); } catch [e & -> 'h]
+}
+```
+
 `loop`, `try`, and `try_table` infer their result type the same way. Converting
 WebAssembly to Wax drops the annotation wherever it is redundant, and re-reading
 that Wax recovers the type by the same inference.

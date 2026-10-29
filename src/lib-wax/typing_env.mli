@@ -208,6 +208,11 @@ type module_context = {
     (Ast.label option * Infer.inferred_type Infer.Cell.t array) list;
   return_types : Infer.inferred_type Infer.Cell.t array;
   resolve_links : resolve_sink;
+  divergent : (Ast.location * Infer.collecting) option ref;
+      (** The construct that an expression-position inference last found never
+          to complete (nothing reaching its exit), with its result cell's
+          record, for [block_contents] to tell a trailing one from a void one.
+      *)
   pun_spans : Ast.location list ref option;
   member_completions : (Ast.location * Members.member_receiver) list ref option;
 }

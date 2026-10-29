@@ -8,6 +8,15 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ## Unreleased
 
+### Language
+
+- A block, `if`, `loop` or `try` whose result type is left unwritten and that
+  never completes, its value going to an enclosing label instead, now takes
+  the type of the block it ends, wherever that block is: for instance
+  `'h: do { try { throw e(); } catch [e & -> 'h] }` as a call argument, a
+  binding's initializer or a function's value. It was accepted only as an
+  operand of `resume`, `suspend` or `cont.bind`.
+
 ### Fixes
 
 - A block or `if` whose result type is left unwritten now takes the alias of

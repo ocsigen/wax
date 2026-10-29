@@ -153,6 +153,12 @@ and collecting = {
           so it cannot be decided as the exit is met, and an [if] types one arm
           before the other. The inferer reports these once the body is typed,
           iff [collected] turned out non-empty. *)
+  mutable divergent_tails : (Ast.location * collecting) list;
+      (** The trailing constructs of the body, their result omitted, that never
+          complete (nothing reaches their exit, their value going to an
+          enclosing label), with their own cell's record: each takes the block's
+          result once it is known, as it would from a concrete context, and so
+          do its own. *)
 }
 
 (* Render an inferred type into a styled printer (colour theme + width supplied

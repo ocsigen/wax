@@ -11093,9 +11093,22 @@ and block_contents ctx results l =
                push its type, to be collected by the enclosing block. The pushed
                cell is the value's own natural type, so the caller can snapshot it
                ([None]). *)
+            ctx.divergent := None;
             let* i' = with_holes ctx i (fun () -> instruction ctx i) in
-            let* () = push_results ~loc:i.info (fst i'.info) in
-            return ([ i' ], None)
+            begin match (!(ctx.divergent), Cell.get results.(0)) with
+            | Some (loc, inner), Collecting cs when loc == snd i'.info ->
+                (* A nested construct that never completes, its value going to
+                   an enclosing label: it delivers nothing here, and takes the
+                   block's result once that is known ([fill_divergent_tails]),
+                   as it would from a concrete context. *)
+                cs.divergent_tails <- (loc, inner) :: cs.divergent_tails;
+                fun st ->
+                  ( (match st with Empty -> Unreachable | st -> st),
+                    ([ i' ], None) )
+            | _ ->
+                let* () = push_results ~loc:i.info (fst i'.info) in
+                return ([ i' ], None)
+            end
         | Empty ->
             (* The stack is empty, so this trailing instruction must produce the
                 block's value: a construction literal (incl. a string) or null
@@ -11248,6 +11261,12 @@ and block_keep_bool ctx loc label ~result ~br_params body =
            cs.collected <- (loc', Cell.make (Cell.get tv)) :: cs.collected
        | Empty | Unreachable | Poisoned -> ());
        let st, () = pop_args ctx `Output ~location:loc [| result |] st in
+       let block' =
+         match standalone_valtype ctx result with
+         | Some iv ->
+             fill_divergent_tail cs (declared_form iv) [| result |] block'
+         | None -> block'
+       in
        (* Return the cell: the caller may deliver more values to it (a [try]'s catch
           handlers) before [block_keep_reinfer] reads the join. Every value reaching
           the exit is already validated against [result] — the fall-through by
@@ -11448,11 +11467,71 @@ and infer_synthesized ?(applies = true) ctx i typ ~type_body =
         (List.rev cs.empty_exits);
     let natural = collected_natural cs.collected in
     let inferred = join_collected ctx ~location:i.info cs.collected in
+    let omitted = typ.results = [||] in
     let results, typ =
       finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~natural
         ~location:i.info ctx typ ~inferred
     in
-    Some (rebuild typ, results)
+    if omitted && cs.collected = [] && cs.empty_exits = [] then
+      ctx.divergent := Some (i.info, cs);
+    Some (fill_divergent_tails ctx cs typ results (rebuild typ), results)
+
+(* Give each of [cs]'s divergent trailing constructs (see [block_contents]) the
+   result of the construct [desc] they end a body of, [typ] as finalized or, when
+   [simplify] dropped it, its [results]. *)
+and fill_divergent_tails ctx cs typ results desc =
+  match (typ.results, results) with
+  | [| t |], _ -> fill_tails cs t results desc
+  | _, [| c |] -> (
+      match standalone_valtype ctx c with
+      | Some iv -> fill_tails cs (declared_form iv) results desc
+      | None -> desc)
+  | _ -> desc
+
+(* Give [cs]'s divergent trailing constructs, ending the bodies of [desc], the
+   result [t] (whose cells are [results]). *)
+and fill_tails cs t results desc =
+  if cs.divergent_tails = [] then desc
+  else
+    let tail (b : (_ list, location) Ast.annotated) =
+      { b with desc = fill_divergent_tail cs t results b.desc }
+    in
+    match desc with
+    | Block r -> Block { r with block = tail r.block }
+    | Loop r -> Loop { r with block = tail r.block }
+    | If r ->
+        If
+          {
+            r with
+            if_block = tail r.if_block;
+            else_block = Option.map tail r.else_block;
+          }
+    | TryTable r -> TryTable { r with block = tail r.block }
+    | Try r ->
+        Try
+          {
+            r with
+            block = tail r.block;
+            catches = List.map (fun (tag, b) -> (tag, tail b)) r.catches;
+            catch_all = Option.map tail r.catch_all;
+          }
+    | d -> d
+
+(* The body [l] with its last instruction given the result [t] (whose cells are
+   [results]) when it is one of [cs]'s divergent trailing constructs, and so its
+   own divergent trailing constructs, which never complete either. *)
+and fill_divergent_tail cs t results l =
+  match List.rev l with
+  | last :: rest -> (
+      match
+        List.find_opt (fun (loc, _) -> loc == snd last.info) cs.divergent_tails
+      with
+      | Some (_, inner) ->
+          let last = annotate_omitted_block t last in
+          let desc = fill_tails inner t results last.desc in
+          List.rev ({ last with desc; info = (results, snd last.info) } :: rest)
+      | None -> l)
+  | [] -> l
 
 (* Try to infer (and, on [simplify], drop) an [if]'s result type from the values
    reaching its exit, returning the typed node when it applies and [None] to fall
@@ -11498,7 +11577,14 @@ and declared_result ctx typ =
    be load-bearing. *)
 and fresh_collecting ?(needed = false) declared =
   let cs =
-    { collected = []; exacts = []; declared; needed; empty_exits = [] }
+    {
+      collected = [];
+      exacts = [];
+      declared;
+      needed;
+      empty_exits = [];
+      divergent_tails = [];
+    }
   in
   (cs, Cell.make (Collecting cs))
 
@@ -12854,6 +12940,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
       control_types = [];
       return_types = [||];
       resolve_links = links;
+      divergent = ref None;
       pun_spans;
       member_completions;
       simplify;

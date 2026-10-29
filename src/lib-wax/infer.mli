@@ -128,6 +128,12 @@ and collecting = {
       (** Each REACHABLE exit that delivered NO value. Whether that is an error
           depends on the other exits, so the inferer decides it once the body is
           typed rather than as the exit is met. *)
+  mutable divergent_tails : (Ast.location * collecting) list;
+      (** The trailing constructs of the body, their result omitted, that never
+          complete (nothing reaches their exit, their value going to an
+          enclosing label), with their own cell's record: each takes the block's
+          result once it is known, as it would from a concrete context, and so
+          do its own. *)
 }
 
 val output_inferred_type_styled :

@@ -424,6 +424,10 @@ type module_context = {
          [resolve_variable], labels via [branch_target]; module fields via
          [Tbl.resolve] through the namespaces). The same sink the namespaces
          hold; [None] outside the editor. *)
+  divergent : (location * Infer.collecting) option ref;
+      (* The construct that an expression-position inference last found never
+         to complete (nothing reaching its exit), with its result cell's record,
+         for [block_contents] to tell a trailing one from a void one. *)
   pun_spans : location list ref option;
       (* The span of each punned struct-literal field (the bare-name form,
          [x] standing for [x: x]), recorded at the field name. Such a span is

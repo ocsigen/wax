@@ -1,0 +1,23 @@
+tag e();
+tag e1(i32);
+fn g(x: &exn) {}
+fn h(x: i32) {}
+fn arg() {
+    g('h: do { try { throw e(); } catch [e & -> 'h] });
+}
+fn binding() -> &exn {
+    let x: &exn = 'h: do &exn { try { throw e(); } catch [e & -> 'h] };
+    x;
+}
+fn value() -> i32 {
+    'h: do { try { throw e1(1); } catch [e1 -> 'h] }
+}
+fn nested() {
+    h('h: do { do { br 'h 1; } });
+}
+fn deeper(c: i32) -> i32 {
+    'h: do { if c { 'g: do { do { br 'h 1; } } } else { 2; } }
+}
+fn looping() -> i32 {
+    'h: do { loop { br 'h 1; } }
+}
