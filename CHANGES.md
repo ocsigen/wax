@@ -23,6 +23,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
   the descriptor to be an exact reference (`&!t`), as the documentation
   states. A non-exact one was accepted by `wax check`, and the conversion then
   failed to validate.
+- A type may have at most 63 supertypes, transitively. Deeper hierarchies were
+  accepted in Wax, WAT and binary input alike, producing modules that engines
+  reject.
 - A block or `if` whose result type is left unwritten now takes the alias of
   the type its context declares: a function's result, a call argument, a
   struct field or an array element written with an alias. Before, converting

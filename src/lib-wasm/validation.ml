@@ -811,6 +811,14 @@ module Error = struct
     report context ~location ~severity:Error
       (text "This type is not a valid subtype of its declared supertype.")
 
+  let subtype_too_deep context ~location =
+    report context ~location ~severity:Error
+      (text
+         (Printf.sprintf
+            "This type has too many supertypes: a subtype hierarchy is at most \
+             %d deep."
+            Types.max_subtype_depth))
+
   let descriptor_outside_rec_group context ~location ~described =
     report context ~location ~severity:Error
       (text "The"
@@ -5283,6 +5291,10 @@ let check_type_definitions ctx =
     | Func _ | Struct _ | Array _ -> ());
     let*? j = ty.supertype in
     let ty' = Types.get_subtype ctx.subtyping_info j in
+    (* Reported at the first type past the limit only: a deeper one is below
+       it. *)
+    if Types.subtype_depth ctx.subtyping_info j = Types.max_subtype_depth then
+      Error.subtype_too_deep ctx.diagnostics ~location;
     let invalid () = Error.invalid_subtype ctx.diagnostics ~location in
     if ty'.final then invalid ()
     else begin

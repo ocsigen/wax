@@ -506,7 +506,24 @@ let runtest filename _ =
             | `Invalid reason ->
                 (* The wasm module is invalid; after translating it to wax,
                    printing and reparsing, wax type-checking should reject it
-                   too. *)
+                   too.
+
+                   A "should have failed" entry in the goldens is not
+                   necessarily a typer gap. Wax often has one spelling for an
+                   invalid form and a valid one, and the Wax printed here is
+                   then a valid program meaning something else: a void block
+                   and an omitted result type are written alike (a divergent
+                   tail takes the enclosing block's result); immediates are
+                   taken from the operands rather than written (a call_ref's
+                   type, a br_on_cast's source type, a conversion's or [!]'s
+                   opcode, the types the descriptor operations take from the
+                   descriptor); [?:] on references is a typed select; function
+                   references are declared implicitly; a cast to a
+                   continuation type is an ascription. Such an entry is
+                   expected. To tell, compile the printed Wax to a binary: if
+                   that validates, the entry is one of these; if not, the typer
+                   accepts what its own lowering rejects, which is a gap to
+                   close in [Typing]. *)
                 let text = wax_string ~color:Never m ^ "\n" in
                 let ok =
                   in_child_process ~quiet (fun () ->

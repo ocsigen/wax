@@ -91,6 +91,13 @@ val get_subtype : subtyping_info -> Id.t -> Internal.subtype
 (** [get_subtype info index] returns the subtype at the given canonical index.
 *)
 
+val max_subtype_depth : int
+(** The most supertypes a type may have, transitively (63). *)
+
+val subtype_depth : subtyping_info -> Id.t -> int
+(** [subtype_depth info index] is the number of supertypes, transitively, of the
+    type at [index], counted up to [max_subtype_depth + 1]. *)
+
 val get_all_rectypes : t -> Internal.rectype list
 (** Returns all recursive type definitions from the context. *)
 

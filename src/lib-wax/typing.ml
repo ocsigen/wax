@@ -476,6 +476,14 @@ module Error = struct
     report context ~location
       ((text "This type is not a valid subtype of" ++ name x) ^^ text ".")
 
+  let subtype_too_deep context ~location =
+    report context ~location
+      (text
+         (Printf.sprintf
+            "This type has too many supertypes: a subtype hierarchy is at most \
+             %d deep."
+            Wax_wasm.Types.max_subtype_depth))
+
   let descriptor_outside_rec_group context ~location ~described =
     report context ~location
       (text "The"
@@ -11759,6 +11767,12 @@ let check_type_definitions ctx =
       | None, _ | _, None -> ()
       | Some j, Some sup ->
           let location = sup.info in
+          (* Reported at the first type past the limit only: a deeper one is
+             below it. *)
+          if
+            Wax_wasm.Types.subtype_depth (subtyping_info ctx) j
+            = Wax_wasm.Types.max_subtype_depth
+          then Error.subtype_too_deep ctx.diagnostics ~location;
           let ty' = Wax_wasm.Types.get_subtype (subtyping_info ctx) j in
           if ty'.final then Error.final_supertype ctx.diagnostics ~location sup
           else

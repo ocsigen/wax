@@ -211,6 +211,17 @@ let subtyping_info t =
   Array.concat (List.rev l)
 
 let get_subtype a i = a.(Id.to_int i)
+let max_subtype_depth = 63
+
+let subtype_depth a i =
+  let rec depth i d =
+    if d > max_subtype_depth then d
+    else
+      match (get_subtype a i).I.supertype with
+      | Some j -> depth j (d + 1)
+      | None -> d
+  in
+  depth i 0
 
 let get_all_rectypes t =
   List.map
