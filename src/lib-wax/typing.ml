@@ -12134,10 +12134,16 @@ let rec functions ctx fields =
                  below, with the failed types as Error poison. *)
               let*@ entry = Tbl.find_no_mark ctx.functions name in
               let*@ _, tname, _ = entry in
-              Tbl.find ctx.diagnostics ctx.types { name with desc = tname }
+              let tname = { name with desc = tname } in
+              let*@ ty = Tbl.find ctx.diagnostics ctx.types tname in
+              Some (tname, ty)
             in
             match ty with
-            | _, { typ = Func typ; _ } -> Some typ
+            | tname, (_, { typ = Func typ; _ }) ->
+                (* The results as written, so that a body's value takes the
+                   alias they are declared with (see [written_results]). *)
+                Some
+                  { typ with results = written_results ctx tname typ.results }
             | _ ->
                 Error.expected_func_type ctx.diagnostics ~location:name.info;
                 None

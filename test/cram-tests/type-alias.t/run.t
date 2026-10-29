@@ -675,6 +675,20 @@ unwritten, take the aliases of the types they are inferred from too.
     (resume $k (block (result (@type $n)) (local.get $a)) (local.get $c))
   )
 
+A block left unwritten in a function body takes the alias of the function's
+declared result, as it does in each configuration.
+
+  $ wax -f wat body.wax
+  (@if $p (@then (@type $r (ref extern))) (@else (@type $r externref)))
+  (func $f (export "f") (param $x (ref extern)) (result (@type $r))
+    (block (result (@type $r)) (local.get $x))
+  )
+  $ wax -D p=false -f wat body.wax
+  (@type $r externref)
+  (func $f (export "f") (param $x (ref extern)) (result (@type $r))
+    (block (result (@type $r)) (local.get $x))
+  )
+
 A declared type written with an alias is still the type a function of the
 same signature reuses: the global's type is [$t], not a new function type.
 

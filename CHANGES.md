@@ -8,6 +8,13 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ## Unreleased
 
+### Fixes
+
+- A block whose result type is left unwritten in a function body now takes the
+  alias of the function's declared result type. Before, converting a module
+  with a conditional alias gave such a block a type that held in every
+  configuration but was not the one `-D` gave it, so the two disagreed.
+
 ## 0.3.0
 
 ### Language

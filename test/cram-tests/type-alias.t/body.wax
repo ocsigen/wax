@@ -1,0 +1,14 @@
+#[if(p)]
+{
+    type r = &extern;
+}
+#[else]
+{
+    type r = &?extern;
+}
+#[export = "f"]
+fn f(x: &extern) -> r {
+    do {
+        x;
+    }
+}
