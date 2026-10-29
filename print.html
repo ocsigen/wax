@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9618c18d.js";
+            window.path_to_searchindex_js = "searchindex-8aa9c9ec.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-15e75985.js"></script>
@@ -1720,6 +1720,12 @@ produce values with no common supertype. So the block above can drop its <code>i
 <pre class="wax-highlight"><span class="hljs wax-code">answer = <span class="hljs-keyword">do</span> {
     <span class="hljs-number">42</span>;
 };</span></pre>
+
+<p>A block that ends another one and never completes, its value going to an
+enclosing label instead, takes the type of the block it ends:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-symbol">'h</span>: <span class="hljs-keyword">do</span> {
+    <span class="hljs-keyword">try</span> { <span class="hljs-keyword">throw</span> <span class="hljs-title">e</span>(); } <span class="hljs-keyword">catch</span> [e &amp; -&gt; <span class="hljs-symbol">'h</span>]
+}</span></pre>
 
 <p><code>loop</code>, <code>try</code>, and <code>try_table</code> infer their result type the same way. Converting
 WebAssembly to Wax drops the annotation wherever it is redundant, and re-reading
