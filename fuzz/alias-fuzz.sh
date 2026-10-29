@@ -31,7 +31,8 @@
 #
 # Then with the [#[else]] branch defining each alias as a neighbouring type
 # (i32/i64, f32/f64; for a reference, the other nullability, a related struct
-# type or the other hierarchy), cast targets aliased too, and some statements
+# type or the other hierarchy), cast targets aliased too, some operands wrapped
+# in a block whose result is left to the context, and some statements
 # placed in one or both branches of an #[if(fz_cond_2)]: the module means something
 # different in each configuration, where it is valid at all. Converting it
 # unresolved, as one module for every configuration, must agree with converting

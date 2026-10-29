@@ -22,7 +22,10 @@
    each configuration (see fuzz/alias-fuzz.sh). Some statements of each
    function body are also placed in one or both branches of an [#[if(v_2)]],
    so that the configurations are combinations of two variables, and two
-   field names of a struct subtype may be swapped.
+   field names of a struct subtype may be swapped. Some operands (call
+   arguments, field and element values, stored and returned values, a body's
+   value) are wrapped in a [do] block whose result is left unwritten, so that
+   it takes its type from a declaration written with an alias.
 
    Aliasing changes nothing about the module, so the oracle compares: the binary
    must be byte-identical to the original's (after [-D] for a conditional run),
@@ -87,34 +90,110 @@ let functype ({ params; results } : functype) : functype =
 (* Whether cast targets are aliased too (the [differ] mode). *)
 let casts = ref false
 
-(* A field's type is not aliased in the [differ] mode: a field of a subtype
+(* A field's type is not aliased in the [differ] mode, unless the type it
+   belongs to is [free], without a supertype or subtype: a field of a subtype
    whose type differs between configurations seldom still makes it one. *)
-let fieldtype (f : fieldtype) : fieldtype =
+let fieldtype ~free (f : fieldtype) : fieldtype =
   match f.typ with
-  | Value v when not !casts -> { f with typ = Value (alias_of v) }
+  | Value v when free || not !casts -> { f with typ = Value (alias_of v) }
   | Value _ | Packed _ -> f
 
-let comptype (c : comptype) : comptype =
+let comptype ~free (c : comptype) : comptype =
   match c with
   | Func f -> Func (functype f)
   | Struct fields ->
       Struct
         (Array.map
            (fun (f : (ident * fieldtype, location) annotated) ->
-             { f with desc = (fst f.desc, fieldtype (snd f.desc)) })
+             { f with desc = (fst f.desc, fieldtype ~free (snd f.desc)) })
            fields)
-  | Array f -> Array (fieldtype f)
+  | Array f -> Array (fieldtype ~free f)
   | Cont _ -> c
 
-let rec instr (i : 'a instr) : 'a instr =
+(* Whether operands are wrapped in blocks (the [differ] mode), and whether the
+   instructions being rewritten are a function body's, where a block may go
+   (not a constant expression's). *)
+let blocks = ref false
+let in_body = ref false
+
+(* The wrapping draws from its own LCG, so that the aliases a seed gets are the
+   same with or without it. *)
+let wrap_state = ref 1
+
+let next_wrap () =
+  wrap_state := ((!wrap_state * 1103515245) + 12345) land max_int;
+  (!wrap_state lsr 8) land max_int
+
+(* The functions the module defines or imports: a call of one takes its
+   arguments' types from its signature, where a call of an intrinsic may require
+   a literal. *)
+let functions : (string, unit) Hashtbl.t = Hashtbl.create 16
+
+let rec collect_functions (f : (_ modulefield, location) annotated) =
+  let import (d : (import_decl, location) annotated) =
+    match d.desc.kind with
+    | Import_func _ -> Hashtbl.replace functions d.desc.id.desc ()
+    | _ -> ()
+  in
+  match f.desc with
+  | Func { name; _ } -> Hashtbl.replace functions name.desc ()
+  | Import { decl; _ } -> import decl
+  | Import_group { decls; _ } -> List.iter import decls
+  | Conditional { then_fields; else_fields; _ } ->
+      List.iter collect_functions then_fields.desc;
+      Option.iter
+        (fun (l : (_ list, location) annotated) ->
+          List.iter collect_functions l.desc)
+        else_fields
+  | _ -> ()
+
+let is_function (f : _ instr) =
+  match f.desc with Get n -> Hashtbl.mem functions n.desc | _ -> false
+
+(* For a [differ] run, [i] sometimes wrapped in a [do] block whose result is
+   left unwritten: its type then comes from the context, which may declare it
+   with an alias that differs between configurations. Not when [i] takes a
+   value from the stack, which a block cannot reach. *)
+let wrap (i : location instr) : location instr =
+  let hole = ref false in
+  Wax_lang.Ast_utils.iter_instr
+    (fun i -> match i.desc with Hole -> hole := true | _ -> ())
+    i;
+  if (not (!blocks && !in_body)) || !hole || next_wrap () mod 2 <> 0 then i
+  else
+    {
+      i with
+      desc =
+        Block
+          {
+            label = None;
+            typ = { params = [||]; results = [||] };
+            block = { desc = [ i ]; info = i.info };
+          };
+    }
+
+let rec instr (i : location instr) : location instr =
   let desc =
     Wax_lang.Ast_utils.map_desc ~instr ~block:(List.map instr) i.desc
   in
   let desc =
     match desc with
     | Let (bindings, init) ->
+        let init =
+          match bindings with [ _ ] -> Option.map wrap init | _ -> init
+        in
         Let (List.map (fun (n, t) -> (n, Option.map alias_of t)) bindings, init)
     | Cast (e, Valtype t) when !casts -> Cast (e, Valtype (alias_of t))
+    | Set (x, op, v) -> Set (x, op, wrap v)
+    | Call (f, args) when is_function f -> Call (f, List.map wrap args)
+    | TailCall (f, args) when is_function f -> TailCall (f, List.map wrap args)
+    | Struct (t, fields) ->
+        Struct (t, List.map (fun (n, v) -> (n, Option.map wrap v)) fields)
+    | StructSet (r, f, v) -> StructSet (r, f, wrap v)
+    | Array (t, v, n) -> Array (t, wrap v, n)
+    | ArrayFixed (t, l) -> ArrayFixed (t, List.map wrap l)
+    | ArraySet (a, j, v) -> ArraySet (a, j, wrap v)
+    | Return v -> Return (Option.map wrap v)
     | _ -> desc
   in
   { i with desc }
@@ -240,7 +319,10 @@ let import_decl (d : (import_decl, location) annotated) =
   in
   { d with desc = { d.desc with kind } }
 
+let is_let (i : _ instr) = match i.desc with Let _ -> true | _ -> false
+
 let rec field (f : (_ modulefield, location) annotated) =
+  (in_body := match f.desc with Func _ -> true | _ -> false);
   let f =
     { f with desc = Wax_lang.Ast_utils.map_modulefield_instr instr f.desc }
   in
@@ -256,9 +338,22 @@ let rec field (f : (_ modulefield, location) annotated) =
                    { st with typ = swap_field_names st.typ }
                  else st
                in
-               { m with desc = (name, { st with typ = comptype st.typ }) })
+               let free = related name.desc = None in
+               { m with desc = (name, { st with typ = comptype ~free st.typ }) })
              rt)
     | Func r ->
+        let single_result =
+          match r.sign with
+          | Some { results; _ } -> Array.length results = 1
+          | None -> false
+        in
+        (* The body's value, which takes its type from the function's results. *)
+        let body =
+          match List.rev (snd r.body) with
+          | last :: rest when single_result && not (is_let last) ->
+              List.rev (wrap last :: rest)
+          | _ -> snd r.body
+        in
         Func
           {
             r with
@@ -270,7 +365,7 @@ let rec field (f : (_ modulefield, location) annotated) =
                     (match r.sign with
                     | Some { results; _ } -> results = [||]
                     | None -> false)
-                  (snd r.body) );
+                  body );
           }
     | Global r -> Global { r with typ = Option.map alias_of r.typ }
     | Tag r -> Tag { r with sign = Option.map functype r.sign }
@@ -301,11 +396,14 @@ let () =
   in
   let differ = Array.length Sys.argv > 4 && Sys.argv.(4) = "differ" in
   casts := differ;
+  blocks := differ;
   if differ then second := Option.map (fun v -> v ^ "_2") conditional;
   state := (seed * 2) + 1;
+  wrap_state := (Hashtbl.hash (seed, "wrap") * 2) + 1;
   let src = In_channel.with_open_bin file In_channel.input_all in
   let m, _ctx = WaxParser.parse_from_string ~color ~filename:file src in
   List.iter collect_supertypes m;
+  List.iter collect_functions m;
   let m = List.map field m in
   let defs_with f =
     List.rev_map
