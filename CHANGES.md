@@ -19,6 +19,10 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Fixes
 
+- Constructing a struct with a descriptor, `{descriptor(d)| ...}`, now requires
+  the descriptor to be an exact reference (`&!t`), as the documentation
+  states. A non-exact one was accepted by `wax check`, and the conversion then
+  failed to validate.
 - A block or `if` whose result type is left unwritten now takes the alias of
   the type its context declares: a function's result, a call argument, a
   struct field or an array element written with an alias. Before, converting

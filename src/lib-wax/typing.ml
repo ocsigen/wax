@@ -5381,6 +5381,20 @@ and descriptor_reftype ctx ~location ~nullable d' =
   | None -> Error.type_without_descriptor ctx.diagnostics ~location);
   target
 
+(* An allocation's descriptor operand [d'] must be exact,
+   [(ref null (exact Y))]: [struct.new_desc] allocates exactly the type [Y]
+   describes, where a cast's target merely takes [d']'s exactness. *)
+and require_exact_descriptor ctx (d' : _ instr) =
+  match fst d'.info with
+  | [| ty |] -> (
+      match Cell.get ty with
+      | Valtype { typ = Ref { typ = Type y; _ }; _ } ->
+          Option.iter
+            (check_subtype ctx ~location:(snd d'.info) ty)
+            (internalize ctx (Ref { nullable = true; typ = Exact y }))
+      | _ -> ())
+  | _ -> ()
+
 (* [typed]/[typed_check] wrap the two child-typers ([instruction]/
    [check_instruction]) in [hole_child], the slice + hole-order machinery defined
    before the recursion. *)
@@ -9439,6 +9453,7 @@ and check_instruction ctx expected (i : location instr) =
         let target =
           descriptor_reftype ctx ~location:i.info ~nullable:false d
         in
+        require_exact_descriptor ctx d;
         let type_body =
           match
             Option.map (fun (t : reftype) -> named_heaptype t.typ) target
@@ -9507,6 +9522,7 @@ and check_instruction ctx expected (i : location instr) =
       let* d, target =
         descriptor_target ctx ~location:i.info ~nullable:false d
       in
+      require_exact_descriptor ctx d;
       let* node =
         match Option.map (fun (t : reftype) -> named_heaptype t.typ) target with
         | None | Some None ->

@@ -459,22 +459,6 @@ from wasm:
   (func (result anyref) (struct.new_default_desc $struct (struct.new $b)))
 Wax type-checking should have failed (type mismatch):
   rec {
-      type a = descriptor b { f: i32 };
-      type b = describes a { };
-  }
-  fn f(x: &b) -> &?any {
-      { descriptor(x)| f: 0 as i32 };
-  }
-from wasm:
-  (rec
-    (type $a (descriptor $b) (struct (field i32)))
-    (type $b (describes $a) (struct))
-  )
-  (func (param (ref $b)) (result anyref)
-    (struct.new_desc $a (i32.const 0) (local.get 0))
-  )
-Wax type-checking should have failed (type mismatch):
-  rec {
       type a = open descriptor b { f: i32 };
       type b = open describes a { };
       type c: a = open descriptor d { .. };

@@ -108,3 +108,27 @@ that descriptor with no possible subtypes either.
   4 │     (type $b (sub (describes $a) (struct))))
   5 │   (global (export "g") (ref null $a) (ref.null $a)))
   [128]
+
+An allocation takes its descriptor as an exact reference, as struct.new_desc
+does: a cast's target takes the descriptor's exactness, but an allocation
+creates exactly the type it describes. A non-exact one was accepted, and the
+lowered module then failed validation.
+
+  $ wax check -X custom-descriptors inexact-alloc.wax
+  Error: This expression has type '&b' but is expected to have type '&?!b'.
+    ──➤  inexact-alloc.wax:10:20
+   8 │ }
+   9 │ fn inexact(z: &b) {
+  10 │   _ = { descriptor(z)| f: 0 };
+     ·                    ^
+  11 │   _ = { descriptor(z)| .. };
+  12 │ }
+  Error: This expression has type '&b' but is expected to have type '&?!b'.
+    ──➤  inexact-alloc.wax:11:20
+   9 │ fn inexact(z: &b) {
+  10 │   _ = { descriptor(z)| f: 0 };
+  11 │   _ = { descriptor(z)| .. };
+     ·                    ^
+  12 │ }
+  13 │ 
+  [128]

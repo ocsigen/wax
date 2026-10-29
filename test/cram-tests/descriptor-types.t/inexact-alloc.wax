@@ -1,0 +1,12 @@
+rec {
+  type a = descriptor b { f: i32 };
+  type b = describes a { };
+}
+fn exact(x: &!b, y: &?!b) {
+  _ = { descriptor(x)| f: 0 };
+  _ = { descriptor(y)| .. };
+}
+fn inexact(z: &b) {
+  _ = { descriptor(z)| f: 0 };
+  _ = { descriptor(z)| .. };
+}

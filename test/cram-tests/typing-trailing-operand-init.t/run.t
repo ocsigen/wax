@@ -15,8 +15,8 @@ accepted.
   >   type a = descriptor b { link: &b };
   >   type b = describes a { };
   > }
-  > fn f(v: &b) -> &a {
-  >   let k: &b;
+  > fn f(v: &!b) -> &a {
+  >   let k: &!b;
   >   let r: &a = { descriptor(k) | link: (k := v) };
   >   return r;
   > }
@@ -33,8 +33,8 @@ descriptor must not leak back into the fields).
   >   type a = descriptor b { link: &b };
   >   type b = describes a { };
   > }
-  > fn f(v: &b) -> &a {
-  >   let k: &b;
+  > fn f(v: &!b) -> &a {
+  >   let k: &!b;
   >   let r: &a = { descriptor(k := v) | link: k };
   >   return r;
   > }
@@ -42,8 +42,8 @@ descriptor must not leak back into the fields).
   $ wax check desc-desc-tee.wax
   Error: The local variable 'k' has not been initialized.
     ──➤  desc-desc-tee.wax:8:44
-   6 │ fn f(v: &b) -> &a {
-   7 │   let k: &b;
+   6 │ fn f(v: &!b) -> &a {
+   7 │   let k: &!b;
    8 │   let r: &a = { descriptor(k := v) | link: k };
      ·                                            ^
    9 │   return r;
