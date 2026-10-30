@@ -6059,7 +6059,9 @@ and finish_resume ctx i ct handlers l' =
    let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
    check_operands ctx ~location:i.info l' (Array.append ptypes [| cref |]));
   check_resume_handlers ctx ~result_types:sg.results handlers;
-  let*! rtypes = array_map_opt (internalize ctx) sg.results in
+  let*! rtypes =
+    array_map_opt (internalize ctx) (written_results ctx inner sg.results)
+  in
   return_statement i (Resume (ct, handlers, l')) rtypes
 
 and finish_resume_throw ctx i ct tag handlers l' =
@@ -6072,7 +6074,9 @@ and finish_resume_throw ctx i ct tag handlers l' =
    let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
    check_operands ctx ~location:i.info l' (Array.append ptypes [| cref |]));
   check_resume_handlers ctx ~result_types:sg.results handlers;
-  let*! rtypes = array_map_opt (internalize ctx) sg.results in
+  let*! rtypes =
+    array_map_opt (internalize ctx) (written_results ctx inner sg.results)
+  in
   return_statement i (ResumeThrow (ct, tag, handlers, l')) rtypes
 
 and finish_resume_throw_ref ctx i ct handlers l' =
@@ -6082,7 +6086,9 @@ and finish_resume_throw_ref ctx i ct handlers l' =
    let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
    check_operands ctx ~location:i.info l' [| exnref; cref |]);
   check_resume_handlers ctx ~result_types:sg.results handlers;
-  let*! rtypes = array_map_opt (internalize ctx) sg.results in
+  let*! rtypes =
+    array_map_opt (internalize ctx) (written_results ctx inner sg.results)
+  in
   return_statement i (ResumeThrowRef (ct, handlers, l')) rtypes
 
 and finish_switch ctx i ct tag l' =
@@ -6101,12 +6107,13 @@ and finish_switch ctx i ct tag l' =
   (* The last parameter of [ct]'s function type must itself be a
          continuation type; the result is that inner continuation's parameter
          types. *)
-  let inner_sg =
+  let inner2, inner_sg =
     match if np = 0 then None else Some (snd sg.params.(np - 1).desc) with
-    | Some (Ref { typ = Type ct2 | Exact ct2; _ }) ->
-        let*@ inner2 = lookup_cont_inner ctx ct2 in
-        lookup_func_type ctx inner2
-    | _ -> None
+    | Some (Ref { typ = Type ct2 | Exact ct2; _ }) -> (
+        match lookup_cont_inner ctx ct2 with
+        | Some inner2 -> (Some inner2, lookup_func_type ctx inner2)
+        | None -> (None, None))
+    | _ -> (None, None)
   in
   (* The 'switch' tag must take no parameters and its results must match
          both continuation types. Mirrors [Validation]'s [Switch] check. *)
@@ -6147,7 +6154,12 @@ and finish_switch ctx i ct tag l' =
                 "the 'switch' tag must take no parameters and its results must \
                  match the two continuation types"));
   let result_params =
-    match inner_sg with Some s2 -> s2.params | None -> [||]
+    match (inner2, inner_sg) with
+    | Some inner2, Some s2 ->
+        (* As written, so that the values switched in take the alias they are
+           declared with. *)
+        written_params ctx inner2 s2.params
+    | _ -> [||]
   in
   let*! rtypes =
     array_map_opt (fun p -> internalize ctx (param_type p)) result_params
@@ -12996,7 +13008,13 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
           match snd info with
           | { typ = Func ft; _ } ->
               check_inline_type ctx ~location:typ.info ft sign;
-              Some ft
+              (* As written, so that a value it delivers takes the alias it is
+                 declared with (see [written_results]). *)
+              Some
+                {
+                  params = written_params ctx typ ft.params;
+                  results = written_results ctx typ ft.results;
+                }
           | _ ->
               Error.expected_func_type ctx.diagnostics ~location:typ.info;
               None)

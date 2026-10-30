@@ -723,6 +723,39 @@ element declared with an alias.
     (return_call $h (block (result (@type $r)) (local.get $x)))
   )
 
+And one holding a value a stack-switching instruction delivers: the results of
+the continuation a resume runs, of the tag a suspend raises, or the parameters
+of the continuation a switch switches to.
+
+  $ wax -f wat switching.wax
+  (@if $p
+    (@then (@type $r externref) (@type $k (ref null $ct2)))
+    (@else (@type $r (ref extern)) (@type $k (ref $ct2)))
+  )
+  (type $ft (func (result (@type $r))))
+  (type $ct (cont $ft))
+  (type $gt (func (result (@type $r))))
+  (tag $e)
+  (tag $ts (type $gt))
+  (type $ft1 (func))
+  (rec (type $ft2 (func (param (@type $k)))) (type $ct2 (cont $ft2)))
+  (tag $t (type $ft1))
+  (func $res (param $c (ref $ct))
+    (drop (block (result (@type $r)) (resume $ct (local.get $c))))
+  )
+  (func $rthrow (param $c (ref $ct))
+    (drop (block (result (@type $r)) (resume_throw $ct $e (local.get $c))))
+  )
+  (func $rref (param $c (ref $ct)) (param $x (ref exn))
+    (drop
+      (block (result (@type $r))
+        (resume_throw_ref $ct (local.get $x) (local.get $c))))
+  )
+  (func $sus (drop (block (result (@type $r)) (suspend $ts))))
+  (func $switch (type $ft2) (param $x (@type $k))
+    (drop (block (result (@type $k)) (switch $ct2 $t (local.get $x))))
+  )
+
 A declared type written with an alias is still the type a function of the
 same signature reuses: the global's type is [$t], not a new function type.
 

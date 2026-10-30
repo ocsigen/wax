@@ -26,6 +26,11 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - A type may have at most 63 supertypes, transitively. Deeper hierarchies were
   accepted in Wax, WAT and binary input alike, producing modules that engines
   reject.
+- The value a `resume`, `resume_throw`, `resume_throw_ref`, `suspend` or
+  `switch` delivers now has the alias it is declared with, as a call result
+  already did, so a block or a local whose type is inferred from it takes that
+  alias. Converting a module with a conditional alias gave such a block a
+  type that held in every configuration but was not the one `-D` gave it.
 - A block or `if` whose result type is left unwritten now takes the alias of
   the type its context declares: a function's result, a call argument, a
   struct field or an array element written with an alias. Before, converting

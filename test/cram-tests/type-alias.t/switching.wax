@@ -1,0 +1,26 @@
+#[if(p)]
+{
+    type r = &?extern;
+    type k = &?ct2;
+}
+#[else]
+{
+    type r = &extern;
+    type k = &ct2;
+}
+type ft = fn() -> r;
+type ct = cont ft;
+type gt = fn() -> r;
+tag e();
+tag ts: gt ;
+type ft1 = fn();
+rec {
+    type ft2 = fn(k);
+    type ct2 = cont ft2;
+}
+tag t: ft1 ;
+fn res(c: &ct) { _ = do { c.resume(); }; }
+fn rthrow(c: &ct) { _ = do { c.resume_throw(e()); }; }
+fn rref(c: &ct, x: &exn) { _ = do { c.resume_throw_ref(x); }; }
+fn sus() { _ = do { suspend ts(); }; }
+fn switch: ft2 (x: k) { _ = do { x.switch(tag: t); }; }
