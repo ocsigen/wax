@@ -1,0 +1,7 @@
+#[if(p)] { type n = i32; } #[else] { type n = i64; }
+type fb = fn();
+type cb = cont fb;
+type fa = fn(n, &?cb);
+type ca = cont fa;
+tag t: fb ;
+fn g(x: &ca) { x.switch(123, tag: t); }

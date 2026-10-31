@@ -6044,10 +6044,12 @@ and finish_cont_bind ctx i src dst l' =
            "the bound parameters and results do not match between the two \
             continuation types");
   (let n = max 0 np in
+   (* As written, so that an operand bound takes the alias its parameter is
+      declared with (see [written_params]). *)
    let>@ bound =
      array_map_opt
        (fun p -> internalize ctx (param_type p))
-       (Array.sub src_sig.params 0 n)
+       (Array.sub (written_params ctx src_inner src_sig.params) 0 n)
    in
    let>@ srcref = internalize ctx (Ref { nullable = true; typ = Type src }) in
    check_operands ctx ~location:i.info l' (Array.append bound [| srcref |]));
@@ -6104,7 +6106,9 @@ and finish_resume ctx i ct handlers l' =
   let*! inner = lookup_cont_inner ctx ct in
   let*! sg = lookup_func_type ctx inner in
   (let>@ ptypes =
-     array_map_opt (fun p -> internalize ctx (param_type p)) sg.params
+     array_map_opt
+       (fun p -> internalize ctx (param_type p))
+       (written_params ctx inner sg.params)
    in
    let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
    check_operands ctx ~location:i.info l' (Array.append ptypes [| cref |]));
@@ -6150,7 +6154,7 @@ and finish_switch ctx i ct tag l' =
      let>@ lead =
        array_map_opt
          (fun p -> internalize ctx (param_type p))
-         (Array.sub sg.params 0 (np - 1))
+         (Array.sub (written_params ctx inner sg.params) 0 (np - 1))
      in
      let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
      check_operands ctx ~location:i.info l' (Array.append lead [| cref |]));

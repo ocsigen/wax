@@ -30,6 +30,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
   between configurations is reported the same way when no alias says so, for
   instance one passed to a function declared with an `i64` parameter in one
   branch and an `i32` one in the other.
+- A literal passed to `cont.bind`, `resume` or `switch` for a parameter
+  declared with a conditional alias now takes that alias, as one passed to a
+  call does, so the error for it names the alias.
 
 ### Fixes
 

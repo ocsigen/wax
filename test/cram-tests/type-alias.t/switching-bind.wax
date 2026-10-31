@@ -1,0 +1,3 @@
+#[if(p)] { type n = i32; } #[else] { type n = i64; }
+type ft1 = fn(n); type ct1 = cont ft1; type ft0 = fn(); type ct0 = cont ft0;
+fn g(x: &ct1) { _ = ct0::bind(123, x); }

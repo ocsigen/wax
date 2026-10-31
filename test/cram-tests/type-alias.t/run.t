@@ -756,6 +756,56 @@ of the continuation a switch switches to.
     (drop (block (result (@type $k)) (switch $ct2 $t (local.get $x))))
   )
 
+The operands they take have the alias their parameters are declared with too:
+a literal passed as one has the alias's type, which differs between
+configurations, and converting unresolved says so.
+
+  $ wax -f wat switching-bind.wax
+  Error:
+    This literal takes the type of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+   ──➤  switching-bind.wax:3:31
+  1 │ #[if(p)] { type n = i32; } #[else] { type n = i64; }
+  2 │ type ft1 = fn(n); type ct1 = cont ft1; type ft0 = fn(); type ct0 = cont ft0;
+  3 │ fn g(x: &ct1) { _ = ct0::bind(123, x); }
+    ·                               ^^^
+  4 │ 
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
+  [128]
+  $ wax -f wat switching-resume.wax
+  Error:
+    This literal takes the type of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+   ──➤  switching-resume.wax:3:26
+  1 │ #[if(p)] { type n = i32; } #[else] { type n = i64; }
+  2 │ type ft1 = fn(n); type ct1 = cont ft1; type ft0 = fn(); type ct0 = cont ft0;
+  3 │ fn g(x: &ct1) { x.resume(123); }
+    ·                          ^^^
+  4 │ 
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
+  [128]
+  $ wax -f wat switching-switch.wax
+  Error:
+    This literal takes the type of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+   ──➤  switching-switch.wax:7:25
+  5 │ type ca = cont fa;
+  6 │ tag t: fb ;
+  7 │ fn g(x: &ca) { x.switch(123, tag: t); }
+    ·                         ^^^
+  8 │ 
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
+  [128]
+
 A declared type written with an alias is still the type a function of the
 same signature reuses: the global's type is [$t], not a new function type.
 
