@@ -809,17 +809,15 @@ if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
       # conversion's stderr in $ERRLOG.)
       grep -qi "Conditional annotations cannot be emitted" "$ERRLOG" && continue
       # Likewise a construct valid in every configuration but lowered
-      # differently in some (a field access whose field is at a different
-      # position in each branch's struct type): only lowering the unresolved
-      # module rejects it, by design. The message wraps, hence the flattening.
+      # differently in some (a literal or cast typed by a conditional alias, a
+      # field at a different position in each branch's struct type, an
+      # operation whose instruction its operands' types pick): the typer
+      # reports it when lowering the unresolved module, by design. Any other
+      # rejection of a checked module, a lowered module failing validation
+      # included, is a lowering bug: an over-rejection, or a configuration-
+      # dependent form the typer does not report. The message wraps, hence the
+      # flattening.
       tr -s ' \n' ' ' <"$ERRLOG" | grep -qi "no single WebAssembly form" &&
-        continue
-      # And an instruction whose form depends on the type a conditional alias
-      # stands for (the arithmetic on a value typed by one): it is lowered from
-      # one configuration, so validating the lowered module reports it in the
-      # others, against the alias. alias-fuzz.sh's COMMUTE checks this lowering
-      # configuration by configuration.
-      grep -q '(@type \$' "$ERRLOG" && grep -q "reachable when" "$ERRLOG" &&
         continue
       finding UNDER_REJECT HIGH "$IN" \
         "wax check accepts but ${FMT}->${out} rejects it (typer under-rejects): $(grep -m1 -i error "$ERRLOG" || true)" \
