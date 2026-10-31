@@ -350,7 +350,9 @@ module Error = struct
      label, whose block's result type is what the value must satisfy, and which
      tells apart two reports on the same value from differently-typed targets.
      The validator's [instruction_type_mismatch] labels its own the same way. *)
-  let expression_type_mismatch ?expected_at context ~location ~provided
+  (* [index] numbers the value among several the expression produces, so two
+     of them with the same mismatch are told apart. *)
+  let expression_type_mismatch ?expected_at ?index context ~location ~provided
       ~expected =
     report context ~location
       ?related:
@@ -363,7 +365,10 @@ module Error = struct
                };
              ])
            expected_at)
-      (text "This expression has type"
+      ((match index with
+         | None -> text "This expression has type"
+         | Some k ->
+             text "Value" ++ Message.int k ++ text "of this expression has type")
        ++ typ provided
        ++ text "but is expected to have type"
        ++ typ expected
@@ -3116,11 +3121,11 @@ let expression_type ctx (i : _ Ast.instr) =
           Error.not_an_expression ctx.diagnostics ~location (Array.length typ));
       Cell.make Error
 
-let check_subtype ?(pin = true) ?expected_at ctx ~location ty' ty =
+let check_subtype ?(pin = true) ?expected_at ?index ctx ~location ty' ty =
   (* Pass [location] so that, when [ty] is an inferring block result, the value
      is recorded with its branch site (see [Collecting]). *)
   if not (subtype ~location ~pin ctx ty' ty) then
-    Error.expression_type_mismatch ?expected_at ctx.diagnostics ~location
+    Error.expression_type_mismatch ?expected_at ?index ctx.diagnostics ~location
       ~provided:ty' ~expected:ty
 
 (* [~pin:false] checks the subtypes without resolving a polymorphic left-hand
@@ -3133,9 +3138,14 @@ let check_subtypes ?(pin = true) ?expected_at ctx ~location types' types =
     Error.value_count_mismatch ctx.diagnostics ~location
       ~expected:(Array.length types) ~provided:(Array.length types')
   else
-    Array.iter2
-      (fun ty' ty -> check_subtype ~pin ?expected_at ctx ~location ty' ty)
-      types' types
+    (* Several values share the one location: number each mismatch. *)
+    let several = Array.length types > 1 in
+    Array.iteri
+      (fun k ty ->
+        check_subtype ~pin ?expected_at
+          ?index:(if several then Some k else None)
+          ctx ~location types'.(k) ty)
+      types
 
 let check_type ctx i ty =
   let ty' = expression_type ctx i in

@@ -1,0 +1,2 @@
+fn f(x: i32) -> (f64, f64) { unreachable; }
+fn g() -> (i32, i32) { 1; loop (i32) -> (f64, f64) { become f(_); } }

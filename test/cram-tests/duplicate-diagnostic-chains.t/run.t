@@ -129,3 +129,14 @@ delivers nothing):
   if_infer.wax:4:5: error: Expecting 1 returned value(s) from the stack, but there are 0.
   if_infer.wax:6:5: error: Expecting 1 returned value(s) from the stack, but there are 0.
   [128]
+
+Several values checked at one location, here the two results of a tail call
+against the function's, are numbered, so two identical mismatches stay
+distinct:
+
+  $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short multi_value.wax
+  multi_value.wax:2:54: error: Value 0 of this expression has type 'f64' but is expected to have type 'i32'.
+  multi_value.wax:2:54: error: Value 1 of this expression has type 'f64' but is expected to have type 'i32'.
+  multi_value.wax:2:1: error: Argument 1 should have type 'i32' but has type 'f64'.
+  multi_value.wax:2:1: error: Argument 0 should have type 'i32' but has type 'f64'.
+  [128]
