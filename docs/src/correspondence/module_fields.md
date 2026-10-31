@@ -22,6 +22,34 @@ A module may carry at most one name, and it must not appear inside a conditional
 (`#[if]`/`#[else]`): the name applies in every configuration. See also
 [Module Name](../language.md#module-name) in the language guide.
 
+## String Settings
+
+The `#![string_imports = "…"]` and `#![string_type = t]` inner attributes (see
+[JavaScript Strings](../language.md#javascript-strings) in the language guide)
+map to module-level `(@string_imports "…")` and `(@string_type $t)` annotations
+in WAT (`(@string_type extern)` for `extern`), in place: a setting under a
+conditional stays under it.
+
+```wax,check
+#![string_imports = "str"]
+type js = { s: &?extern };
+#[if(js_strings)]
+{
+    #![string_type = js]
+}
+```
+
+corresponds to the WAT
+
+```wat
+(type $js (struct (field $s externref)))
+(@string_imports "str")
+(@if $js_strings (@then (@string_type $js)))
+```
+
+The binary format has no such annotations: they only determine how the string
+literals are lowered.
+
 ## Feature Declarations
 
 A `#![feature = "..."]` inner attribute declares an optional proposal the

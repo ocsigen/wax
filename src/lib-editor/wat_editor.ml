@@ -759,7 +759,7 @@ let wat_field_symbols
         };
       ]
   | Export _ | Start _ -> []
-  | Feature_annotation _ -> []
+  | Feature_annotation _ | String_type _ | String_imports _ -> []
   | Module_if_annotation _ -> []
 
 (* As [symbols_string], but for WAT, and with the WAT recovery config (parens as

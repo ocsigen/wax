@@ -347,6 +347,12 @@ server](#language-server)).
       existing `(array (mut i8))` type when the module has one and otherwise pins
       a synthesised one. A module-level `(@string …)` global becomes an ordinary
       global.
+    - A string building a JavaScript string (`(@string extern …)`, or a struct
+      whose single field is an `anyref` or an `externref`) becomes a `global.get`
+      of an imported string constant, wrapped in a `struct.new` for a struct;
+      the imports, from the module that `(@string_imports "…")` names, are
+      synthesised after the module's own. An untyped string builds the type
+      `(@string_type …)` designates. Both annotations are then dropped.
     - Replaces each value-type alias use `(@type $t)` by the value type it
       stands for, and drops the `(@type $t …)` definitions.
     - Synthesises the declarative element segment (`(elem declare func …)`) that

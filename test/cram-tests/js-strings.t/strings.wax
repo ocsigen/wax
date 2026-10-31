@@ -1,0 +1,24 @@
+// The runtime representation of a string depends on the configuration: a
+// byte array, or a JavaScript string wrapped in a struct.
+type bytes = [mut i8];
+type js = { s: &?extern };
+#![string_imports = "str"]
+#[if(js_strings)]
+{
+    #![string_type = js]
+}
+const greeting = "hello";
+#[export]
+fn message() -> &eq {
+    "world";
+}
+// A plain JavaScript string, whatever the configuration.
+#[export]
+fn plain() -> &extern {
+    extern#"plain";
+}
+// A byte array, whatever the configuration.
+#[export]
+fn raw() -> &bytes {
+    bytes#"raw";
+}

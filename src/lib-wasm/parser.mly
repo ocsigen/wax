@@ -174,6 +174,8 @@
 %token STRING_ANNOT "(@string"
 %token CHAR_ANNOT "(@char"
 %token FEATURE_ANNOT "(@feature"
+%token STRING_TYPE_ANNOT "(@string_type"
+%token STRING_IMPORTS_ANNOT "(@string_imports"
 %token TYPE_ANNOT "(@type"
 %token BRANCH_HINT_ANNOT "(@metadata.code.branch_hint"
 %token INSTR_FREQ_ANNOT "(@metadata.code.instr_freq"
@@ -1191,7 +1193,7 @@ folded_instruction:
     with_loc $sloc
       (Folded
         (with_loc ($startpos, $endpos(c)) (Try {label; typ; block = annot ($startpos(block), $endpos(block)) block; catches; catch_all}), [])) }
-| STRING_ANNOT id = option(index) l = string_list ")"
+| STRING_ANNOT id = option(string_heap_type) l = string_list ")"
     { with_loc $sloc (String (id, l)) }
 | CHAR_ANNOT s = STRING ")"
     { let c = String.get_utf_8_uchar s.Ast.desc 0 in
@@ -1506,8 +1508,14 @@ v128_const_body:
 | "(" MEMORY i = index ")" { i }
 | { annot $sloc (Num Uint32.zero) }
 
+(* The type a string literal builds: an array or struct type, or [extern] for a
+   plain JavaScript string. *)
+string_heap_type:
+| EXTERN { Extern }
+| i = index { Type i }
+
 globalstring:
-| STRING_ANNOT id = ID typ = option(index) init = string_list ")"
+| STRING_ANNOT id = ID typ = option(string_heap_type) init = string_list ")"
   { annot $sloc (String_global {id; typ; init}) }
 
 (* A module-level [(@feature "name")] annotation: the module declares it uses
@@ -1515,6 +1523,20 @@ globalstring:
 feature_annotation:
 | FEATURE_ANNOT s = STRING ")"
   { annot $sloc (Feature_annotation s) }
+
+(* A module-level [(@string_type $t)] (or [(@string_type extern)]) annotation:
+   an untyped string literal of the module builds a [$t] (the Wax [#[string]]
+   type attribute). *)
+string_type_annotation:
+| STRING_TYPE_ANNOT t = string_heap_type ")"
+  { annot $sloc (String_type t) }
+
+(* A module-level [(@string_imports "name")] annotation: the import module of
+   the JavaScript string constants (the Wax [#![string_imports = "…"]] inner
+   attribute). *)
+string_imports_annotation:
+| STRING_IMPORTS_ANNOT s = STRING ")"
+  { annot $sloc (String_imports s) }
 
 (* A value-type alias definition, [(@type $id t)]; [(@type $id)] then stands
    for [t] wherever a value type is expected. *)
@@ -1536,6 +1558,8 @@ module_field:
 | f = data
 | f = globalstring
 | f = feature_annotation
+| f = string_type_annotation
+| f = string_imports_annotation
 | f = type_alias
 | f = cond_module_field
   { f }

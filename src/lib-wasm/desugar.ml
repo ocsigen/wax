@@ -22,7 +22,15 @@ exception Unbound_alias of Ast.location
    module already declares it). *)
 let default_string_type = "<string>"
 
-let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
+(* The array type a string literal builds. A literal building a JavaScript
+   string ([extern], or a struct) has been expanded by {!String_literals}. *)
+let array_idx (t : heaptype) =
+  match t with Type i | Exact i -> i | _ -> assert false
+
+let module_ (m : Ast.location module_) : Ast.location module_ =
+  (* Apply the string settings first: literals building JavaScript strings are
+     expanded, and the untyped ones take the designated type. *)
+  let name, fields = String_literals.module_ m in
   (* Scan the type section: which array types are [i16] (their strings are
      UTF-16-encoded), tracked both by name and by index since a [@string] may
      name its type either way; plus every type name, to freshen the synthesised
@@ -148,7 +156,8 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
 
   let rec map_instr (i : Ast.location instr) : Ast.location instr =
     match i.desc with
-    | String (idxo, s) -> { i with desc = string_expr i.info idxo s }
+    | String (t, s) ->
+        { i with desc = string_expr i.info (Option.map array_idx t) s }
     | Char c -> { i with desc = char_expr c }
     | If_annotation _ -> raise (Conditional_remains i.info)
     | desc -> { i with desc = map_structured desc }
@@ -199,8 +208,8 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
           }
     (* [@string]/[@char] print as a folded head with no operands; expand them at
        the folded level so no redundant parenthesis is left behind. *)
-    | Folded ({ desc = String (idxo, s); info; _ }, []) ->
-        string_expr info idxo s
+    | Folded ({ desc = String (t, s); info; _ }, []) ->
+        string_expr info (Option.map array_idx t) s
     | Folded ({ desc = Char c; _ }, []) -> char_expr c
     | Folded (h, l) -> Folded (map_instr h, List.map map_instr l)
     | desc -> desc
@@ -222,6 +231,7 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
           Table { r with init }
       | Elem r -> Elem { r with init = List.map (List.map map_instr) r.init }
       | String_global { id; typ; init } ->
+          let typ = Option.map array_idx typ in
           let type_idx, _ = resolve_type f.info typ in
           let gtyp : globaltype =
             { mut = false; typ = Ref { nullable = false; typ = Type type_idx } }

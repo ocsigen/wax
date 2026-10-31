@@ -362,7 +362,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
         use types ty;
         List.iter (use_on labels) ons
     (* Our extension: a string literal names the array type it builds. *)
-    | String (idx_opt, _) -> Option.iter (use types) idx_opt
+    | String (t, _) -> Option.iter use_heaptype t
     | _ -> ()
   in
 
@@ -448,7 +448,9 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
             declare then_fields.desc;
             Option.iter (fun b -> declare b.desc) else_fields
         | Text.Type_alias { id; _ } -> ignore (register aliases (Some id) None)
-        | Text.Export _ | Text.Start _ | Text.Feature_annotation _ -> ())
+        | Text.Export _ | Text.Start _ | Text.Feature_annotation _
+        | Text.String_type _ | Text.String_imports _ ->
+            ())
       fields
   in
 
@@ -534,7 +536,7 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
                 use memories mem;
                 walk_const_expr offset
             | Text.Passive -> ())
-        | Text.String_global { typ; _ } -> Option.iter (use types) typ
+        | Text.String_global { typ; _ } -> Option.iter use_heaptype typ
         | Text.Export { kind; index; _ } ->
             let sp =
               match kind with
@@ -547,7 +549,8 @@ let f ?expected ((_, fields) : location Text.module_) : binding list =
             use sp index
         | Text.Start idx -> use funcs idx
         | Text.Type_alias { typ; _ } -> use_valtype typ
-        | Text.Feature_annotation _ -> ()
+        | Text.String_type t -> use_heaptype t
+        | Text.Feature_annotation _ | Text.String_imports _ -> ()
         | Text.Module_if_annotation { then_fields; else_fields; _ } ->
             resolve then_fields.desc;
             Option.iter (fun b -> resolve b.desc) else_fields)

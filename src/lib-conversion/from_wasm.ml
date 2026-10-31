@@ -603,6 +603,13 @@ let idx ctx kind i =
   | `Elem -> Sequence.get ctx.elems i
   | `Local -> Sequence.get ctx.locals i
 
+(* The Wax name of the type a string literal builds: [extern] for a plain
+   JavaScript string. *)
+let string_type_name ctx ~location (t : Src.heaptype) =
+  match t with
+  | Type i | Exact i -> idx ctx `Type i
+  | _ -> { Wax_utils.Ast.desc = "extern"; info = location }
+
 let label ctx i = LabelStack.get ctx.labels i
 
 (* The Wax name for a concrete type reference [i] appearing in a ref-type. An
@@ -4815,7 +4822,9 @@ and instruction_desc ctx (i : _ Src.instr) : unit Stack.t =
   | Char c -> Stack.push 1 (expect I32 (with_loc (Char c)))
   | String (t, s) ->
       let s = Wax_utils.Ast.concat_desc s in
-      Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
+      Stack.push 1
+        (with_loc
+           (String (Option.map (string_type_name ctx ~location:i.info) t, s)))
   | If_annotation { cond; then_body; else_body } ->
       (* Each branch body runs on a fresh stack, and the annotation declares NO
          results: a value a branch leaves is an ENCLOSING-frame value per
@@ -5749,6 +5758,32 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
     | Start _ | Export _ -> None
     | Type_alias { id; typ } ->
         Some (Type_alias { name = alias_name ctx id; typ = valtype ctx typ })
+    (* A [(@string_type $t)] annotation becomes a [#![string_type = t]] inner
+       attribute, and a [(@string_imports "name")] annotation a
+       [#![string_imports = "name"]] one. *)
+    | String_type t ->
+        let name = string_type_name ctx ~location:f.info t in
+        Some
+          (Module_annotation
+             [
+               synth_attr ~location:f.info "string_type"
+                 (Some
+                    {
+                      desc = Get name;
+                      info = name.info;
+                      hints = Wax_wasm.Hints.none;
+                      expected = Unset;
+                    })
+                 None;
+             ])
+    | String_imports name ->
+        Some
+          (Module_annotation
+             [
+               synth_attr ~location:name.Wax_utils.Ast.info "string_imports"
+                 (Some (string_of_name name))
+                 None;
+             ])
     (* A [(@feature "name")] annotation becomes a [#![feature = "name"]] inner
        attribute. *)
     | Feature_annotation name ->
@@ -5771,7 +5806,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                  {
                    desc =
                      String
-                       ( Option.map (idx ctx `Type) typ,
+                       ( Option.map (string_type_name ctx ~location:f.info) typ,
                          Wax_utils.Ast.concat_desc init );
                    info = f.Ast.info;
                    hints = Wax_wasm.Hints.none;
@@ -5948,7 +5983,8 @@ let elaborate_implicit_types ctx fields =
       (* Groups are flattened below, so only their [Import] members reach here. *)
       | Import_group1 _ | Import_group2 _ | Types _ | Import _ | Memory _
       | Table _ | Export _ | Start _ | Data _ | String_global _
-      | Feature_annotation _ | Type_alias _ | Module_if_annotation _ ->
+      | Feature_annotation _ | Type_alias _ | String_type _ | String_imports _
+      | Module_if_annotation _ ->
           ())
     (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
@@ -6044,7 +6080,7 @@ let register_names ctx export_tbl fields =
                  exports)
         (* Groups are flattened below, so only their [Import] members reach here. *)
         | Func _ | Export _ | Start _ | Import_group1 _ | Import_group2 _
-        | Feature_annotation _ ->
+        | Feature_annotation _ | String_type _ | String_imports _ ->
             ()
         | Elem { id; _ } -> Sequence.register ctx.elems export_tbl None id []
         | Data { id; _ } -> Sequence.register ctx.datas export_tbl None id []
@@ -6102,7 +6138,8 @@ let register_names ctx export_tbl fields =
               else_fields
         | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
         | Table _ | Tag _ | String_global _ | Import_group1 _ | Import_group2 _
-        | Feature_annotation _ | Type_alias _ ->
+        | Feature_annotation _ | Type_alias _ | String_type _ | String_imports _
+          ->
             ())
       (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
   in

@@ -1066,7 +1066,43 @@ module Error = struct
 
   let invalid_string_element_type context ~location =
     report context ~location
-      (text "A string literal can only build an [i8] or [i16] array.")
+      (text
+         "A string literal can only build an [i8] or [i16] array, or a struct \
+          whose single field is an [anyref] or an [externref] (a JavaScript \
+          string).")
+
+  let js_string_not_unicode context ~location =
+    report context ~location
+      (text "A JavaScript string must be a valid Unicode string.")
+
+  let string_imports_missing context ~location =
+    report context ~location
+      ~hint:
+        (text "Declare the import module of the string constants with"
+         ++ kw "#![string_imports = \"…\"]"
+        ^^ text ".")
+      (text
+         "This string builds a JavaScript string, but the module does not \
+          declare the import module of its string constants.")
+
+  let invalid_string_type context ~location x =
+    report context ~location
+      (text "Type" ++ name x
+      ++ text
+           "cannot be the string type: it should be an [i8] or [i16] array, a \
+            struct whose single field is an [anyref] or an [externref], or \
+            [extern].")
+
+  let multiple_string_setting context ~location ~prev_loc key =
+    report context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously declared here";
+          };
+        ]
+      ((text "The module already declares its" ++ kw key) ^^ text ".")
 
   let string_not_unicode context ~location =
     report context ~location
@@ -1996,6 +2032,29 @@ let field_value (name : ident) = function
         hints = Wax_wasm.Hints.none;
         expected = Unset;
       }
+
+(* Whether a string literal naming [name] builds a plain JavaScript string. A
+   type cannot be named [extern], a built-in type. *)
+let is_extern_string (name : ident) = name.desc = "extern"
+
+(* Whether a struct whose single field has type [field] holds a JavaScript
+   string: an [anyref] or [externref] field (non-nullable or not). *)
+let is_js_string_field type_context (field : fieldtype) =
+  match field.typ with
+  | Value t -> (
+      match Typing_env.unalias type_context t with
+      | Ref { typ = Any | Extern; _ } -> true
+      | _ -> false)
+  | Packed _ -> false
+
+(* Check that a string literal [s] building a JavaScript string can be imported
+   as a string constant: valid UTF-8 text, in a configuration declaring the
+   import module of its string constants. *)
+let check_js_string ctx ~location s =
+  if not (String.is_valid_utf_8 s) then
+    Error.js_string_not_unicode ctx.diagnostics ~location;
+  if not ctx.type_context.string_imports then
+    Error.string_imports_missing ctx.diagnostics ~location
 
 let lookup_array_type ?location ctx name =
   let*@ ty = Tbl.find ctx.diagnostics ctx.type_context.types name in
@@ -9734,52 +9793,123 @@ and check_instruction ctx expected (i : location instr) =
         | Some a, Some b -> valtype_equal ctx a b
         | _ -> false
       in
+      (* The type the literal builds: the one it names, else the one the context
+         pins exactly ([extern] for a plain JavaScript string), else the one the
+         configuration designates ([#![string_type = t]]). *)
+      let designated, target =
+        match ty with
+        | Some _ -> (false, ty)
+        | None -> (
+            match exact_named_type expected with
+            | Some _ as t -> (false, t)
+            | None -> (
+                match Cell.get expected with
+                | Valtype { typ = Ref { typ = Extern; _ }; _ } ->
+                    (false, Some { Annot.desc = "extern"; info = i.info })
+                | _ -> (true, ctx.type_context.string_type)))
+      in
       let typ =
-        match
-          match ty with Some _ -> ty | None -> exact_named_type expected
-        with
-        | Some name when not (is_default name) -> name
+        match target with
+        | Some name when is_extern_string name || not (is_default name) -> name
         | _ -> string_typ
       in
-      (* A bare string builds the canonical [mut i8] array, naming no source type
+      if is_extern_string typ then
+        (* A plain JavaScript string: an imported string constant. *)
+        let () = check_js_string ctx ~location:i.info s in
+        let emitted =
+          match ty with
+          | Some _ -> ty
+          | None when designated -> Some string_typ
+          | None -> None
+        in
+        let* node =
+          let*! result =
+            internalize ctx (Ref { nullable = false; typ = Extern })
+          in
+          if has_expectation expected then
+            check_subtype ctx ~location:i.info result expected;
+          return_expression i (String (emitted, s)) result
+        in
+        return
+          ( node,
+            match
+              internalize_valtype ctx (Ref { nullable = false; typ = Extern })
+            with
+            | Some iv -> Typ (valtype_cell iv)
+            | None -> Uninferrable )
+      else begin
+        (* A bare string builds the canonical [mut i8] array, naming no source type
          at all, so record a use of that canonical index — every definition the
          array deduplicates onto is used by the literal. The mirror of the
          validator's [string_type_reference]; resolved in the unused-field pass.
          A string that adopted a named array type resolved (and so marked) that
          name itself. *)
-      if ctx.warn_unused && typ.desc = string_typ.desc then
-        Option.iter
-          (fun id ->
-            let r = (!(ctx.origin), id) in
-            if not (List.mem r !(ctx.canonical_type_references)) then
-              ctx.canonical_type_references :=
-                r :: !(ctx.canonical_type_references))
-          (resolve_type_name ctx.diagnostics ctx.type_context string_typ);
-      (let>@ field = lookup_array_type ctx typ in
-       match field.typ with
-       | Packed I8 -> ()
-       | Packed I16 ->
-           if not (String.is_valid_utf_8 s) then
-             Error.string_not_unicode ctx.diagnostics ~location:i.info
-       | Value _ ->
-           Error.invalid_string_element_type ctx.diagnostics ~location:i.info);
-      let emitted =
-        if typ.desc = string_typ.desc then None
-        else emitted_name ty typ ~field_unique:false
-      in
-      let* node =
-        let*! result = construction_result typ in
-        return_expression i (String (emitted, s)) result
-      in
-      (* A bare string re-infers to its natural [<string>] type (or the emitted
+        if ctx.warn_unused && typ.desc = string_typ.desc then
+          Option.iter
+            (fun id ->
+              let r = (!(ctx.origin), id) in
+              if not (List.mem r !(ctx.canonical_type_references)) then
+                ctx.canonical_type_references :=
+                  r :: !(ctx.canonical_type_references))
+            (resolve_type_name ctx.diagnostics ctx.type_context string_typ);
+        (let>@ _, st = Tbl.find ctx.diagnostics ctx.type_context.types typ in
+         match st.typ with
+         | Array { typ = Packed I8; _ } -> ()
+         | Array { typ = Packed I16; _ } ->
+             if not (String.is_valid_utf_8 s) then
+               Error.string_not_unicode ctx.diagnostics ~location:i.info
+         | Struct [| field |]
+           when is_js_string_field ctx.type_context (field_type field) ->
+             check_js_string ctx ~location:i.info s
+         | Array { typ = Value _; _ } | Struct _ ->
+             Error.invalid_string_element_type ctx.diagnostics ~location:i.info
+         | Func _ | Cont _ ->
+             Error.expected_array_type ctx.diagnostics ~location:typ.info);
+        let emitted =
+          if designated then
+            if typ.desc = string_typ.desc then None
+            else
+              (* The designated type, which a bare literal takes: marked with
+               the internal [<string>] name, which the lowering leaves
+               implicit like the default one, and [erase_types] drops. *)
+              Some { string_typ with info = i.info }
+          else if ctx.type_context.string_type_anywhere && ty <> None then
+            (* A bare literal may take another type in another configuration:
+             the name is never redundant. *)
+            ty
+          else if typ.desc = string_typ.desc then None
+          else emitted_name ty typ ~field_unique:false
+        in
+        let* node =
+          let*! result = construction_result typ in
+          return_expression i (String (emitted, s)) result
+        in
+        let natural =
+          (* A literal of the designated type re-infers to it. *)
+          if designated && typ.desc <> string_typ.desc then
+            internalize_valtype ctx
+              (Ref
+                 {
+                   nullable = false;
+                   typ =
+                     (if
+                        Wax_utils.Feature.is_enabled ctx.type_context.features
+                          Wax_utils.Feature.Custom_descriptors
+                      then Exact typ
+                      else Type typ);
+                 })
+          else string_valtype_natural
+        in
+        (* A bare string re-infers to its natural [<string>] type (or the emitted
          non-default name resolves the same); it never fails to type, so it
          reports [Typ] of that natural type and the binding site drops a
          redundant annotation exactly as before. *)
-      return
-        ( node,
-          match string_valtype_natural with
-          | Some iv -> Typ (valtype_cell iv)
-          | None -> Uninferrable )
+        return
+          ( node,
+            match natural with
+            | Some iv -> Typ (valtype_cell iv)
+            | None -> Uninferrable )
+      end
   | Cast (e, typ) when is_null_initializer e ->
       let* i' = instruction ctx i in
       (* A cast of [null] is redundant when the checking context already
@@ -12639,6 +12769,22 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
           (* Allowed exactly where [module] is: as an inner attribute. *)
           if not module_ok then
             Error.annotation_not_allowed diagnostics ~location "feature"
+      | "string_type" ->
+          (match value with
+          | Some { desc = Get _; _ } -> ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location
+                "string_type" "a type name");
+          if not module_ok then
+            Error.annotation_not_allowed diagnostics ~location "string_type"
+      | "string_imports" ->
+          (match value with
+          | Some { desc = String _; _ } -> ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location
+                "string_imports" "a string");
+          if not module_ok then
+            Error.annotation_not_allowed diagnostics ~location "string_imports"
       | "import" ->
           (match value with
           | Some { desc = String _; _ } -> ()
@@ -12872,6 +13018,9 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
       written;
       features;
       subtyping_info_cache = None;
+      string_type = None;
+      string_imports = false;
+      string_type_anywhere = false;
     }
   in
   (* Walk module fields, descending at each conditional into the branch this
@@ -12928,6 +13077,71 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
           ()
       | _ -> ())
     fields;
+  (* The string settings of this configuration: the type an untyped string
+     literal builds ([#![string_type = t]]) and whether the import module of its
+     JavaScript string constants is declared ([#![string_imports = "…"]]). Each
+     may be declared once per configuration; an ill-shaped value is reported by
+     [check_attribute_list]. *)
+  (let rec designates fields =
+     List.exists
+       (fun (field : (_ modulefield, _) annotated) ->
+         match field.desc with
+         | Module_annotation attrs ->
+             List.exists
+               (fun (a : Ast.attribute) -> a.attr_name = "string_type")
+               attrs
+         | Conditional { then_fields; else_fields; _ } ->
+             designates then_fields.desc
+             || Option.fold ~none:false
+                  ~some:(fun e -> designates e.Annot.desc)
+                  else_fields
+         | _ -> false)
+       fields
+   in
+   type_context.string_type_anywhere <- designates fields);
+  (let type_seen = ref None and imports_seen = ref None in
+   let once seen key location f =
+     match !seen with
+     | Some prev_loc ->
+         Error.multiple_string_setting diagnostics ~location ~prev_loc key
+     | None ->
+         seen := Some location;
+         f ()
+   in
+   walk_fields
+     (fun (field : (_ modulefield, _) annotated) ->
+       match field.desc with
+       | Module_annotation attrs ->
+           List.iter
+             (fun (a : Ast.attribute) ->
+               let location = a.attr_span in
+               match (a.attr_name, a.attr_value) with
+               | "string_type", Some { desc = Get name; _ } ->
+                   once type_seen "string_type" location (fun () ->
+                       let valid =
+                         is_extern_string name
+                         ||
+                         match Tbl.find diagnostics type_context.types name with
+                         | None -> true (* Reported as unbound. *)
+                         | Some (_, st) -> (
+                             match st.typ with
+                             | Array { typ = Packed (I8 | I16); _ } -> true
+                             | Struct [| field |] ->
+                                 is_js_string_field type_context
+                                   (field_type field)
+                             | Array _ | Struct _ | Func _ | Cont _ -> false)
+                       in
+                       if valid then type_context.string_type <- Some name
+                       else
+                         Error.invalid_string_type diagnostics
+                           ~location:name.info name)
+               | "string_imports", Some { desc = String _; _ } ->
+                   once imports_seen "string_imports" location (fun () ->
+                       type_context.string_imports <- true)
+               | _ -> ())
+             attrs
+       | _ -> ())
+     fields);
   (* Index the struct types by their field set, so a literal whose name is
      omitted can be resolved from its fields. All types are registered above, so
      this is complete; a later distinct name for the same key marks it ambiguous
@@ -14408,7 +14622,26 @@ let check ?(warn_unused = false) ?(suggest = false)
       ~faithful:false diagnostics fields shape
 
 let erase_types m =
+  (* A literal of the module's string type carries the [<string>] marker (see
+     [String] in [instruction_core]): written bare, it takes that type again. *)
+  let rec unmark (i : location instr) =
+    match i.desc with
+    | String (Some { desc = "<string>"; _ }, s) ->
+        { i with desc = String (None, s) }
+    | desc ->
+        let desc' =
+          Ast_utils.map_desc ~instr:unmark
+            ~block:(Ast_utils.smart_map unmark)
+            desc
+        in
+        if desc' == desc then i else { i with desc = desc' }
+  in
   List.map
     (fun (m : (_ modulefield, location) Ast.annotated) ->
-      { m with desc = Ast_utils.map_modulefield snd m.desc })
+      {
+        m with
+        desc =
+          Ast_utils.map_modulefield_instr unmark
+            (Ast_utils.map_modulefield snd m.desc);
+      })
     m

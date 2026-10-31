@@ -1183,6 +1183,55 @@ module Error = struct
     report context ~location ~severity:Error
       (text "A string building an i16 array must be a valid Unicode string.")
 
+  let js_string_not_unicode context ~location =
+    report context ~location ~severity:Error
+      (text "A JavaScript string must be a valid Unicode string.")
+
+  let string_struct_required context ~location =
+    report context ~location ~severity:Error
+      (text
+         "A string can only build a struct whose single field is an anyref or \
+          an externref (a JavaScript string).")
+
+  let string_type_required context ~location idx =
+    report context ~location ~severity:Error
+      (text "Type" ++ index idx
+      ++ text
+           "cannot be the string type: it should be an i8 or i16 array, or a \
+            struct whose single field is an anyref or an externref.")
+
+  let string_type_already_declared context ~location ~prev_loc =
+    report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously declared here";
+          };
+        ]
+      (text "The module already declares its string type.")
+
+  let string_imports_already_declared context ~location ~prev_loc =
+    report context ~location ~severity:Error
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = prev_loc;
+            message = text "previously declared here";
+          };
+        ]
+      (text "The module already declares the import module of its strings.")
+
+  let string_imports_missing context ~location =
+    report context ~location ~severity:Error
+      ~hint:
+        (text "Declare the import module of the string constants with"
+         ++ kw "(@string_imports \"…\")"
+        ^^ text ".")
+      (text
+         "This string builds a JavaScript string, but the module does not \
+          declare the import module of its string constants.")
+
   let incompatible_array_element context ~location =
     report context ~location ~severity:Error
       (text "The array element type is incompatible.")
@@ -2120,6 +2169,12 @@ type module_context = {
   (* Whether the extra "unused" analyses run (tied to [-v]/[check], like
      [unused-local]); consulted by lints emitted during stack validation. *)
   warn_unused : bool;
+  (* The type an untyped string literal builds, when the module designates one
+     with [(@string_type $t)] (or [(@string_type extern)]). *)
+  mutable string_type : Ast.Text.heaptype option;
+  (* Whether the module declares the import module of its JavaScript string
+     constants, [(@string_imports "…")]. *)
+  mutable string_imports : bool;
 }
 
 module IntSet = Set.Make (Int)
@@ -2202,6 +2257,42 @@ let lookup_array_type ctx idx =
   | Func _ | Struct _ | Cont _ ->
       Error.expected_array_type ctx.diagnostics ~location:idx.info idx;
       None
+
+(* How a string literal builds a value of type [ty]: the bytes of its UTF-8
+   text in an [i8] array, its UTF-16 code units in an [i16] array, or a
+   JavaScript string (an imported string constant) wrapped in a struct whose
+   single field is an [anyref] or an [externref]. *)
+type string_repr = Bytes | Wide | Js_string | Not_a_string
+
+let string_repr (ctx : module_context) ty =
+  match (Types.get_subtype ctx.subtyping_info ty).typ with
+  | Array { typ = Packed I8; _ } -> Bytes
+  | Array { typ = Packed I16; _ } -> Wide
+  | Struct [| { typ = Value (Ref { typ = Any | Extern; _ }); _ } |] -> Js_string
+  | Array { typ = Value _; _ } | Struct _ | Func _ | Cont _ -> Not_a_string
+
+(* Check that a JavaScript string [s] can be imported as a string constant. *)
+let check_js_string (ctx : module_context) ~location s =
+  if not (String.is_valid_utf_8 (Wax_utils.Ast.concat_desc s)) then
+    Error.js_string_not_unicode ctx.diagnostics ~location;
+  if not ctx.string_imports then
+    Error.string_imports_missing ctx.diagnostics ~location
+
+(* Check that a string literal [s] can build a value of type [ty] (named by
+   [idx]), reporting at [location]. *)
+let check_string_literal (ctx : module_context) ~location idx ty s =
+  match string_repr ctx ty with
+  | Bytes -> ()
+  | Wide ->
+      if not (String.is_valid_utf_8 (Wax_utils.Ast.concat_desc s)) then
+        Error.string_not_unicode ctx.diagnostics ~location
+  | Js_string -> check_js_string ctx ~location s
+  | Not_a_string -> (
+      match (Types.get_subtype ctx.subtyping_info ty).typ with
+      | Array _ -> Error.string_array_required ctx.diagnostics ~location
+      | Struct _ -> Error.string_struct_required ctx.diagnostics ~location
+      | Func _ | Cont _ ->
+          Error.expected_array_type ctx.diagnostics ~location:idx.Ast.info idx)
 
 (* The descriptor type of the type at global index [ty], for the descriptor
    instructions ([struct.new_desc], [ref.get_desc], …). Reports an error and
@@ -4677,23 +4768,28 @@ let rec instruction_core ctx (i : _ Ast.Text.instr) =
   | Folded (i, l) ->
       let* () = instructions ctx l in
       instruction ctx i
-  | String (Some idx, s) ->
-      let*! ty, field = lookup_array_type ctx idx in
-      (match field.typ with
-      | Packed I8 -> ()
-      | Packed I16 ->
-          let s = Wax_utils.Ast.concat_desc s in
-          if not (String.is_valid_utf_8 s) then
-            Error.string_not_unicode ctx.modul.diagnostics ~location:i.info
-      | Value _ ->
-          Error.string_array_required ctx.modul.diagnostics ~location:i.info);
-      push ~source:(exact_ref_source ctx idx) (Some loc)
-        (Ref
-           {
-             nullable = false;
-             typ = (if allocation_is_exact ctx then Exact ty else Type ty);
-           })
-  | String (None, _) ->
+  | String (t, s) when t <> None || ctx.modul.string_type <> None -> (
+      (* Its own type, or else the designated one. *)
+      let t =
+        match t with Some t -> t | None -> Option.get ctx.modul.string_type
+      in
+      match t with
+      | Type idx | Exact idx ->
+          let*! ty =
+            resolve_type_index ctx.modul.diagnostics ctx.modul.types idx
+          in
+          check_string_literal ctx.modul ~location:i.info idx ty s;
+          push ~source:(exact_ref_source ctx idx) (Some loc)
+            (Ref
+               {
+                 nullable = false;
+                 typ = (if allocation_is_exact ctx then Exact ty else Type ty);
+               })
+      | _ ->
+          (* [extern]: the only abstract type a string literal can name. *)
+          check_js_string ctx.modul ~location:i.info s;
+          push_known (Some loc) (Ref { nullable = false; typ = Extern }))
+  | String (_, _) ->
       let i = string_type_reference ctx.modul.types in
       let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
       push ~source:(Inline_ref comptype) (Some loc)
@@ -5397,6 +5493,51 @@ let tables_and_memories ctx fields =
       | _ -> ())
     fields
 
+(* Read the module's string settings: the type an untyped string literal builds
+   ([(@string_type $t)]) and whether the import module of its JavaScript string
+   constants is declared ([(@string_imports "…")]). Each may be declared once;
+   the module has been projected onto one configuration, so a guarded
+   declaration counts only where it applies. *)
+let string_settings ctx fields =
+  ignore
+    (List.fold_left
+       (fun (type_loc, imports_loc)
+            (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+         match field.desc with
+         | String_type t -> (
+             match type_loc with
+             | Some prev_loc ->
+                 Error.string_type_already_declared ctx.diagnostics
+                   ~location:field.info ~prev_loc;
+                 (type_loc, imports_loc)
+             | None ->
+                 (match t with
+                 | Type idx | Exact idx -> (
+                     match resolve_type_index ctx.diagnostics ctx.types idx with
+                     | None -> ()
+                     | Some ty -> (
+                         match string_repr ctx ty with
+                         | Bytes | Wide | Js_string -> ctx.string_type <- Some t
+                         | Not_a_string ->
+                             Error.string_type_required ctx.diagnostics
+                               ~location:idx.info idx))
+                 | _ ->
+                     (* [extern]: the only abstract type the annotation can
+                        name. *)
+                     ctx.string_type <- Some t);
+                 (Some field.info, imports_loc))
+         | String_imports _ -> (
+             match imports_loc with
+             | Some prev_loc ->
+                 Error.string_imports_already_declared ctx.diagnostics
+                   ~location:field.info ~prev_loc;
+                 (type_loc, imports_loc)
+             | None ->
+                 ctx.string_imports <- true;
+                 (type_loc, Some field.info))
+         | _ -> (type_loc, imports_loc))
+       (None, None) fields)
+
 let globals ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
@@ -5431,35 +5572,29 @@ let globals ctx fields =
           (* A named array type is honoured (and must be an i8/i16 array, like
              any string); with none, the global takes the default [<string>]
              ([mut i8]) type. *)
-          let ty, src =
+          let typ = match typ with Some _ -> typ | None -> ctx.string_type in
+          let heaptype, src =
             match typ with
             | None ->
-                ( string_type_reference ctx.types,
+                ( Type (string_type_reference ctx.types),
                   Inline_ref (Ast.Text.Array { mut = true; typ = Packed I8 }) )
-            | Some idx -> (
+            | Some (Type idx | Exact idx) -> (
                 match resolve_type_index ctx.diagnostics ctx.types idx with
                 | None ->
-                    ( string_type_reference ctx.types,
+                    ( Type (string_type_reference ctx.types),
                       Inline_ref
                         (Ast.Text.Array { mut = true; typ = Packed I8 }) )
                 | Some ty ->
-                    (match (Types.get_subtype ctx.subtyping_info ty).typ with
-                    | Array { typ = Packed I8; _ } -> ()
-                    | Array { typ = Packed I16; _ } ->
-                        let s = Wax_utils.Ast.concat_desc init in
-                        if not (String.is_valid_utf_8 s) then
-                          Error.string_not_unicode ctx.diagnostics
-                            ~location:idx.info
-                    | Array { typ = Value _; _ } ->
-                        Error.string_array_required ctx.diagnostics
-                          ~location:idx.info
-                    | _ ->
-                        Error.expected_array_type ctx.diagnostics
-                          ~location:idx.info idx);
-                    (ty, named_ref_source idx))
+                    check_string_literal ctx ~location:idx.info idx ty init;
+                    (Type ty, named_ref_source idx))
+            | Some _ ->
+                (* [extern]: the only abstract type a string literal can
+                   name. *)
+                check_js_string ctx ~location:field.info init;
+                (Extern, Plain (Ref { nullable = false; typ = Ast.Text.Extern }))
           in
           let typ =
-            { mut = false; typ = Ref { nullable = false; typ = Type ty } }
+            { mut = false; typ = Ref { nullable = false; typ = heaptype } }
           in
           Sequence.register ctx.globals (Some id) (typ, src)
       | _ -> ())
@@ -6239,14 +6374,14 @@ let lint_confusable ctx fields =
         | Table { exports; _ } | Tag { exports; _ } -> List.iter check exports
         | Data { init; _ } -> check_data init
         | String_global { init; _ } -> List.iter check init
-        | Feature_annotation n -> check n
+        | Feature_annotation n | String_imports n -> check n
         | Module_if_annotation { cond; then_fields; else_fields } ->
             check_cond cond;
             walk then_fields.Ast.desc;
             Option.iter
               (fun (f : (_, _) Ast.annotated) -> walk f.Ast.desc)
               else_fields
-        | Types _ | Start _ | Type_alias _ -> ())
+        | Types _ | Start _ | Type_alias _ | String_type _ -> ())
       fields
   in
   walk fields
@@ -6667,7 +6802,9 @@ let check_syntax ctx lst =
               Error.alias_already_defined ctx.diagnostics ~location:id.info
                 ~prev_loc id.desc
           | None -> aliases := (id.desc, id.info) :: !aliases)
-      | Feature_annotation _ | Module_if_annotation _ -> ())
+      | Feature_annotation _ | String_type _ | String_imports _
+      | Module_if_annotation _ ->
+          ())
     lst;
   (* An alias and a type are named in distinct positions ([(@type $t)] and
      [(ref $t)]), but Wax names both in one, so a name may not be both. *)
@@ -6764,6 +6901,8 @@ let validate_configuration ?(warn_unused = true)
       imported_tables = [];
       imported_tags = [];
       warn_unused;
+      string_type = None;
+      string_imports = false;
     }
   in
   check_type_definitions ctx;
@@ -6772,6 +6911,7 @@ let validate_configuration ?(warn_unused = true)
     { ctx with subtyping_info = Types.subtyping_info type_context.types }
   in
   check_syntax ctx fields;
+  string_settings ctx fields;
   tables_and_memories ctx fields;
   globals ctx fields;
   segments ctx fields;
@@ -6850,7 +6990,7 @@ let project select fields =
         [ { f with desc = Data { id; init; mode } } ]
     | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
     | Export _ | Start _ | String_global _ | Feature_annotation _ | Type_alias _
-      ->
+    | String_type _ | String_imports _ ->
         [ f ]
   and sinstrs l = List.concat_map sinstr l
   and sinstr (i : _ Ast.Text.instr) =
@@ -6950,8 +7090,8 @@ let check_import_order diagnostics fields =
          | None, (Import _ | Import_group1 _ | Import_group2 _)
          | ( _,
              ( Types _ | Export _ | Start _ | Elem _ | Data _
-             | Feature_annotation _ | Type_alias _ | Module_if_annotation _ ) )
-           ->
+             | Feature_annotation _ | Type_alias _ | String_type _
+             | String_imports _ | Module_if_annotation _ ) ) ->
              can_import)
        None fields)
 

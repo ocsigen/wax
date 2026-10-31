@@ -444,11 +444,13 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | VecSplat op -> VecSplat op
     | VecShuffle v -> VecShuffle v
     | VecTernOp op -> VecTernOp op
-    | String (idx, s) ->
+    | String (t, s) ->
         let ty =
-          match idx with
+          match t with
           | None -> resolve_string_type ()
-          | Some id -> resolve_idx ctx.types id
+          | Some (Type id | Exact id) -> resolve_idx ctx.types id
+          (* Expanded by [String_literals]. *)
+          | Some _ -> assert false
         in
         string ~wide:(IntSet.mem ty ctx.wide_arrays) i.T.info ty s
     | Char c -> Const (I32 (Int32.of_int (Uchar.to_int c)))
@@ -552,6 +554,17 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
   let fields =
     Ast_utils.expand_type_aliases ~unbound:(fun a -> T.Alias a) fields
   in
+  (* Expand the literals building JavaScript strings, and give the untyped ones
+     the designated type. *)
+  let _, fields =
+    try String_literals.module_ (module_name, fields)
+    with String_literals.Missing_string_imports location ->
+      raise
+        (Unresolved_reference
+           ( location,
+             "This string builds a JavaScript string, but the module does not \
+              declare the import module of its string constants." ))
+  in
 
   (* Pass 1: Build Context *)
   let ctx = empty_context in
@@ -639,7 +652,8 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             ( { ctx with globals = fst (add_name ctx.globals (Some id)) },
               acc_func_types )
         | T.Module_if_annotation _ -> raise (Conditional_in_binary f.Ast.info)
-        | T.Start _ | T.Export _ | T.Feature_annotation _ | T.Type_alias _ ->
+        | T.Start _ | T.Export _ | T.Feature_annotation _ | T.Type_alias _
+        | T.String_type _ | T.String_imports _ ->
             (ctx, acc_func_types))
       (ctx, func_types_by_idx) fields
   in
@@ -963,9 +977,11 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             let ty, wide =
               match typ with
               | None -> (resolve_string_type (), false)
-              | Some idx ->
+              | Some (Type idx | Exact idx) ->
                   let ty = resolve_idx ctx.types idx in
                   (ty, IntSet.mem ty ctx.wide_arrays)
+              (* Expanded by [String_literals]. *)
+              | Some _ -> assert false
             in
             Some
               {

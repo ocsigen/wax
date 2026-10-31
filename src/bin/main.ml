@@ -108,6 +108,17 @@ let desugar_wat ~color ~source ast =
               (Wax_utils.Message.text
                  "This type alias has no definition to expand it to.")
             ();
+          Wax_utils.Diagnostic.abort ()
+      | Wax_wasm.String_literals.Missing_string_imports location ->
+          Wax_utils.Diagnostic.report d ~location ~severity:Error
+            ~message:
+              (Wax_utils.Message.text
+                 "This string builds a JavaScript string, but the module does \
+                  not declare the import module of its string constants.")
+            ~hint:
+              (Wax_utils.Message.text
+                 "Declare it with a (@string_imports \"…\") annotation.")
+            ();
           Wax_utils.Diagnostic.abort ())
 
 (* Rewrite the legacy [try]/[catch] instructions of a text module into

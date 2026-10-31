@@ -270,7 +270,8 @@ let rec map_field_valtypes f (fl : ('info modulefield, _) Ast.annotated) =
             then_fields = fields r.then_fields;
             else_fields = Option.map fields r.else_fields;
           }
-    | Memory _ | Export _ | Start _ | String_global _ | Feature_annotation _ ->
+    | Memory _ | Export _ | Start _ | String_global _ | Feature_annotation _
+    | String_type _ | String_imports _ ->
         fl.desc
   in
   { fl with desc }

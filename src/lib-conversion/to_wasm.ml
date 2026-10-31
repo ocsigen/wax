@@ -2075,13 +2075,20 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
          the [mut i8] default that a bare [(@string "..")] already lowers to, so
          it stays omitted; a concrete inferred type (e.g. an immutable [chars])
          is pinned explicitly. *)
-      let idx = match ty with Some idx -> idx | None -> expr_type_name i in
-      let idx =
-        if idx.desc <> "" && idx.desc.[0] = '<' then None else Some idx
+      let t : Text.heaptype option =
+        match ty with
+        | Some { desc = "extern"; _ } -> Some Extern
+        | Some idx when idx.desc <> "" && idx.desc.[0] = '<' -> None
+        | Some idx -> Some (Type (index idx))
+        | None -> (
+            match (expr_reftype i).typ with
+            | Extern -> Some Extern
+            | Type idx | Exact idx ->
+                if idx.desc <> "" && idx.desc.[0] = '<' then None
+                else Some (Type (index idx))
+            | _ -> assert false)
       in
-      folded loc
-        (String (Option.map index idx, [ { desc = s; info = loc } ]))
-        []
+      folded loc (String (t, [ { desc = s; info = loc } ])) []
   | If_annotation { cond; then_body; else_body } ->
       (* Each branch is converted with its own type table in force: a name
          declared in two branches has a different definition in each (see
@@ -2258,6 +2265,23 @@ let feature_annotations fields =
       | _ -> [])
     fields
 
+(* The string settings of a [#![…]] inner attribute list: [#![string_type = t]]
+   becomes [(@string_type $t)] ([(@string_type extern)] for [extern]), and
+   [#![string_imports = "name"]] becomes [(@string_imports "name")]. *)
+let string_annotations attributes =
+  List.filter_map
+    (fun (a : Wax_lang.Ast.attribute) ->
+      match (a.attr_name, a.attr_value) with
+      | "string_type", Some { desc = Get t; info; _ } ->
+          let t : Text.heaptype =
+            if t.desc = "extern" then Extern else Type (index t)
+          in
+          Some { Ast.desc = Text.String_type t; info }
+      | "string_imports", Some { desc = String (_, n); info; _ } ->
+          Some { Ast.desc = Text.String_imports { desc = n; info }; info }
+      | _ -> None)
+    attributes
+
 let globaltype mut t : Text.globaltype = { mut; typ = valtype t }
 
 (* Smallest memory size (in 64KiB pages) that holds the declared active data
@@ -2374,8 +2398,8 @@ let reorder_defines (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
   match f.desc with
   | Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _ -> true
   | Import _ | Import_group1 _ | Import_group2 _ | Types _ | Export _ | Start _
-  | Elem _ | Data _ | Feature_annotation _ | Type_alias _
-  | Module_if_annotation _ ->
+  | Elem _ | Data _ | Feature_annotation _ | Type_alias _ | String_type _
+  | String_imports _ | Module_if_annotation _ ->
       false
 
 let reorder_is_import (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
@@ -2756,9 +2780,10 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                  sibling field so the run stays contiguous and re-groups back. *)
               let imports = List.map (lower_import module_) decls in
               List.map fst imports @ List.concat_map snd imports
-        (* The module name is lowered separately into the name section; the
-           annotation itself produces no module field. *)
-        | Module_annotation _ -> []
+        (* The module name is lowered separately into the name section, and
+           the features into leading annotations; the string settings become
+           annotations in place, so a conditional one stays conditional. *)
+        | Module_annotation attrs -> string_annotations attrs
         | Memory
             {
               name;
@@ -2918,6 +2943,9 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
               };
             ]
         | _ ->
+            (* Export fields emitted beside a field that cannot carry its
+               exports inline. *)
+            let export_fields = ref [] in
             let desc =
               match field.desc with
               | Type rectype ->
@@ -2929,6 +2957,27 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                        rectype)
               | Type_alias { name; typ } ->
                   Text.Type_alias { id = name; typ = valtype typ }
+              (* A constant holding a bare literal of the module's string type,
+                 which a configuration may designate: a [(@string …)] global,
+                 which takes the type the configuration gives it. *)
+              | Global
+                  {
+                    name;
+                    mut = false;
+                    typ = None;
+                    def =
+                      { desc = String (Some { desc = "<string>"; _ }, s); _ };
+                    attributes;
+                  } ->
+                  export_fields :=
+                    List.map
+                      (fun nm ->
+                        annot field.info
+                          (Text.Export
+                             { name = nm; kind = Global; index = index name }))
+                      (exports ~name attributes);
+                  Text.String_global
+                    { id = name; typ = None; init = [ annot field.info s ] }
               | Global { name; mut; typ; def; attributes } ->
                   let typ =
                     match typ with
@@ -3032,7 +3081,7 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                   start_fields ~loc:field.info ~field_name:name attributes
               | _ -> []
             in
-            (field' :: start) @ guarded)
+            (field' :: !export_fields) @ start @ guarded)
       fields
   in
   let wasm_fields = convert_fields fields in

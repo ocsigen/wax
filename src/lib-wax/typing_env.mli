@@ -149,6 +149,16 @@ type type_context = {
   written : (string, Ast.subtype) Hashtbl.t;
   features : Wax_utils.Feature.set;
   mutable subtyping_info_cache : Wax_wasm.Types.subtyping_info option;
+  mutable string_type : Ast.ident option;
+      (** The type an untyped string literal builds, when the configuration
+          designates one with [#![string_type = t]]; [extern] for a plain
+          JavaScript string. *)
+  mutable string_imports : bool;
+      (** Whether the configuration declares the import module of its JavaScript
+          string constants, [#![string_imports = "…"]]. *)
+  mutable string_type_anywhere : bool;
+      (** Whether some configuration of the module designates a string type: the
+          type a bare literal takes may then differ between them. *)
 }
 (** The module-wide type space and its memoised subtyping info (see the field
     comments in [typing_env.ml]). *)

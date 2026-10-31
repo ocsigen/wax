@@ -712,6 +712,8 @@ let rec token_rec ctx lexbuf =
       Wax_utils.Trivia.report_item ctx Block_comment s.info s.desc;
       token_rec ctx lexbuf
   | "(@string" -> STRING_ANNOT
+  | "(@string_type" -> STRING_TYPE_ANNOT
+  | "(@string_imports" -> STRING_IMPORTS_ANNOT
   | "(@char" -> CHAR_ANNOT
   | "(@if" -> IF_ANNOT
   | "(@then" -> THEN_ANNOT
@@ -736,6 +738,8 @@ let rec token_rec ctx lexbuf =
       let loc_start = Sedlexing.lexing_bytes_position_start lexbuf in
       let s = string lexbuf in
       if s = "string" then STRING_ANNOT
+      else if s = "string_type" then STRING_TYPE_ANNOT
+      else if s = "string_imports" then STRING_IMPORTS_ANNOT
       else if s = "char" then CHAR_ANNOT
       else if s = "if" then IF_ANNOT
       else if s = "then" then THEN_ANNOT
