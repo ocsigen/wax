@@ -966,6 +966,46 @@ A cast that has one target wherever it occurs converts.
       (@else (return (ref.cast (ref any) (local.get $x)))))
   )
 
+A branching cast on a value of a conditional alias, the test of a match among
+them, takes a source type that holds in every configuration: its source type
+cannot be the alias, so it is a common supertype of what the alias stands for.
+
+  $ wax check cast-source.wax
+  $ wax -f wat cast-source.wax
+  (@if $p
+    (@then (@type $n (ref eq)) (@type $s (ref $sub)))
+    (@else (@type $n eqref) (@type $s (ref null $base)))
+  )
+  (type $base (sub (struct (field $a i32))))
+  (type $sub (sub $base (struct (field $a i32) (field $b i32))))
+  (type $leaf
+    (sub final $sub (struct (field $a i32) (field $b i32) (field $c i32)))
+  )
+  (func $m (export "m") (param $v (@type $n)) (result i32)
+    (local $p (ref $base))
+    (block $default
+      (local.set $p
+        (block $arm (result (ref $base))
+          (drop (br_on_cast $arm eqref (ref $base) (local.get $v)))
+          (br $default)))
+      (return (struct.get $base $a (local.get $p))))
+    (return (i32.const 0))
+  )
+  (func $hit (export "hit") (param $v (@type $s)) (result i32)
+    (drop
+      (block $l (result (ref $leaf))
+        (br_on_cast $l (ref null $base) (ref $leaf) (local.get $v))
+        (return (i32.const 0))))
+    (return (i32.const 1))
+  )
+  (func $miss (export "miss") (param $v (@type $s)) (result i32)
+    (drop
+      (block $l (result (ref null $base))
+        (br_on_cast_fail $l (ref null $base) (ref $leaf) (local.get $v))
+        (return (i32.const 1))))
+    (return (i32.const 0))
+  )
+
 A field access on a value whose struct type differs between configurations
 reads the field at the position it has in one of them. The struct types are
 related by subtyping, so that access is valid in every configuration, but it

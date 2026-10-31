@@ -4098,6 +4098,26 @@ let val_lub ctx v1 v2 =
       Ref { nullable; typ = lub }
   | _ -> if v1 = v2 then Some v1 else None
 
+(* The source type [ty1] of a branching cast whose operand [cell] is a value of
+   a conditional alias, in a module lowered as one for every configuration:
+   widened to the lub with the type the alias stands for in each of them, so
+   that the cast holds in all of them. A source type is a [reftype] immediate,
+   with no alias to defer to. [ty1] itself when a definition does not resolve
+   here to a reference of the same hierarchy, as before. *)
+let conditional_cast_source ctx cell ty1 =
+  match Cell.get cell with
+  | Valtype { alias = Some a; _ } -> (
+      match Hashtbl.find_opt ctx.alias_variants a.desc with
+      | Some defs ->
+          Option.value ~default:ty1
+            (List.fold_left
+               (fun acc def ->
+                 let*@ t = acc in
+                 val_lub ctx t (unalias ctx.type_context def))
+               (Some ty1) defs)
+      | None -> ty1)
+  | _ -> ty1
+
 (* The least upper bound of two value type cells, or [None] when they have no
    common type. Mirrors the [Select] (?:) reconciliation: it pins an
    as-yet-unconstrained literal/[null] to the other side and lubs two reference
@@ -5678,7 +5698,7 @@ and type_branch ctx i =
                cast; report it and recover with the cast target. *)
             let ty1 =
               match val_lub ctx (Ref ty) (Ref ty') with
-              | Some t -> t
+              | Some t -> conditional_cast_source ctx typ' t
               | None ->
                   Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
                     typ';
@@ -5755,7 +5775,7 @@ and type_branch ctx i =
                report it and recover with the cast target. *)
             let ty1 =
               match val_lub ctx (Ref ty) (Ref ty') with
-              | Some t -> t
+              | Some t -> conditional_cast_source ctx typ' t
               | None ->
                   Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
                     typ';
@@ -12844,6 +12864,7 @@ let report_configuration_forms diagnostics tbl =
 let type_configuration ?(warn_unused = false) ?(build = true) ?forms
     ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
     ?(member_completions = None) ?(faithful = false)
+    ?(alias_variants = Hashtbl.create 0)
     ?(features = Wax_utils.Feature.default ())
     ?(select =
       fun (_ : location) -> invalid_arg "Typing: unplanned conditional")
@@ -12989,6 +13010,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
       suggest;
       select;
       faithful;
+      alias_variants;
     }
   in
   check_type_definitions ctx;
@@ -14219,6 +14241,26 @@ let dedupe_sinks ~resolve_links ~pun_spans ~member_completions =
       l := List.sort_uniq (fun (a, _) (b, _) -> compare (span a) (span b)) !l)
     member_completions
 
+(* Each alias defined under a conditional annotation, with its definition in
+   every branch, as written (see [Typing_env.alias_variants]). *)
+let conditional_alias_variants fields =
+  let tbl = Hashtbl.create 8 in
+  let rec walk ~under fields =
+    List.iter
+      (fun (field : (_ modulefield, _) annotated) ->
+        match field.desc with
+        | Conditional { then_fields; else_fields; _ } ->
+            walk ~under:true then_fields.desc;
+            Option.iter (fun e -> walk ~under:true e.Annot.desc) else_fields
+        | Type_alias { name; typ } when under ->
+            Hashtbl.replace tbl name.desc
+              (typ :: Option.value ~default:[] (Hashtbl.find_opt tbl name.desc))
+        | _ -> ())
+      fields
+  in
+  walk ~under:false fields;
+  tbl
+
 let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
     ?(suggest = false) ?(lowering = true) ?(resolve_links = None)
     ?(pun_spans = None) ?(member_completions = None) ?(faithful = false)
@@ -14254,14 +14296,21 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
         (Wax_utils.Diagnostic.collector ())
         (plan_shape ~guards:false fields)
     in
+    (* A branching cast on a value of a conditional alias takes a source type
+       that holds in every configuration (see [conditional_cast_source]); not
+       for the editor, which shows each configuration's own. *)
+    let alias_variants =
+      if lowering && not simplify then conditional_alias_variants fields
+      else Hashtbl.create 0
+    in
     let results =
       List.map
         (fun run ->
           ( run,
             type_configuration
               ~select:(Wax_wasm.Cond_plan.select plan run)
-              ~resolve_links ~pun_spans ~member_completions ~faithful ~features
-              ~simplify
+              ~resolve_links ~pun_spans ~member_completions ~faithful
+              ~alias_variants ~features ~simplify
               (Wax_utils.Diagnostic.collector ())
               fields ))
         (Wax_wasm.Cond_plan.runs plan)

@@ -277,6 +277,13 @@ type module_context = {
          but the [From_wasm] scaffolding cast on a [call_ref]/[return_call_ref]
          callee is still dropped when redundant, so it does not re-lower to a
          spurious [ref.cast]. Set only on that path; never with [simplify]. *)
+  alias_variants : (string, valtype list) Hashtbl.t;
+  (* Each alias defined under a conditional annotation, with its definition in
+         every branch, as written. Filled only for the runs that build a module
+         lowered as one for every configuration: a branching cast on a value of
+         such an alias takes a source type that holds in all of them (see
+         [Typing.conditional_cast_source]). Empty otherwise, so a checking run
+         types each configuration on its own. *)
   (* --- Module-wide type and name tables (built once, before any body) --- *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;

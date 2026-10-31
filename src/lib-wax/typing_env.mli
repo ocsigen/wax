@@ -177,6 +177,10 @@ type module_context = {
          pending stack, the other is left for the run that owns it and stitched
          in by [Typing.f_infer]. *)
   faithful : bool;
+  alias_variants : (string, Ast.valtype list) Hashtbl.t;
+      (* Each alias defined under a conditional annotation, with its definition
+         in every branch: for the runs that build a module lowered as one for
+         every configuration, empty otherwise. *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
   functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;

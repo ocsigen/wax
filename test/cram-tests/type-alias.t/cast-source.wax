@@ -1,0 +1,30 @@
+#[if(p)]
+{
+    type n = &eq;
+    type s = &sub;
+}
+#[else]
+{
+    type n = &?eq;
+    type s = &?base;
+}
+type base = open { a: i32 };
+type sub: base = open { a: i32, b: i32 };
+type leaf: sub = { a: i32, b: i32, c: i32 };
+#[export]
+fn m(v: n) -> i32 {
+    match v {
+        p: &base => { return p.a; }
+        _ => { return 0; }
+    }
+}
+#[export]
+fn hit(v: s) -> i32 {
+    _ = 'l: do &leaf { br_on_cast 'l &leaf v; return 0; };
+    return 1;
+}
+#[export]
+fn miss(v: s) -> i32 {
+    _ = 'l: do &?base { br_on_cast_fail 'l &leaf v; return 1; };
+    return 0;
+}

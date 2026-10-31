@@ -19,6 +19,12 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Fixes
 
+- A `match`, `br_on_cast` or `br_on_cast_fail` on a value of a conditional
+  alias now converts without resolving the conditionals when the alias stands
+  for different reference types, for instance `&eq` in one configuration and
+  `&?eq` in another. The cast took its source type from one configuration,
+  so the conversion was rejected wherever that type was too narrow; it now
+  takes a type that holds in all of them.
 - Constructing a struct with a descriptor, `{descriptor(d)| ...}`, now requires
   the descriptor to be an exact reference (`&!t`), as the documentation
   states. A non-exact one was accepted by `wax check`, and the conversion then
