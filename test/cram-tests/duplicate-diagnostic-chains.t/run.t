@@ -140,3 +140,9 @@ distinct:
   multi_value.wax:2:1: error: Argument 1 should have type 'i32' but has type 'f64'.
   multi_value.wax:2:1: error: Argument 0 should have type 'i32' but has type 'f64'.
   [128]
+
+A type test on an unbound type reports it once, not again from its lint:
+
+  $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short test_unbound.wax
+  test_unbound.wax:1:38: error: The type 'nosuch' is not bound.
+  [128]

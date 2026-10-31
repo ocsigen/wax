@@ -7346,9 +7346,11 @@ and type_cast ctx i =
          identical error at the same location. The innermost is the one to fix.
          An operand that is ALREADY poison satisfies the check silently and
          poisons the result too, so the chain stays quiet past its first link. *)
+      (* [None] for an unbound target, reported here once. *)
+      let top = top_heap_type ctx ty.typ in
       let operand_ok =
         match
-          let*@ typ = top_heap_type ctx ty.typ in
+          let*@ typ = top in
           internalize ctx (Ref { nullable = true; typ })
         with
         | Some typ ->
@@ -7363,7 +7365,7 @@ and type_cast ctx i =
       let poisoned =
         (not operand_ok) || match op_natural with Error -> true | _ -> false
       in
-      (if ctx.warn_unused && not ctx.simplify then
+      (if ctx.warn_unused && (not ctx.simplify) && top <> None then
          let>@ target = internalize ctx (Ref ty) in
          lint_ref_cast ~operand_location:(snd i'.info) ctx ~location:i.info
            ~is_test:true op_natural (Cell.get target));

@@ -31,6 +31,7 @@ grammar keeps none, and both are versioned independently of the toolchain.
   of a tail call against the function's, now says which value it is about
   ("Value 1 of this expression has type …"), so two identical mismatches are
   no longer reported as the same line twice.
+- An `is` test against an unbound type reports it once.
 - Converting a module without resolving its conditional annotations now
   reports an operation whose instruction depends on a type that differs
   between configurations, such as `x + x` on a conditional alias that stands
