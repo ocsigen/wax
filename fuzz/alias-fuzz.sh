@@ -42,7 +42,13 @@
 #                    compiles on its own, but the converted module specialized
 #                    to that configuration does not compile, or is not the same
 #                    module (compared by fuzz_canon, up to type identity: a
-#                    duplicated type is the same type, a different one is not).
+#                    duplicated type is the same type, a different one is not);
+#   COMMUTE_REJECT — every configuration compiles on its own, but the module
+#                    does not convert unresolved, and not because a construct
+#                    has no single WebAssembly form (the one rejection that is
+#                    by design): an over-rejection, or a form that differs
+#                    between configurations the typer does not report, caught
+#                    only by validating the lowered module.
 #
 # Plus CRASH for any wax invocation that exits other than ok/rejected. Seeds come
 # from fuzz/corpus-wax/valid (run fuzz/wax-corpus.sh first); a seed that does not
@@ -178,8 +184,31 @@ fuzz_one() {
   fi
 
   # Differing aliases: unresolved conversion must commute with -D.
-  if "$ALIAS" "$seed" "$s" fz_cond differ >"$dir/d.wax" 2>/dev/null \
-     && [ "$(classify_wax -f wat "$dir/d.wax" -o "$dir/d.wat")" = ok ]; then
+  if "$ALIAS" "$seed" "$s" fz_cond differ >"$dir/d.wax" 2>/dev/null; then
+    verdict="$(classify_wax -f wat "$dir/d.wax" -o "$dir/d.wat")"
+    cp "$ERRLOG" "$dir/d.err"
+  else
+    verdict=skipped
+  fi
+  if [ "$verdict" = rejected ]; then
+    local all_compile=true
+    for v in true false; do
+      for v2 in true false; do
+        [ "$(classify_wax -D "fz_cond=$v" -D "fz_cond_2=$v2" -f wasm "$dir/d.wax" -o "$dir/dd.wasm")" = ok ] \
+          || all_compile=false
+      done
+    done
+    if $all_compile \
+       && ! tr -s ' \n' ' ' <"$dir/d.err" | grep -qi "no single WebAssembly form"; then
+      keep "$dir/d.wax"
+      report COMMUTE_REJECT "every configuration compiles, but unresolved: $(grep -m1 -i error "$dir/d.err")" \
+        "$ALIAS $seed $s fz_cond differ | wax -f wat"
+    fi
+  elif [ "$verdict" != ok ] && [ "$verdict" != skipped ]; then
+    keep "$dir/d.wax"
+    report CRASH "$verdict" "$ALIAS $seed $s fz_cond differ | wax -f wat"
+  fi
+  if [ "$verdict" = ok ]; then
     for v in true false; do
       for v2 in true false; do
         local defs=(-D "fz_cond=$v" -D "fz_cond_2=$v2") cfg="fz_cond=$v fz_cond_2=$v2"
