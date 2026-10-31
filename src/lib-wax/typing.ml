@@ -1020,6 +1020,16 @@ module Error = struct
            "and has no single WebAssembly form: the alias stands for different \
             types under a conditional annotation.")
 
+  let configuration_dependent_literal context ~location =
+    report context ~location
+      ~hint:
+        (text
+           "Write it in the branches of a conditional, give it a type of its \
+            own, or resolve the conditionals with -D.")
+      (text
+         "This literal has no single WebAssembly form: it takes different \
+          types under different conditional annotations.")
+
   let configuration_dependent_field context ~location x =
     report context ~location
       ~hint:
@@ -12765,13 +12775,14 @@ let check_attributes diagnostics
 (*** Forms that depend on the configuration ***)
 
 (* What a construct lowers to in each configuration checked, for one whose form
-   may depend on the configuration: a literal or null typed by a conditional
-   alias (its type, printed), a cast to one (its target type), a struct field
+   may depend on the configuration: a literal or null (its type, printed, with
+   the conditional alias it takes, if any), a cast to a conditional alias (its
+   target type), a struct field
    access (the receiver's struct type and the field's position), an operation
    whose instruction its operands' types pick (those types, printed, with the
    conditional alias of one, if any). *)
 type configuration_form =
-  | Literal_form of ident * string list
+  | Literal_form of ident option * string list
   | Cast_form of ident * string list
   | Field_form of ident * (string * int) list
   | Operation_form of ident option * string list
@@ -12798,12 +12809,21 @@ let record_configuration_forms ctx tbl typed_fields =
     Hashtbl.replace tbl key (at, form prev)
   in
   let union v l = if List.mem v l then l else v :: l in
+  (* A literal's type may differ between configurations without an alias to
+     say so: one taken from a declaration written differently in each branch,
+     or from an alias whose provenance was lost on the way. *)
   let typed_by ?at (l : location) cell =
     match Cell.get cell with
-    | Valtype { alias = Some a; typ; _ } when conditional_alias ctx a ->
-        let t = Output.valtype_string typ in
+    | Valtype { alias; typ; _ } ->
+        let a =
+          match alias with
+          | Some a when conditional_alias ctx a -> Some a
+          | _ -> None
+        in
+        let t = Output.valtype_string (unalias ctx.type_context typ) in
         add ?at l (function
-          | Some (Literal_form (_, seen)) -> Literal_form (a, union t seen)
+          | Some (Literal_form (a', seen)) ->
+              Literal_form ((if a' = None then a else a'), union t seen)
           | _ -> Literal_form (a, [ t ]))
     | _ -> ()
   in
@@ -12952,8 +12972,10 @@ let report_configuration_forms diagnostics tbl =
       match form with
       | Operation_form (a, _ :: _ :: _) ->
           Error.configuration_dependent_operation diagnostics ~location a
-      | Literal_form (a, _ :: _ :: _) ->
+      | Literal_form (Some a, _ :: _ :: _) ->
           Error.conditional_alias_literal diagnostics ~location a
+      | Literal_form (None, _ :: _ :: _) ->
+          Error.configuration_dependent_literal diagnostics ~location
       | Cast_form (a, _ :: _ :: _) ->
           Error.conditional_alias_cast diagnostics ~location a
       | Field_form (f, seen)

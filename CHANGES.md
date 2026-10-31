@@ -26,7 +26,10 @@ grammar keeps none, and both are versioned independently of the toolchain.
   WebAssembly form", at the whole operation. It used to fail with a type
   mismatch against a type the code never wrote. This covers the operators,
   compound assignments, numeric conversions, methods such as `x.sqrt()`, and
-  memory stores, with or without an alias.
+  memory stores, with or without an alias. A literal whose type differs
+  between configurations is reported the same way when no alias says so, for
+  instance one passed to a function declared with an `i64` parameter in one
+  branch and an `i32` one in the other.
 
 ### Fixes
 

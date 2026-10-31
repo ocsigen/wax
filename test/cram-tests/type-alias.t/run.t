@@ -1067,8 +1067,8 @@ unresolved reports the operation, rather than a mismatch in the lowered module.
 So does any operation whose instruction its operands' types pick: a method on
 a value, a store, a compound assignment, a conversion. The operands need not
 have an alias: a constant declared with a different type in each branch is
-reported too. Written in the branches of a conditional, the same operation
-converts.
+reported too, as is a literal passed to a function declared that way. Written
+in the branches of a conditional, the same operation converts.
 
   $ wax -f wat op-method.wax
   Error:
@@ -1139,6 +1139,19 @@ converts.
   Hint:
     Write it in the branches of a conditional, or resolve the conditionals with
     -D.
+  [128]
+  $ wax -f wat literal-unaliased.wax
+  Error:
+    This literal has no single WebAssembly form: it takes different types under
+    different conditional annotations.
+   ──➤  literal-unaliased.wax:2:12
+  1 │ #[if(p)] { fn k(x: i64) {} } #[else] { fn k(x: i32) {} }
+  2 │ fn j() { k(5); }
+    ·            ^
+  3 │ 
+  Hint:
+    Write it in the branches of a conditional, give it a type of its own, or
+    resolve the conditionals with -D.
   [128]
   $ wax -f wat op-branches.wax
   (@if $p
