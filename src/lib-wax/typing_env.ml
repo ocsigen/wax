@@ -221,6 +221,16 @@ type type_context = {
          when a type is added (including function types minted while
          type-checking, e.g. an inline [&fn(..)] cast target), so subtyping
          queries always see the current type space. Read via [subtyping_info]. *)
+  mutable string_type : Ast.ident option;
+      (* The type an untyped string literal builds, when the configuration
+         designates one with [#![string_type = t]]; [extern] for a plain
+         JavaScript string. *)
+  mutable string_imports : bool;
+      (* Whether the configuration declares the import module of its
+         JavaScript string constants, [#![string_imports = "…"]]. *)
+  mutable string_type_anywhere : bool;
+      (* Whether some configuration of the module designates a string type:
+         the type a bare literal takes may then differ between them. *)
 }
 
 (* [typ] with an alias use replaced by the value type it stands for, as its

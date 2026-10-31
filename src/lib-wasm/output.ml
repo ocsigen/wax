@@ -228,6 +228,16 @@ let heaptype (ty : heaptype) =
       | Exact t -> list [ type_ "exact"; index t ]
       | _ -> assert false)
 
+(* The type a string literal builds, part of its annotation: [$t], or
+   [extern]. *)
+let string_heaptype (ty : heaptype) =
+  match ty with
+  | Type t -> index ~style:Annotation t
+  | _ -> (
+      match heaptype_keyword ty with
+      | Some kw -> atom ~style:Annotation kw
+      | None -> heaptype ty)
+
 let reftype { nullable; typ } =
   match (nullable, typ) with
   | true, Func -> type_ "funcref"
@@ -1094,7 +1104,7 @@ and instr_unhinted i =
       list ~loc
         (block
            (atom ~style:Annotation "@string"
-           :: option (fun id -> [ index ~style:Annotation id ]) id)
+           :: option (fun t -> [ string_heaptype t ]) id)
         :: List.map
              (fun s ->
                let loc = Some s.Ast.info in
@@ -1432,7 +1442,7 @@ let rec modulefield f =
         (block
            (atom ~style:Annotation "@string"
            :: id ~style:Annotation i.Ast.desc
-           :: option (fun id -> [ index ~style:Annotation id ]) typ)
+           :: option (fun t -> [ string_heaptype t ]) typ)
         :: List.map
              (fun s ->
                let i, s = escape_string s.Ast.desc in
@@ -1449,6 +1459,21 @@ let rec modulefield f =
       list ~loc
         [
           atom ~style:Annotation "@feature";
+          Atom
+            {
+              loc = None;
+              style = Annotation;
+              len = Some (i + 2);
+              s = "\"" ^ s ^ "\"";
+            };
+        ]
+  | String_type idx ->
+      list ~loc [ atom ~style:Annotation "@string_type"; string_heaptype idx ]
+  | String_imports name ->
+      let i, s = escape_string name.Ast.desc in
+      list ~loc
+        [
+          atom ~style:Annotation "@string_imports";
           Atom
             {
               loc = None;

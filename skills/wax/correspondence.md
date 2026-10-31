@@ -215,6 +215,8 @@ an `i16` array holds the UTF-16 code units (so the string must be valid Unicode)
 |------|-----|
 | `i32.const <code point>` | `'c'` |
 | `array.new_fixed $t` (constant elements) | `"..."` or `t # "..."` |
+| `global.get $c` (imported string constant) | `extern # "..."` |
+| `struct.new $t (global.get $c)` (imported string constant) | `t # "..."` |
 
 In WAT both forms are written with annotations (`(@char …)` and `(@string …)`),
 so they round-trip faithfully through WAT. A Wasm binary keeps only the
@@ -224,6 +226,16 @@ elements, decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
 `i16`), form a reasonable string (valid text, no control characters other
 than tab/newline/carriage return); otherwise it stays an
 [array literal](#aggregate-instructions).
+
+A string literal building a
+[JavaScript string](language.md#javascript-strings) (`(@string extern "…")`,
+or a struct type whose single field is an `anyref` or an `externref`) is
+lowered to a `global.get` of an imported string constant,
+`(import "<module>" "<text>" (global (ref extern)))`, wrapped in a
+`struct.new` for a struct (after an `any.convert_extern` for an `anyref`
+field). The imports are synthesised after the module's own ones, one per
+distinct text. A Wasm binary keeps only these instructions and imports, so the
+literal is not recovered.
 
 ## Numeric Instructions
 
@@ -818,6 +830,34 @@ corresponds to the WAT
 A module may carry at most one name, and it must not appear inside a conditional
 (`#[if]`/`#[else]`): the name applies in every configuration. See also
 [Module Name](language.md#module-name) in the language guide.
+
+## String Settings
+
+The `#![string_imports = "…"]` and `#![string_type = t]` inner attributes (see
+[JavaScript Strings](language.md#javascript-strings) in the language guide)
+map to module-level `(@string_imports "…")` and `(@string_type $t)` annotations
+in WAT (`(@string_type extern)` for `extern`), in place: a setting under a
+conditional stays under it.
+
+```wax,check
+#![string_imports = "str"]
+type js = { s: &?extern };
+#[if(js_strings)]
+{
+    #![string_type = js]
+}
+```
+
+corresponds to the WAT
+
+```wat
+(type $js (struct (field $s externref)))
+(@string_imports "str")
+(@if $js_strings (@then (@string_type $js)))
+```
+
+The binary format has no such annotations: they only determine how the string
+literals are lowered.
 
 ## Feature Declarations
 

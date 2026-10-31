@@ -1211,7 +1211,7 @@ Expecting instructions.
 
 parse: LPAREN FUNC STRING_ANNOT WAIT
 
-Expecting ')', a string, or an index.
+Expecting ')', a string, or a type.
 <1>This '(' opens the enclosing construct.
 
 parse: LPAREN FUNC STRUCT_GET NAT MEM_OFFSET
@@ -3121,12 +3121,30 @@ Expecting ')' or a string.
 
 parse_script: STRING_ANNOT ID WAIT
 
-Expecting ')', a string, or an index.
+Expecting ')', a string, or a type.
 <2>This '(' opens the enclosing construct.
 
 parse_script: STRING_ANNOT WAIT
 
 Expecting an identifier ('$...').
+
+parse_script: STRING_IMPORTS_ANNOT STRING WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: STRING_IMPORTS_ANNOT WAIT
+
+Expecting a string.
+
+parse_script: STRING_TYPE_ANNOT NAT NAT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: STRING_TYPE_ANNOT WAIT
+
+Expecting a type.
 
 parse_script: TYPE_ANNOT ID ANYREF WAIT
 

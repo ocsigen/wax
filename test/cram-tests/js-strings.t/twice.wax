@@ -1,0 +1,2 @@
+#![string_imports = "str"]
+#![string_imports = "str2"]

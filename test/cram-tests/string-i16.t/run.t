@@ -58,7 +58,9 @@ Only `i8` and `i16` arrays are allowed, and an `i16` string must be valid
 Unicode:
 
   $ wax bad-type.wax -f wat
-  Error: A string literal can only build an [i8] or [i16] array.
+  Error:
+    A string literal can only build an [i8] or [i16] array, or a struct whose
+    single field is an [anyref] or an [externref] (a JavaScript string).
    ──➤  bad-type.wax:2:16
   1 │ type w = [mut i32];
   2 │ fn f() -> &w { w # "hi"; }

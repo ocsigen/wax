@@ -1512,6 +1512,57 @@ elements, decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
 than tab, newline, and carriage return. Anything else (arbitrary binary data)
 decompiles as an ordinary [array literal](#arrays) instead.
 
+### JavaScript Strings
+
+A string literal can also build a JavaScript string, imported as a string
+constant (the `importedStringConstants` option of the
+[JS String Builtins](https://github.com/WebAssembly/js-string-builtins)): a
+plain one, of type `&extern`, or one wrapped in a struct whose single field is
+an `anyref` or an `externref`. The text must be valid Unicode; it is the
+import name, in UTF-8. The module states the import module of its string
+constants with a `#![string_imports = "…"]` inner attribute; the embedder
+passes the same name as `importedStringConstants`:
+
+```wax,check
+#![string_imports = "str"]
+
+type js = { s: &?extern };
+
+fn plain() -> &extern {
+    extern # "hello";          // a JavaScript string
+}
+
+fn wrapped() -> &js {
+    js # "hello";              // a JavaScript string wrapped in a [js]
+}
+```
+
+Each distinct text is imported once, as an immutable `&extern` global; an
+`anyref` field holds the string internalized with `any.convert_extern`.
+
+The type a string literal builds when neither a prefix nor its context selects
+one — by default `[mut i8]` — can be set with a `#![string_type = t]` inner
+attribute, naming an `i8` or `i16` array type, a struct type holding a
+JavaScript string, or `extern`. Under a
+[conditional](#conditional-compilation), it can differ between configurations:
+here a bare string is a byte array, or a JavaScript string when `js_strings`
+holds.
+
+```wax,check
+#![string_imports = "str"]
+
+type js = { s: &?extern };
+
+#[if(js_strings)]
+{
+    #![string_type = js]
+}
+
+const greeting = "hello";
+```
+
+A module declares each of these at most once per configuration.
+
 ## SIMD (v128)
 
 The 128-bit vector type is `v128`. Its operations are written as method

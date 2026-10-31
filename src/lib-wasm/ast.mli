@@ -725,7 +725,7 @@ end) : sig
     | AnyConvertExtern
     | Folded of 'info instr * 'info instr list
     (* Our extensions *)
-    | String of X.idx option * (string, location) annotated list
+    | String of X.heaptype option * (string, location) annotated list
     | Char of Uchar.t
     | If_annotation of {
         cond : cond;
@@ -878,7 +878,7 @@ module Text : sig
       }
     | Data of { id : name option; init : dataval; mode : 'info datamode }
     (* Our extensions *)
-    | String_global of { id : name; typ : idx option; init : datastring }
+    | String_global of { id : name; typ : heaptype option; init : datastring }
     (* A module-level [(@feature "name")] annotation: the module declares it
        uses the named optional proposal (the Wax [#![feature = "…"]] inner
        attribute). *)
@@ -887,6 +887,14 @@ module Text : sig
        value type [t] wherever one is expected. It defines no type index; the
        binary encoder expands every use. *)
     | Type_alias of { id : name; typ : valtype }
+    (* A module-level [(@string_type $t)] annotation: an untyped string literal
+       of the module builds a [$t] — or a plain JavaScript string, for
+       [(@string_type extern)] (the Wax [#[string]] attribute). *)
+    | String_type of heaptype
+    (* A module-level [(@string_imports "name")] annotation: the import module
+       of the JavaScript string constants a JS-string literal is lowered to (the
+       Wax [#![string_imports = "…"]] inner attribute). *)
+    | String_imports of name
     | Module_if_annotation of {
         cond : cond;
         then_fields :

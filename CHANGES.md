@@ -10,6 +10,14 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Language
 
+- A string literal can build a JavaScript string, imported as a string
+  constant of the JS String Builtins: `extern # "…"` (`(@string extern "…")`
+  in WAT), or a literal of a struct type whose single field is an `anyref` or
+  an `externref`. The module names the import module with
+  `#![string_imports = "…"]` (`(@string_imports "…")`), and
+  `#![string_type = t]` (`(@string_type $t)`) sets the type a bare literal
+  builds, possibly differently in each configuration, so one source can
+  represent strings as byte arrays or as JavaScript strings.
 - A block, `if`, `loop` or `try` whose result type is left unwritten and that
   never completes, its value going to an enclosing label instead, now takes
   the type of the block it ends, wherever that block is: for instance

@@ -188,9 +188,9 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', a module field, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
-    1x Expecting ')', a string, or an identifier ('$...').
+    2x Expecting ')', a string, or a type.
        <_>This '(' opens the enclosing construct.
-    2x Expecting ')', a string, or an index.
+    1x Expecting ')', a string, or an identifier ('$...').
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', a type use, an identifier ('$...'), an inline export, or an inline import.
        <_>This '(' opens the enclosing construct.
@@ -200,7 +200,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', an element list, or an index.
        <_>This '(' opens the enclosing construct.
-  114x Expecting ')'.
+  116x Expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'always_opt', 'freq', or 'never_opt'.
     1x Expecting 'and', 'not', 'or', a comparison operator, or an integer.
@@ -297,7 +297,7 @@
     1x Expecting a script instance.
     1x Expecting a storage type.
     3x Expecting a string or an identifier ('$...').
-   16x Expecting a string.
+   17x Expecting a string.
     1x Expecting a subtype or an identifier ('$...').
     1x Expecting a subtype.
     1x Expecting a table type or an identifier ('$...').
@@ -305,6 +305,7 @@
     2x Expecting a then-branch.
     2x Expecting a type use or an index.
     2x Expecting a type use.
+    1x Expecting a type.
     1x Expecting a v128 shape: 'i8x16', 'i16x8', 'i32x4', 'i64x2', 'f32x4', or 'f64x2'.
     4x Expecting a value type.
     1x Expecting a vector shape and its lanes.

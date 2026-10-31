@@ -1,0 +1,4 @@
+#[export]
+fn f() -> &extern {
+    extern#"no import module";
+}
