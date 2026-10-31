@@ -2120,6 +2120,11 @@ type module_context = {
   (* Whether the extra "unused" analyses run (tied to [-v]/[check], like
      [unused-local]); consulted by lints emitted during stack validation. *)
   warn_unused : bool;
+  (* The spans of the module's conditional annotations, before it was projected
+     onto this configuration: a lint reports at the conditional a spliced
+     instruction came from where that holds in every configuration (see
+     [lint_body]'s dead code). Empty for a module without any. *)
+  cond_spans : Ast.location list;
 }
 
 module IntSet = Set.Make (Int)
@@ -5874,17 +5879,37 @@ let lint_body ctx instrs =
   let rec drop_n n l =
     if n <= 0 then l else match l with [] -> [] | _ :: t -> drop_n (n - 1) t
   in
+  (* The statement of the module as written that holds the instruction at [l]
+     but not the one at [other]: the outermost conditional annotation holding
+     [l] alone, or [l] itself. A configuration's body has its conditionals
+     spliced in, so its instructions sit at a different place in each; the
+     statement they come from is the same in all of them, as a lint reported
+     once for every configuration needs (see [Cond_explore.report]), and is
+     what the Wax typer, which keeps the conditional, reports. *)
+  let statement ~other (l : Ast.location) =
+    let contains (s : Ast.location) (x : Ast.location) =
+      s.loc_start.pos_cnum <= x.loc_start.pos_cnum
+      && x.loc_end.pos_cnum <= s.loc_end.pos_cnum
+    in
+    List.fold_left
+      (fun (best : Ast.location) s ->
+        if contains s l && (not (contains s other)) && contains s best then s
+        else best)
+      l ctx.modul.cond_spans
+  in
   let rec walk instrs =
     (* Dead code: after the first unconditional divergence, the next statement
        (if any) can never be reached. Reported once, at that statement. *)
     let rec dead = function
       | a :: (b :: _ as rest) ->
           if is_diverging a then
-            Error.dead_code diagnostics ~location:b.info
+            Error.dead_code diagnostics
+              ~location:(statement ~other:a.info b.info)
               ~related:
                 [
                   {
-                    Wax_utils.Diagnostic.location = a.info;
+                    Wax_utils.Diagnostic.location =
+                      statement ~other:b.info a.info;
                     message =
                       Wax_utils.Message.text "Control never returns from here.";
                   };
@@ -6690,7 +6715,8 @@ let check_syntax ctx lst =
   | _ -> ()
 
 let validate_configuration ?(warn_unused = true)
-    ?(features = Wax_utils.Feature.default ()) diagnostics (_, fields) =
+    ?(features = Wax_utils.Feature.default ()) ?(cond_spans = []) diagnostics
+    (_, fields) =
   let type_context =
     {
       types = Types.create ();
@@ -6764,6 +6790,7 @@ let validate_configuration ?(warn_unused = true)
       imported_tables = [];
       imported_tags = [];
       warn_unused;
+      cond_spans;
     }
   in
   check_type_definitions ctx;
@@ -6995,6 +7022,13 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
   | [] -> validate_configuration ~warn_unused ~features diagnostics modul
   | shape ->
       let plan = Cond_plan.make ~exhaustive:true diagnostics shape in
+      let rec spans (item : Cond_plan.item) =
+        match item with
+        | Cond { key; then_; else_; _ } ->
+            key :: List.concat_map spans (then_ @ Option.value ~default:[] else_)
+        | Body { items; _ } -> List.concat_map spans items
+      in
+      let cond_spans = List.concat_map spans shape in
       if warn_unused then
         List.iter
           (fun (location, side) ->
@@ -7010,7 +7044,7 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
                configuration's multi-result tuple. *)
             let cctx = Wax_utils.Diagnostic.collector ~parent:diagnostics () in
             sink_config := run;
-            validate_configuration ~warn_unused ~features cctx
+            validate_configuration ~warn_unused ~features ~cond_spans cctx
               (name, project (Cond_plan.select plan run) fields);
             (Wax_utils.Diagnostic.collected cctx, Cond_plan.assumption plan run))
           (Cond_plan.runs plan)

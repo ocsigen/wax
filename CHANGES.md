@@ -17,6 +17,14 @@ grammar keeps none, and both are versioned independently of the toolchain.
   binding's initializer or a function's value. It was accepted only as an
   operand of `resume`, `suspend` or `cont.bind`.
 
+### Warnings
+
+- `dead-code` now reports, for WebAssembly text, code made unreachable in
+  every configuration when that code is a conditional annotation, or follows
+  one: `(@if $p (@then (return …)) (@else (return …)))` followed by another
+  `(@if …)`, say. It was reported for the same code in Wax but not in its WAT
+  form, as each configuration saw a different first unreachable instruction.
+
 ### Diagnostics
 
 - Converting a module without resolving its conditional annotations now

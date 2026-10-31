@@ -1,0 +1,10 @@
+#[export]
+fn after_return() -> i32 {
+    return 1;
+    #[if(p)] { return 2; } #[else] { return 3; }
+}
+#[export]
+fn after_conditional() -> i32 {
+    #[if(p)] { return 1; } #[else] { return 2; }
+    #[if(p)] { return 3; } #[else] { return 4; }
+}
