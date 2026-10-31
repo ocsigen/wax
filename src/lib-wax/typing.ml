@@ -1032,6 +1032,26 @@ module Error = struct
             under different conditional annotations, so this access has no \
             single WebAssembly form.")
 
+  let configuration_dependent_operation context ~location alias =
+    let hint =
+      text
+        "Write it in the branches of a conditional, or resolve the \
+         conditionals with -D."
+    in
+    match alias with
+    | Some x ->
+        report context ~location ~hint
+          (text "This operation is on a value of the type alias"
+          ++ name x
+          ++ text
+               "and has no single WebAssembly form: the alias stands for \
+                different types under a conditional annotation.")
+    | None ->
+        report context ~location ~hint
+          (text
+             "This operation has no single WebAssembly form: its operands have \
+              different types under different conditional annotations.")
+
   let invalid_cast context ~location ty' =
     report context ~location
       (text "This value of type" ++ typ ty'
@@ -12747,11 +12767,14 @@ let check_attributes diagnostics
 (* What a construct lowers to in each configuration checked, for one whose form
    may depend on the configuration: a literal or null typed by a conditional
    alias (its type, printed), a cast to one (its target type), a struct field
-   access (the receiver's struct type and the field's position). *)
+   access (the receiver's struct type and the field's position), an operation
+   whose instruction its operands' types pick (those types, printed, with the
+   conditional alias of one, if any). *)
 type configuration_form =
   | Literal_form of ident * string list
   | Cast_form of ident * string list
   | Field_form of ident * (string * int) list
+  | Operation_form of ident option * string list
 
 (* Record in [tbl], by span, the form each such construct of [typed_fields]
    takes in this configuration. A module lowered as one for every
@@ -12812,6 +12835,38 @@ let record_configuration_forms ctx tbl typed_fields =
         | _ -> ())
     | _ -> ()
   in
+  (* An operand's type as the lowering sees it: a number's type, or just
+     [ref], as no instruction picked by an operand's type tells references
+     apart. [None] when it has none (unreachable code). *)
+  let operand_key (e : _ instr) =
+    match fst e.info with
+    | [| cell |] -> (
+        match Cell.get cell with
+        | Valtype { typ; _ } -> (
+            match unalias ctx.type_context typ with
+            | Ref _ -> Some "ref"
+            | t -> Some (Output.valtype_string t))
+        | _ -> None)
+    | _ -> None
+  in
+  let operand_alias (e : _ instr) =
+    match fst e.info with
+    | [| cell |] -> (
+        match Cell.get cell with
+        | Valtype { alias = Some a; _ } when conditional_alias ctx a -> Some a
+        | _ -> None)
+    | _ -> None
+  in
+  let operation (l : location) operands =
+    let keys = List.map operand_key operands in
+    if operands <> [] && List.for_all Option.is_some keys then
+      let shape = String.concat " " (List.map Option.get keys) in
+      let a = List.find_map operand_alias operands in
+      add l (function
+        | Some (Operation_form (a', seen)) ->
+            Operation_form ((if a' = None then a else a'), union shape seen)
+        | _ -> Operation_form (a, [ shape ]))
+  in
   Ast_utils.iter_module_instr
     (fun (i : _ instr) ->
       let l = snd i.info in
@@ -12832,6 +12887,30 @@ let record_configuration_forms ctx tbl typed_fields =
                 | _ -> Cast_form (a, [ t ]))
           | _ -> ())
       | StructGet (recv, f), _ | StructSet (recv, f, _), _ -> field l recv f
+      (* The operations whose instruction the lowering picks from an operand's
+         type (see [To_wasm]): the operators, a compound assignment, a cast
+         from a number, a method on a value ([x.clz()], [x.min(y)]: its
+         receiver), and a memory store or atomic access (its values, not the
+         address). *)
+      | BinOp (_, a, b), _ -> operation l [ a; b ]
+      | UnOp (_, a), _ | Set (_, Some _, a), _ -> operation l [ a ]
+      | Cast (a, (Valtype _ | Signedtype _)), _ -> operation l [ a ]
+      | Call ({ desc = StructGet (recv, meth); _ }, args), _ -> (
+          match fst recv.info with
+          | [| _ |] -> operation l [ recv ]
+          | _ -> (
+              if
+                String.starts_with ~prefix:"store" meth.desc
+                || Wax_wasm.Atomics.of_method_name meth.desc <> None
+              then
+                match
+                  List.filter
+                    (fun (a : _ instr) ->
+                      match a.desc with Labelled _ -> false | _ -> true)
+                    args
+                with
+                | _address :: values -> operation l values
+                | [] -> ()))
       | _ -> ())
     typed_fields
 
@@ -12842,11 +12921,37 @@ let record_configuration_forms ctx tbl typed_fields =
    related by subtyping, or validating the lowered module reports it), and a
    type redefined per configuration is named, so its field resolves in each. *)
 let report_configuration_forms diagnostics tbl =
-  Hashtbl.fold (fun _ e l -> e :: l) tbl []
-  |> List.sort (fun ((l : location), _) ((l' : location), _) ->
-      compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
+  let forms =
+    Hashtbl.fold (fun _ e l -> e :: l) tbl []
+    |> List.sort (fun ((l : location), _) ((l' : location), _) ->
+        compare l.loc_start.pos_cnum l'.loc_start.pos_cnum)
+  in
+  (* An operation reported covers what it contains: the operations it is
+     made of, and a literal that takes its type from the operands. *)
+  let operations =
+    List.filter_map
+      (fun ((l : location), form) ->
+        match form with
+        | Operation_form (_, _ :: _ :: _) ->
+            Some (l.loc_start.pos_cnum, l.loc_end.pos_cnum)
+        | _ -> None)
+      forms
+  in
+  let covered (l : location) =
+    let a = l.loc_start.pos_cnum and b = l.loc_end.pos_cnum in
+    List.exists
+      (fun (a', b') -> a' <= a && b <= b' && (a', b') <> (a, b))
+      operations
+  in
+  forms
+  |> List.filter (fun ((l : location), form) ->
+      match form with
+      | Operation_form _ | Literal_form _ -> not (covered l)
+      | Cast_form _ | Field_form _ -> true)
   |> List.iter (fun ((location : location), form) ->
       match form with
+      | Operation_form (a, _ :: _ :: _) ->
+          Error.configuration_dependent_operation diagnostics ~location a
       | Literal_form (a, _ :: _ :: _) ->
           Error.conditional_alias_literal diagnostics ~location a
       | Cast_form (a, _ :: _ :: _) ->
@@ -12857,7 +12962,7 @@ let report_configuration_forms diagnostics tbl =
                  List.exists (fun (t', k') -> t <> t' && k <> k') seen)
                seen ->
           Error.configuration_dependent_field diagnostics ~location f
-      | Literal_form _ | Cast_form _ | Field_form _ -> ())
+      | Literal_form _ | Cast_form _ | Field_form _ | Operation_form _ -> ())
 
 (*** Type-checking a configuration ***)
 

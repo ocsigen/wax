@@ -1,0 +1,2 @@
+#[if(p)] { const g: i64 = 0; } #[else] { const g: i32 = 0; }
+fn f() { _ = g + g; }

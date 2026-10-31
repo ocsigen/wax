@@ -1,0 +1,2 @@
+#[if(p)] { type n = i64; type f = f64; } #[else] { type n = i32; type f = f32; }
+fn g(x: f) -> f { return x.sqrt(); }

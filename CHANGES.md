@@ -17,6 +17,17 @@ grammar keeps none, and both are versioned independently of the toolchain.
   binding's initializer or a function's value. It was accepted only as an
   operand of `resume`, `suspend` or `cont.bind`.
 
+### Diagnostics
+
+- Converting a module without resolving its conditional annotations now
+  reports an operation whose instruction depends on a type that differs
+  between configurations, such as `x + x` on a conditional alias that stands
+  for `i64` in one and `i32` in another: "This operation … has no single
+  WebAssembly form", at the whole operation. It used to fail with a type
+  mismatch against a type the code never wrote. This covers the operators,
+  compound assignments, numeric conversions, methods such as `x.sqrt()`, and
+  memory stores, with or without an alias.
+
 ### Fixes
 
 - A `match`, `br_on_cast` or `br_on_cast_fail` on a value of a conditional

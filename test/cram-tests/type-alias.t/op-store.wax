@@ -1,0 +1,3 @@
+#[if(p)] { type n = i64; type f = f64; } #[else] { type n = i32; type f = f32; }
+memory m: i32 [1];
+fn g(x: n) { m.store32(0, x); }

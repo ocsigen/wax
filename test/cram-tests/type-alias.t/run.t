@@ -1037,25 +1037,116 @@ reads the wrong field where the field moved (see also cond-field-position.t).
   )
 
 Code whose lowering depends on the type an alias stands for, such as an
-arithmetic operation, only lowers in a resolved configuration.
+arithmetic operation, only lowers in a resolved configuration. Converting it
+unresolved reports the operation, rather than a mismatch in the lowered module.
 
   $ wax check shared.wax
   $ wax -f wat shared.wax
   Error:
-    Type mismatch: this produces a value of type '(@type $nativeint)', but type
-    'i64' is expected.
+    This operation is on a value of the type alias 'nativeint' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
    ──➤  shared.wax:4:12
   2 │ #[export = "double"]
   3 │ fn double(x: nativeint) -> nativeint {
   4 │     return x + x;
-    ·            ^
+    ·            ^^^^^
   5 │ }
   6 │ 
-  Hint: reachable when not $portable_int
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
   [128]
   $ wax -D portable_int=false -f wat shared.wax
   (@type $nativeint i32)
   (func $double (export "double")
     (param $x (@type $nativeint)) (result (@type $nativeint))
     (return (i32.add (local.get $x) (local.get $x)))
+  )
+
+So does any operation whose instruction its operands' types pick: a method on
+a value, a store, a compound assignment, a conversion. The operands need not
+have an alias: a constant declared with a different type in each branch is
+reported too. Written in the branches of a conditional, the same operation
+converts.
+
+  $ wax -f wat op-method.wax
+  Error:
+    This operation is on a value of the type alias 'f' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+   ──➤  op-method.wax:2:26
+  1 │ #[if(p)] { type n = i64; type f = f64; } #[else] { type n = i32; type f = f32; }
+  2 │ fn g(x: f) -> f { return x.sqrt(); }
+    ·                          ^^^^^^^^
+  3 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat op-store.wax
+  Error:
+    This operation is on a value of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+   ──➤  op-store.wax:3:14
+  1 │ #[if(p)] { type n = i64; type f = f64; } #[else] { type n = i32; type f = f32; }
+  2 │ memory m: i32 [1];
+  3 │ fn g(x: n) { m.store32(0, x); }
+    ·              ^^^^^^^^^^^^^^^
+  4 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat op-compound.wax
+  Error:
+    This operation is on a value of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+   ──➤  op-compound.wax:2:33
+  1 │ #[if(p)] { type n = i64; type f = f64; } #[else] { type n = i32; type f = f32; }
+  2 │ fn g(x: n) -> n { let y: n = x; y += x; return y; }
+    ·                                 ^^^^^^
+  3 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat op-convert.wax
+  Error:
+    This operation is on a value of the type alias 'n' and has no single
+    WebAssembly form: the alias stands for different types under a conditional
+    annotation.
+   ──➤  op-convert.wax:2:28
+  1 │ #[if(p)] { type n = i64; type f = f64; } #[else] { type n = i32; type f = f32; }
+  2 │ fn g(x: n) -> f64 { return x as f64_s; }
+    ·                            ^^^^^^^^^^
+  3 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat op-unaliased.wax
+  Error:
+    This operation has no single WebAssembly form: its operands have different
+    types under different conditional annotations.
+   ──➤  op-unaliased.wax:2:14
+  1 │ #[if(p)] { const g: i64 = 0; } #[else] { const g: i32 = 0; }
+  2 │ fn f() { _ = g + g; }
+    ·              ^^^^^
+  3 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat op-branches.wax
+  (@if $p
+    (@then (@type $n i64) (@type $f f64))
+    (@else (@type $n i32) (@type $f f32))
+  )
+  (func $g (param $x (@type $n)) (result (@type $n))
+    (@if $p
+      (@then (return (i64.add (local.get $x) (local.get $x))))
+      (@else (return (i32.add (local.get $x) (local.get $x)))))
   )
