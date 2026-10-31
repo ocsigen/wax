@@ -72,14 +72,17 @@ cp "$CANON" "$RESULTS/.fuzz_canon" && CANON="$RESULTS/.fuzz_canon"
 mapfile -t SEED_FILES < <(find "$SEEDS" -name '*.wax' | sort)
 NSEEDS=${#SEED_FILES[@]}
 
-# Whether two binaries are the same module: byte-identical, or equal up to two
+# Whether two binaries are the same module: byte-identical, or equal up to three
 # differences that do not change what the module does. A select of a
 # conditional alias's type is a typed select (the alias may be a reference in
-# another configuration), where the seed's numeric one is untyped; and the
+# another configuration), where the seed's numeric one is untyped; the
 # declarative element segment a module with conditionals gets once they are
 # resolved may list its functions differently (one already declared by an
-# export, say), aliases or not.
-NORM='s/select (result \(i32\|i64\|f32\|f64\|v128\))/select/g; /^ *(elem declare /d'
+# export, say), aliases or not; and the source type of a br_on_cast(_fail),
+# which a module lowered as one for every configuration takes from one of them
+# where -D takes the configuration's own (an immediate is a reftype, which has
+# no alias to defer to): the cast tests the target type only.
+NORM='s/select (result \(i32\|i64\|f32\|f64\|v128\))/select/g; /^ *(elem declare /d; s/\(br_on_cast\(_fail\)\? [^ ]*\) \(([^()]*\(([^()]*)[^()]*\)*)\|[a-z0-9]*ref\) /\1 /g'
 same_module() {
   cmp -s "$1" "$2" && return 0
   diff -q <("$WAX" -f wat "$1" 2>&1 | sed "$NORM") \
