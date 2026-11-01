@@ -24,3 +24,11 @@ val module_ : Ast.location Ast.Text.module_ -> Ast.location Ast.Text.module_
     returned unchanged, for the caller to report the conditional. Raises
     {!Missing_string_imports} on a JavaScript-string literal in a module without
     a [(@string_imports …)] annotation. *)
+
+val untyped_literal : Ast.location Ast.Text.module_ -> Ast.location option
+(** The location of the first untyped string literal ([(@string "…")], or a
+    [(@string $id "…")] global) of a module that does not designate a string
+    type with [(@string_type …)]: such a literal builds a byte array. [None]
+    when the module designates a string type, or has no untyped literal. Meant
+    for a build in which string literals must not silently fall back to byte
+    arrays, e.g. one where strings are JavaScript strings. *)

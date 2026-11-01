@@ -57,6 +57,7 @@ val wat_to_binary :
   ?validate:bool ->
   ?warn_unused:bool ->
   ?try_table:bool ->
+  ?require_string_type:bool ->
   filename:string ->
   string ->
   binary_module
@@ -80,7 +81,14 @@ val wat_to_binary :
 
     When [try_table] is set (default [false]), the legacy exception-handling
     instructions are rewritten into the standard [try_table] (see
-    {!Wax_wasm.Legacy_eh}). *)
+    {!Wax_wasm.Legacy_eh}).
+
+    When [require_string_type] is set (default [false]), a module with an
+    untyped string literal must designate its string type ([(@string_type $t)] /
+    [#![string_type = t]]); otherwise the literal is reported as an error rather
+    than building a byte array. Set it when strings are expected to be of
+    another type than the default byte array (for instance JavaScript strings),
+    so that a module missing the declaration is caught. *)
 
 val wax_to_binary :
   ?color:Wax_utils.Colors.flag ->
@@ -88,6 +96,7 @@ val wax_to_binary :
   ?validate:bool ->
   ?warn_unused:bool ->
   ?try_table:bool ->
+  ?require_string_type:bool ->
   filename:string ->
   string ->
   binary_module

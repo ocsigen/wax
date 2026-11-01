@@ -67,10 +67,33 @@ let lower_legacy_eh ~try_table ~color ~source ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme ~source
       (fun d -> Wax_wasm.Legacy_eh.module_ d ast)
 
+(* With [require_string_type], refuse a module whose string literals would
+   silently build byte arrays because it designates no string type (see
+   {!Wax_wasm.String_literals.untyped_literal}). [declaration] is how the source
+   language declares the string type. *)
+let check_string_type ~require_string_type ~color ~palette ~source ~declaration
+    ast =
+  if require_string_type then
+    match Wax_wasm.String_literals.untyped_literal ast with
+    | None -> ()
+    | Some location ->
+        Wax_utils.Diagnostic.run ~color ~palette ~source (fun d ->
+            Wax_utils.Diagnostic.report d ~location ~severity:Error
+              ~message:
+                (Wax_utils.Message.text
+                   "This string literal has no type, and the module does not \
+                    designate a string type: it would build a byte array.")
+              ~hint:
+                (Wax_utils.Message.text
+                   ("Designate the string type with " ^ declaration
+                  ^ ", or give the literal an explicit type."))
+              ();
+            Wax_utils.Diagnostic.abort ())
+
 let wat_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(name_functions = false)
-    ?(validate = false) ?(warn_unused = validate) ?(try_table = false) ~filename
-    text =
+    ?(validate = false) ?(warn_unused = validate) ?(try_table = false)
+    ?(require_string_type = false) ~filename text =
   let ast, _ctx = Wat_parser.parse_from_string ~color ~filename text in
   let ast =
     if Wax_wasm.Cond_specialize.is_empty defines then ast
@@ -86,6 +109,9 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
      emitted binary passes strict reference validation (as [wat_to_wasm] does in
      the CLI). *)
   let ast = Wax_wasm.Declare_refs.module_ ast in
+  check_string_type ~require_string_type ~color
+    ~palette:Wax_utils.Colors.wat_theme ~source:(Some text)
+    ~declaration:"(@string_type $t)" ast;
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d -> Wax_wasm.Validation.f ~warn_unused d ast);
@@ -94,7 +120,8 @@ let wat_to_binary ?(color = Wax_utils.Colors.Never)
 
 let wax_to_binary ?(color = Wax_utils.Colors.Never)
     ?(defines = Wax_wasm.Cond_specialize.of_list []) ?(validate = false)
-    ?(warn_unused = validate) ?(try_table = false) ~filename text =
+    ?(warn_unused = validate) ?(try_table = false)
+    ?(require_string_type = false) ~filename text =
   let ast, _ctx = Wax_parser.parse_from_string ~color ~filename text in
   let ast =
     if Wax_wasm.Cond_specialize.is_empty defines then ast
@@ -111,6 +138,9 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d -> To_wasm.module_ d types ast)
   in
+  check_string_type ~require_string_type ~color
+    ~palette:Wax_utils.Colors.wax_theme ~source:(Some text)
+    ~declaration:"#![string_type = t]" wasm_ast;
   if validate then
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->

@@ -25,6 +25,13 @@ grammar keeps none, and both are versioned independently of the toolchain.
   binding's initializer or a function's value. It was accepted only as an
   operand of `resume`, `suspend` or `cont.bind`.
 
+### Embedding API
+
+- `Wax.wat_to_binary` and `Wax.wax_to_binary` take a `require_string_type`
+  option, which rejects an untyped string literal in a module designating no
+  string type (instead of building a byte array), so that a build representing
+  strings as JavaScript strings catches a module missing the declaration.
+
 ### Warnings
 
 - `dead-code` now reports, for WebAssembly text, code made unreachable in

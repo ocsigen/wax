@@ -1,0 +1,10 @@
+type string = { s: &?extern };
+#![string_imports = "str"]
+#[if(js_strings)]
+{
+    #![string_type = string]
+}
+#[export]
+fn message() -> &eq {
+    "world"
+}

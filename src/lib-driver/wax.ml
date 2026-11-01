@@ -12,12 +12,13 @@ module Define = struct
 end
 
 let wat_to_binary ?defines ?name_functions ?validate ?warn_unused ?try_table
-    ~filename text =
+    ?require_string_type ~filename text =
   Wax_conversion.Driver.wat_to_binary ?defines ?name_functions ?validate
-    ?warn_unused ?try_table ~filename text
+    ?warn_unused ?try_table ?require_string_type ~filename text
 
-let wax_to_binary ?defines ?validate ?warn_unused ?try_table ~filename text =
+let wax_to_binary ?defines ?validate ?warn_unused ?try_table
+    ?require_string_type ~filename text =
   Wax_conversion.Driver.wax_to_binary ?defines ?validate ?warn_unused ?try_table
-    ~filename text
+    ?require_string_type ~filename text
 
 let output_binary = Wax_conversion.Driver.output_binary

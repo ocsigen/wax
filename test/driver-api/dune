@@ -1,0 +1,10 @@
+; Tests of the embedding API (src/lib-driver), through a small program that
+; assembles a module with it.
+
+(executable
+ (name assemble)
+ (libraries wax))
+
+(cram
+ (package wax-lib)
+ (deps ./assemble.exe))

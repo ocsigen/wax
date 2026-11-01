@@ -391,3 +391,29 @@ let module_ ((name, fields) as m : location module_) : location module_ =
                    fields)
         in
         (name, fields)
+
+let untyped_literal ((_, fields) : location module_) =
+  if
+    List.exists
+      (fun (f : (_ modulefield, _) Ast.annotated) ->
+        match f.desc with String_type _ -> true | _ -> false)
+      fields
+  then None
+  else
+    let found = ref None in
+    let note loc = if !found = None then found := Some loc in
+    List.iter
+      (fun (f : (location modulefield, location) Ast.annotated) ->
+        match f.desc with
+        | String_global { typ = None; _ } -> note f.info
+        | _ ->
+            ignore
+              (map_field_instrs
+                 (fun (i : location instr) ->
+                   (match i.desc with
+                   | String (None, _) -> note i.info
+                   | _ -> ());
+                   i.desc)
+                 f))
+      fields;
+    !found
