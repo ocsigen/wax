@@ -541,10 +541,16 @@ module Error = struct
         ]
       (text "The local" ++ ident name ++ text "is already defined.")
 
-  let type_mismatch context ~location ~provided_source ~expected_source =
+  (* [index] numbers the value among several checked at [location], so two of
+     them with the same mismatch are told apart. *)
+  let type_mismatch ?index context ~location ~provided_source ~expected_source =
     report context ~location ~severity:Error
       (text "Type mismatch: expecting type"
-       ++ styp expected_source ++ text "but got type" ++ styp provided_source
+       ++ styp expected_source
+       ++ (match index with
+         | None -> text "but got type"
+         | Some k -> text "for value" ++ Message.int k ++ text "but got type")
+       ++ styp provided_source
       ^^ text ".")
 
   let br_cast_type_mismatch context ~location =
@@ -2411,7 +2417,14 @@ let pop ctx loc ?arity ~expected_source ty st =
         Error.instruction_type_mismatch ctx.modul.diagnostics ~location
           ~consumer:(Some loc) ~provided_source:source ~expected_source
     | None ->
-        Error.type_mismatch ctx.modul.diagnostics ~location:loc
+        (* With no push location, every value of a [pop_args] is reported at
+           [loc]: number it when it is one of several. *)
+        let index =
+          match arity with
+          | Some (_, current, expected) when expected > 1 -> Some current
+          | _ -> None
+        in
+        Error.type_mismatch ?index ctx.modul.diagnostics ~location:loc
           ~provided_source:source ~expected_source
   in
   match st with

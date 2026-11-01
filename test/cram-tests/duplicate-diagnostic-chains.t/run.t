@@ -146,3 +146,11 @@ A type test on an unbound type reports it once, not again from its lint:
   $ wax check -W dead-code=hidden -W unused-field=hidden --error-format short test_unbound.wax
   test_unbound.wax:1:38: error: The type 'nosuch' is not bound.
   [128]
+
+The WAT validator numbers them too, where the values have no place of their
+own to be reported at (several results of one call):
+
+  $ wax check --error-format short multi_value.wat
+  multi_value.wat:3:4: error: Type mismatch: expecting type 'i32' for value 1 but got type 'f64'.
+  multi_value.wat:3:4: error: Type mismatch: expecting type 'i32' for value 0 but got type 'f64'.
+  [128]
