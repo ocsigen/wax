@@ -2167,7 +2167,9 @@ let compilation_priority attributes =
    standalone [(export …)] wrapped in the conditional [(@if <cond> …)], so the
    export is present only when its guard holds -- independent of the field's own
    reachability. [field_name] indexes the exported entity, [kind] is its export
-   sort. *)
+   sort. The conditional is located at its guard, not at the field: the
+   validator's {!Wax_wasm.Cond_plan} identifies a conditional by its location,
+   so several guards on one field sharing its span would be decided as one. *)
 let guarded_export_fields ~loc ~kind ~field_name attributes =
   List.filter_map
     (fun ({ attr_name = k; attr_value = v; attr_guard = guard; _ } :
@@ -2183,7 +2185,7 @@ let guarded_export_fields ~loc ~kind ~field_name attributes =
               }
           in
           Some
-            (annot loc
+            (annot cond.Ast.info
                (Text.Module_if_annotation
                   {
                     cond = cond.Ast.desc;
@@ -2205,7 +2207,8 @@ let inline_export_fields ~loc ~kind ~field_name attributes =
     (exports ~name:field_name attributes)
 
 (* The [(start $f)] field for a function's [#[start]] attribute: inline when
-   unguarded, wrapped in [(@if <cond> …)] when guarded, like a guarded export. *)
+   unguarded, wrapped in [(@if <cond> …)] when guarded (and located at its guard),
+   like a guarded export. *)
 let start_fields ~loc ~field_name attributes =
   List.filter_map
     (fun ({ attr_name = k; attr_guard = guard; _ } : Wax_lang.Ast.attribute) ->
@@ -2213,7 +2216,7 @@ let start_fields ~loc ~field_name attributes =
       | "start", None -> Some (annot loc (Text.Start (index field_name)))
       | "start", Some cond ->
           Some
-            (annot loc
+            (annot cond.Ast.info
                (Text.Module_if_annotation
                   {
                     cond = cond.Ast.desc;

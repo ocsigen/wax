@@ -487,7 +487,7 @@ type ctx = {
   function_types : Src.typeuse CondTbl.t;
   exports :
     ( Src.exportable * string,
-      (Cond.t * Wax_wasm.Ast.cond * Src.name) list )
+      (Cond.t * Wax_wasm.Ast.cond * Ast.location * Src.name) list )
     Hashtbl.t;
       (* Standalone [(export …)] fields, keyed by the Wax name of their target,
          attached to that target as [#[export]] attributes. Each is paired with
@@ -496,14 +496,16 @@ type ctx = {
          condition (for a [#[export …, if <cond>]] guard) -- so a target that
          exists in several mutually exclusive branches receives only the exports
          of its own branch, and an export narrower than its target's reachability
-         is emitted as a guarded attribute. *)
-  starts : (string, (Cond.t * Wax_wasm.Ast.cond) list) Hashtbl.t;
+         is emitted as a guarded attribute. The [(export …)] field's span is
+         kept too, as that guard's location (see [folded_attrs]). *)
+  starts : (string, (Cond.t * Wax_wasm.Ast.cond * Ast.location) list) Hashtbl.t;
       (* [(start …)] fields, keyed by the Wax name of their function, rendered as
          a [#[start]] attribute on it rather than a separate field. As with
          [exports], each is paired with the branch condition under which it
          appears, so a start narrower than its function's reachability becomes a
          guarded [#[start, if <cond>]] and mutually exclusive starts (at most one
-         per configuration) stay on their own functions. *)
+         per configuration) stay on their own functions. The [(start …)]
+         field's span is kept as the guard's location, as for [exports]. *)
   locals : Sequence.t;
   local_valtypes : (string, Ast.valtype) Hashtbl.t;
       (* The Wax type of each local (parameters included), keyed by the Wax name;
@@ -5290,15 +5292,18 @@ let simplify_guard ctx ~location (syn : Wax_wasm.Ast.cond) :
    keep it plain where the target's position already entails the branch, and
    otherwise guard it with the branch condition simplified against the position.
    [make guard nm] builds the attribute for one entry, [guard] being [None] for
-   a plain attribute. *)
+   a plain attribute. A guard is located at the span of the [(…)] field it comes
+   from: {!Wax_wasm.Cond_plan} identifies a conditional by its location, so two
+   guards sharing one (say, the target's name, which has no source span of its
+   own) would be decided as one, wrongly coupling unrelated conditions. *)
 (* A synthesized attribute: one the conversion invents rather than reads, so it
    has no source span of its own and takes the entity's. *)
 let synth_attr ~location attr_name attr_value attr_guard : Ast.attribute =
   { attr_name; attr_value; attr_guard; attr_span = location }
 
-let folded_attrs ctx ~location entries make =
+let folded_attrs ctx entries make =
   List.filter_map
-    (fun (c, syn, nm) ->
+    (fun (c, syn, location, nm) ->
       if not (Cond.is_satisfiable (Cond.and_ ctx.cond_asm c)) then None
       else if Cond.logical_implies ctx.cond_asm c then Some (make None nm)
       else Some (make (Some (simplify_guard ctx ~location syn)) nm))
@@ -5323,7 +5328,7 @@ let exports ctx kind name e : Ast.attributes =
   let standalone =
     match Hashtbl.find_opt ctx.exports (kind, name.Ast.desc) with
     | None -> []
-    | Some entries -> folded_attrs ctx ~location:name.Ast.info entries attr
+    | Some entries -> folded_attrs ctx entries attr
   in
   (* When a field carries several exports, put the unnamed [#[export]] (the one
      reusing the field's own Wax name) first; [partition] is stable, so the rest
@@ -5341,8 +5346,8 @@ let start_attribute ctx name : Ast.attributes =
   match Hashtbl.find_opt ctx.starts name.Wax_utils.Ast.desc with
   | None -> []
   | Some entries ->
-      folded_attrs ctx ~location:name.Ast.info
-        (List.map (fun (c, syn) -> (c, syn, ())) entries)
+      folded_attrs ctx
+        (List.map (fun (c, syn, location) -> (c, syn, location, ())) entries)
         (fun guard () ->
           synth_attr ~location:name.Wax_utils.Ast.info "start" None guard)
 
@@ -6129,11 +6134,14 @@ let collect_exports cond_env diagnostics fields =
         match field.desc with
         | Export { name; kind; index } ->
             (* Don't keep a meaningless location *)
-            lst := (kind, index, Ast.no_loc name.desc, asm, combine syn) :: !lst;
+            lst :=
+              (kind, index, Ast.no_loc name.desc, asm, combine syn, field.info)
+              :: !lst;
             let k = (kind, index.Ast.desc) in
             Hashtbl.replace tbl k
               (name :: (try Hashtbl.find tbl k with Not_found -> []))
-        | Start index -> start_lst := (index, asm, combine syn) :: !start_lst
+        | Start index ->
+            start_lst := (index, asm, combine syn, field.info) :: !start_lst
         | Module_if_annotation { cond; then_fields; else_fields } ->
             let c =
               Cond.of_cond cond_env diagnostics ~location:field.info cond
@@ -6365,14 +6373,14 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
        condition it appeared under; rendered as a [#[start]] attribute on that
        function (guarded when the start is narrower than the function). *)
       List.iter
-        (fun (index, asm, syn) ->
+        (fun (index, asm, syn, location) ->
           let name = (idx ctx `Func index).Ast.desc in
           Hashtbl.replace ctx.starts name
-            ((asm, syn)
+            ((asm, syn, location)
             :: Option.value ~default:[] (Hashtbl.find_opt ctx.starts name)))
         start_lst;
       List.iter
-        (fun (kind, index, name, asm, syn) ->
+        (fun (kind, index, name, asm, syn, location) ->
           let k =
             ( kind,
               (idx ctx
@@ -6386,7 +6394,7 @@ let module_ ?(strict_constants = false) ?(faithful = false) ?features
                 .desc )
           in
           let l =
-            (asm, syn, name)
+            (asm, syn, location, name)
             ::
             (match Hashtbl.find_opt ctx.exports k with
             | None -> []

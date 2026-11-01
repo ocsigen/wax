@@ -75,6 +75,13 @@ grammar keeps none, and both are versioned independently of the toolchain.
   struct field or an array element written with an alias. Before, converting
   a module with a conditional alias gave such a block a type that held in
   every configuration but was not the one `-D` gave it, so the two disagreed.
+- A module with several conditional exports or starts now converts between
+  WAT and Wax. Each condition was not always checked on its own, so a valid
+  module could be rejected with a duplicate export or start reported in a
+  configuration where none existed: for instance, an `(@if …)` export of one
+  function next to an `(@if …)`/`(@else …)` pair exporting the same name from
+  two others, or two `#[export …, if …]` with different conditions on one
+  function.
 
 ## 0.3.0
 

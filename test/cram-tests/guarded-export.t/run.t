@@ -119,3 +119,51 @@ A guard is only meaningful on an export or start, not on other attributes:
   3 │     fn f(&eq) -> &eq;
   4 │ }
   [128]
+
+Each guard is decided on its own, even when a module carries several: guards
+from unrelated conditionals, and several guards on one field, are never
+conflated with one another.
+
+  $ wax independent.wat -f wax
+  import "x"
+  #[export = "g", if(not(wasi))]
+  fn f() -> i32;
+  #[if(use_js_string)]
+  {
+      #[export]
+      fn a() -> i32 {
+          0;
+      }
+  }
+  #[export = "a", if(not(use_js_string))]
+  fn b() -> i32 {
+      1;
+  }
+  $ wax independent.wat -f wax | wax -i wax -f wat
+  (import "x" "f" (func $f (result i32)))
+  (@if (not $wasi) (@then (export "g" (func $f))))
+  (@if $use_js_string (@then (func $a (export "a") (result i32) (i32.const 0))))
+  (func $b (result i32) (i32.const 1))
+  (@if (not $use_js_string) (@then (export "a" (func $b))))
+  $ wax onefield.wax -f wat
+  (func $f)
+  (@if $a (@then (export "x" (func $f))))
+  (@if $b (@then (export "y" (func $f))))
+  (func $g)
+  (@if (not $b) (@then (export "y" (func $g))))
+  (func $h)
+  (@if $a (@then (start $h)))
+  (@if $b (@then (export "z" (func $h))))
+  (func $i)
+  (@if (not $b) (@then (export "z" (func $i))))
+  $ wax onefield.wax -f wat | wax -i wat -f wax
+  #[export = "x", if(a)]
+  #[export = "y", if(b)]
+  fn f() {}
+  #[export = "y", if(not(b))]
+  fn g() {}
+  #[start, if(a)]
+  #[export = "z", if(b)]
+  fn h() {}
+  #[export = "z", if(not(b))]
+  fn i() {}

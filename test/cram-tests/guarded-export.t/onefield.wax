@@ -1,0 +1,10 @@
+#[export = "x", if(a)]
+#[export = "y", if(b)]
+fn f() {}
+#[export = "y", if(not(b))]
+fn g() {}
+#[start, if(a)]
+#[export = "z", if(b)]
+fn h() {}
+#[export = "z", if(not(b))]
+fn i() {}
