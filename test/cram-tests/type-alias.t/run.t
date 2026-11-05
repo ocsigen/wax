@@ -1203,6 +1203,22 @@ in the branches of a conditional, the same operation converts.
     Write it in the branches of a conditional, give it a type of its own, or
     resolve the conditionals with -D.
   [128]
+
+An operand taken off the stack of unreachable code picks no form: any
+instruction accepts it. The comparison below compares the struct with such an
+operand when dbg is set, and two of them otherwise, so it is a ref.eq in every
+configuration.
+
+  $ wax -f wat op-unreachable.wax
+  (type $s (struct (field $f (mut i64))))
+  (func $f
+    (return)
+    (struct.new_default $s)
+    (@if $dbg (@then (i64.const 1)))
+    (drop)
+    (drop (ref.eq))
+    (unreachable)
+  )
   $ wax -f wat op-branches.wax
   (@if $p
     (@then (@type $n i64) (@type $f f64))

@@ -372,6 +372,11 @@ type module_context = {
          into the innermost (head) collector instead of erroring, to be re-checked
          against the true state at the operand's emission slot. Empty outside such
          an operand, so a read then reports immediately. *)
+  polymorphic_values : inferred_type Cell.t list ref;
+      (* The cell of each value taken off the polymorphic stack of unreachable
+         code ([pop_any]). Its type is whatever its use defaults it to, so a
+         hole holding one picks no operation's form ([record_configuration_forms]
+         in the typer). Shared by the whole module, unlike [missing_holes]. *)
   missing_holes : (inferred_type Cell.t * missing_batch) list ref;
       (* The placeholder cell of each pending-value underflow ([pop_many] on an
          empty stack), with its counts: the hole that consumes the cell reports

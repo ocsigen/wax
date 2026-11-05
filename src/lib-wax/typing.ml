@@ -2617,7 +2617,10 @@ let ( let*! ) e f =
    missing value is tracked once rather than once per subsequent pop. *)
 let pop_any ctx batch current expected st =
   match st with
-  | Unreachable -> (st, Cell.make Unknown)
+  | Unreachable ->
+      let cell = Cell.make Unknown in
+      ctx.polymorphic_values := cell :: !(ctx.polymorphic_values);
+      (st, cell)
   | Poisoned ->
       let cell = Cell.make Error in
       (* Poisoned by this very run's underflow (below): this value is missing
@@ -12893,9 +12896,20 @@ let record_configuration_forms ctx tbl typed_fields =
         | _ -> None)
     | _ -> None
   in
+  (* A hole holding a value of unreachable code: the operation's use defaults
+     its type, so any form would do in this configuration. *)
+  let polymorphic (e : _ instr) =
+    match (e.desc, fst e.info) with
+    | Hole, [| cell |] -> List.memq cell !(ctx.polymorphic_values)
+    | _ -> false
+  in
   let operation (l : location) operands =
     let keys = List.map operand_key operands in
-    if operands <> [] && List.for_all Option.is_some keys then
+    if
+      operands <> []
+      && (not (List.for_all polymorphic operands))
+      && List.for_all Option.is_some keys
+    then
       let shape = String.concat " " (List.map Option.get keys) in
       let a = List.find_map operand_alias operands in
       add l (function
@@ -13133,6 +13147,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
       tags = Tbl.make ~current (Namespace.make ~links ()) "tag";
       locals = StringMap.empty;
       warn_unused;
+      polymorphic_values = ref [];
       missing_holes = ref [];
       unresolved_label = ref false;
       read_locals = ref IntSet.empty;

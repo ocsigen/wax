@@ -200,6 +200,7 @@ type module_context = {
   mutable locals : (Infer.inferred_valtype option * Ast.location) StringMap.t;
   mutable initialized_locals : StringSet.t;
   mutable deferred_uninit : Ast.ident list ref list;
+  polymorphic_values : Infer.inferred_type Infer.Cell.t list ref;
   missing_holes : (Infer.inferred_type Infer.Cell.t * missing_batch) list ref;
   unresolved_label : bool ref;
   read_locals : IntSet.t ref;

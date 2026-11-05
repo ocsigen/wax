@@ -1,0 +1,9 @@
+type s = { f: mut i64 };
+fn f() {
+    return;
+    {s| .. };
+    #[if(dbg)] { 1 as i64; }
+    _ = _;
+    _ = _ == _;
+    unreachable;
+}
