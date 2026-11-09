@@ -1372,10 +1372,17 @@ type type_table = Typing_env.types
 type types = {
   mutable current : type_table;
   by_branch : (int * int * bool, type_table) Hashtbl.t;
+  declared : (int * int, valtype) Hashtbl.t;
+      (* By its span, the type to declare an inferred declaration with, where
+         the configurations infer different ones, one of them a supertype of
+         the others (see [declaration_choice]). *)
 }
 
 let get_type_definition d types nm =
   Option.map snd (Tbl.find d types.current nm)
+
+let declared_type types (l : location) =
+  Hashtbl.find_opt types.declared (l.loc_start.pos_cnum, l.loc_end.pos_cnum)
 
 let in_branch types (location : location) side f =
   match
@@ -12962,7 +12969,7 @@ type configuration_form =
   | Cast_form of ident * string list
   | Field_form of ident * (string * int) list
   | Operation_form of ident option * string list
-  | Declaration_form of declaration * string list
+  | Declaration_form of declaration * (string * declared_ref option) list
   | Immediate_form of immediate * string list
   | Receiver_form of (string * string list) list
 
@@ -12979,6 +12986,18 @@ and declaration =
    call through a reference applies to, or the type a struct, array or string
    value is inferred with. *)
 and immediate = Access | Call_ref | Construction
+
+(* The reference type a declaration takes in a configuration, for
+   [declaration_choice]: its heap type, with the names of that type and its
+   supertypes ([ancestors]), its hierarchy, and whether it is that hierarchy's
+   bottom, a subtype of every type in it. *)
+and declared_ref = {
+  nullable : bool;
+  heap : heaptype;
+  ancestors : string list;
+  hierarchy : string;
+  bottom : bool;
+}
 
 (* Record in [tbl], by span, the form each such construct of [typed_fields]
    takes in this configuration. A module lowered as one for every
@@ -13003,11 +13022,56 @@ let record_configuration_forms ctx tbl typed_fields =
     Hashtbl.replace tbl key (at, form prev)
   in
   let union v l = if List.mem v l then l else v :: l in
-  let declared l d types =
+  (* A declaration of a single type [t], unaliased, records it as a reference
+     too (see [declaration_choice]). *)
+  let ref_entry (t : valtype) =
+    let abstract ancestors hierarchy = Some (ancestors, hierarchy, false) in
+    let bottom hierarchy = Some ([], hierarchy, true) in
+    match t with
+    | Ref { nullable; typ = heap } ->
+        let entry =
+          match heap with
+          | Type n | Exact n -> (
+              let named tops hierarchy =
+                Some (type_ancestors ctx n.desc @ tops, hierarchy, false)
+              in
+              match Tbl.find_no_mark ctx.type_context.types n with
+              | Some (_, { typ = Struct _; _ }) ->
+                  named [ "struct"; "eq"; "any" ] "any"
+              | Some (_, { typ = Array _; _ }) ->
+                  named [ "array"; "eq"; "any" ] "any"
+              | Some (_, { typ = Func _; _ }) -> named [ "func" ] "func"
+              | Some (_, { typ = Cont _; _ }) -> named [ "cont" ] "cont"
+              | None -> None)
+          | Any -> abstract [ "any" ] "any"
+          | Eq -> abstract [ "eq"; "any" ] "any"
+          | I31 -> abstract [ "i31"; "eq"; "any" ] "any"
+          | Struct -> abstract [ "struct"; "eq"; "any" ] "any"
+          | Array -> abstract [ "array"; "eq"; "any" ] "any"
+          | None_ -> bottom "any"
+          | Func -> abstract [ "func" ] "func"
+          | NoFunc -> bottom "func"
+          | Extern -> abstract [ "extern" ] "extern"
+          | NoExtern -> bottom "extern"
+          | Exn -> abstract [ "exn" ] "exn"
+          | NoExn -> bottom "exn"
+          | Cont -> abstract [ "cont" ] "cont"
+          | NoCont -> bottom "cont"
+        in
+        Option.map
+          (fun (ancestors, hierarchy, bottom) ->
+            { nullable; heap; ancestors; hierarchy; bottom })
+          entry
+    | I32 | I64 | F32 | F64 | V128 | Alias _ -> None
+  in
+  let declared ?typ l d types =
     let t = String.concat " " types in
+    let entry = (t, Option.bind typ ref_entry) in
     add l (function
-      | Some (Declaration_form (d, seen)) -> Declaration_form (d, union t seen)
-      | _ -> Declaration_form (d, [ t ]))
+      | Some (Declaration_form (d, seen)) ->
+          Declaration_form
+            (d, if List.mem_assoc t seen then seen else entry :: seen)
+      | _ -> Declaration_form (d, [ entry ]))
   in
   let immediate l k parts =
     let t = String.concat " " parts in
@@ -13173,7 +13237,9 @@ let record_configuration_forms ctx tbl typed_fields =
           | TryCatch { typ; _ } ),
           _ )
         when typ.results <> [||] ->
-          declared l Block_result
+          declared
+            ?typ:(match typ.results with [| t |] -> Some t | _ -> None)
+            l Block_result
             (Array.to_list (Array.map Output.valtype_string typ.results))
       | Let (bindings, Some init), _
         when Array.length (fst init.info) = List.length bindings -> (
@@ -13185,20 +13251,21 @@ let record_configuration_forms ctx tbl typed_fields =
                  (fun k (name, typ) ->
                    match (name, typ, Cell.get (fst init.info).(k)) with
                    | Some name, None, Valtype { typ; _ } ->
-                       [
-                         ( name,
-                           Output.valtype_string (unalias ctx.type_context typ)
-                         );
-                       ]
+                       [ (name, unalias ctx.type_context typ) ]
                    | _ -> [])
                  bindings)
           in
           match unannotated with
           | [] -> ()
           | _ ->
-              declared l
+              declared
+                ?typ:
+                  (match (bindings, unannotated) with
+                  | [ _ ], [ (_, t) ] -> Some t
+                  | _ -> None)
+                l
                 (Locals (List.map fst unannotated))
-                (List.map snd unannotated))
+                (List.map (fun (_, t) -> Output.valtype_string t) unannotated))
       (* The operations whose instruction the lowering picks from an operand's
          type (see [To_wasm]): the operators, a compound assignment, a cast
          from a number, a method on a value ([x.clz()], [x.min(y)]: its
@@ -13293,11 +13360,16 @@ let record_configuration_forms ctx tbl typed_fields =
           match single i with
           | Some cell -> (
               match Cell.get cell with
-              | Valtype { typ; _ } -> (
+              | Valtype { typ; alias; _ } -> (
                   match unalias ctx.type_context typ with
-                  | Ref _ -> (
+                  | Ref _ as t -> (
+                      let typ =
+                        match alias with
+                        | Some a when conditional_alias ctx a -> None
+                        | _ -> Some t
+                      in
                       match written_form cell with
-                      | Some t -> declared l Select_result [ t ]
+                      | Some w -> declared ?typ l Select_result [ w ]
                       | None -> ())
                   | _ -> declared l Select_result [ "number" ])
               | _ -> ())
@@ -13313,14 +13385,56 @@ let record_configuration_forms ctx tbl typed_fields =
           match
             Option.bind (single def) (fun c ->
                 match Cell.get c with
-                | Valtype { typ; _ } ->
-                    Some (Output.valtype_string (unalias ctx.type_context typ))
+                | Valtype { typ; _ } -> Some (unalias ctx.type_context typ)
                 | _ -> None)
           with
-          | Some t -> declared field.info (Global_type name) [ t ]
+          | Some t ->
+              declared ~typ:t field.info (Global_type name)
+                [ Output.valtype_string t ]
           | None -> ())
       | _ -> ())
     typed_fields
+
+(* Of the reference types [seen] an inferred declaration takes in the
+   configurations, the one the others are subtypes of, if any, made nullable
+   if one of them is, and inexact: the type to declare it with. *)
+let declaration_choice seen =
+  match List.map snd seen with
+  | refs when List.for_all Option.is_some refs ->
+      let refs = List.map Option.get refs in
+      let key (h : heaptype) =
+        match h with
+        | Type n | Exact n -> n.desc
+        | Any -> "any"
+        | Eq -> "eq"
+        | I31 -> "i31"
+        | Struct -> "struct"
+        | Array -> "array"
+        | Func -> "func"
+        | Extern -> "extern"
+        | Exn -> "exn"
+        | Cont -> "cont"
+        | None_ | NoFunc | NoExtern | NoExn | NoCont -> ""
+      in
+      List.find_map
+        (fun c ->
+          if
+            (not c.bottom)
+            && List.for_all
+                 (fun e ->
+                   e.hierarchy = c.hierarchy
+                   && (e.bottom || List.mem (key c.heap) e.ancestors))
+                 refs
+          then
+            Some
+              (Ref
+                 {
+                   nullable = List.exists (fun e -> e.nullable) refs;
+                   typ = (match c.heap with Exact n -> Type n | h -> h);
+                 })
+          else None)
+        refs
+  | _ -> None
 
 (* Of the types [seen] a receiver has in the configurations, with their
    supertypes, the one the others are subtypes of, if any. *)
@@ -13366,9 +13480,10 @@ let report_configuration_forms diagnostics tbl =
     | Operation_form (_, _ :: _ :: _)
     | Literal_form (_, _ :: _ :: _)
     | Cast_form (_, _ :: _ :: _)
-    | Declaration_form (_, _ :: _ :: _)
     | Immediate_form (_, _ :: _ :: _) ->
         true
+    | Declaration_form (_, (_ :: _ :: _ as seen)) ->
+        declaration_choice seen = None
     | Field_form (_, seen) ->
         List.exists
           (fun (t, k) -> List.exists (fun (t', k') -> t <> t' && k <> k') seen)
@@ -13410,7 +13525,8 @@ let report_configuration_forms diagnostics tbl =
                  List.exists (fun (t', k') -> t <> t' && k <> k') seen)
                seen ->
           Error.configuration_dependent_field diagnostics ~location f
-      | Declaration_form (d, _ :: _ :: _) ->
+      | Declaration_form (d, (_ :: _ :: _ as seen))
+        when declaration_choice seen = None ->
           Error.configuration_dependent_declaration diagnostics ~location
             (match d with
             | Block_result -> `Block
@@ -14759,7 +14875,8 @@ let stitch plan results =
   in
   match results with
   | (primary, (table, tree)) :: _ ->
-      ({ current = table; by_branch }, fields primary tree)
+      ( { current = table; by_branch; declared = Hashtbl.create 0 },
+        fields primary tree )
   | [] -> assert false
 
 (* The editor sinks were filled by every run, so a use in code common to several
@@ -14824,7 +14941,12 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
       type_configuration ~warn_unused ~suggest ~resolve_links ~pun_spans
         ~member_completions ~faithful ~features ~simplify diagnostics fields
     in
-    ({ current = types; by_branch = Hashtbl.create 0 }, typed)
+    ( {
+        current = types;
+        by_branch = Hashtbl.create 0;
+        declared = Hashtbl.create 0;
+      },
+      typed )
   else begin
     (* Each configuration is checked on its own; what holds in each but not
        as one module, the form a construct takes differing between them, is
@@ -14881,7 +15003,19 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
         (Wax_wasm.Cond_plan.runs plan)
     in
     dedupe_sinks ~resolve_links ~pun_spans ~member_completions;
-    stitch plan results
+    let types, typed = stitch plan results in
+    (* An inferred declaration takes a type that holds in every configuration
+       (see [declaration_choice]). *)
+    Option.iter
+      (Hashtbl.iter (fun (kind, a, b) (_, form) ->
+           match form with
+           | Declaration_form (_, (_ :: _ :: _ as seen)) when kind = "" ->
+               Option.iter
+                 (Hashtbl.replace types.declared (a, b))
+                 (declaration_choice seen)
+           | _ -> ()))
+      forms;
+    (types, typed)
   end
 
 (* Report a "Trojan Source" bidirectional control character in any string the

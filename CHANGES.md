@@ -51,8 +51,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
   when the type it gets differs between configurations and no alias names it:
   `let y = x!` on a conditional alias `x` (the non-null type has no alias), or
   `let y = f()` where `f` returns `i64` in one branch and `i32` in the other.
-  The message says which declaration it is about, and writing its type with
-  an alias fixes it.
+  (Where one of the types is a supertype of the others, the declaration takes
+  it instead; see Fixes.) The message says which declaration it is about, and
+  writing its type with an alias fixes it.
 - So does an instruction whose type comes from a value whose type differs
   between configurations: a struct or array access, a call through a function
   reference, a continuation instruction, or a struct, array or string built
@@ -72,7 +73,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
   alias, or a function declared differently in each branch), now converts
   without resolving the conditionals whichever branch defines which. It named
   the type the first branch gives the value, so it was rejected with a type
-  mismatch when that was the subtype.
+  mismatch when that was the subtype. A local, a global, a block result or a
+  selection `c ? a : b` whose type is left unwritten and differs that way is
+  likewise declared with the supertype.
 - A `match`, `br_on_cast` or `br_on_cast_fail` on a value of a conditional
   alias now converts without resolving the conditionals when the alias stands
   for different reference types, for instance `&eq` in one configuration and

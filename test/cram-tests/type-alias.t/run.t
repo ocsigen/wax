@@ -1299,6 +1299,31 @@ alias gives it one form.
         (ref.as_non_null (local.get $y)) (local.get $c)))
   )
 
+Where one of the types a declaration is inferred with is a supertype of the
+others, it is declared with that one, whichever branch defines it.
+
+  $ wax -f wat decl-supertype.wax
+  (type $s1 (sub (struct (field $f i32))))
+  (type $s2 (sub final $s1 (struct (field $f i32) (field $g i32))))
+  (@if $p
+    (@then
+      (func $make (result (ref $s2))
+        (return (struct.new $s2 (i32.const 1) (i32.const 2))))
+      (global $h (ref $s2) (struct.new $s2 (i32.const 1) (i32.const 2))))
+    (@else
+      (func $make (result (ref $s1)) (return (struct.new $s1 (i32.const 1))))
+      (global $h (ref $s1) (struct.new $s1 (i32.const 1))))
+  )
+  (global $g (ref $s1) (global.get $h))
+  (func $get (param $c i32) (result i32)
+    (local $y (ref $s1))
+    (local.set $y (call $make))
+    (drop (block (result (ref $s1)) (call $make)))
+    (drop
+      (select (result (ref $s1)) (call $make) (local.get $y) (local.get $c)))
+    (struct.get $s1 $f (local.get $y))
+  )
+
 An access, a call through a reference or a construction names a type, taken
 from its operand or its context. When that type differs between
 configurations, the access names the one the others are subtypes of, which

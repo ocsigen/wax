@@ -803,6 +803,14 @@ and instruction ret ctx (i : _ Wax_lang.Ast.instr) : location Text.instr list =
 and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
     location Text.instr list =
   let _, loc = i.info in
+  (* An inferred declaration the configurations type differently takes the
+     type that holds in all of them (see [Typing.declared_type]). *)
+  let declared = Wax_lang.Typing.declared_type ctx.types loc in
+  let blocktype (typ : functype) =
+    match (typ.results, declared) with
+    | [| _ |], Some t -> blocktype { typ with results = [| t |] }
+    | _ -> blocktype typ
+  in
   match i.desc with
   | Block { label; typ; block = body } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
@@ -1865,9 +1873,10 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
              (without raising) so the local is still registered and later reads
              of it resolve. *)
           let ty =
-            match ty with
-            | Some ty -> ty
-            | None -> (
+            match (ty, declared) with
+            | Some ty, _ -> ty
+            | None, Some t -> t
+            | None, None -> (
                 match expr_opt_valtype body with Some t -> t | None -> I32)
           in
           (* Reserve the (possibly renamed) local and declare it now, keeping the
@@ -2063,9 +2072,10 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
       let code_else = instruction ret ctx else_ in
       let code_cond = instruction ret ctx cond in
       let typ =
-        match expr_opt_valtype i with
-        | None | Some (I32 | I64 | F32 | F64 | V128) -> None
-        | Some typ -> Some [ valtype typ ]
+        match (declared, expr_opt_valtype i) with
+        | Some typ, _ -> Some [ valtype typ ]
+        | None, (None | Some (I32 | I64 | F32 | F64 | V128)) -> None
+        | None, Some typ -> Some [ valtype typ ]
       in
       folded loc (Select typ) (code_then @ code_else @ code_cond)
   | Char c -> folded loc (Char c) []
@@ -2934,9 +2944,12 @@ let module_ ?(features = Wax_utils.Feature.default ()) diagnostics types fields
                   Text.Type_alias { id = name; typ = valtype typ }
               | Global { name; mut; typ; def; attributes } ->
                   let typ =
-                    match typ with
-                    | Some typ -> typ
-                    | None ->
+                    match
+                      (typ, Wax_lang.Typing.declared_type ctx.types field.info)
+                    with
+                    | Some typ, _ -> typ
+                    | None, Some typ -> typ
+                    | None, None ->
                         (*ZZZ *)
                         expr_valtype def
                   in

@@ -173,6 +173,14 @@ val get_type_definition :
 (** [get_type_definition context types id] returns the subtype definition for
     the given identifier, if it exists. *)
 
+val declared_type : types -> Ast.location -> Ast.valtype option
+(** [declared_type types location] is the type to declare the inferred
+    declaration at [location] with (a block's result, a local, a global, a
+    select's result) when the configurations of a module lowered as one for all
+    of them infer different reference types for it, one a supertype of the
+    others: that one, made nullable if one of them is. [None] otherwise, the
+    declaration then taking the type the typed tree gives it. *)
+
 val in_branch : types -> Ast.location -> bool -> (unit -> 'a) -> 'a
 (** [in_branch types location side f] runs [f] with the type table in force
     inside the branch [side] ([true]: then) of the conditional annotation at
