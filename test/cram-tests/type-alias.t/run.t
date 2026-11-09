@@ -1259,6 +1259,110 @@ declarations nest, the innermost is reported.
     (drop (block (result (@type $r)) (br_on_null 1 (local.get $x))))
   )
 
+The same holds for a global whose type is left unwritten, and for a selection
+of references, whose instruction is typed with its result: ascribing it the
+alias gives it one form.
+
+  $ wax -f wat decl-global.wax
+  Error:
+    The type of the global 'g' is inferred as different types under different
+    conditional annotations, so its declaration has no single WebAssembly form.
+   ──➤  decl-global.wax:2:1
+  1 │ #[if(p)] { const h: i64 = 0; } #[else] { const h: i32 = 0; }
+  2 │ const g = h;
+    · ^^^^^^^^^^^^
+  3 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-select.wax
+  Error:
+    The result type of this selection is inferred as different types under
+    different conditional annotations, so it has no single WebAssembly form.
+   ──➤  decl-select.wax:2:32
+  1 │ #[if(p)] { type r = &?extern; } #[else] { type r = &?eq; }
+  2 │ fn f(x: r, y: r, c: i32) { _ = c ? x! : y!; }
+    ·                                ^^^^^^^^^^^
+  3 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-select-ascribed.wax
+  (@if $p (@then (@type $r externref)) (@else (@type $r eqref)))
+  (func $f (param $x (@type $r)) (param $y (@type $r)) (param $c i32)
+    (drop
+      (select (result (@type $r)) (ref.as_non_null (local.get $x))
+        (ref.as_non_null (local.get $y)) (local.get $c)))
+  )
+
+An access, a call through a reference or a construction names a type, taken
+from its operand or its context. When that type differs between
+configurations, the access names the one the others are subtypes of, which
+it reads the same field of in each, whichever branch defines it; with no such
+type, or for the other constructs, it has no single form.
+
+  $ wax -f wat field-supertype.wax
+  (type $s1 (sub (struct (field $f i32))))
+  (type $s2 (sub final $s1 (struct (field $f i32) (field $g i32))))
+  (@if $p (@then (@type $n (ref $s2))) (@else (@type $n (ref $s1))))
+  (func $get (export "get") (param $x (@type $n)) (result i32)
+    (return (struct.get $s1 $f (local.get $x)))
+  )
+  $ wax -f wat field-covariant.wax
+  (type $s1 (sub (struct (field $f anyref))))
+  (type $s2 (sub final $s1 (struct (field $f eqref))))
+  (@if $p (@then (@type $n (ref $s1))) (@else (@type $n (ref $s2))))
+  (func $get (param $x (@type $n)) (result anyref)
+    (return (struct.get $s1 $f (local.get $x)))
+  )
+  $ wax -f wat imm-array.wax
+  Error:
+    This value has different types under different conditional annotations, none
+    of them a supertype of the others, so an access to it has no single
+    WebAssembly form.
+   ──➤  imm-array.wax:4:18
+  2 │ type b = [mut i64];
+  3 │ #[if(p)] { type r = &a; } #[else] { type r = &b; }
+  4 │ fn f(x: r) { _ = x[0]; }
+    ·                  ^
+  5 │ 
+  Hint:
+    Access it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat imm-call-ref.wax
+  Error:
+    This call has no single WebAssembly form: the function reference it calls
+    has different types under different conditional annotations.
+   ──➤  imm-call-ref.wax:4:18
+  2 │ type u = fn() -> i64;
+  3 │ #[if(p)] { type r = &?t; } #[else] { type r = &?u; }
+  4 │ fn f(x: r) { _ = x!(); }
+    ·                  ^^^^
+  5 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat imm-construct.wax
+  Error:
+    The type of this value is inferred as different types under different
+    conditional annotations, so it has no single WebAssembly form.
+   ──➤  imm-construct.wax:4:22
+  2 │ type b = [mut i64];
+  3 │ #[if(p)] { type r = &a; } #[else] { type r = &b; }
+  4 │ fn f() -> r { return [0; 3]; }
+    ·                      ^^^^^^
+  5 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+
 An operand taken off the stack of unreachable code picks no form: any
 instruction accepts it. The comparison below compares the struct with such an
 operand when dbg is set, and two of them otherwise, so it is a ref.eq in every

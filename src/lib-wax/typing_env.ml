@@ -284,6 +284,12 @@ type module_context = {
          such an alias takes a source type that holds in all of them (see
          [Typing.conditional_cast_source]). Empty otherwise, so a checking run
          types each configuration on its own. *)
+  receiver_types : (int * int, string) Hashtbl.t;
+  (* By the span of the receiver of a struct or array access, the type the
+         access names, in a module lowered as one for every configuration: of
+         the types the receiver has in the configurations, the one the others
+         are subtypes of (see [Typing.receiver_choice]). Filled, as
+         [alias_variants], only for the runs that build such a module. *)
   (* --- Module-wide type and name tables (built once, before any body) --- *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;

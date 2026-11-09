@@ -46,18 +46,30 @@ grammar keeps none, and both are versioned independently of the toolchain.
   between configurations is reported the same way when no alias says so, for
   instance one passed to a function declared with an `i64` parameter in one
   branch and an `i32` one in the other.
-- The same goes for a block whose result type is left unwritten, or a local
-  declared without a type, when the type it gets differs between
-  configurations and no alias names it: `let y = x!` on a conditional alias
-  `x` (the non-null type has no alias), or `let y = f()` where `f` returns
-  `i64` in one branch and `i32` in the other. The message says which
-  declaration it is about, and writing its type with an alias fixes it.
+- The same goes for a block whose result type is left unwritten, a local or
+  global declared without a type, or a selection `c ? a : b` of references,
+  when the type it gets differs between configurations and no alias names it:
+  `let y = x!` on a conditional alias `x` (the non-null type has no alias), or
+  `let y = f()` where `f` returns `i64` in one branch and `i32` in the other.
+  The message says which declaration it is about, and writing its type with
+  an alias fixes it.
+- So does an instruction whose type comes from a value whose type differs
+  between configurations: a struct or array access, a call through a function
+  reference, a continuation instruction, or a struct, array or string built
+  without naming its type, for instance `x[0]` on a conditional alias that
+  stands for `&a` in one configuration and `&b` in another.
 - A literal passed to `cont.bind`, `resume` or `switch` for a parameter
   declared with a conditional alias now takes that alias, as one passed to a
   call does, so the error for it names the alias.
 
 ### Fixes
 
+- A struct or array access on a value whose type differs between
+  configurations, `&s1` in one and its subtype `&s2` in another (a conditional
+  alias, or a function declared differently in each branch), now converts
+  without resolving the conditionals whichever branch defines which. It named
+  the type the first branch gives the value, so it was rejected with a type
+  mismatch when that was the subtype.
 - A `match`, `br_on_cast` or `br_on_cast_fail` on a value of a conditional
   alias now converts without resolving the conditionals when the alias stands
   for different reference types, for instance `&eq` in one configuration and

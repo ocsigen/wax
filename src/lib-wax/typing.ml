@@ -1067,8 +1067,7 @@ module Error = struct
              "This operation has no single WebAssembly form: its operands have \
               different types under different conditional annotations.")
 
-  (* [locals] is [None] for a block's result. *)
-  let configuration_dependent_declaration context ~location locals =
+  let configuration_dependent_declaration context ~location declaration =
     let hint =
       text
         "Give it a type that holds in every configuration (a type alias \
@@ -1076,24 +1075,79 @@ module Error = struct
          or resolve the conditionals with -D."
     in
     report context ~location ~hint
-      (match locals with
-      | None ->
+      (match declaration with
+      | `Block ->
           text
             "The result type of this block is inferred as different types \
              under different conditional annotations, so it has no single \
              WebAssembly form."
-      | Some [ x ] ->
+      | `Select ->
+          text
+            "The result type of this selection is inferred as different types \
+             under different conditional annotations, so it has no single \
+             WebAssembly form."
+      | `Global x ->
+          text "The type of the global"
+          ++ name x
+          ++ text
+               "is inferred as different types under different conditional \
+                annotations, so its declaration has no single WebAssembly \
+                form."
+      | `Locals [ x ] ->
           text "The type of the local"
           ++ name x
           ++ text
                "is inferred as different types under different conditional \
                 annotations, so its declaration has no single WebAssembly \
                 form."
-      | Some _ ->
+      | `Locals _ ->
           text
             "The types of these locals are inferred as different types under \
              different conditional annotations, so their declaration has no \
              single WebAssembly form.")
+
+  let configuration_dependent_immediate context ~location kind =
+    match kind with
+    | `Receiver ->
+        report context ~location
+          ~hint:
+            (text
+               "Access it in the branches of a conditional, or resolve the \
+                conditionals with -D.")
+          (text
+             "This value has different types under different conditional \
+              annotations, none of them a supertype of the others, so an \
+              access to it has no single WebAssembly form.")
+    | `Access ->
+        report context ~location
+          ~hint:
+            (text
+               "Write it in the branches of a conditional, or resolve the \
+                conditionals with -D.")
+          (text
+             "This instruction has no single WebAssembly form: the value it \
+              applies to has different types under different conditional \
+              annotations.")
+    | `Call_ref ->
+        report context ~location
+          ~hint:
+            (text
+               "Write it in the branches of a conditional, or resolve the \
+                conditionals with -D.")
+          (text
+             "This call has no single WebAssembly form: the function reference \
+              it calls has different types under different conditional \
+              annotations.")
+    | `Construction ->
+        report context ~location
+          ~hint:
+            (text
+               "Write it in the branches of a conditional, or resolve the \
+                conditionals with -D.")
+          (text
+             "The type of this value is inferred as different types under \
+              different conditional annotations, so it has no single \
+              WebAssembly form.")
 
   let invalid_cast context ~location ty' =
     report context ~location
@@ -4188,6 +4242,46 @@ let conditional_cast_source ctx cell ty1 =
                (Some ty1) defs)
       | None -> ty1)
   | _ -> ty1
+
+(* The name of the type [name] and of its declared supertypes, transitively. *)
+let type_ancestors ctx name =
+  let rec walk seen n =
+    if List.mem n seen then seen
+    else
+      match Tbl.find_no_mark ctx.type_context.types (Ast.no_loc n) with
+      | Some (_, { supertype = Some s; _ }) -> walk (n :: seen) s.desc
+      | _ -> n :: seen
+  in
+  walk [] name
+
+(* The receiver [recv] of a struct or array access ascribed the type
+   [ctx.receiver_types] gives it, when it is not the receiver's own, so that
+   the lowering names that type (see [To_wasm.expr_type_name]) whichever
+   configuration's run builds the access. *)
+let ascribe_conditional_receiver ctx (recv : _ instr) =
+  let l = snd recv.info in
+  match
+    ( fst recv.info,
+      Hashtbl.find_opt ctx.receiver_types
+        (l.loc_start.pos_cnum, l.loc_end.pos_cnum) )
+  with
+  | [| cell |], Some name -> (
+      match Cell.get cell with
+      | Valtype { typ; _ } -> (
+          match unalias ctx.type_context typ with
+          | Ref ({ typ = Type n | Exact n; _ } as r) when n.desc <> name -> (
+              let t = Ref { r with typ = Type { n with desc = name } } in
+              match internalize ctx t with
+              | Some cell' ->
+                  {
+                    recv with
+                    desc = Cast (recv, Ascribed t);
+                    info = ([| cell' |], l);
+                  }
+              | None -> recv)
+          | _ -> recv)
+      | _ -> recv)
+  | _ -> recv
 
 (* The least upper bound of two value type cells, or [None] when they have no
    common type. Mirrors the [Select] (?:) reconciliation: it pins an
@@ -7495,7 +7589,9 @@ and type_aggregate_access ctx i =
             Error.expected_struct ctx.diagnostics ~location:(snd i'.info);
             None
       in
-      return_expression i (StructGet (i', field)) ty
+      return_expression i
+        (StructGet (ascribe_conditional_receiver ctx i', field))
+        ty
   | GetDescriptor i' ->
       let* i' = instruction ctx i' in
       let*! ty =
@@ -7578,7 +7674,9 @@ and type_aggregate_access ctx i =
             return i2'
         | None -> typed ctx i2
       in
-      return_statement i (StructSet (i1', field, i2')) [||]
+      return_statement i
+        (StructSet (ascribe_conditional_receiver ctx i1', field, i2'))
+        [||]
   (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
   | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
     when table_receiver ctx tabname ->
@@ -7605,7 +7703,9 @@ and type_aggregate_access ctx i =
       | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
           let*! ty = field_read_type ctx (written_array_field ctx ty typ) in
-          return_expression i (ArrayGet (i1', i2')) ty
+          return_expression i
+            (ArrayGet (ascribe_conditional_receiver ctx i1', i2'))
+            ty
       | Error ->
           (* Receiver already failed to type; recover silently. *)
           return_expression i (ArrayGet (i1', i2')) (Cell.make Error)
@@ -7670,7 +7770,9 @@ and type_aggregate_access ctx i =
                 return i3'
             | None -> typed ctx i3
           in
-          return_statement i (ArraySet (i1', i2', i3')) [||]
+          return_statement i
+            (ArraySet (ascribe_conditional_receiver ctx i1', i2', i3'))
+            [||]
       | Error ->
           (* Receiver already failed to type; recover silently (still type the
              value so its holes are consumed). *)
@@ -8818,7 +8920,7 @@ and type_array_fill_call ctx i func a (meth : Ast.ident) j v n =
   return_statement i
     (Call
        ( {
-           desc = StructGet (a', meth);
+           desc = StructGet (ascribe_conditional_receiver ctx a', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
            expected = Unset;
@@ -8860,12 +8962,12 @@ and type_array_copy_call ctx i func a1 (meth : Ast.ident) i1 a2 i2 n =
   return_statement i
     (Call
        ( {
-           desc = StructGet (a1', meth);
+           desc = StructGet (ascribe_conditional_receiver ctx a1', meth);
            info = ([||], func.info);
            hints = Wax_wasm.Hints.none;
            expected = Unset;
          },
-         [ i1'; a2'; i2'; n' ] ))
+         [ i1'; ascribe_conditional_receiver ctx a2'; i2'; n' ] ))
     [||]
 
 and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
@@ -8911,7 +9013,7 @@ and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
       return_statement i
         (Call
            ( {
-               desc = StructGet (a', meth);
+               desc = StructGet (ascribe_conditional_receiver ctx a', meth);
                info = ([||], func.info);
                hints = Wax_wasm.Hints.none;
                expected = Unset;
@@ -12821,6 +12923,26 @@ let check_attributes diagnostics
 
 (*** Forms that depend on the configuration ***)
 
+(* Each alias defined under a conditional annotation, with its definition in
+   every branch, as written (see [Typing_env.alias_variants]). *)
+let conditional_alias_variants fields =
+  let tbl = Hashtbl.create 8 in
+  let rec walk ~under fields =
+    List.iter
+      (fun (field : (_ modulefield, _) annotated) ->
+        match field.desc with
+        | Conditional { then_fields; else_fields; _ } ->
+            walk ~under:true then_fields.desc;
+            Option.iter (fun e -> walk ~under:true e.Annot.desc) else_fields
+        | Type_alias { name; typ } when under ->
+            Hashtbl.replace tbl name.desc
+              (typ :: Option.value ~default:[] (Hashtbl.find_opt tbl name.desc))
+        | _ -> ())
+      fields
+  in
+  walk ~under:false fields;
+  tbl
+
 (* What a construct lowers to in each configuration checked, for one whose form
    may depend on the configuration: a literal or null (its type, printed, with
    the conditional alias it takes, if any), a cast to a conditional alias (its
@@ -12828,17 +12950,31 @@ let check_attributes diagnostics
    access (the receiver's struct type and the field's position), an operation
    whose instruction its operands' types pick (those types, printed, with the
    conditional alias of one, if any), an inferred declaration (the type it is
-   declared with, printed). *)
+   declared with, printed), an instruction whose type immediate the lowering
+   takes from a type the code does not write (that immediate), the receiver of
+   a struct or array access (its type, with that type's supertypes). *)
 type configuration_form =
   | Literal_form of ident option * string list
   | Cast_form of ident * string list
   | Field_form of ident * (string * int) list
   | Operation_form of ident option * string list
   | Declaration_form of declaration * string list
+  | Immediate_form of immediate * string list
+  | Receiver_form of (string * string list) list
 
 (* A declaration whose type the lowering takes from the one it is inferred
-   with: an omitted block result, unannotated locals. *)
-and declaration = Block_result | Locals of ident list
+   with: an omitted block result, unannotated locals or global, the result of
+   a [select] of references. *)
+and declaration =
+  | Block_result
+  | Locals of ident list
+  | Global_type of ident
+  | Select_result
+
+(* Where an immediate comes from: the operand a continuation instruction or a
+   call through a reference applies to, or the type a struct, array or string
+   value is inferred with. *)
+and immediate = Access | Call_ref | Construction
 
 (* Record in [tbl], by span, the form each such construct of [typed_fields]
    takes in this configuration. A module lowered as one for every
@@ -12849,8 +12985,9 @@ and declaration = Block_result | Locals of ident list
    reaches the lowered module, as a local's or a result's, validating it
    checks the constant anyway; a dropped one is checked only here.) *)
 let record_configuration_forms ctx tbl typed_fields =
-  let add ?at (l : location) form =
-    let key = (l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
+  (* [kind] tells apart two forms of one construct. *)
+  let add ?at ?(kind = "") (l : location) form =
+    let key = (kind, l.loc_start.pos_cnum, l.loc_end.pos_cnum) in
     let at = Option.value ~default:l at in
     let at, prev =
       match Hashtbl.find_opt tbl key with
@@ -12867,6 +13004,50 @@ let record_configuration_forms ctx tbl typed_fields =
     add l (function
       | Some (Declaration_form (d, seen)) -> Declaration_form (d, union t seen)
       | _ -> Declaration_form (d, [ t ]))
+  in
+  let immediate l k parts =
+    let t = String.concat " " parts in
+    add ~kind:"immediate" l (function
+      | Some (Immediate_form (k, seen)) -> Immediate_form (k, union t seen)
+      | _ -> Immediate_form (k, [ t ]))
+  in
+  (* A value's type as a declaration of it is written: by its conditional
+     alias, which lowers to the same annotation in every configuration, or by
+     the type itself. *)
+  let written_form cell =
+    match Cell.get cell with
+    | Valtype { alias = Some a; _ } when conditional_alias ctx a -> Some a.desc
+    | Valtype { typ; _ } ->
+        Some (Output.valtype_string (unalias ctx.type_context typ))
+    | _ -> None
+  in
+  let single (e : _ instr) =
+    match fst e.info with [| cell |] -> Some cell | _ -> None
+  in
+  (* The type a value's reference type names, as an immediate. *)
+  let own_name cell =
+    match Cell.get cell with
+    | Valtype { typ; _ } -> (
+        match unalias ctx.type_context typ with
+        | Ref { typ = Type n | Exact n; _ } -> Some n.desc
+        | _ -> None)
+    | _ -> None
+  in
+  (* The receiver of a struct or array access, by its own span: the access
+     names the type the others are subtypes of (see [receiver_choice]). The
+     value read through a supertype may have a wider type than the
+     configuration types it with (an immutable field refined by a subtype):
+     still a valid one, and where the code needs the narrower one, a
+     declaration or operation inferred from it differs between configurations,
+     and is reported there. *)
+  let access (recv : _ instr) =
+    match Option.bind (single recv) own_name with
+    | Some n ->
+        let entry = (n, type_ancestors ctx n) in
+        add ~kind:"receiver" (snd recv.info) (function
+          | Some (Receiver_form seen) -> Receiver_form (union entry seen)
+          | _ -> Receiver_form [ entry ])
+    | None -> ()
   in
   (* A literal's type may differ between configurations without an alias to
      say so: one taken from a declaration written differently in each branch,
@@ -13039,7 +13220,113 @@ let record_configuration_forms ctx tbl typed_fields =
                 | _address :: values -> operation l values
                 | [] -> ()))
       | _ -> ())
+    typed_fields;
+  let is_array (e : _ instr) =
+    match Option.bind (single e) own_name with
+    | Some n -> (
+        match Tbl.find_no_mark ctx.type_context.types (Ast.no_loc n) with
+        | Some (_, { typ = Array _; _ }) -> true
+        | _ -> false)
+    | None -> false
+  in
+  let ascribed_selects = Hashtbl.create 4 in
+  (* A call through a reference, rather than of a function by name. *)
+  let call_ref (f : _ instr) =
+    match f.desc with
+    | Get name when Tbl.find_no_mark ctx.functions name <> None -> None
+    | _ -> Option.bind (single f) own_name
+  in
+  Ast_utils.iter_module_instr
+    (fun (i : _ instr) ->
+      let l = snd i.info in
+      match i.desc with
+      (* A field access has a value; a method, called, has none. *)
+      | StructGet (recv, _) when single i <> None -> access recv
+      | StructSet (recv, _, _) -> access recv
+      | ArrayGet (recv, _) -> access recv
+      | ArraySet (recv, _, _) -> access recv
+      | Call ({ desc = StructGet (a, { desc = "fill" | "init"; _ }); _ }, _)
+        when is_array a ->
+          access a
+      | Call
+          ({ desc = StructGet (a1, { desc = "copy"; _ }); _ }, [ _; a2; _; _ ])
+        when is_array a1 ->
+          access a1;
+          access a2
+      | (Call (f, _) | TailCall (f, _)) when single f <> None -> (
+          match call_ref f with
+          | Some n -> immediate l Call_ref [ n ]
+          | None -> ())
+      | GetDescriptor recv -> (
+          match Option.bind (single recv) own_name with
+          | Some n -> immediate l Access [ n ]
+          | None -> ())
+      | Struct (None, _)
+      | StructDefault None
+      | Array (None, _, _)
+      | ArrayDefault (None, _)
+      | ArrayFixed (None, _)
+      | ArraySegment (None, _, _, _)
+      | String (None, _)
+      | StructDesc _ | StructDefaultDesc _ -> (
+          match Option.bind (single i) own_name with
+          | Some n -> immediate l Construction [ n ]
+          | None -> ())
+      | Resume (ct, _, _)
+      | ResumeThrow (ct, _, _, _)
+      | ResumeThrowRef (ct, _, _)
+      | Switch (ct, _, _)
+      | ContNew (ct, _) ->
+          immediate l Access [ ct.desc ]
+      | ContBind (src, dst, _) -> immediate l Access [ src.desc; dst.desc ]
+      (* A select ascribed an alias is typed with it (see [To_wasm]); the walk
+         reaches the ascription first. *)
+      | Cast (({ desc = Select _; _ } as sel), Ascribed (Alias _)) ->
+          Hashtbl.replace ascribed_selects (snd sel.info) ()
+      (* A select of references is typed with its result, one of numbers is
+         not. *)
+      | Select _ when not (Hashtbl.mem ascribed_selects l) -> (
+          match single i with
+          | Some cell -> (
+              match Cell.get cell with
+              | Valtype { typ; _ } -> (
+                  match unalias ctx.type_context typ with
+                  | Ref _ -> (
+                      match written_form cell with
+                      | Some t -> declared l Select_result [ t ]
+                      | None -> ())
+                  | _ -> declared l Select_result [ "number" ])
+              | _ -> ())
+          | None -> ())
+      | _ -> ())
+    typed_fields;
+  (* A global's type, unwritten, is its initializer's, unless that carries an
+     alias, which [declared_alias] writes. *)
+  Ast_utils.iter_fields
+    (fun (field : (_ modulefield, _) annotated) ->
+      match field.desc with
+      | Global { name; typ = None; def; _ } -> (
+          match
+            Option.bind (single def) (fun c ->
+                match Cell.get c with
+                | Valtype { typ; _ } ->
+                    Some (Output.valtype_string (unalias ctx.type_context typ))
+                | _ -> None)
+          with
+          | Some t -> declared field.info (Global_type name) [ t ]
+          | None -> ())
+      | _ -> ())
     typed_fields
+
+(* Of the types [seen] a receiver has in the configurations, with their
+   supertypes, the one the others are subtypes of, if any. *)
+let receiver_choice seen =
+  List.find_map
+    (fun (n, _) ->
+      if List.for_all (fun (_, ancestors) -> List.mem n ancestors) seen then
+        Some n
+      else None)
+    seen
 
 (* Report, once, each construct of [tbl] (see [record_configuration_forms])
    with no form that holds in every configuration. A field access is fine when
@@ -13075,13 +13362,16 @@ let report_configuration_forms diagnostics tbl =
     | Operation_form (_, _ :: _ :: _)
     | Literal_form (_, _ :: _ :: _)
     | Cast_form (_, _ :: _ :: _)
-    | Declaration_form (_, _ :: _ :: _) ->
+    | Declaration_form (_, _ :: _ :: _)
+    | Immediate_form (_, _ :: _ :: _) ->
         true
     | Field_form (_, seen) ->
         List.exists
           (fun (t, k) -> List.exists (fun (t', k') -> t <> t' && k <> k') seen)
           seen
-    | Literal_form _ | Cast_form _ | Operation_form _ | Declaration_form _ ->
+    | Receiver_form seen -> receiver_choice seen = None
+    | Literal_form _ | Cast_form _ | Operation_form _ | Declaration_form _
+    | Immediate_form _ ->
         false
   in
   (* A declaration takes its type from what it contains: one of those that has
@@ -13099,7 +13389,7 @@ let report_configuration_forms diagnostics tbl =
       match form with
       | Operation_form _ | Literal_form _ -> not (covered l)
       | Declaration_form _ -> not (contains_conflict l)
-      | Cast_form _ | Field_form _ -> true)
+      | Cast_form _ | Field_form _ | Immediate_form _ | Receiver_form _ -> true)
   |> List.iter (fun ((location : location), form) ->
       match form with
       | Operation_form (a, _ :: _ :: _) ->
@@ -13118,9 +13408,22 @@ let report_configuration_forms diagnostics tbl =
           Error.configuration_dependent_field diagnostics ~location f
       | Declaration_form (d, _ :: _ :: _) ->
           Error.configuration_dependent_declaration diagnostics ~location
-            (match d with Block_result -> None | Locals l -> Some l)
+            (match d with
+            | Block_result -> `Block
+            | Locals l -> `Locals l
+            | Global_type x -> `Global x
+            | Select_result -> `Select)
+      | Immediate_form (k, _ :: _ :: _) ->
+          Error.configuration_dependent_immediate diagnostics ~location
+            (match k with
+            | Access -> `Access
+            | Call_ref -> `Call_ref
+            | Construction -> `Construction)
+      | Receiver_form seen when receiver_choice seen = None ->
+          Error.configuration_dependent_immediate diagnostics ~location
+            `Receiver
       | Literal_form _ | Cast_form _ | Field_form _ | Operation_form _
-      | Declaration_form _ ->
+      | Declaration_form _ | Immediate_form _ | Receiver_form _ ->
           ())
 
 (*** Type-checking a configuration ***)
@@ -13128,7 +13431,7 @@ let report_configuration_forms diagnostics tbl =
 let type_configuration ?(warn_unused = false) ?(build = true) ?forms
     ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
     ?(member_completions = None) ?(faithful = false)
-    ?(alias_variants = Hashtbl.create 0)
+    ?(alias_variants = Hashtbl.create 0) ?(receiver_types = Hashtbl.create 0)
     ?(features = Wax_utils.Feature.default ())
     ?(select =
       fun (_ : location) -> invalid_arg "Typing: unplanned conditional")
@@ -13276,6 +13579,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
       select;
       faithful;
       alias_variants;
+      receiver_types;
     }
   in
   check_type_definitions ctx;
@@ -14506,26 +14810,6 @@ let dedupe_sinks ~resolve_links ~pun_spans ~member_completions =
       l := List.sort_uniq (fun (a, _) (b, _) -> compare (span a) (span b)) !l)
     member_completions
 
-(* Each alias defined under a conditional annotation, with its definition in
-   every branch, as written (see [Typing_env.alias_variants]). *)
-let conditional_alias_variants fields =
-  let tbl = Hashtbl.create 8 in
-  let rec walk ~under fields =
-    List.iter
-      (fun (field : (_ modulefield, _) annotated) ->
-        match field.desc with
-        | Conditional { then_fields; else_fields; _ } ->
-            walk ~under:true then_fields.desc;
-            Option.iter (fun e -> walk ~under:true e.Annot.desc) else_fields
-        | Type_alias { name; typ } when under ->
-            Hashtbl.replace tbl name.desc
-              (typ :: Option.value ~default:[] (Hashtbl.find_opt tbl name.desc))
-        | _ -> ())
-      fields
-  in
-  walk ~under:false fields;
-  tbl
-
 let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
     ?(suggest = false) ?(lowering = true) ?(resolve_links = None)
     ?(pun_spans = None) ?(member_completions = None) ?(faithful = false)
@@ -14568,6 +14852,18 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
       if lowering && not simplify then conditional_alias_variants fields
       else Hashtbl.create 0
     in
+    (* A struct or array access names a type that holds in every
+       configuration (see [receiver_choice]). *)
+    let receiver_types = Hashtbl.create 16 in
+    Option.iter
+      (Hashtbl.iter (fun (kind, a, b) (_, form) ->
+           match form with
+           | Receiver_form seen when kind = "receiver" ->
+               Option.iter
+                 (Hashtbl.replace receiver_types (a, b))
+                 (receiver_choice seen)
+           | _ -> ()))
+      forms;
     let results =
       List.map
         (fun run ->
@@ -14575,7 +14871,7 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
             type_configuration
               ~select:(Wax_wasm.Cond_plan.select plan run)
               ~resolve_links ~pun_spans ~member_completions ~faithful
-              ~alias_variants ~features ~simplify
+              ~alias_variants ~receiver_types ~features ~simplify
               (Wax_utils.Diagnostic.collector ())
               fields ))
         (Wax_wasm.Cond_plan.runs plan)

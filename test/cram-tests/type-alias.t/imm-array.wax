@@ -1,0 +1,4 @@
+type a = [mut i32];
+type b = [mut i64];
+#[if(p)] { type r = &a; } #[else] { type r = &b; }
+fn f(x: r) { _ = x[0]; }

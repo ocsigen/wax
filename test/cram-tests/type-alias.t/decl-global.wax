@@ -1,0 +1,2 @@
+#[if(p)] { const h: i64 = 0; } #[else] { const h: i32 = 0; }
+const g = h;

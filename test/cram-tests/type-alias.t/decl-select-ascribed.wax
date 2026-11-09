@@ -1,0 +1,2 @@
+#[if(p)] { type r = &?extern; } #[else] { type r = &?eq; }
+fn f(x: r, y: r, c: i32) { _ = (c ? x! : y! : r); }

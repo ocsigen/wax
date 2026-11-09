@@ -1,0 +1,4 @@
+type t = fn() -> i32;
+type u = fn() -> i64;
+#[if(p)] { type r = &?t; } #[else] { type r = &?u; }
+fn f(x: r) { _ = x!(); }

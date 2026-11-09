@@ -49,3 +49,19 @@ converts.
   (func $get (export "get") (result i32)
     (return (struct.get $s1 $f (call $make)))
   )
+
+It names the type the others are subtypes of, whichever branch defines it.
+
+  $ wax -f wat same-swapped.wax
+  (type $s1 (sub (struct (field $f i32))))
+  (type $s2 (sub final $s1 (struct (field $f i32) (field $g i32))))
+  (@if $p
+    (@then
+      (func $make (result (ref $s2))
+        (return (struct.new $s2 (i32.const 1) (i32.const 2)))))
+    (@else
+      (func $make (result (ref $s1)) (return (struct.new $s1 (i32.const 1)))))
+  )
+  (func $get (export "get") (result i32)
+    (return (struct.get $s1 $f (call $make)))
+  )

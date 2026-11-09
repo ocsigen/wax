@@ -181,6 +181,12 @@ type module_context = {
       (* Each alias defined under a conditional annotation, with its definition
          in every branch: for the runs that build a module lowered as one for
          every configuration, empty otherwise. *)
+  receiver_types : (int * int, string) Hashtbl.t;
+      (* By the span of the receiver of a struct or array access, the type the
+         access names, in a module lowered as one for every configuration: of
+         the types the receiver has in the configurations, the one the others
+         are subtypes of. Filled, as [alias_variants], only for the runs that
+         build such a module. *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
   functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;
