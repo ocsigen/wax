@@ -50,12 +50,55 @@ let canonical_names (m : _ B.module_) =
         map)
     ids B.IntMap.empty
 
+(* [text] with each function's locals that no instruction reads or writes left
+   out. A module converted unresolved declares at the function level the locals
+   of every branch of a conditional annotation, as WAT has no conditional local,
+   so once specialized it may declare some its kept branches never use; an
+   unused local means nothing. Only in a function whose locals are all
+   referenced by name: dropping one renumbers the others. *)
+let drop_unused_locals ((id, fields) : _ Ast.Text.module_) : _ Ast.Text.module_
+    =
+  let field (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
+    match f.desc with
+    | Func ({ locals; instrs; _ } as func) -> (
+        let used =
+          List.fold_left
+            (Wax_wasm.Ast_utils.fold_instr (fun acc (i : _ Ast.Text.instr) ->
+                 match (acc, i.desc) with
+                 | ( Some names,
+                     ( LocalGet { desc = Id n; _ }
+                     | LocalSet { desc = Id n; _ }
+                     | LocalTee { desc = Id n; _ } ) ) ->
+                     Some (n :: names)
+                 | _, (LocalGet _ | LocalSet _ | LocalTee _) -> None
+                 | _ -> acc))
+            (Some []) instrs
+        in
+        match used with
+        | Some used
+          when List.for_all
+                 (fun (l : _ Ast.annotated) -> Option.is_some (fst l.desc))
+                 locals ->
+            let locals =
+              List.filter
+                (fun (l : _ Ast.annotated) ->
+                  match fst l.desc with
+                  | Some (n : Ast.Text.name) -> List.mem n.desc used
+                  | None -> true)
+                locals
+            in
+            { f with desc = Ast.Text.Func { func with locals } }
+        | _ -> f)
+    | _ -> f
+  in
+  (id, List.map field fields)
+
 (* The module as WAT, without its type definitions (a [(type …)] or [(rec …)]
    field, which runs to the next field). Fields start at column 0, or at column
    2 inside a [(module …)] wrapper. *)
 let render (m : _ B.module_) =
   let m = { m with names = { m.names with types = canonical_names m } } in
-  let text = Wax_wasm.Binary_to_text.module_ m in
+  let text = drop_unused_locals (Wax_wasm.Binary_to_text.module_ m) in
   let s =
     Wax_utils.Printer.run_string (fun p ->
         Wax_wasm.Output.module_ p ~trivia:(Wax_utils.Trivia.empty ()) text)
