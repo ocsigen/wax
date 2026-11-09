@@ -1,0 +1,10 @@
+rec {
+    type o1 = descriptor d1 { x: i32 };
+    type d1 = describes o1 { };
+}
+rec {
+    type o2 = descriptor d2 { x: i64 };
+    type d2 = describes o2 { };
+}
+#[if(p)] { type r = &o1; } #[else] { type r = &o2; }
+fn g(x: r) { _ = x.descriptor; }

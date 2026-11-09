@@ -1,0 +1,4 @@
+type s1 = { f: i32 };
+type s2 = { f: mut i32 };
+#[if(p)] { type n = &s1; } #[else] { type n = &s2; }
+fn mk() -> n { return {f: 1}; }

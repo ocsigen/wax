@@ -1362,6 +1362,62 @@ type, or for the other constructs, it has no single form.
     Write it in the branches of a conditional, or resolve the conditionals with
     -D.
   [128]
+  $ wax -f wat imm-struct.wax
+  Error:
+    The type of this value is inferred as different types under different
+    conditional annotations, so it has no single WebAssembly form.
+   ──➤  imm-struct.wax:4:23
+  2 │ type s2 = { f: mut i32 };
+  3 │ #[if(p)] { type n = &s1; } #[else] { type n = &s2; }
+  4 │ fn mk() -> n { return {f: 1}; }
+    ·                       ^^^^^^
+  5 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat imm-string.wax
+  Error:
+    The type of this value is inferred as different types under different
+    conditional annotations, so it has no single WebAssembly form.
+   ──➤  imm-string.wax:4:23
+  2 │ type b = [mut i16];
+  3 │ #[if(p)] { type n = &a; } #[else] { type n = &b; }
+  4 │ fn mk() -> n { return "ab"; }
+    ·                       ^^^^
+  5 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -f wat imm-cont.wax
+  Error:
+    This instruction has no single WebAssembly form: the value it applies to has
+    different types under different conditional annotations.
+   ──➤  imm-cont.wax:6:18
+  4 │ type c2 = cont f2;
+  5 │ #[if(p)] { type k = &c1; } #[else] { type k = &c2; }
+  6 │ fn g(x: k) { _ = x.resume(); }
+    ·                  ^^^^^^^^^^
+  7 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+  $ wax -X custom-descriptors -f wat imm-descriptor.wax
+  Error:
+    This instruction has no single WebAssembly form: the value it applies to has
+    different types under different conditional annotations.
+    ──➤  imm-descriptor.wax:10:18
+   8 │ }
+   9 │ #[if(p)] { type r = &o1; } #[else] { type r = &o2; }
+  10 │ fn g(x: r) { _ = x.descriptor; }
+     ·                  ^^^^^^^^^^^^
+  11 │ 
+  Hint:
+    Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
 
 An operand taken off the stack of unreachable code picks no form: any
 instruction accepts it. The comparison below compares the struct with such an

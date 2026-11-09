@@ -1,0 +1,4 @@
+type a = [i8];
+type b = [mut i16];
+#[if(p)] { type n = &a; } #[else] { type n = &b; }
+fn mk() -> n { return "ab"; }

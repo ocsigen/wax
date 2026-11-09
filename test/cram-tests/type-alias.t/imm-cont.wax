@@ -1,0 +1,6 @@
+type f1 = fn() -> i32;
+type c1 = cont f1;
+type f2 = fn() -> i64;
+type c2 = cont f2;
+#[if(p)] { type k = &c1; } #[else] { type k = &c2; }
+fn g(x: k) { _ = x.resume(); }
