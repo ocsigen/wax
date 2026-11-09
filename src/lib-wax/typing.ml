@@ -2372,7 +2372,11 @@ let rec subtype ?location ?(pin = true) ctx ty ty' =
          first-checked one would reject the others. *)
       if pin then Cell.set ty t;
       true
-  | _, (Unknown | Error | UnknownRef) -> assert false
+  (* The poison of a declaration whose type did not resolve (a function's
+     result, reported where it is written): any value fits it, as one of type
+     [Error] fits anything, so that its uses do not cascade. *)
+  | _, Error -> true
+  | _, (Unknown | UnknownRef) -> assert false
   | UnknownRef, _ -> false
   | _, Valtype { internal = Alias _; _ } -> .
 

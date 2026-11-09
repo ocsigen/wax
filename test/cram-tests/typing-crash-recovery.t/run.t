@@ -148,3 +148,22 @@ tripping an assertion:
 
   $ wax check super-cycle-hole.wax >/dev/null 2>&1; echo $?
   128
+
+A function whose result type does not resolve, in a module with a conditional
+annotation, checks its body's value against the poison its result is declared
+with; the value fits it, as it would fit any poison, instead of tripping an
+assertion:
+
+  $ cat > unbound-result.wax <<'WAX'
+  > #[if(c)] {}
+  > fn f() -> &?t { null; }
+  > WAX
+
+  $ wax check unbound-result.wax
+  Error: The type 't' is not bound.
+   ──➤  unbound-result.wax:2:13
+  1 │ #[if(c)] {}
+  2 │ fn f() -> &?t { null; }
+    ·             ^
+  3 │ 
+  [128]

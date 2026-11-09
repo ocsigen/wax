@@ -64,6 +64,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Fixes
 
+- A function whose result type is not bound no longer crashes `wax` with an
+  internal error when the module has a conditional annotation; the unbound
+  type is reported, as it is in a module without one.
 - A struct or array access on a value whose type differs between
   configurations, `&s1` in one and its subtype `&s2` in another (a conditional
   alias, or a function declared differently in each branch), now converts
