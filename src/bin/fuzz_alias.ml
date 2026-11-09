@@ -25,7 +25,10 @@
    field names of a struct subtype may be swapped. Some operands (call
    arguments, field and element values, stored and returned values, a body's
    value) are wrapped in a [do] block whose result is left unwritten, so that
-   it takes its type from a declaration written with an alias.
+   it takes its type from a declaration written with an alias. And some
+   annotations are dropped (of a [let], a global, a block's result), so that a
+   declaration takes the type it is inferred with, which may differ between
+   configurations with no alias to name it.
 
    Aliasing changes nothing about the module, so the oracle compares: the binary
    must be byte-identical to the original's (after [-D] for a conditional run),
@@ -172,6 +175,10 @@ let wrap (i : location instr) : location instr =
           };
     }
 
+(* For a [differ] run, whether to drop an annotation [wrap] could otherwise
+   leave: a declaration then takes the type it is inferred with. *)
+let drop_annotation () = !blocks && next_wrap () mod 3 = 0
+
 let rec instr (i : location instr) : location instr =
   let desc =
     Wax_lang.Ast_utils.map_desc ~instr ~block:(List.map instr) i.desc
@@ -182,7 +189,15 @@ let rec instr (i : location instr) : location instr =
         let init =
           match bindings with [ _ ] -> Option.map wrap init | _ -> init
         in
-        Let (List.map (fun (n, t) -> (n, Option.map alias_of t)) bindings, init)
+        let binding (n, t) =
+          match (n, t, init) with
+          | Some _, Some _, Some _ when drop_annotation () -> (n, None)
+          | _ -> (n, Option.map alias_of t)
+        in
+        Let (List.map binding bindings, init)
+    | Block ({ typ = { params = [||]; results = [| _ |] }; _ } as b)
+      when !in_body && drop_annotation () ->
+        Block { b with typ = { params = [||]; results = [||] } }
     | Cast (e, Valtype t) when !casts -> Cast (e, Valtype (alias_of t))
     | Set (x, op, v) -> Set (x, op, wrap v)
     | Call (f, args) when is_function f -> Call (f, List.map wrap args)
@@ -201,12 +216,24 @@ let rec instr (i : location instr) : location instr =
 (* The supertype of each type the module declares, by name. *)
 let supertypes : (string, string) Hashtbl.t = Hashtbl.create 16
 
+(* The kind (struct, array, function, continuation) of each type the module
+   declares, by name. *)
+let kinds : (string, string) Hashtbl.t = Hashtbl.create 16
+
+let kind_of (c : comptype) =
+  match c with
+  | Struct _ -> "struct"
+  | Array _ -> "array"
+  | Func _ -> "func"
+  | Cont _ -> "cont"
+
 let rec collect_supertypes (f : (_ modulefield, location) annotated) =
   match f.desc with
   | Type rt ->
       Array.iter
         (fun (m : (ident * subtype, location) annotated) ->
           let name, st = m.desc in
+          Hashtbl.replace kinds name.desc (kind_of st.typ);
           Option.iter
             (fun (s : ident) -> Hashtbl.replace supertypes name.desc s.desc)
             st.supertype)
@@ -228,10 +255,26 @@ let related t =
         (fun sub sup acc -> if acc = None && sup = t then Some sub else acc)
         supertypes None
 
+(* Another type the module declares of the same kind as [t], if any: an access,
+   a call or a construction then names a type the other configuration has no
+   subtype of. *)
+let unrelated t =
+  match Hashtbl.find_opt kinds t with
+  | None -> None
+  | Some k -> (
+      match
+        Hashtbl.fold
+          (fun n k' acc -> if k' = k && n <> t then n :: acc else acc)
+          kinds []
+        |> List.sort compare
+      with
+      | [] -> None
+      | l -> Some (List.nth l (next () mod List.length l)))
+
 (* A type of the same kind as [t], for the [#[else]] definition of a [differ]
    run: a reference may keep its heap type and change its nullability, or name
-   a related struct type (whose fields may sit elsewhere), or move to the other
-   hierarchy. *)
+   a related struct type (whose fields may sit elsewhere), or another type of
+   its kind, or move to the other hierarchy. *)
 let neighbour (t : valtype) : valtype =
   match t with
   | I32 -> I64
@@ -239,7 +282,7 @@ let neighbour (t : valtype) : valtype =
   | F32 -> F64
   | F64 -> F32
   | Ref ({ typ = Type n | Exact n; _ } as r) when next () mod 2 = 0 -> (
-      match related n.desc with
+      match if next () mod 2 = 0 then related n.desc else unrelated n.desc with
       | Some s -> Ref { r with typ = Type (no_loc s) }
       | None -> Ref { r with nullable = not r.nullable })
   | Ref ({ typ = Any | Eq | I31 | Struct | Array | None_; _ } as r)
@@ -367,6 +410,7 @@ let rec field (f : (_ modulefield, location) annotated) =
                     | None -> false)
                   body );
           }
+    | Global r when drop_annotation () -> Global { r with typ = None }
     | Global r -> Global { r with typ = Option.map alias_of r.typ }
     | Tag r -> Tag { r with sign = Option.map functype r.sign }
     | Import r -> Import { r with decl = import_decl r.decl }
