@@ -93,6 +93,52 @@ let drop_unused_locals ((id, fields) : _ Ast.Text.module_) : _ Ast.Text.module_
   in
   (id, List.map field fields)
 
+(* [s] with each function's locals named [$l0], [$l1]… in declaration order. A
+   module converted unresolved names apart the locals of a statement that
+   occurs in both branches of a conditional ([$x] in one, [$x_2] in the
+   other), so once specialized it may name a local differently than the
+   configuration compiled directly does. *)
+let canonical_local_names s =
+  let decl = Re.Perl.compile_pat {|\(local \$([^ ()]+)|} in
+  let use =
+    Re.Perl.compile_pat
+      {|(\(local |local\.get |local\.set |local\.tee )\$([^ ()]+)|}
+  in
+  (* A function's lines, renamed one by one: a name runs to a space or a
+     parenthesis, or else to the end of its line. *)
+  let rename lines =
+    let names =
+      List.concat_map (Re.all decl) lines
+      |> List.mapi (fun k g -> (Re.Group.get g 1, Printf.sprintf "$l%d" k))
+    in
+    List.map
+      (Re.replace use ~f:(fun g ->
+           match List.assoc_opt (Re.Group.get g 2) names with
+           | Some n -> Re.Group.get g 1 ^ n
+           | None -> Re.Group.get g 0))
+      lines
+  in
+  (* A function starts a field, at column 0 or 2. *)
+  let starts_func line =
+    let t = String.trim line in
+    String.starts_with ~prefix:"(func" t
+    && String.length line - String.length t <= 2
+  in
+  let chunks =
+    List.fold_left
+      (fun chunks line ->
+        match chunks with
+        | current :: rest when not (starts_func line) ->
+            (line :: current) :: rest
+        | _ -> [ line ] :: chunks)
+      []
+      (String.split_on_char '\n' s)
+  in
+  List.rev_map
+    (fun chunk -> String.concat "\n" (rename (List.rev chunk)))
+    chunks
+  |> String.concat "\n"
+
 (* The module as WAT, without its type definitions (a [(type …)] or [(rec …)]
    field, which runs to the next field). Fields start at column 0, or at column
    2 inside a [(module …)] wrapper. *)
@@ -128,6 +174,7 @@ let render (m : _ B.module_) =
   (* Two indices of one canonical type are printed uniquified ([$c0_1]). *)
   |> Re.replace (Re.Perl.compile_pat {|\$c([0-9]+)_[0-9]+|}) ~f:(fun g ->
       "$c" ^ Re.Group.get g 1)
+  |> canonical_local_names
 
 let () =
   let d = Wax_utils.Diagnostic.collector () in
