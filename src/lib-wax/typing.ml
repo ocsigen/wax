@@ -13354,6 +13354,14 @@ let record_configuration_forms ctx tbl typed_fields =
          reaches the ascription first. *)
       | Cast (({ desc = Select _; _ } as sel), Ascribed (Alias _)) ->
           Hashtbl.replace ascribed_selects (snd sel.info) ()
+      (* A select choosing between two values of unreachable code takes its
+         type from its use, which may differ between configurations, but an
+         untyped select accepts them whatever the use: recorded apart, it
+         lowers untyped unless a configuration needs a reference ([stitch]). *)
+      | Select (_, a, b)
+        when (not (Hashtbl.mem ascribed_selects l))
+             && polymorphic a && polymorphic b ->
+          add ~kind:"untyped" l (fun _ -> Declaration_form (Select_result, []))
       (* A select of references is typed with its result, one of numbers is
          not. *)
       | Select _ when not (Hashtbl.mem ascribed_selects l) -> (
@@ -15007,13 +15015,25 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
     (* An inferred declaration takes a type that holds in every configuration
        (see [declaration_choice]). *)
     Option.iter
-      (Hashtbl.iter (fun (kind, a, b) (_, form) ->
-           match form with
-           | Declaration_form (_, (_ :: _ :: _ as seen)) when kind = "" ->
-               Option.iter
-                 (Hashtbl.replace types.declared (a, b))
-                 (declaration_choice seen)
-           | _ -> ()))
+      (fun forms ->
+        Hashtbl.iter
+          (fun (kind, a, b) (_, form) ->
+            match form with
+            | Declaration_form (_, (_ :: _ :: _ as seen)) when kind = "" ->
+                Option.iter
+                  (Hashtbl.replace types.declared (a, b))
+                  (declaration_choice seen)
+            (* A select choosing between values of unreachable code in some
+               configurations, and between numbers in the others, if any, is
+               untyped, though the run that owns it may infer a reference from
+               its use. [i32] stands for any number, all lowered alike. *)
+            | Declaration_form (Select_result, []) when kind = "untyped" -> (
+                match Hashtbl.find_opt forms ("", a, b) with
+                | None | Some (_, Declaration_form (_, [ ("number", _) ])) ->
+                    Hashtbl.replace types.declared (a, b) I32
+                | Some _ -> ())
+            | _ -> ())
+          forms)
       forms;
     (types, typed)
   end

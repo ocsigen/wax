@@ -178,8 +178,10 @@ val declared_type : types -> Ast.location -> Ast.valtype option
     declaration at [location] with (a block's result, a local, a global, a
     select's result) when the configurations of a module lowered as one for all
     of them infer different reference types for it, one a supertype of the
-    others: that one, made nullable if one of them is. [None] otherwise, the
-    declaration then taking the type the typed tree gives it. *)
+    others: that one, made nullable if one of them is. For a select of numbers
+    in every configuration where its values are not those of unreachable code, a
+    numeric type, for an untyped select. [None] otherwise, the declaration then
+    taking the type the typed tree gives it. *)
 
 val in_branch : types -> Ast.location -> bool -> (unit -> 'a) -> 'a
 (** [in_branch types location side f] runs [f] with the type table in force

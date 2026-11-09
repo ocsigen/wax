@@ -1,0 +1,8 @@
+fn f() {
+    return;
+    _?_:_;
+    #[if(dbg)] { 1; }
+    let l64: i64 = _;
+    do (&?extern) { _ = _; }
+    unreachable;
+}

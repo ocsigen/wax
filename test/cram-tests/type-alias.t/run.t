@@ -1459,6 +1459,20 @@ configuration.
     (drop (ref.eq))
     (unreachable)
   )
+A select between two such operands takes its type from its use: a number
+when dbg is unset, a reference when it is set. An untyped select accepts them
+in both.
+
+  $ wax -f wat select-unreachable.wax
+  (func $f
+    (local $l64 i64)
+    (return)
+    (select)
+    (@if $dbg (@then (i64.const 1)))
+    (local.set $l64)
+    (block (param externref) (drop))
+    (unreachable)
+  )
   $ wax -f wat op-branches.wax
   (@if $p
     (@then (@type $n i64) (@type $f f64))

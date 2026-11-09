@@ -2073,6 +2073,7 @@ and instruction_desc ret ctx (i : _ Wax_lang.Ast.instr) :
       let code_cond = instruction ret ctx cond in
       let typ =
         match (declared, expr_opt_valtype i) with
+        | Some (I32 | I64 | F32 | F64 | V128), _ -> None
         | Some typ, _ -> Some [ valtype typ ]
         | None, (None | Some (I32 | I64 | F32 | F64 | V128)) -> None
         | None, Some typ -> Some [ valtype typ ]
