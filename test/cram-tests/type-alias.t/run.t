@@ -1204,6 +1204,61 @@ in the branches of a conditional, the same operation converts.
     resolve the conditionals with -D.
   [128]
 
+An inferred declaration has the type of what declares it: a non-null value of
+a conditional alias has no alias, so a block or a local holding one has no
+single form, while annotating it with the alias gives it one. Where the
+declarations nest, the innermost is reported.
+
+  $ wax -f wat decl-block.wax
+  Error:
+    The result type of this block is inferred as different types under different
+    conditional annotations, so it has no single WebAssembly form.
+   ──➤  decl-block.wax:2:22
+  1 │ #[if(p)] { type r = &?extern; } #[else] { type r = &?eq; }
+  2 │ fn f(x: r) 'l: { _ = do { br_on_null 'l x; }; }
+    ·                      ^^^^^^^^^^^^^^^^^^^^^^^
+  3 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-local.wax
+  Error:
+    The type of the local 'y' is inferred as different types under different
+    conditional annotations, so its declaration has no single WebAssembly form.
+   ──➤  decl-local.wax:2:14
+  1 │ #[if(p)] { type r = &?extern; } #[else] { type r = &?eq; }
+  2 │ fn f(x: r) { let y = x!; let z: r = x!; }
+    ·              ^^^^^^^^^^
+  3 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-nested.wax
+  Error:
+    The result type of this block is inferred as different types under different
+    conditional annotations, so it has no single WebAssembly form.
+   ──➤  decl-nested.wax:2:18
+  1 │ #[if(p)] { fn k() -> i64 { 0; } } #[else] { fn k() -> i32 { 0; } }
+  2 │ fn j() { let y = do { k(); }; }
+    ·                  ^^^^^^^^^^^
+  3 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-annotated.wax
+  (@if $p (@then (@type $r externref)) (@else (@type $r eqref)))
+  (func $f (param $x (@type $r))
+    (local $y (@type $r))
+    (local.set $y (ref.as_non_null (local.get $x)))
+    (drop (block (result (@type $r)) (br_on_null 1 (local.get $x))))
+  )
+
 An operand taken off the stack of unreachable code picks no form: any
 instruction accepts it. The comparison below compares the struct with such an
 operand when dbg is set, and two of them otherwise, so it is a ref.eq in every

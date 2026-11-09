@@ -46,6 +46,12 @@ grammar keeps none, and both are versioned independently of the toolchain.
   between configurations is reported the same way when no alias says so, for
   instance one passed to a function declared with an `i64` parameter in one
   branch and an `i32` one in the other.
+- The same goes for a block whose result type is left unwritten, or a local
+  declared without a type, when the type it gets differs between
+  configurations and no alias names it: `let y = x!` on a conditional alias
+  `x` (the non-null type has no alias), or `let y = f()` where `f` returns
+  `i64` in one branch and `i32` in the other. The message says which
+  declaration it is about, and writing its type with an alias fixes it.
 - A literal passed to `cont.bind`, `resume` or `switch` for a parameter
   declared with a conditional alias now takes that alias, as one passed to a
   call does, so the error for it names the alias.

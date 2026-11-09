@@ -1,0 +1,2 @@
+#[if(p)] { type r = &?extern; } #[else] { type r = &?eq; }
+fn f(x: r) 'l: { _ = do { br_on_null 'l x; }; }

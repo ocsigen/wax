@@ -1067,6 +1067,34 @@ module Error = struct
              "This operation has no single WebAssembly form: its operands have \
               different types under different conditional annotations.")
 
+  (* [locals] is [None] for a block's result. *)
+  let configuration_dependent_declaration context ~location locals =
+    let hint =
+      text
+        "Give it a type that holds in every configuration (a type alias \
+         defined in the branches), write it in the branches of a conditional, \
+         or resolve the conditionals with -D."
+    in
+    report context ~location ~hint
+      (match locals with
+      | None ->
+          text
+            "The result type of this block is inferred as different types \
+             under different conditional annotations, so it has no single \
+             WebAssembly form."
+      | Some [ x ] ->
+          text "The type of the local"
+          ++ name x
+          ++ text
+               "is inferred as different types under different conditional \
+                annotations, so its declaration has no single WebAssembly \
+                form."
+      | Some _ ->
+          text
+            "The types of these locals are inferred as different types under \
+             different conditional annotations, so their declaration has no \
+             single WebAssembly form.")
+
   let invalid_cast context ~location ty' =
     report context ~location
       (text "This value of type" ++ typ ty'
@@ -12799,12 +12827,18 @@ let check_attributes diagnostics
    target type), a struct field
    access (the receiver's struct type and the field's position), an operation
    whose instruction its operands' types pick (those types, printed, with the
-   conditional alias of one, if any). *)
+   conditional alias of one, if any), an inferred declaration (the type it is
+   declared with, printed). *)
 type configuration_form =
   | Literal_form of ident option * string list
   | Cast_form of ident * string list
   | Field_form of ident * (string * int) list
   | Operation_form of ident option * string list
+  | Declaration_form of declaration * string list
+
+(* A declaration whose type the lowering takes from the one it is inferred
+   with: an omitted block result, unannotated locals. *)
+and declaration = Block_result | Locals of ident list
 
 (* Record in [tbl], by span, the form each such construct of [typed_fields]
    takes in this configuration. A module lowered as one for every
@@ -12828,6 +12862,12 @@ let record_configuration_forms ctx tbl typed_fields =
     Hashtbl.replace tbl key (at, form prev)
   in
   let union v l = if List.mem v l then l else v :: l in
+  let declared l d types =
+    let t = String.concat " " types in
+    add l (function
+      | Some (Declaration_form (d, seen)) -> Declaration_form (d, union t seen)
+      | _ -> Declaration_form (d, [ t ]))
+  in
   (* A literal's type may differ between configurations without an alias to
      say so: one taken from a declaration written differently in each branch,
      or from an alias whose provenance was lost on the way. *)
@@ -12937,6 +12977,43 @@ let record_configuration_forms ctx tbl typed_fields =
                 | _ -> Cast_form (a, [ t ]))
           | _ -> ())
       | StructGet (recv, f), _ | StructSet (recv, f, _), _ -> field l recv f
+      (* An omitted result is filled with the inferred one, named by the alias
+         it carries, if any ([declared_form]); a written one is the same in
+         every configuration. None is filled in unreachable code. *)
+      | ( ( Block { typ; _ }
+          | Loop { typ; _ }
+          | If { typ; _ }
+          | TryTable { typ; _ }
+          | Try { typ; _ }
+          | TryCatch { typ; _ } ),
+          _ )
+        when typ.results <> [||] ->
+          declared l Block_result
+            (Array.to_list (Array.map Output.valtype_string typ.results))
+      | Let (bindings, Some init), _
+        when Array.length (fst init.info) = List.length bindings -> (
+          (* An unannotated local is declared with the alias its initializer
+             carries ([declared_alias]), or else with the initializer's type. *)
+          let unannotated =
+            List.concat
+              (List.mapi
+                 (fun k (name, typ) ->
+                   match (name, typ, Cell.get (fst init.info).(k)) with
+                   | Some name, None, Valtype { typ; _ } ->
+                       [
+                         ( name,
+                           Output.valtype_string (unalias ctx.type_context typ)
+                         );
+                       ]
+                   | _ -> [])
+                 bindings)
+          in
+          match unannotated with
+          | [] -> ()
+          | _ ->
+              declared l
+                (Locals (List.map fst unannotated))
+                (List.map snd unannotated))
       (* The operations whose instruction the lowering picks from an operand's
          type (see [To_wasm]): the operators, a compound assignment, a cast
          from a number, a method on a value ([x.clz()], [x.min(y)]: its
@@ -12993,10 +13070,35 @@ let report_configuration_forms diagnostics tbl =
       (fun (a', b') -> a' <= a && b <= b' && (a', b') <> (a, b))
       operations
   in
+  let conflicting form =
+    match form with
+    | Operation_form (_, _ :: _ :: _)
+    | Literal_form (_, _ :: _ :: _)
+    | Cast_form (_, _ :: _ :: _)
+    | Declaration_form (_, _ :: _ :: _) ->
+        true
+    | Field_form (_, seen) ->
+        List.exists
+          (fun (t, k) -> List.exists (fun (t', k') -> t <> t' && k <> k') seen)
+          seen
+    | Literal_form _ | Cast_form _ | Operation_form _ | Declaration_form _ ->
+        false
+  in
+  (* A declaration takes its type from what it contains: one of those that has
+     no single form is what to report. *)
+  let contains_conflict (l : location) =
+    let a = l.loc_start.pos_cnum and b = l.loc_end.pos_cnum in
+    List.exists
+      (fun ((l' : location), form) ->
+        let a' = l'.loc_start.pos_cnum and b' = l'.loc_end.pos_cnum in
+        a <= a' && b' <= b && (a', b') <> (a, b) && conflicting form)
+      forms
+  in
   forms
   |> List.filter (fun ((l : location), form) ->
       match form with
       | Operation_form _ | Literal_form _ -> not (covered l)
+      | Declaration_form _ -> not (contains_conflict l)
       | Cast_form _ | Field_form _ -> true)
   |> List.iter (fun ((location : location), form) ->
       match form with
@@ -13014,7 +13116,12 @@ let report_configuration_forms diagnostics tbl =
                  List.exists (fun (t', k') -> t <> t' && k <> k') seen)
                seen ->
           Error.configuration_dependent_field diagnostics ~location f
-      | Literal_form _ | Cast_form _ | Field_form _ | Operation_form _ -> ())
+      | Declaration_form (d, _ :: _ :: _) ->
+          Error.configuration_dependent_declaration diagnostics ~location
+            (match d with Block_result -> None | Locals l -> Some l)
+      | Literal_form _ | Cast_form _ | Field_form _ | Operation_form _
+      | Declaration_form _ ->
+          ())
 
 (*** Type-checking a configuration ***)
 

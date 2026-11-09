@@ -1,0 +1,2 @@
+#[if(p)] { fn k() -> i64 { 0; } } #[else] { fn k() -> i32 { 0; } }
+fn j() { let y = do { k(); }; }

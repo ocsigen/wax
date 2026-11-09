@@ -1,0 +1,2 @@
+#[if(p)] { type r = &?extern; } #[else] { type r = &?eq; }
+fn f(x: r) { let y = x!; let z: r = x!; }
