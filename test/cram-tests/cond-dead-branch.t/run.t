@@ -107,3 +107,20 @@ Converting does not report it (no validation of a same-format conversion), but
   25 │ }
      · ╰
   26 │ 
+
+Whether a branch is reachable depends on its condition and the enclosing ones
+alone, not on how many configurations were explored: here the last branch is
+selected only when all thirteen variables are false, past the 4096
+configurations the check explores, and it is not reported:
+
+  $ { echo "(module"
+  >   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
+  >     echo "  (@if \$c$i (@then (global \$g$i i32 (i32.const $i))))"
+  >   done
+  >   printf '  (@if (and'
+  >   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13; do printf ' (not $c%d)' $i; done
+  >   echo ') (@then (global $x i32 (i32.const 0)))))'
+  > } > many.wat
+  $ wax check -W dead-code=warning -W truncated-coverage=hidden many.wat
+  $ wax -W truncated-coverage=hidden many.wat -f wax -o many.wax
+  $ wax check -W dead-code=warning -W truncated-coverage=hidden many.wax

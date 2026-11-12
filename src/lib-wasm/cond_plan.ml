@@ -35,7 +35,8 @@ type t = {
   env : Cond_solver.env;
   n_runs : int;
   truncated : bool;
-  items : item list;
+  dead : (Ast.location * bool) list;
+      (* The outermost branches no world reaches (see [dead_branches]). *)
 }
 
 let max_runs = 4096
@@ -79,7 +80,10 @@ let make ?(exhaustive = false) diagnostics items =
   let truncated = ref false in
   List.iter (fun k -> Hashtbl.replace node_owner k 0) (direct items);
   (* One run: [decide] is called at each conditional reached, in stream order,
-     and returns the selected side; [asm] accumulates the assumption. *)
+     and returns the selected side; [asm] accumulates the assumption, and [path]
+     is the conjunction of the literals of the branches enclosing the
+     conditional — what any world selecting it must satisfy, whatever it
+     decides elsewhere. *)
   let walk r ~seed ~decide =
     let asm = ref seed in
     let bodies = ref [] in
@@ -89,38 +93,48 @@ let make ?(exhaustive = false) diagnostics items =
         List.iter (fun k' -> Hashtbl.replace node_owner k' r) (direct inside)
       end
     in
-    let rec conds items =
+    let rec conds path items =
       List.iter
         (function
           | Cond { key; cond; then_; else_ } ->
               let k = key_of key in
               let f = formula key cond in
-              let d = decide k ~asm:!asm f ~has_else:(else_ <> None) in
+              let d = decide k ~asm:!asm ~path f ~has_else:(else_ <> None) in
               Hashtbl.replace decisions (r, k) d;
-              asm := Cond_solver.and_ !asm (if d then f else Cond_solver.not_ f);
+              let lit = if d then f else Cond_solver.not_ f in
+              asm := Cond_solver.and_ !asm lit;
               let inside = if d then Some then_ else else_ in
               Option.iter
                 (fun inside ->
                   claim k d inside;
-                  conds inside)
+                  conds (Cond_solver.and_ path lit) inside)
                 inside
-          | Body { rank; items } -> bodies := (rank, items) :: !bodies)
+          | Body { rank; items } -> bodies := (rank, path, items) :: !bodies)
         items
     in
-    conds items;
+    conds Cond_solver.true_ items;
     let bodies =
-      List.stable_sort (fun (a, _) (b, _) -> compare a b) (List.rev !bodies)
+      List.stable_sort
+        (fun (a, _, _) (b, _, _) -> compare a b)
+        (List.rev !bodies)
     in
-    List.iter (fun (_, items) -> conds items) bodies;
+    List.iter (fun (_, path, items) -> conds path items) bodies;
     Hashtbl.replace assumptions r !asm
   in
   (* Phase A: the worlds that exist. Each unselected branch nobody owns or has a
-     run queued for gets a run seeded with the assumption that selects it; the
-     queued run replays the same path (its seed entails every decision on it)
-     and so selects that branch. Seeds are deduplicated by formula: an equal
-     seed makes equal decisions. An [exhaustive] plan queues EVERY reachable
-     other side, ownership or not, so it visits every reachable configuration
-     (up to [max_runs]). *)
+     run queued for gets a run seeded with its path condition, the enclosing
+     branches' literals and its own: a run decides every conditional
+     consistently with its seed, so it selects each enclosing branch and then
+     that one. Not the assumption in force at that point: it also holds this
+     run's decisions at conditionals that do not enclose the branch, which a
+     world selecting it need not share, and may contradict (selecting [a] then
+     [b] rules out a branch under [not a and not b] that the run seeded with
+     [not a] would not reach either, as it selects [b] and leaves [not b] to
+     the run already queued for it). Seeds are deduplicated by formula: an
+     equal seed makes equal decisions. An [exhaustive] plan queues EVERY
+     reachable other side, ownership or not, seeded with the assumption in
+     force, so it visits every reachable configuration (up to [max_runs]); a
+     covering plan makes at most one run per branch, so it needs no cap. *)
   let queue = Queue.create () in
   Queue.push Cond_solver.true_ queue;
   let seen = Bdd_tbl.create 16 in
@@ -128,12 +142,12 @@ let make ?(exhaustive = false) diagnostics items =
   while (not (Queue.is_empty queue)) && not !truncated do
     let seed = Queue.pop queue in
     if not (Bdd_tbl.mem seen seed) then
-      if !n_runs >= max_runs then truncated := true
+      if exhaustive && !n_runs >= max_runs then truncated := true
       else begin
         Bdd_tbl.add seen seed ();
         let r = !n_runs in
         incr n_runs;
-        walk r ~seed ~decide:(fun k ~asm f ~has_else ->
+        walk r ~seed ~decide:(fun k ~asm ~path f ~has_else ->
             let d = Cond_solver.is_satisfiable (Cond_solver.and_ asm f) in
             let other = not d in
             (* An exhaustive plan explores the other side even when it is no
@@ -147,7 +161,9 @@ let make ?(exhaustive = false) diagnostics items =
                  && not (Hashtbl.mem pending (k, other))
             then begin
               let seed' =
-                Cond_solver.and_ asm (if other then f else Cond_solver.not_ f)
+                Cond_solver.and_
+                  (if exhaustive then asm else path)
+                  (if other then f else Cond_solver.not_ f)
               in
               if Cond_solver.is_satisfiable seed' then begin
                 Hashtbl.replace pending (k, other) ();
@@ -177,7 +193,7 @@ let make ?(exhaustive = false) diagnostics items =
               let r = !n_runs in
               incr n_runs;
               walk r ~seed:Cond_solver.false_
-                ~decide:(fun k' ~asm:_ _f ~has_else:_ ->
+                ~decide:(fun k' ~asm:_ ~path:_ _f ~has_else:_ ->
                   if k' = k then side
                   else
                     match Hashtbl.find_opt decisions (parent, k') with
@@ -185,6 +201,27 @@ let make ?(exhaustive = false) diagnostics items =
                     | None -> false))
       all
   done;
+  (* The outermost branches no world reaches: those whose path condition is
+     unsatisfiable, though their enclosing branch's is not. Decided from the
+     conditions alone, not from the runs, which an exhaustive plan may have
+     stopped short of the world that reaches a branch. *)
+  let rec dead path items =
+    List.concat_map
+      (function
+        | Cond { key; cond; then_; else_ } ->
+            let f = formula key cond in
+            let side d inside =
+              let path =
+                Cond_solver.and_ path (if d then f else Cond_solver.not_ f)
+              in
+              if Cond_solver.is_satisfiable path then dead path inside
+              else [ (key, d) ]
+            in
+            side true then_ @ Option.fold ~none:[] ~some:(side false) else_
+        | Body { items; _ } -> dead path items)
+      items
+  in
+  let dead = dead Cond_solver.true_ items in
   {
     decisions;
     owners;
@@ -193,7 +230,7 @@ let make ?(exhaustive = false) diagnostics items =
     env;
     n_runs = !n_runs;
     truncated = !truncated;
-    items;
+    dead;
   }
 
 let runs t = List.init t.n_runs Fun.id
@@ -298,25 +335,4 @@ let text_shape fields =
   in
   fields_ fields
 
-(* Every branch of the shape with its key and the conditional's span, outermost
-   first. *)
-let rec located_branches items =
-  List.concat_map
-    (function
-      | Cond { key; then_; else_; _ } ->
-          ((key, true) :: located_branches then_)
-          @ Option.fold ~none:[]
-              ~some:(fun e -> (key, false) :: located_branches e)
-              else_
-      | Body { items; _ } -> located_branches items)
-    items
-
-let dead_branches t =
-  List.filter
-    (fun (location, side) ->
-      let k = key_of location in
-      (not (Hashtbl.mem t.owners (k, side)))
-      (* Only the outermost dead branch of a nest: a conditional inside a dead
-         branch is never decided, so it has no owning run of its own. *)
-      && Hashtbl.mem t.node_owner k)
-    (located_branches t.items)
+let dead_branches t = t.dead

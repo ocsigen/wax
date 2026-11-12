@@ -14,9 +14,11 @@
     then the bodies by rank), selects the then-branch whenever its condition is
     consistent with the assumptions accumulated so far, refining the assumption
     either way. Each unselected branch that no run owns yet gets a run of its
-    own, seeded with the assumption in force at that point conjoined with the
-    branch's literal, so the world it is typed in is the one the enclosing
-    decisions describe. A branch no consistent world reaches (its condition
+    own, seeded with its path condition (its literal conjoined with those of the
+    branches enclosing it), so the world it is typed in is one the enclosing
+    decisions describe. Not with the assumption in force at that point: the
+    decisions made at conditionals that do not enclose the branch may rule out
+    every world reaching it. A branch no consistent world reaches (its condition
     contradicts the enclosing ones) still needs a typed form for the preserved
     tree: it is typed in a {e forced} run that replays its enclosing branch's
     owner decision for decision and selects it anyway; inside such a dead branch
@@ -88,11 +90,11 @@ val explain : t -> ?style:[ `Wat | `Wax ] -> Cond_solver.t -> string option
 val primary : t -> run
 
 val dead_branches : t -> (Ast.location * bool) list
-(** The branches no run of an exhaustive plan selects — the conditional's span
-    and the side ([true]: then) — i.e. the branches no consistent world reaches:
-    the condition cannot hold together with the enclosing ones, or at all. Only
-    the outermost of a dead nest is listed. Meaningful for an exhaustive plan; a
-    covering plan forces such branches instead. *)
+(** The branches no consistent world reaches — the conditional's span and the
+    side ([true]: then): the condition cannot hold together with the enclosing
+    ones, or at all. Only the outermost of a dead nest is listed. Decided from
+    the conditions, so exact for any plan, a truncated one included; a covering
+    plan forces these branches. *)
 
 val select : t -> run -> Ast.location -> bool
 (** The branch [run] selects at the conditional with that span: [true] for the

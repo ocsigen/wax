@@ -24,6 +24,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
   one: `(@if $p (@then (return …)) (@else (return …)))` followed by another
   `(@if …)`, say. It was reported for the same code in Wax but not in its WAT
   form, as each configuration saw a different first unreachable instruction.
+- `dead-code` no longer reports a conditional branch as selected by no
+  configuration when the module has too many configurations to check them all
+  (`truncated-coverage`) and only an unchecked one selects it.
 
 ### Diagnostics
 
@@ -106,6 +109,13 @@ grammar keeps none, and both are versioned independently of the toolchain.
   function next to an `(@if …)`/`(@else …)` pair exporting the same name from
   two others, or two `#[export …, if …]` with different conditions on one
   function.
+- Converting a module with conditional annotations between WAT and Wax could
+  type a branch in a configuration that does not select it, and so reject a
+  valid module. A branch reachable only in a combination of conditions the
+  earlier conditionals did not lead to, such as a function under
+  `(and (not $a) (not $b))` after definitions under `$a` and under `$b`, or an
+  `(@else …)` branch following an `(@if $c …)` with no else, was typed against
+  the other branches' definitions.
 
 ## 0.3.0
 
