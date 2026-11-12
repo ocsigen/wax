@@ -27,6 +27,7 @@ val type_def_location : recorded_type -> Ast.location option
 
 val f :
   ?warn_unused:bool ->
+  ?report_truncation:bool ->
   ?features:Wax_utils.Feature.set ->
   ?record_types:(Ast.location * int * recorded_type) list ref ->
   Wax_utils.Diagnostic.context ->
@@ -51,6 +52,11 @@ val f :
     [(local …)] but never read is reported as a warning (unless its name starts
     with [_]). Disable it when the module was compiled from Wax, whose own type
     checker already reports unused locals against the Wax source.
+
+    When [report_truncation] is unset (default set), a conditional module with
+    more configurations than are explored is not reported as
+    [truncated-coverage]. Unset it, too, for a module compiled from Wax, whose
+    type checker already reported it against the Wax source.
 
     [features] gives the enabled optional features / proposals (default: their
     built-in defaults); a module using a disabled feature is rejected. *)

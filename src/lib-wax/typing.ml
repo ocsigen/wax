@@ -14726,9 +14726,11 @@ let plan_shape ~guards (fields : location module_) :
    under the run's own selection (its attribute guards resolved the same way),
    so a diagnostic is reported once with the assumption under which it is
    reachable. Only the diagnostics matter here, so the typed module is not
-   built ([~build:false]). *)
-let check_configurations ?forms ~warn_unused ~features ~simplify ~suggest
-    ~faithful diagnostics (fields : location module_) shape =
+   built ([~build:false]). [report_truncation] is off for a module the caller
+   already checked, whose truncation was reported then. *)
+let check_configurations ?forms ?(report_truncation = true) ~warn_unused
+    ~features ~simplify ~suggest ~faithful diagnostics
+    (fields : location module_) shape =
   let module P = Wax_wasm.Cond_plan in
   let plan = P.make ~exhaustive:true diagnostics shape in
   (* A branch no configuration reaches is a property of the module, not of a
@@ -14755,7 +14757,9 @@ let check_configurations ?forms ~warn_unused ~features ~simplify ~suggest
   in
   Wax_wasm.Cond_explore.report diagnostics
     ?truncation_location:
-      (match fields with hd :: _ -> Some hd.info | [] -> None)
+      (match fields with
+      | hd :: _ when report_truncation -> Some hd.info
+      | _ -> None)
     ~explain:(P.explain plan ~style:`Wax)
     ~truncated:(P.truncated plan) configurations
 
@@ -14940,9 +14944,10 @@ let dedupe_sinks ~resolve_links ~pun_spans ~member_completions =
     member_completions
 
 let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
-    ?(suggest = false) ?(lowering = true) ?(resolve_links = None)
-    ?(pun_spans = None) ?(member_completions = None) ?(faithful = false)
-    ?(features = Wax_utils.Feature.default ()) diagnostics fields shape =
+    ?(suggest = false) ?(lowering = true) ?(report_truncation = true)
+    ?(resolve_links = None) ?(pun_spans = None) ?(member_completions = None)
+    ?(faithful = false) ?(features = Wax_utils.Feature.default ()) diagnostics
+    fields shape =
   let has_conditional = shape <> [] in
   if not has_conditional then
     let types, typed =
@@ -14963,8 +14968,8 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
     let forms =
       if lowering && not simplify then Some (Hashtbl.create 16) else None
     in
-    check_configurations ?forms ~warn_unused ~features ~simplify ~suggest
-      ~faithful diagnostics fields shape;
+    check_configurations ?forms ~report_truncation ~warn_unused ~features
+      ~simplify ~suggest ~faithful diagnostics fields shape;
     Option.iter (report_configuration_forms diagnostics) forms;
     (* Build the typed module (consumed only by the deferred WAT conversion and
        the editor; validation-only paths use [check] and never reach here) with
@@ -15140,20 +15145,21 @@ let prepare_module_check ~warn_unused diagnostics features fields =
   shape
 
 let f_infer ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
-    ?(lowering = true) ?(resolve_links = None) ?(pun_spans = None)
-    ?(member_completions = None) ?(faithful = false)
+    ?(lowering = true) ?(report_truncation = true) ?(resolve_links = None)
+    ?(pun_spans = None) ?(member_completions = None) ?(faithful = false)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   let shape = prepare_module_check ~warn_unused diagnostics features fields in
-  f_infer_with_shape ~simplify ~warn_unused ~suggest ~lowering ~resolve_links
-    ~pun_spans ~member_completions ~faithful ~features diagnostics fields shape
+  f_infer_with_shape ~simplify ~warn_unused ~suggest ~lowering
+    ~report_truncation ~resolve_links ~pun_spans ~member_completions ~faithful
+    ~features diagnostics fields shape
 
 let f ?(simplify = false) ?(warn_unused = false) ?(suggest = false)
-    ?(faithful = false) ?(width_check = `Off)
+    ?(faithful = false) ?(width_check = `Off) ?(report_truncation = true)
     ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   let types, typed =
-    f_infer ~simplify ~warn_unused ~suggest ~faithful ~features diagnostics
-      fields
+    f_infer ~simplify ~warn_unused ~suggest ~faithful ~report_truncation
+      ~features diagnostics fields
   in
   (* Reconcile the recorded widths BEFORE projecting: the pass settles the
      inference cell of whatever it pins, so the projection then reports the pinned

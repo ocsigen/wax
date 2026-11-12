@@ -7020,8 +7020,9 @@ let apply_declared_features diagnostics features fields =
       | _ -> ())
     fields
 
-let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
-    ?record_types diagnostics ((name, fields) as modul) =
+let f ?(warn_unused = true) ?(report_truncation = true)
+    ?(features = Wax_utils.Feature.default ()) ?record_types diagnostics
+    ((name, fields) as modul) =
   Wax_utils.Debug.timed "validate" @@ fun () ->
   recorded_types := record_types;
   sink_config := 0;
@@ -7064,6 +7065,8 @@ let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
       in
       Cond_explore.report diagnostics
         ?truncation_location:
-          (match fields with f :: _ -> Some f.Ast.info | [] -> None)
+          (match fields with
+          | f :: _ when report_truncation -> Some f.Ast.info
+          | _ -> None)
         ~explain:(Cond_plan.explain plan) ~truncated:(Cond_plan.truncated plan)
         configurations

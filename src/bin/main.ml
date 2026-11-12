@@ -236,8 +236,10 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wax_theme
       ~source:(Some text) (fun d ->
+        (* A truncated exploration was reported by the validation above. *)
         Wax_lang.Typing.f ~simplify:(not faithful) ~faithful
-          ~width_check:(width_check_mode ()) d wax_ast)
+          ~width_check:(width_check_mode ()) ~report_truncation:(not validate) d
+          wax_ast)
     |> snd |> Wax_lang.Typing.erase_types
   in
   let trivia, tail =
@@ -279,8 +281,10 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->
         (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
-           above; do not repeat them against the compiled Wasm. *)
-        Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
+           above, and so is a truncated exploration of its configurations;
+           do not repeat them against the compiled Wasm. *)
+        Wax_wasm.Validation.f ~warn_unused:false ~report_truncation:false d
+          wasm_ast);
   let wasm_ast =
     lower_legacy_eh ~try_table ~color ~source:(Some text) wasm_ast
   in
@@ -353,8 +357,10 @@ let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->
         (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
-           above; do not repeat them against the compiled Wasm. *)
-        Wax_wasm.Validation.f ~warn_unused:false d wasm_ast_text);
+           above, and so is a truncated exploration of its configurations;
+           do not repeat them against the compiled Wasm. *)
+        Wax_wasm.Validation.f ~warn_unused:false ~report_truncation:false d
+          wasm_ast_text);
   let wasm_ast_text =
     lower_legacy_eh ~try_table ~color ~source:(Some text) wasm_ast_text
   in

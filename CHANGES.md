@@ -27,6 +27,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - `dead-code` no longer reports a conditional branch as selected by no
   configuration when the module has too many configurations to check them all
   (`truncated-coverage`) and only an unchecked one selects it.
+- `truncated-coverage` is reported once by a conversion between Wax and
+  WebAssembly. It was reported twice, as the module is checked both before and
+  after it is converted.
 
 ### Diagnostics
 

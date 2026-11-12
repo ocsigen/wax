@@ -124,3 +124,13 @@ configurations the check explores, and it is not reported:
   $ wax check -W dead-code=warning -W truncated-coverage=hidden many.wat
   $ wax -W truncated-coverage=hidden many.wat -f wax -o many.wax
   $ wax check -W dead-code=warning -W truncated-coverage=hidden many.wax
+
+A conversion checks the module twice, before and after converting it, but
+reports the truncated exploration once:
+
+  $ wax many.wat -f wax 2>&1 >/dev/null | grep -c truncated-coverage
+  1
+  $ wax many.wax -f wat 2>&1 >/dev/null | grep -c truncated-coverage
+  1
+  $ wax many.wax -f wasm -o many.wasm 2>&1 | grep -c truncated-coverage
+  1

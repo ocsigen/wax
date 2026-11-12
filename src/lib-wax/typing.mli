@@ -20,6 +20,7 @@ val f :
   ?suggest:bool ->
   ?faithful:bool ->
   ?width_check:[ `Off | `Repair | `Report ] ->
+  ?report_truncation:bool ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -65,7 +66,13 @@ val f :
       harness see a missing conversion pin at all, rather than a healed one.
     - A disagreement no pin can fix — the value's type is fixed by its context,
       so a cast would convert the value rather than ground it — is reported as
-      an error in BOTH modes. *)
+      an error in BOTH modes.
+
+    When [report_truncation] is unset (default set), a conditional module with
+    more configurations than are checked is not reported as
+    [truncated-coverage]: for a module this command already checked under
+    another form (the Wax a WAT input converts to), whose validation reported
+    it. *)
 
 val reserved_type_names : string list
 (** The built-in type names a [type] declaration (or a [rec] member) may not
@@ -99,6 +106,7 @@ val f_infer :
   ?warn_unused:bool ->
   ?suggest:bool ->
   ?lowering:bool ->
+  ?report_truncation:bool ->
   ?resolve_links:reference list ref option ->
   ?pun_spans:Ast.location list ref option ->
   ?member_completions:(Ast.location * Members.member_receiver) list ref option ->

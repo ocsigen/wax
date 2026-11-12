@@ -115,8 +115,10 @@ let wax_to_binary ?(color = Wax_utils.Colors.Never)
     Wax_utils.Diagnostic.run ~color ~palette:Wax_utils.Colors.wat_theme
       ~source:(Some text) (fun d ->
         (* Unused locals are reported against the Wax source by [Typing.f]
-           above; do not repeat them against the compiled Wasm. *)
-        Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
+           above, and so is a truncated exploration of its configurations;
+           do not repeat them against the compiled Wasm. *)
+        Wax_wasm.Validation.f ~warn_unused:false ~report_truncation:false d
+          wasm_ast);
   let wasm_ast =
     lower_legacy_eh ~try_table ~color ~source:(Some text) wasm_ast
   in
