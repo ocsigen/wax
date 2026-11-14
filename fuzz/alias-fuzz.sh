@@ -42,7 +42,8 @@
 #                    compiles on its own, but the converted module specialized
 #                    to that configuration does not compile, or is not the same
 #                    module (compared by fuzz_canon, up to type identity: a
-#                    duplicated type is the same type, a different one is not);
+#                    duplicated type is the same type, a different one is not;
+#                    and up to identity casts, see same_canonical);
 #   COMMUTE_REJECT — every configuration compiles on its own, but the module
 #                    does not convert unresolved, and not because a construct
 #                    has no single WebAssembly form (the one rejection that is
@@ -97,8 +98,28 @@ same_module() {
 
 # Whether two binaries are the same module up to type identity (see fuzz_canon):
 # a type spelled twice is still one type. Rendered under the worker's $dir.
+#
+# Also the same when the only difference is ref.casts the first (a
+# configuration compiled on its own) has and the second (the module converted
+# unresolved) lacks, and they are identity casts: a cast to a conditional alias
+# of a value that already has the alias's type lowers to nothing unresolved, as
+# no single immediate names the alias in every configuration, while -D resolves
+# the alias and keeps the source's redundant cast. A cast its operand's static
+# type already satisfies never traps, and the simplifying decompiler drops
+# exactly those, so the two must agree once both have been through it; any
+# other dropped cast still differs.
 same_canonical() {
-  "$CANON" "$1" "$dir/canon1.txt" "$2" "$dir/canon2.txt" \
+  "$CANON" "$1" "$dir/canon1.txt" "$2" "$dir/canon2.txt" || return 1
+  diff <(sed "$NORM" "$dir/canon1.txt") <(sed "$NORM" "$dir/canon2.txt") \
+    >"$dir/canon.diff" && return 0
+  grep '^[<>]' "$dir/canon.diff" | grep -qv '^< *ref\.cast ' && return 1
+  local f
+  for f in 1 2; do
+    "$WAX" -f wax "${!f}" -o "$dir/simpl$f.wax" 2>/dev/null \
+      && "$WAX" -f wasm "$dir/simpl$f.wax" -o "$dir/simpl$f.wasm" 2>/dev/null \
+      || return 1
+  done
+  "$CANON" "$dir/simpl1.wasm" "$dir/canon1.txt" "$dir/simpl2.wasm" "$dir/canon2.txt" \
     && diff -q <(sed "$NORM" "$dir/canon1.txt") <(sed "$NORM" "$dir/canon2.txt") >/dev/null
 }
 
