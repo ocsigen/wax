@@ -1,0 +1,9 @@
+type ft = fn();
+type k = cont ft;
+tag t();
+
+// a chain of misplaced clauses is reported once, by the innermost one
+fn bad_chain(x: i32) -> i32 { (x + 1) on [t -> switch] on [t -> switch]; }
+
+// a second clause on a resume call is the misplaced one
+fn second(c: &k) { c.resume() on [t -> switch] on [t -> switch]; }

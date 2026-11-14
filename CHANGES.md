@@ -41,6 +41,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
   where the values have no place of their own to be reported at, such as a
   `br_table` target's.
 - An `is` test against an unbound type reports it once.
+- A chain of misplaced `on` handler clauses, as in `f() on [t -> 'h] on [t ->
+  'h]`, is reported once, at the innermost clause. Each clause of the chain
+  used to report the same error.
 - Converting a module without resolving its conditional annotations now
   reports an operation whose instruction depends on a type that differs
   between configurations, such as `x + x` on a conditional alias that stands

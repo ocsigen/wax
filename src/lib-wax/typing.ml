@@ -6603,22 +6603,30 @@ and type_cont_method_call ctx i ~handlers recv (meth : Ast.ident) args =
 
 (* The postfix handler clause [e on [t -> 'l, …]]: fold the handlers into the
    resume-family call it wraps; any other wrapped expression is an error (the
-   grammar attaches the clause to any expression). *)
+   grammar attaches the clause to any expression). A chain of misplaced
+   clauses is reported once, by its innermost one: every level of the chain
+   starts at the same operand. *)
 and type_on_clause ctx i inner handlers =
+  let resume_call (e : location instr) =
+    match e.desc with
+    | Call
+        ( {
+            desc =
+              StructGet
+                (_, { desc = "resume" | "resume_throw" | "resume_throw_ref"; _ });
+            _;
+          },
+          _ ) ->
+        true
+    | _ -> false
+  in
   match inner.desc with
-  | Call
-      ( {
-          desc =
-            StructGet
-              ( recv,
-                ({ desc = "resume" | "resume_throw" | "resume_throw_ref"; _ } as
-                 meth) );
-          _;
-        },
-        args ) ->
+  | Call ({ desc = StructGet (recv, meth); _ }, args) when resume_call inner ->
       type_cont_method_call ctx i ~handlers recv meth args
   | _ ->
-      Error.on_clause_context ctx.diagnostics ~location:i.info;
+      (match inner.desc with
+      | On (inner', _) when not (resume_call inner') -> ()
+      | _ -> Error.on_clause_context ctx.diagnostics ~location:i.info);
       (* Recover by typing the wrapped expression and carrying its result. *)
       let* inner' = instruction ctx inner in
       return_statement i (On (inner', handlers)) (fst inner'.info)

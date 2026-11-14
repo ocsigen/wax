@@ -168,6 +168,30 @@ requires its labelled `tag:` immediate; `resume_throw` takes its tag
 call-style; and the `T::` constructor namespace knows only `new` and `bind`,
 at their arities. Operand counts follow from the inferred types.
 
+A chain of `on` clauses is reported once, by its innermost misplaced clause:
+
+  $ wax check on-chain.wax
+  Error:
+    An 'on' handler clause is only allowed on a 'resume', 'resume_throw' or
+    'resume_throw_ref' call.
+   ──➤  on-chain.wax:6:31
+  4 │ 
+  5 │ // a chain of misplaced clauses is reported once, by the innermost one
+  6 │ fn bad_chain(x: i32) -> i32 { (x + 1) on [t -> switch] on [t -> switch]; }
+    ·                               ^^^^^^^^^^^^^^^^^^^^^^^^
+  7 │ 
+  8 │ // a second clause on a resume call is the misplaced one
+  Error:
+    An 'on' handler clause is only allowed on a 'resume', 'resume_throw' or
+    'resume_throw_ref' call.
+    ──➤  on-chain.wax:9:20
+   7 │ 
+   8 │ // a second clause on a resume call is the misplaced one
+   9 │ fn second(c: &k) { c.resume() on [t -> switch] on [t -> switch]; }
+     ·                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 │ 
+  [128]
+
   $ wax check surface-errors.wax
   Error:
     An 'on' handler clause is only allowed on a 'resume', 'resume_throw' or
