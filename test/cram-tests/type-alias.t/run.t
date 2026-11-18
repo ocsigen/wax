@@ -1324,6 +1324,61 @@ others, it is declared with that one, whichever branch defines it.
     (struct.get $s1 $f (local.get $y))
   )
 
+A function declared without a named type has a type named after it, which
+stands for a different type in each configuration declaring the function with
+a different signature: a declaration inferred from a reference to it has no
+single form then, and one when the signatures agree, written the same, with a
+conditional alias even.
+
+  $ wax -f wat decl-func.wax
+  Error:
+    The result type of this block is inferred as different types under different
+    conditional annotations, so it has no single WebAssembly form.
+   ──➤  decl-func.wax:2:18
+  1 │ #[if(p)] { fn k() -> i64 { 0; } } #[else] { fn k() -> i32 { 0; } }
+  2 │ fn j() { let y = do { k; }; }
+    ·                  ^^^^^^^^^
+  3 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-func-global.wax
+  Error:
+    The type of the global 'g' is inferred as different types under different
+    conditional annotations, so its declaration has no single WebAssembly form.
+   ──➤  decl-func-global.wax:2:1
+  1 │ #[if(p)] { fn k() -> i64 { 0; } } #[else] { fn k() -> i32 { 0; } }
+  2 │ let g = k;
+    · ^^^^^^^^^^
+  3 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-func-same.wax
+  (@if $p
+    (@then (func $k (result i32) (i32.const 1)))
+    (@else (func $k (result i32) (i32.const 0)))
+  )
+  (func $j
+    (local $f (ref $<func:k>))
+    (local.set $f (ref.func $k))
+    (drop (call_ref $<func:k> (local.get $f)))
+  )
+  (type $<func:k> (func (result i32)))
+  $ wax -f wat decl-func-alias.wax
+  (@if $p (@then (@type $w i64)) (@else (@type $w i32)))
+  (func $k (param $x (@type $w)) (result (@type $w)) (local.get $x))
+  (func $j (param $y (@type $w))
+    (local $f (ref $<func:k>))
+    (local.set $f (ref.func $k))
+    (drop (call_ref $<func:k> (local.get $y) (local.get $f)))
+  )
+  (type $<func:k> (func (param $x (@type $w)) (result (@type $w))))
+
 An access, a call through a reference or a construction names a type, taken
 from its operand or its context. When that type differs between
 configurations, the access names the one the others are subtypes of, which

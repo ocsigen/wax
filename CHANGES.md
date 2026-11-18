@@ -58,8 +58,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - The same goes for a block whose result type is left unwritten, a local or
   global declared without a type, or a selection `c ? a : b` of references,
   when the type it gets differs between configurations and no alias names it:
-  `let y = x!` on a conditional alias `x` (the non-null type has no alias), or
-  `let y = f()` where `f` returns `i64` in one branch and `i32` in the other.
+  `let y = x!` on a conditional alias `x` (the non-null type has no alias),
+  `let y = f()` where `f` returns `i64` in one branch and `i32` in the other,
+  or `let g = f`, a reference to that function.
   (Where one of the types is a supertype of the others, the declaration takes
   it instead; see Fixes.) The message says which declaration it is about, and
   writing its type with an alias fixes it.

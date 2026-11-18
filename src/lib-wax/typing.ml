@@ -12996,12 +12996,13 @@ and declaration =
 and immediate = Access | Call_ref | Construction
 
 (* The reference type a declaration takes in a configuration, for
-   [declaration_choice]: its heap type, with the names of that type and its
-   supertypes ([ancestors]), its hierarchy, and whether it is that hierarchy's
-   bottom, a subtype of every type in it. *)
+   [declaration_choice]: its heap type, the name [ancestors] lists it by, with
+   the names of that type and its supertypes ([ancestors]), its hierarchy, and
+   whether it is that hierarchy's bottom, a subtype of every type in it. *)
 and declared_ref = {
   nullable : bool;
   heap : heaptype;
+  name : string;
   ancestors : string list;
   hierarchy : string;
   bottom : bool;
@@ -13030,18 +13031,73 @@ let record_configuration_forms ctx tbl typed_fields =
     Hashtbl.replace tbl key (at, form prev)
   in
   let union v l = if List.mem v l then l else v :: l in
+  (* The signature each function declared without a named type is written
+     with, in the branches this run types. *)
+  let signatures = Hashtbl.create 16 in
+  let rec collect_signatures fields =
+    List.iter
+      (fun (field : (_ modulefield, _) annotated) ->
+        let import (d : (import_decl, _) annotated) =
+          match d.desc.kind with
+          | Import_func { typ = None; sign = Some sign; _ } ->
+              Hashtbl.replace signatures d.desc.id.desc sign
+          | _ -> ()
+        in
+        match field.desc with
+        | Func { name; typ = None; sign = Some sign; _ } ->
+            Hashtbl.replace signatures name.desc sign
+        | Import { decl; _ } -> import decl
+        | Import_group { decls; _ } -> List.iter import decls
+        | Conditional { then_fields; else_fields; _ } ->
+            if ctx.select field.info then collect_signatures then_fields.desc
+            else
+              Option.iter (fun b -> collect_signatures b.Annot.desc) else_fields
+        | _ -> ())
+      fields
+  in
+  collect_signatures typed_fields;
+  (* A type by its name, but a function's type by its signature too: one
+     declared without a named type has a type synthesized as [<func:f>], named
+     after the function, so the name stands for a different type in each
+     configuration that declares the function with a different signature. The
+     signature as written, as the lowering spells it: a conditional alias or a
+     type defined in each branch, by its name. *)
+  let type_key n =
+    let prefix = "<func:" in
+    if String.starts_with ~prefix n then
+      let f =
+        String.sub n (String.length prefix)
+          (String.length n - String.length prefix - 1)
+      in
+      match Hashtbl.find_opt signatures f with
+      | Some sign -> n ^ " = " ^ Output.comptype_string (Func sign)
+      | None -> n
+    else n
+  in
+  let valtype_form (t : valtype) =
+    match t with
+    | Ref { typ = Type n | Exact n; _ } when type_key n.desc <> n.desc ->
+        Output.valtype_string t ^ " where " ^ type_key n.desc
+    | _ -> Output.valtype_string t
+  in
   (* A declaration of a single type [t], unaliased, records it as a reference
      too (see [declaration_choice]). *)
   let ref_entry (t : valtype) =
-    let abstract ancestors hierarchy = Some (ancestors, hierarchy, false) in
-    let bottom hierarchy = Some ([], hierarchy, true) in
+    let abstract ancestors hierarchy =
+      Some (List.hd ancestors, ancestors, hierarchy, false)
+    in
+    let bottom hierarchy = Some ("", [], hierarchy, true) in
     match t with
     | Ref { nullable; typ = heap } ->
         let entry =
           match heap with
           | Type n | Exact n -> (
               let named tops hierarchy =
-                Some (type_ancestors ctx n.desc @ tops, hierarchy, false)
+                Some
+                  ( type_key n.desc,
+                    List.map type_key (type_ancestors ctx n.desc) @ tops,
+                    hierarchy,
+                    false )
               in
               match Tbl.find_no_mark ctx.type_context.types n with
               | Some (_, { typ = Struct _; _ }) ->
@@ -13067,8 +13123,8 @@ let record_configuration_forms ctx tbl typed_fields =
           | NoCont -> bottom "cont"
         in
         Option.map
-          (fun (ancestors, hierarchy, bottom) ->
-            { nullable; heap; ancestors; hierarchy; bottom })
+          (fun (name, ancestors, hierarchy, bottom) ->
+            { nullable; heap; name; ancestors; hierarchy; bottom })
           entry
     | I32 | I64 | F32 | F64 | V128 | Alias _ -> None
   in
@@ -13082,7 +13138,7 @@ let record_configuration_forms ctx tbl typed_fields =
       | _ -> Declaration_form (d, [ entry ]))
   in
   let immediate l k parts =
-    let t = String.concat " " parts in
+    let t = String.concat " " (List.map type_key parts) in
     add ~kind:"immediate" l (function
       | Some (Immediate_form (k, seen)) -> Immediate_form (k, union t seen)
       | _ -> Immediate_form (k, [ t ]))
@@ -13093,8 +13149,7 @@ let record_configuration_forms ctx tbl typed_fields =
   let written_form cell =
     match Cell.get cell with
     | Valtype { alias = Some a; _ } when conditional_alias ctx a -> Some a.desc
-    | Valtype { typ; _ } ->
-        Some (Output.valtype_string (unalias ctx.type_context typ))
+    | Valtype { typ; _ } -> Some (valtype_form (unalias ctx.type_context typ))
     | _ -> None
   in
   let single (e : _ instr) =
@@ -13248,7 +13303,7 @@ let record_configuration_forms ctx tbl typed_fields =
           declared
             ?typ:(match typ.results with [| t |] -> Some t | _ -> None)
             l Block_result
-            (Array.to_list (Array.map Output.valtype_string typ.results))
+            (Array.to_list (Array.map valtype_form typ.results))
       | Let (bindings, Some init), _
         when Array.length (fst init.info) = List.length bindings -> (
           (* An unannotated local is declared with the alias its initializer
@@ -13273,7 +13328,7 @@ let record_configuration_forms ctx tbl typed_fields =
                   | _ -> None)
                 l
                 (Locals (List.map fst unannotated))
-                (List.map (fun (_, t) -> Output.valtype_string t) unannotated))
+                (List.map (fun (_, t) -> valtype_form t) unannotated))
       (* The operations whose instruction the lowering picks from an operand's
          type (see [To_wasm]): the operators, a compound assignment, a cast
          from a number, a method on a value ([x.clz()], [x.min(y)]: its
@@ -13405,8 +13460,7 @@ let record_configuration_forms ctx tbl typed_fields =
                 | _ -> None)
           with
           | Some t ->
-              declared ~typ:t field.info (Global_type name)
-                [ Output.valtype_string t ]
+              declared ~typ:t field.info (Global_type name) [ valtype_form t ]
           | None -> ())
       | _ -> ())
     typed_fields
@@ -13418,20 +13472,6 @@ let declaration_choice seen =
   match List.map snd seen with
   | refs when List.for_all Option.is_some refs ->
       let refs = List.map Option.get refs in
-      let key (h : heaptype) =
-        match h with
-        | Type n | Exact n -> n.desc
-        | Any -> "any"
-        | Eq -> "eq"
-        | I31 -> "i31"
-        | Struct -> "struct"
-        | Array -> "array"
-        | Func -> "func"
-        | Extern -> "extern"
-        | Exn -> "exn"
-        | Cont -> "cont"
-        | None_ | NoFunc | NoExtern | NoExn | NoCont -> ""
-      in
       List.find_map
         (fun c ->
           if
@@ -13439,7 +13479,7 @@ let declaration_choice seen =
             && List.for_all
                  (fun e ->
                    e.hierarchy = c.hierarchy
-                   && (e.bottom || List.mem (key c.heap) e.ancestors))
+                   && (e.bottom || List.mem c.name e.ancestors))
                  refs
           then
             Some

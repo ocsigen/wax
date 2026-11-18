@@ -1,0 +1,3 @@
+#[if(p)] { type w = i64; } #[else] { type w = i32; }
+fn k(x: w) -> w { x; }
+fn j(y: w) { let f = k; _ = f(y); }
