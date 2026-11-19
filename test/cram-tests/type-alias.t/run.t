@@ -1056,6 +1056,61 @@ cannot be the alias, so it is a common supertype of what the alias stands for.
     (return (i32.const 0))
   )
 
+That common source type also types what the cast leaves when it fails: the
+value sent to the label of a br_on_cast_fail, or kept by a br_on_cast. It is
+then wider than in some configuration, nullable here where the alias is &any.
+Where that wider value does not fit where it goes, no source type holds in
+every configuration, and the cast has no single form, though each
+configuration compiles on its own.
+
+  $ wax check cast-residual.wax
+  $ wax -D p=false -f wasm cast-residual.wax -o /dev/null
+  $ wax -f wat cast-residual.wax
+  Error:
+    This cast has no single WebAssembly form: the value it tests has different
+    types under different conditional annotations, and what it leaves when the
+    cast fails, typed from a source type that holds in all of them, does not fit
+    where it goes in every one.
+    ──➤  cast-residual.wax:12:27
+  10 │ #[export]
+  11 │ fn fails(x: a) -> a {
+  12 │     return 'l: do a { _ = br_on_cast_fail 'l &t x; return x; };
+     ·                           ^^^^^^^^^^^^^^^^^^^^^^^
+  13 │ }
+  14 │ 
+  Hint:
+    Cast in the branches of a conditional, or resolve the conditionals with -D.
+  [128]
+  $ wax check cast-fallthrough.wax
+  $ wax -f wat cast-fallthrough.wax
+  Error:
+    This cast has no single WebAssembly form: the value it tests has different
+    types under different conditional annotations, and what it leaves when the
+    cast fails, typed from a source type that holds in all of them, does not fit
+    where it goes in every one.
+    ──➤  cast-fallthrough.wax:12:28
+  10 │ #[export]
+  11 │ fn falls(x: a) -> a {
+  12 │     _ = 'l: do &t { return br_on_cast 'l &t x; };
+     ·                            ^^^^^^^^^^^^^^^^^^
+  13 │     return x;
+  14 │ }
+  Hint:
+    Cast in the branches of a conditional, or resolve the conditionals with -D.
+  [128]
+
+Where it fits, the cast converts.
+
+  $ wax -f wat cast-residual-fits.wax
+  (@if $p (@then (@type $a anyref)) (@else (@type $a (ref any))))
+  (type $t (struct))
+  (func $fits (export "fits") (param $x (@type $a)) (result anyref)
+    (return
+      (block $l (result anyref)
+        (drop (br_on_cast_fail $l anyref (ref $t) (local.get $x)))
+        (return (local.get $x))))
+  )
+
 A field access on a value whose struct type differs between configurations
 reads the field at the position it has in one of them. The struct types are
 related by subtyping, so that access is valid in every configuration, but it

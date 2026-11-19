@@ -1148,6 +1148,18 @@ module Error = struct
              "The type of this value is inferred as different types under \
               different conditional annotations, so it has no single \
               WebAssembly form.")
+    | `Cast_source ->
+        report context ~location
+          ~hint:
+            (text
+               "Cast in the branches of a conditional, or resolve the \
+                conditionals with -D.")
+          (text
+             "This cast has no single WebAssembly form: the value it tests has \
+              different types under different conditional annotations, and \
+              what it leaves when the cast fails, typed from a source type \
+              that holds in all of them, does not fit where it goes in every \
+              one.")
 
   let invalid_cast context ~location ty' =
     report context ~location
@@ -4239,18 +4251,33 @@ let val_lub ctx v1 v2 =
    widened to the lub with the type the alias stands for in each of them, so
    that the cast holds in all of them. A source type is a [reftype] immediate,
    with no alias to defer to. [ty1] itself when a definition does not resolve
-   here to a reference of the same hierarchy, as before. *)
-let conditional_cast_source ctx cell ty1 =
+   here to a reference of the same hierarchy, as before. A cast whose residual,
+   what it leaves when the cast to [target] fails, is wider for the widening is
+   recorded at [location] in [ctx.widened_casts]: the configuration may not
+   accept that wider value where it goes. *)
+let conditional_cast_source ctx ~location cell ~target ty1 =
   match Cell.get cell with
   | Valtype { alias = Some a; _ } -> (
       match Hashtbl.find_opt ctx.alias_variants a.desc with
       | Some defs ->
-          Option.value ~default:ty1
-            (List.fold_left
-               (fun acc def ->
-                 let*@ t = acc in
-                 val_lub ctx t (unalias ctx.type_context def))
-               (Some ty1) defs)
+          let widened =
+            Option.value ~default:ty1
+              (List.fold_left
+                 (fun acc def ->
+                   let*@ t = acc in
+                   val_lub ctx t (unalias ctx.type_context def))
+                 (Some ty1) defs)
+          in
+          (match (ty1, widened) with
+          | Ref own, Ref wide -> (
+              match
+                ( internalize_valtype ctx (Ref (diff_ref_type own target)),
+                  internalize_valtype ctx (Ref (diff_ref_type wide target)) )
+              with
+              | Some a, Some b when valtype_equal ctx a b -> ()
+              | _ -> ctx.widened_casts := location :: !(ctx.widened_casts))
+          | _ -> ());
+          widened
       | None -> ty1)
   | _ -> ty1
 
@@ -5874,7 +5901,8 @@ and type_branch ctx i =
                cast; report it and recover with the cast target. *)
             let ty1 =
               match val_lub ctx (Ref ty) (Ref ty') with
-              | Some t -> conditional_cast_source ctx typ' t
+              | Some t ->
+                  conditional_cast_source ctx ~location:i.info typ' ~target:ty t
               | None ->
                   Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
                     typ';
@@ -5951,7 +5979,8 @@ and type_branch ctx i =
                report it and recover with the cast target. *)
             let ty1 =
               match val_lub ctx (Ref ty) (Ref ty') with
-              | Some t -> conditional_cast_source ctx typ' t
+              | Some t ->
+                  conditional_cast_source ctx ~location:i.info typ' ~target:ty t
               | None ->
                   Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
                     typ';
@@ -13608,7 +13637,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
     ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
     ?(member_completions = None) ?(faithful = false)
     ?(alias_variants = Hashtbl.create 0) ?(receiver_types = Hashtbl.create 0)
-    ?(features = Wax_utils.Feature.default ())
+    ?(widened_casts = ref []) ?(features = Wax_utils.Feature.default ())
     ?(select =
       fun (_ : location) -> invalid_arg "Typing: unplanned conditional")
     ?(guard = fun (_ : location) -> true) ~simplify diagnostics fields =
@@ -13756,6 +13785,7 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
       faithful;
       alias_variants;
       receiver_types;
+      widened_casts;
     }
   in
   check_type_definitions ctx;
@@ -15025,8 +15055,8 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
        [Cond_plan] needs, each typing the branches it selects spliced into a
        world that exists, then stitched so every branch comes from the run that
        owns it. Diagnostics are discarded — [check_configurations] above did
-       the real checking; references are recorded here, off the runs' trees,
-       and deduplicated across them. *)
+       the real checking, but for the casts a run widens (below); references
+       are recorded here, off the runs' trees, and deduplicated across them. *)
     let plan =
       Wax_wasm.Cond_plan.make
         (Wax_utils.Diagnostic.collector ())
@@ -15051,18 +15081,45 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
                  (receiver_choice seen)
            | _ -> ()))
       forms;
+    let has_error sink =
+      List.exists
+        (fun e -> Wax_utils.Diagnostic.entry_severity e = Error)
+        (Wax_utils.Diagnostic.collected sink)
+    in
+    let widened = ref [] in
     let results =
       List.map
         (fun run ->
-          ( run,
-            type_configuration
-              ~select:(Wax_wasm.Cond_plan.select plan run)
-              ~resolve_links ~pun_spans ~member_completions ~faithful
-              ~alias_variants ~receiver_types ~features ~simplify
-              (Wax_utils.Diagnostic.collector ())
-              fields ))
+          let select = Wax_wasm.Cond_plan.select plan run in
+          let sink = Wax_utils.Diagnostic.collector () in
+          let widened_casts = ref [] in
+          let result =
+            type_configuration ~select ~resolve_links ~pun_spans
+              ~member_completions ~faithful ~alias_variants ~receiver_types
+              ~widened_casts ~features ~simplify sink fields
+          in
+          (* A widened cast leaves a wider value when the cast fails than the
+             configuration's own (see [conditional_cast_source]). Where that
+             fails the run, and the run typed with each configuration's own
+             sources does not, no source type holds in every configuration:
+             report the casts, rather than the lowered module's mismatch. *)
+          if
+            !widened_casts <> [] && has_error sink
+            && not
+                 (let sink = Wax_utils.Diagnostic.collector () in
+                  ignore
+                    (type_configuration ~select ~faithful ~receiver_types
+                       ~features ~simplify sink fields);
+                  has_error sink)
+          then widened := !widened_casts @ !widened;
+          (run, result))
         (Wax_wasm.Cond_plan.runs plan)
     in
+    List.iter
+      (fun location ->
+        Error.configuration_dependent_immediate diagnostics ~location
+          `Cast_source)
+      (List.sort_uniq compare !widened);
     dedupe_sinks ~resolve_links ~pun_spans ~member_completions;
     let types, typed = stitch plan results in
     (* An inferred declaration takes a type that holds in every configuration

@@ -91,7 +91,11 @@ grammar keeps none, and both are versioned independently of the toolchain.
   for different reference types, for instance `&eq` in one configuration and
   `&?eq` in another. The cast took its source type from one configuration,
   so the conversion was rejected wherever that type was too narrow; it now
-  takes a type that holds in all of them.
+  takes a type that holds in all of them. When the value the cast leaves on
+  failure, typed from that wider type, does not fit where it goes in some
+  configuration (a nullable value sent to a `&any` label), the cast is
+  reported as having no single WebAssembly form, instead of a type mismatch
+  in the converted module.
 - Constructing a struct with a descriptor, `{descriptor(d)| ...}`, now requires
   the descriptor to be an exact reference (`&!t`), as the documentation
   states. A non-exact one was accepted by `wax check`, and the conversion then

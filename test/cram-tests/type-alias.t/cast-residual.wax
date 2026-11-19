@@ -1,0 +1,13 @@
+#[if(p)]
+{
+    type a = &?any;
+}
+#[else]
+{
+    type a = &any;
+}
+type t = { };
+#[export]
+fn fails(x: a) -> a {
+    return 'l: do a { _ = br_on_cast_fail 'l &t x; return x; };
+}

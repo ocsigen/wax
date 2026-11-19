@@ -1,0 +1,14 @@
+#[if(p)]
+{
+    type a = &?any;
+}
+#[else]
+{
+    type a = &any;
+}
+type t = { };
+#[export]
+fn falls(x: a) -> a {
+    _ = 'l: do &t { return br_on_cast 'l &t x; };
+    return x;
+}

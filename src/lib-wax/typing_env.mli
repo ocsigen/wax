@@ -187,6 +187,10 @@ type module_context = {
          the types the receiver has in the configurations, the one the others
          are subtypes of. Filled, as [alias_variants], only for the runs that
          build such a module. *)
+  widened_casts : Ast.location list ref;
+      (* The branching casts whose source [alias_variants] widened so that the
+         value they leave when the cast fails is wider than in this
+         configuration. *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
   functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;

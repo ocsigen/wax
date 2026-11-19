@@ -290,6 +290,11 @@ type module_context = {
          the types the receiver has in the configurations, the one the others
          are subtypes of (see [Typing.receiver_choice]). Filled, as
          [alias_variants], only for the runs that build such a module. *)
+  widened_casts : location list ref;
+  (* The branching casts whose source [Typing.conditional_cast_source] widened
+         so that the value they leave when the cast fails is wider than in this
+         configuration: where that value no longer fits, the cast has no single
+         form (see [Typing.f_infer_with_shape]). *)
   (* --- Module-wide type and name tables (built once, before any body) --- *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
