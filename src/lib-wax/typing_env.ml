@@ -290,11 +290,21 @@ type module_context = {
          the types the receiver has in the configurations, the one the others
          are subtypes of (see [Typing.receiver_choice]). Filled, as
          [alias_variants], only for the runs that build such a module. *)
-  widened_casts : location list ref;
-  (* The branching casts whose source [Typing.conditional_cast_source] widened
-         so that the value they leave when the cast fails is wider than in this
-         configuration: where that value no longer fits, the cast has no single
-         form (see [Typing.f_infer_with_shape]). *)
+  declared_choices : (int * int, valtype) Hashtbl.t;
+  (* By its span, the type an inferred declaration takes in every
+         configuration (see [Typing.declaration_choice]), which a run building
+         a module lowered as one for every configuration types it with. Filled,
+         as [alias_variants], only for those runs. *)
+  withheld : (int * int, unit) Hashtbl.t;
+  (* The spans of the choices above (a widened cast source, a receiver type,
+         a declared type) this run does not apply, typing those constructs as
+         the configuration does on its own. *)
+  applied_choices :
+    ((int * int) * (Wax_utils.Diagnostic.context -> unit)) list ref;
+  (* The choices above this run applied that make a value wider than in the
+         configuration, by span, each with how to report it as having no
+         single form: where the wider value does not fit where it goes (see
+         [Typing.f_infer_with_shape]). *)
   (* --- Module-wide type and name tables (built once, before any body) --- *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;

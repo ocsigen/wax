@@ -187,10 +187,19 @@ type module_context = {
          the types the receiver has in the configurations, the one the others
          are subtypes of. Filled, as [alias_variants], only for the runs that
          build such a module. *)
-  widened_casts : Ast.location list ref;
-      (* The branching casts whose source [alias_variants] widened so that the
-         value they leave when the cast fails is wider than in this
-         configuration. *)
+  declared_choices : (int * int, Ast.valtype) Hashtbl.t;
+      (* By its span, the type an inferred declaration takes in every
+         configuration, which a run building a module lowered as one for every
+         configuration types it with. Filled, as [alias_variants], only for
+         those runs. *)
+  withheld : (int * int, unit) Hashtbl.t;
+      (* The spans of the choices above (a widened cast source, a receiver
+         type, a declared type) this run does not apply. *)
+  applied_choices :
+    ((int * int) * (Wax_utils.Diagnostic.context -> unit)) list ref;
+      (* The choices above this run applied that make a value wider than in
+         the configuration, by span, each with how to report it as having no
+         single form. *)
   type_context : type_context;
   types : (Wax_wasm.Types.ref_index * Ast.subtype) Tbl.t;
   functions : (Wax_wasm.Types.Id.t * string * bool) option Tbl.t;

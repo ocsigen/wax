@@ -1,0 +1,9 @@
+#[if(p)] { type a = &any; } #[else] { type a = &?any; }
+rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { info: i32 };
+}
+#[export]
+fn miss(v: a, d: &!obj_desc) -> a {
+    return 'l: do a { _ = br_on_cast_fail 'l descriptor(d) v; return v; };
+}

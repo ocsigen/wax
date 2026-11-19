@@ -1160,6 +1160,18 @@ module Error = struct
               what it leaves when the cast fails, typed from a source type \
               that holds in all of them, does not fit where it goes in every \
               one.")
+    | `Access_result ->
+        report context ~location
+          ~hint:
+            (text
+               "Access it in the branches of a conditional, or resolve the \
+                conditionals with -D.")
+          (text
+             "This value has different types under different conditional \
+              annotations, so an access to it names the supertype that holds \
+              in all of them; what the access reads, typed from that \
+              supertype, does not fit where it goes in every one, so it has no \
+              single WebAssembly form.")
 
   let invalid_cast context ~location ty' =
     report context ~location
@@ -4246,20 +4258,46 @@ let val_lub ctx v1 v2 =
       Ref { nullable; typ = lub }
   | _ -> if v1 = v2 then Some v1 else None
 
+(* A span, as the tables of the choices a module lowered as one for every
+   configuration makes key it ([ctx.withheld], [ctx.applied_choices]). *)
+let choice_key (l : location) = (l.loc_start.pos_cnum, l.loc_end.pos_cnum)
+
+(* Record that this run applied the choice at [l], with how to [report] it. *)
+let applied_choice ctx l report =
+  ctx.applied_choices := (choice_key l, report) :: !(ctx.applied_choices)
+
+(* The type [ctx.declared_choices] gives the inferred declaration at [l], when
+   it is not the type [own] the configuration infers (it is then a supertype of
+   it), recording the choice with how to [report] it. *)
+let declared_choice ctx (l : location) own report =
+  if Hashtbl.mem ctx.withheld (choice_key l) then None
+  else
+    match
+      (Hashtbl.find_opt ctx.declared_choices (choice_key l), Cell.get own)
+    with
+    | Some t, Valtype v -> (
+        match internalize_valtype ctx t with
+        | Some t' when not (valtype_equal ctx t' v) ->
+            applied_choice ctx l report;
+            Some t'
+        | _ -> None)
+    | _ -> None
+
 (* The source type [ty1] of a branching cast whose operand [cell] is a value of
    a conditional alias, in a module lowered as one for every configuration:
    widened to the lub with the type the alias stands for in each of them, so
    that the cast holds in all of them. A source type is a [reftype] immediate,
    with no alias to defer to. [ty1] itself when a definition does not resolve
-   here to a reference of the same hierarchy, as before. A cast whose residual,
-   what it leaves when the cast to [target] fails, is wider for the widening is
-   recorded at [location] in [ctx.widened_casts]: the configuration may not
-   accept that wider value where it goes. *)
+   here to a reference of the same hierarchy, as before, or when the choice at
+   [location] is withheld. A cast whose residual, what it leaves when the cast
+   to [target] fails, is wider for the widening is recorded in
+   [ctx.applied_choices]: the configuration may not accept that wider value
+   where it goes. *)
 let conditional_cast_source ctx ~location cell ~target ty1 =
   match Cell.get cell with
   | Valtype { alias = Some a; _ } -> (
       match Hashtbl.find_opt ctx.alias_variants a.desc with
-      | Some defs ->
+      | Some defs when not (Hashtbl.mem ctx.withheld (choice_key location)) ->
           let widened =
             Option.value ~default:ty1
               (List.fold_left
@@ -4275,11 +4313,29 @@ let conditional_cast_source ctx ~location cell ~target ty1 =
                   internalize_valtype ctx (Ref (diff_ref_type wide target)) )
               with
               | Some a, Some b when valtype_equal ctx a b -> ()
-              | _ -> ctx.widened_casts := location :: !(ctx.widened_casts))
+              | _ ->
+                  applied_choice ctx location (fun d ->
+                      Error.configuration_dependent_immediate d ~location
+                        `Cast_source))
           | _ -> ());
           widened
-      | None -> ty1)
+      | Some _ | None -> ty1)
   | _ -> ty1
+
+(* The source and residual of a descriptor branching cast to [target] on an
+   operand [cell] of type [ty']: the operand's own type is the source, widened
+   as a [br_on_cast]'s when the operand is a value of a conditional alias (see
+   [conditional_cast_source]). *)
+let descriptor_cast_types ctx ~location cell ty' ~target =
+  let own = Ref ty' in
+  match conditional_cast_source ctx ~location cell ~target own with
+  | Ref source as widened when widened != own ->
+      let*@ typ1 = internalize ctx (Ref source) in
+      let+@ typ2 = internalize ctx (Ref (diff_ref_type source target)) in
+      (typ1, typ2)
+  | _ ->
+      let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' target)) in
+      (cell, typ2)
 
 (* The name of the type [name] and of its declared supertypes, transitively. *)
 let type_ancestors ctx name =
@@ -4295,13 +4351,16 @@ let type_ancestors ctx name =
 (* The receiver [recv] of a struct or array access ascribed the type
    [ctx.receiver_types] gives it, when it is not the receiver's own, so that
    the lowering names that type (see [To_wasm.expr_type_name]) whichever
-   configuration's run builds the access. *)
+   configuration's run builds the access. Applied before the access is typed,
+   so that what it reads is typed as the lowering reads it: a field a subtype
+   refines reads as the supertype declares it, which is recorded in
+   [ctx.applied_choices], as it may not fit where it goes. *)
 let ascribe_conditional_receiver ctx (recv : _ instr) =
   let l = snd recv.info in
   match
     ( fst recv.info,
-      Hashtbl.find_opt ctx.receiver_types
-        (l.loc_start.pos_cnum, l.loc_end.pos_cnum) )
+      if Hashtbl.mem ctx.withheld (choice_key l) then None
+      else Hashtbl.find_opt ctx.receiver_types (choice_key l) )
   with
   | [| cell |], Some name -> (
       match Cell.get cell with
@@ -4311,6 +4370,9 @@ let ascribe_conditional_receiver ctx (recv : _ instr) =
               let t = Ref { r with typ = Type { n with desc = name } } in
               match internalize ctx t with
               | Some cell' ->
+                  applied_choice ctx l (fun d ->
+                      Error.configuration_dependent_immediate d ~location:l
+                        `Access_result);
                   {
                     recv with
                     desc = Cast (recv, Ascribed t);
@@ -5411,6 +5473,39 @@ let float_literal_lattice s =
   if Wax_wasm.Misc.is_float32 s then Float else Valtype f64_valtype
 
 let rec instruction ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
+  declare_chosen ctx i (instruction_typed ctx i)
+
+(* An omitted block result or the result of a select, typed [typed], ascribed
+   the type [ctx.declared_choices] declares it with, when it is not its own: as
+   the lowering declares it (see [declared_type]), so that where it goes is
+   checked against it. *)
+and declare_chosen ctx i typed =
+  match i.desc with
+  | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | TryTable _
+  | Try _ | TryCatch _ | Select _
+    when Hashtbl.length ctx.declared_choices > 0 -> (
+      let* i' = typed in
+      match fst i'.info with
+      | [| cell |] -> (
+          let kind = match i.desc with Select _ -> `Select | _ -> `Block in
+          match
+            declared_choice ctx i.info cell (fun d ->
+                Error.configuration_dependent_declaration d ~location:i.info
+                  kind)
+          with
+          | Some t ->
+              return
+                {
+                  desc = Cast (i', Ascribed t.typ);
+                  info = ([| valtype_cell t |], snd i'.info);
+                  hints = Wax_wasm.Hints.none;
+                  expected = Unset;
+                }
+          | None -> return i')
+      | _ -> return i')
+  | _ -> typed
+
+and instruction_typed ctx i : _ hole_st -> _ hole_st * (_ array * _) instr =
   if debug then Wax_utils.Printer.run_err (fun p -> Printer_output.instr p i);
   match i.desc with
   | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | If_annotation _
@@ -6082,8 +6177,7 @@ and type_branch ctx i =
                supertype — a failed [val_lub] means different hierarchies. *)
             if Option.is_none (val_lub ctx (Ref ty) (Ref ty')) then
               Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) typ';
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
-            (typ', typ2)
+            descriptor_cast_types ctx ~location:i.info typ' ty' ~target:ty
         | Unknown | UnknownRef ->
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty ty)) in
             (typ', typ2)
@@ -6117,8 +6211,7 @@ and type_branch ctx i =
             (* See [Br_on_cast_desc_eq]. *)
             if Option.is_none (val_lub ctx (Ref ty) (Ref ty')) then
               Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) typ';
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
-            (typ', typ2)
+            descriptor_cast_types ctx ~location:i.info typ' ty' ~target:ty
         | Unknown | UnknownRef ->
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty ty)) in
             (typ', typ2)
@@ -7557,6 +7650,7 @@ and type_aggregate_access ctx i =
   match i.desc with
   | StructGet (i', field) ->
       let* i' = instruction ctx i' in
+      let i' = ascribe_conditional_receiver ctx i' in
       let*! ty =
         let ty = expression_type ctx i' in
         (* The receiver this access is on, for member completion: a memory /
@@ -7637,9 +7731,7 @@ and type_aggregate_access ctx i =
             Error.expected_struct ctx.diagnostics ~location:(snd i'.info);
             None
       in
-      return_expression i
-        (StructGet (ascribe_conditional_receiver ctx i', field))
-        ty
+      return_expression i (StructGet (i', field)) ty
   | GetDescriptor i' ->
       let* i' = instruction ctx i' in
       let*! ty =
@@ -7745,15 +7837,14 @@ and type_aggregate_access ctx i =
   | ArrayGet (i1, i2) -> (
       (* Emission order: the array, then the index. *)
       let* i1' = typed ctx i1 in
+      let i1' = ascribe_conditional_receiver ctx i1' in
       let* i2' = typed ctx i2 in
       check_type ctx i2' i32_cell;
       match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
           let*! ty = field_read_type ctx (written_array_field ctx ty typ) in
-          return_expression i
-            (ArrayGet (ascribe_conditional_receiver ctx i1', i2'))
-            ty
+          return_expression i (ArrayGet (i1', i2')) ty
       | Error ->
           (* Receiver already failed to type; recover silently. *)
           return_expression i (ArrayGet (i1', i2')) (Cell.make Error)
@@ -8059,11 +8150,25 @@ and type_let ctx i =
                [expression_type] reports it if it is not. A single binding with
                an annotation is handled by the branch above, so any annotation
                here is absent — no redundancy to suggest. *)
-            [
+            let ty = expression_type ctx i' in
+            let binding' =
               fst
-                (bind_let_value ~init:i' ctx ~location:(snd i'.info)
-                   (expression_type ctx i') binding);
-            ]
+                (bind_let_value ~init:i' ctx ~location:(snd i'.info) ty binding)
+            in
+            (* An unannotated local takes the type the lowering declares it
+               with (see [declared_type]). *)
+            (match binding with
+            | Some name, None ->
+                Option.iter
+                  (fun t ->
+                    ctx.locals <-
+                      StringMap.add name.Annot.desc (Some t, name.info)
+                        ctx.locals)
+                  (declared_choice ctx i.info ty (fun d ->
+                       Error.configuration_dependent_declaration d
+                         ~location:i.info (`Locals [ name ])))
+            | _ -> ());
+            [ binding' ]
         | _ ->
             (* Each name takes one value off a multi-value initializer, left to
                right (the names match the values in order). *)
@@ -8981,6 +9086,7 @@ and type_array_copy_call ctx i func a1 (meth : Ast.ident) i1 a2 i2 n =
   let* a1' = typed ctx a1 in
   let* i1' = typed ctx i1 in
   let* a2' = typed ctx a2 in
+  let a2' = ascribe_conditional_receiver ctx a2' in
   let* i2' = typed ctx i2 in
   let* n' = typed ctx n in
   check_type ctx n' i32_cell;
@@ -9015,7 +9121,7 @@ and type_array_copy_call ctx i func a1 (meth : Ast.ident) i1 a2 i2 n =
            hints = Wax_wasm.Hints.none;
            expected = Unset;
          },
-         [ i1'; ascribe_conditional_receiver ctx a2'; i2'; n' ] ))
+         [ i1'; a2'; i2'; n' ] ))
     [||]
 
 and type_array_init_call ctx i func a (meth : Ast.ident) arg1 rest =
@@ -9434,7 +9540,21 @@ and type_simd_free_intrinsic_call ctx i func ns (name : Ast.ident) args =
    delegates to [instruction] and snapshots its own type. [expected] is the
    [Unknown] sentinel when [check_instruction] is entered from [instruction] with
    no context (synthesis). *)
+(* A block or select checked against [expected] takes the type the lowering
+   declares it with, as in synthesis (see [declare_chosen]), which must then
+   fit [expected] too. *)
 and check_instruction ctx expected (i : location instr) =
+  match i.desc with
+  | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | TryTable _
+  | Try _ | TryCatch _ | Select _
+    when Hashtbl.length ctx.declared_choices > 0 ->
+      let* i', reinfer = check_instruction_typed ctx expected i in
+      let* i'' = declare_chosen ctx i (return i') in
+      if i'' != i' && has_expectation expected then check_type ctx i'' expected;
+      return (i'', reinfer)
+  | _ -> check_instruction_typed ctx expected i
+
+and check_instruction_typed ctx expected (i : location instr) =
   (* The construction's type name: explicit, or inferred from an exact expected
      type; [missing] reports a [cannot_infer_*] error and yields [None]. *)
   let resolve_name ty ~missing =
@@ -12481,6 +12601,18 @@ let rec globals ctx fields =
                   bound_value_type ctx ~location:def.info
                     (expression_type ctx def')
                 in
+                (* The type the lowering declares it with, if not its own
+                   (see [declared_type]). *)
+                let ity =
+                  match
+                    declared_choice ctx field.info (expression_type ctx def')
+                      (fun d ->
+                        Error.configuration_dependent_declaration d
+                          ~location:field.info (`Global name))
+                  with
+                  | Some t -> Some t
+                  | None -> ity
+                in
                 Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
                 (* As for a [let], a value of an alias's type declares the
                    global with the alias. *)
@@ -13637,7 +13769,8 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
     ?(suggest = false) ?(resolve_links = None) ?(pun_spans = None)
     ?(member_completions = None) ?(faithful = false)
     ?(alias_variants = Hashtbl.create 0) ?(receiver_types = Hashtbl.create 0)
-    ?(widened_casts = ref []) ?(features = Wax_utils.Feature.default ())
+    ?(declared_choices = Hashtbl.create 0) ?(withheld = Hashtbl.create 0)
+    ?(applied_choices = ref []) ?(features = Wax_utils.Feature.default ())
     ?(select =
       fun (_ : location) -> invalid_arg "Typing: unplanned conditional")
     ?(guard = fun (_ : location) -> true) ~simplify diagnostics fields =
@@ -13785,7 +13918,9 @@ let type_configuration ?(warn_unused = false) ?(build = true) ?forms
       faithful;
       alias_variants;
       receiver_types;
-      widened_casts;
+      declared_choices;
+      withheld;
+      applied_choices;
     }
   in
   check_type_definitions ctx;
@@ -15055,8 +15190,9 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
        [Cond_plan] needs, each typing the branches it selects spliced into a
        world that exists, then stitched so every branch comes from the run that
        owns it. Diagnostics are discarded — [check_configurations] above did
-       the real checking, but for the casts a run widens (below); references
-       are recorded here, off the runs' trees, and deduplicated across them. *)
+       the real checking, but for the choices that make the runs differ from
+       it (below); references are recorded here, off the runs' trees, and
+       deduplicated across them. *)
     let plan =
       Wax_wasm.Cond_plan.make
         (Wax_utils.Diagnostic.collector ())
@@ -15081,58 +15217,90 @@ let f_infer_with_shape ?(simplify = false) ?(warn_unused = false)
                  (receiver_choice seen)
            | _ -> ()))
       forms;
+    (* An inferred declaration takes a type that holds in every configuration
+       (see [declaration_choice]). *)
+    let declared_choices = Hashtbl.create 16 in
+    Option.iter
+      (Hashtbl.iter (fun (kind, a, b) (_, form) ->
+           match form with
+           | Declaration_form (_, (_ :: _ :: _ as seen)) when kind = "" ->
+               Option.iter
+                 (Hashtbl.replace declared_choices (a, b))
+                 (declaration_choice seen)
+           | _ -> ()))
+      forms;
+    (* A run applies these choices, each a type that holds in every
+       configuration, as the lowering does, so a value may be wider than the
+       configuration's own. Where one does not fit where it goes, it fails the
+       run, though the configuration does not on its own: no single form holds
+       in every configuration. A failing run is typed again without the choices
+       it applied: if that is clean, it reports those whose choice alone fails
+       it (all of them if none does), rather than the lowered module's type
+       mismatch. Only on that failure, so the reruns cost nothing otherwise. *)
     let has_error sink =
       List.exists
         (fun e -> Wax_utils.Diagnostic.entry_severity e = Error)
         (Wax_utils.Diagnostic.collected sink)
     in
-    let widened = ref [] in
+    let fails ~select withheld =
+      let sink = Wax_utils.Diagnostic.collector () in
+      ignore
+        (type_configuration ~select ~faithful ~alias_variants ~receiver_types
+           ~declared_choices ~withheld ~features ~simplify sink fields);
+      has_error sink
+    in
+    let withholding keys =
+      let tbl = Hashtbl.create 8 in
+      List.iter (fun k -> Hashtbl.replace tbl k ()) keys;
+      tbl
+    in
+    let blamed = Hashtbl.create 8 in
     let results =
       List.map
         (fun run ->
           let select = Wax_wasm.Cond_plan.select plan run in
           let sink = Wax_utils.Diagnostic.collector () in
-          let widened_casts = ref [] in
+          let applied_choices = ref [] in
           let result =
             type_configuration ~select ~resolve_links ~pun_spans
               ~member_completions ~faithful ~alias_variants ~receiver_types
-              ~widened_casts ~features ~simplify sink fields
+              ~declared_choices ~applied_choices ~features ~simplify sink fields
           in
-          (* A widened cast leaves a wider value when the cast fails than the
-             configuration's own (see [conditional_cast_source]). Where that
-             fails the run, and the run typed with each configuration's own
-             sources does not, no source type holds in every configuration:
-             report the casts, rather than the lowered module's mismatch. *)
+          let applied =
+            List.sort_uniq (fun (k, _) (k', _) -> compare k k') !applied_choices
+          in
+          let keys = List.map fst applied in
           if
-            !widened_casts <> [] && has_error sink
-            && not
-                 (let sink = Wax_utils.Diagnostic.collector () in
-                  ignore
-                    (type_configuration ~select ~faithful ~receiver_types
-                       ~features ~simplify sink fields);
-                  has_error sink)
-          then widened := !widened_casts @ !widened;
+            applied <> [] && has_error sink
+            && not (fails ~select (withholding keys))
+          then begin
+            let alone =
+              List.filter
+                (fun (k, _) ->
+                  fails ~select
+                    (withholding (List.filter (fun k' -> k' <> k) keys)))
+                applied
+            in
+            List.iter
+              (fun (k, report) -> Hashtbl.replace blamed k report)
+              (if alone = [] then applied else alone)
+          end;
           (run, result))
         (Wax_wasm.Cond_plan.runs plan)
     in
     List.iter
-      (fun location ->
-        Error.configuration_dependent_immediate diagnostics ~location
-          `Cast_source)
-      (List.sort_uniq compare !widened);
+      (fun (_, report) -> report diagnostics)
+      (List.sort
+         (fun (k, _) (k', _) -> compare k k')
+         (List.of_seq (Hashtbl.to_seq blamed)));
     dedupe_sinks ~resolve_links ~pun_spans ~member_completions;
     let types, typed = stitch plan results in
-    (* An inferred declaration takes a type that holds in every configuration
-       (see [declaration_choice]). *)
+    Hashtbl.iter (Hashtbl.replace types.declared) declared_choices;
     Option.iter
       (fun forms ->
         Hashtbl.iter
           (fun (kind, a, b) (_, form) ->
             match form with
-            | Declaration_form (_, (_ :: _ :: _ as seen)) when kind = "" ->
-                Option.iter
-                  (Hashtbl.replace types.declared (a, b))
-                  (declaration_choice seen)
             (* A select choosing between values of unreachable code in some
                configurations, and between numbers in the others, if any, is
                untyped, though the run that owns it may infer a reference from

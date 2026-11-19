@@ -1111,6 +1111,43 @@ Where it fits, the cast converts.
         (return (local.get $x))))
   )
 
+A branching cast on a descriptor, br_on_cast_desc_eq, takes a source type that
+holds in every configuration too, whichever branch defines the narrower one,
+and has no single form where what it leaves when the cast fails does not fit.
+
+  $ wax -X custom-descriptors -f wat cast-desc-hit.wax
+  (@if $p (@then (@type $a (ref any))) (@else (@type $a anyref)))
+  (rec
+    (type $obj (descriptor $obj_desc) (struct (field $x i32)))
+    (type $obj_desc (describes $obj) (struct (field $info i32)))
+  )
+  (func $hit (export "hit")
+    (param $v (@type $a)) (param $d (ref (exact $obj_desc))) (result i32)
+    (drop
+      (block $l (result (ref (exact $obj)))
+        (drop
+          (br_on_cast_desc_eq $l anyref (ref (exact $obj)) (local.get $v)
+            (local.get $d)))
+        (return (i32.const 0))))
+    (return (i32.const 1))
+  )
+  $ wax -X custom-descriptors -f wat cast-desc-miss.wax
+  Error:
+    This cast has no single WebAssembly form: the value it tests has different
+    types under different conditional annotations, and what it leaves when the
+    cast fails, typed from a source type that holds in all of them, does not fit
+    where it goes in every one.
+    ──➤  cast-desc-miss.wax:8:27
+   6 │ #[export]
+   7 │ fn miss(v: a, d: &!obj_desc) -> a {
+   8 │     return 'l: do a { _ = br_on_cast_fail 'l descriptor(d) v; return v; };
+     ·                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 │ }
+  10 │ 
+  Hint:
+    Cast in the branches of a conditional, or resolve the conditionals with -D.
+  [128]
+
 A field access on a value whose struct type differs between configurations
 reads the field at the position it has in one of them. The struct types are
 related by subtyping, so that access is valid in every configuration, but it
@@ -1379,6 +1416,72 @@ others, it is declared with that one, whichever branch defines it.
     (struct.get $s1 $f (local.get $y))
   )
 
+The supertype also types where the declared value goes, as the lowering
+declares it: where a configuration needs the narrower type it infers there,
+there is no single form, though each configuration compiles on its own.
+
+  $ wax -f wat decl-narrow-local.wax
+  Error:
+    The type of the local 'y' is inferred as different types under different
+    conditional annotations, so its declaration has no single WebAssembly form.
+   ──➤  decl-narrow-local.wax:5:10
+  3 │ #[if(p)] { fn make() -> &s2 { return {s2| f: 1, g: 2}; } fn use(x: &s2) {} }
+  4 │ #[else] { fn make() -> &s1 { return {s1| f: 1}; } fn use(x: &s1) {} }
+  5 │ fn f() { let y = make(); use(y); }
+    ·          ^^^^^^^^^^^^^^
+  6 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-narrow-block.wax
+  Error:
+    The result type of this block is inferred as different types under different
+    conditional annotations, so it has no single WebAssembly form.
+   ──➤  decl-narrow-block.wax:5:14
+  3 │ #[if(p)] { fn make() -> &s2 { return {s2| f: 1, g: 2}; } fn use(x: &s2) {} }
+  4 │ #[else] { fn make() -> &s1 { return {s1| f: 1}; } fn use(x: &s1) {} }
+  5 │ fn f() { use(do { make(); }); }
+    ·              ^^^^^^^^^^^^^^
+  6 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-narrow-select.wax
+  Error:
+    The result type of this selection is inferred as different types under
+    different conditional annotations, so it has no single WebAssembly form.
+   ──➤  decl-narrow-select.wax:5:20
+  3 │ #[if(p)] { fn make() -> &s2 { return {s2| f: 1, g: 2}; } fn use(x: &s2) {} }
+  4 │ #[else] { fn make() -> &s1 { return {s1| f: 1}; } fn use(x: &s1) {} }
+  5 │ fn f(c: i32) { use(c ? make() : make()); }
+    ·                    ^^^^^^^^^^^^^^^^^^^
+  6 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+  $ wax -f wat decl-narrow-global.wax
+  Error:
+    The type of the global 'g' is inferred as different types under different
+    conditional annotations, so its declaration has no single WebAssembly form.
+   ──➤  decl-narrow-global.wax:5:1
+  3 │ #[if(p)] { const h: &s2 = {s2| f: 1, g: 2}; fn use(x: &s2) {} }
+  4 │ #[else] { const h: &s1 = {s1| f: 1}; fn use(x: &s1) {} }
+  5 │ const g = h;
+    · ^^^^^^^^^^^^
+  6 │ fn f() { use(g); }
+  7 │ 
+  Hint:
+    Give it a type that holds in every configuration (a type alias defined in
+    the branches), write it in the branches of a conditional, or resolve the
+    conditionals with -D.
+  [128]
+
 A function declared without a named type has a type named after it, which
 stands for a different type in each configuration declaring the function with
 a different signature: a declaration inferred from a reference to it has no
@@ -1551,6 +1654,27 @@ type, or for the other constructs, it has no single form.
   11 │ 
   Hint:
     Write it in the branches of a conditional, or resolve the conditionals with
+    -D.
+  [128]
+
+What such an access reads is typed by the supertype's field. Where a subtype
+refines the field and a configuration needs the refined type, the access has
+no single form.
+
+  $ wax -f wat field-narrow.wax
+  Error:
+    This value has different types under different conditional annotations, so
+    an access to it names the supertype that holds in all of them; what the
+    access reads, typed from that supertype, does not fit where it goes in every
+    one, so it has no single WebAssembly form.
+   ──➤  field-narrow.wax:4:28
+  2 │ type s2: s1 = { f: &?eq };
+  3 │ #[if(p)] { type n = &s1; type r = &?any; } #[else] { type n = &s2; type r = &?eq; }
+  4 │ fn get(x: n) -> r { return x.f; }
+    ·                            ^
+  5 │ 
+  Hint:
+    Access it in the branches of a conditional, or resolve the conditionals with
     -D.
   [128]
 

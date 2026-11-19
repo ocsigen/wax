@@ -85,9 +85,12 @@ grammar keeps none, and both are versioned independently of the toolchain.
   the type the first branch gives the value, so it was rejected with a type
   mismatch when that was the subtype. A local, a global, a block result or a
   selection `c ? a : b` whose type is left unwritten and differs that way is
-  likewise declared with the supertype.
+  likewise declared with the supertype. Where a configuration needs the
+  narrower type, what the access reads (a field the subtype refines) or the
+  declared value, the construct is reported as having no single WebAssembly
+  form, instead of a type mismatch in the converted module.
 - A `match`, `br_on_cast` or `br_on_cast_fail` on a value of a conditional
-  alias now converts without resolving the conditionals when the alias stands
+  alias, testing a type or a descriptor, now converts without resolving the conditionals when the alias stands
   for different reference types, for instance `&eq` in one configuration and
   `&?eq` in another. The cast took its source type from one configuration,
   so the conversion was rejected wherever that type was too narrow; it now

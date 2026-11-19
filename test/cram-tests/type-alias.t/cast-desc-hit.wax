@@ -1,0 +1,10 @@
+#[if(p)] { type a = &any; } #[else] { type a = &?any; }
+rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { info: i32 };
+}
+#[export]
+fn hit(v: a, d: &!obj_desc) -> i32 {
+    _ = 'l: do &!obj { _ = br_on_cast 'l descriptor(d) v; return 0; };
+    return 1;
+}
