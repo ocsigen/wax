@@ -225,6 +225,7 @@
 %token REF_EXTERN
 %token REF_STRUCT
 %token REF_ARRAY
+%token REF_CONT
 %token EITHER
 %token SCRIPT
 %token INPUT
@@ -1676,6 +1677,7 @@ result_pat:
 | "(" REF_EXTERN ")"
 | "(" REF_STRUCT ")"
 | "(" REF_ARRAY ")"
+| "(" REF_CONT ")"
 | "(" REF_NULL heap_type ")"
 | "(" REF_HOST NAT ")"
 | "(" REF_EXTERN NAT ")"

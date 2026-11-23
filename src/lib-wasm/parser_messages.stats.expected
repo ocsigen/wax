@@ -1,16 +1,16 @@
-error states: 711
-with an "Expecting" list: 692
+error states: 712
+with an "Expecting" list: 693
 with an "Assuming" hedge: 73
 hedges assuming 4 or more constructs: 42
 most constructs assumed by one hedge: 9
 overridden: 19
 "Syntax error", nothing to list (not overridden): 0
 "Syntax error", over 5 to list (not overridden): 0
-delimiter hints: 239
+delimiter hints: 240
 missed delimiter hints (an opener is open, but no hint): 0
 tokens shown as jargon: 0
 rule names shown as jargon: 0
-states numbered as in the .cmly: 711/711
+states numbered as in the .cmly: 712/712
 listed tokens the parser rejects: 0
 lists missing an accepted token: 23
 accepted tokens missing (total): 1769

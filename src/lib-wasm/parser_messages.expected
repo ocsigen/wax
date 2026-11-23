@@ -18,7 +18,7 @@ parse: LPAREN DATA LPAREN BLOCK ID LPAREN_THEN
 Expecting ')', a block type, or instructions.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN BLOCK LPAREN_RESULT RPAREN END
+parse: LPAREN DATA LPAREN BLOCK LPAREN_RESULT RPAREN LPAREN_LOCAL
 
 Assuming that the block type is complete, expecting ')' or instructions.
 <^1>this block type
@@ -61,7 +61,7 @@ parse: LPAREN DATA LPAREN IF ID CATCH_ALL
 
 Expecting a block type, a folded instruction, or a then-branch.
 
-parse: LPAREN DATA LPAREN IF LPAREN_RESULT RPAREN RPAREN
+parse: LPAREN DATA LPAREN IF LPAREN_RESULT RPAREN LPAREN_CATCH_REF
 
 Assuming that the block type is complete, expecting a folded instruction or a then-branch.
 <^1>this block type
@@ -121,7 +121,7 @@ parse: LPAREN DATA LPAREN LOOP ID LPAREN_THEN
 Expecting ')', a block type, or instructions.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN LOOP LPAREN_RESULT RPAREN END
+parse: LPAREN DATA LPAREN LOOP LPAREN_RESULT RPAREN LPAREN_LOCAL
 
 Assuming that the block type is complete, expecting ')' or instructions.
 <^1>this block type
@@ -235,7 +235,7 @@ parse: LPAREN DATA LPAREN TRY LPAREN WAIT
 
 Expecting 'do'.
 
-parse: LPAREN DATA LPAREN TRY LPAREN_RESULT RPAREN LPAREN_THEN
+parse: LPAREN DATA LPAREN TRY LPAREN_RESULT RPAREN RPAREN
 
 Assuming that the block type is complete, expecting '('.
 <^1>this block type
@@ -255,7 +255,7 @@ parse: LPAREN DATA LPAREN TRY_TABLE ID END
 Expecting ')', a block type, catches, or instructions.
 <3>This '(' opens the enclosing construct.
 
-parse: LPAREN DATA LPAREN TRY_TABLE LPAREN_RESULT RPAREN ELSE
+parse: LPAREN DATA LPAREN TRY_TABLE LPAREN_RESULT RPAREN END
 
 Assuming that the catches are complete, expecting ')' or instructions.
 <^1>these catches
@@ -627,7 +627,7 @@ parse: LPAREN FUNC BLOCK ID RPAREN
 
 Expecting 'end', a block type, or instructions.
 
-parse: LPAREN FUNC BLOCK LPAREN_RESULT RPAREN LPAREN_THEN
+parse: LPAREN FUNC BLOCK LPAREN_RESULT RPAREN LPAREN_LOCAL
 
 Assuming that the block type is complete, expecting 'end' or instructions.
 <^1>this block type
@@ -911,7 +911,7 @@ parse: LPAREN FUNC IF ID LPAREN_THEN
 
 Expecting 'else', 'end', a block type, or instructions.
 
-parse: LPAREN FUNC IF LPAREN_RESULT RPAREN LPAREN_LOCAL
+parse: LPAREN FUNC IF LPAREN_RESULT RPAREN LPAREN_THEN
 
 Assuming that the block type is complete, expecting 'else', 'end', or instructions.
 <^1>this block type
@@ -1021,7 +1021,7 @@ parse: LPAREN FUNC LOOP ID RPAREN
 
 Expecting 'end', a block type, or instructions.
 
-parse: LPAREN FUNC LOOP LPAREN_RESULT RPAREN LPAREN_THEN
+parse: LPAREN FUNC LOOP LPAREN_RESULT RPAREN LPAREN_LOCAL
 
 Assuming that the block type is complete, expecting 'end' or instructions.
 <^1>this block type
@@ -1384,7 +1384,7 @@ parse: LPAREN FUNC TRY_TABLE LPAREN_PARAM WAIT
 Expecting ')' or a value type.
 <1>This '(' opens the enclosing construct.
 
-parse: LPAREN FUNC TRY_TABLE LPAREN_RESULT RPAREN RPAREN
+parse: LPAREN FUNC TRY_TABLE LPAREN_RESULT RPAREN LPAREN_LOCAL
 
 Assuming that the catches are complete, expecting 'end' or instructions.
 <^1>these catches
@@ -2335,6 +2335,11 @@ Expecting ')'.
 <2>This '(' opens the enclosing construct.
 
 parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_ARRAY WAIT
+
+Expecting ')'.
+<2>This '(' opens the enclosing construct.
+
+parse_script: LPAREN ASSERT_RETURN LPAREN GET STRING RPAREN LPAREN REF_CONT WAIT
 
 Expecting ')'.
 <2>This '(' opens the enclosing construct.

@@ -200,7 +200,7 @@
        <_>This '(' opens the enclosing construct.
     1x Expecting ')', an element list, or an index.
        <_>This '(' opens the enclosing construct.
-  114x Expecting ')'.
+  115x Expecting ')'.
        <_>This '(' opens the enclosing construct.
     1x Expecting 'always_opt', 'freq', or 'never_opt'.
     1x Expecting 'and', 'not', 'or', a comparison operator, or an integer.

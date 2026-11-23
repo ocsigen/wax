@@ -645,6 +645,7 @@ let keyword_table : (string, token) Hashtbl.t =
       ("ref.extern", REF_EXTERN);
       ("ref.struct", REF_STRUCT);
       ("ref.array", REF_ARRAY);
+      ("ref.cont", REF_CONT);
       ("either", EITHER);
       ("script", SCRIPT);
       ("input", INPUT);
