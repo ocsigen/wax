@@ -88,6 +88,17 @@ let rec uint ?(n = 5) ch =
     else if i >= 16 then error ch "integer too large";
   if i < 128 then i else i - 128 + (uint ~n:(n - 1) ch lsl 7)
 
+let rec uint32_rec ?(n = 5) ch =
+  let i = Int32.of_int (input_byte ch) in
+  if n = 1 then
+    if Int32.compare i 128l >= 0 then error ch "integer representation too long"
+    else if Int32.compare i 16l >= 0 then error ch "integer too large";
+  if Int32.compare i 128l < 0 then i
+  else
+    Int32.add (Int32.sub i 128l) (Int32.shift_left (uint32_rec ~n:(n - 1) ch) 7)
+
+let uint32 ch = Wax_utils.Uint32.of_int32 (uint32_rec ch)
+
 let rec uint64_rec ?(n = 10) ch =
   let i = input_byte ch in
   if n = 1 then
@@ -101,15 +112,26 @@ let rec uint64_rec ?(n = 10) ch =
 
 let uint64 ch = Wax_utils.Uint64.of_int64 (uint64_rec ch)
 
-let rec sint ?(n = 5) ch =
-  let i = input_byte ch in
-  if n = 1 then
-    if i >= 128 then error ch "integer representation too long"
-    else if not (i < 8 || (i > 120 && i < 128)) then
-      error ch "integer too large";
-  if i < 64 then i
-  else if i < 128 then i - 128
-  else i - 128 + (sint ~n:(n - 1) ch lsl 7)
+(* A 33-bit signed integer (s33), used for heap-type and block-type indices so
+   that the full unsigned 32-bit index range [0, 2^32 - 1] is positive while
+   negative values encode the abstract-type / inline-valtype tags. Decoded into
+   [int64] so it does not overflow a 32-bit OCaml [int]. The 5th byte contributes
+   5 bits (32 - 4 * 7 + 1 = 5): bit 4 (0x10) is the sign bit, and bits 5..6
+   (0x60) must sign-extend it, i.e. [i < 16] for non-negative values and
+   [i >= 112] for negative ones. *)
+let rec sint33 ?(n = 5) ch =
+  let i = Int64.of_int (input_byte ch) in
+  (if n = 1 then
+     if Int64.compare i 128L >= 0 then
+       error ch "integer representation too long"
+     else
+       let sign_bit = Int64.logand i 0x10L <> 0L in
+       let unused_bits = Int64.logand i 0x60L in
+       if if sign_bit then unused_bits <> 0x60L else unused_bits <> 0L then
+         error ch "integer too large");
+  if Int64.compare i 64L < 0 then i
+  else if Int64.compare i 128L < 0 then Int64.sub i 128L
+  else Int64.add (Int64.sub i 128L) (Int64.shift_left (sint33 ~n:(n - 1) ch) 7)
 
 let rec sint32 ?(n = 5) ch =
   let i = Int32.of_int (input_byte ch) in
@@ -211,29 +233,29 @@ let skip_section (ch : ch) { pos; size; _ } =
 (*** Type and entity decoding ***)
 
 let heaptype ch =
-  let i = sint ch in
-  match i + 128 with
-  | 0x74 -> NoExn
-  | 0x73 -> NoFunc
-  | 0x72 -> NoExtern
-  | 0x71 -> None_
-  | 0x70 -> Func
-  | 0x6F -> Extern
-  | 0x6E -> Any
-  | 0x6D -> Eq
-  | 0x6C -> I31
-  | 0x6B -> Struct
-  | 0x6A -> Array
-  | 0x69 -> Exn
-  | 0x68 -> Cont
-  | 0x75 -> NoCont
+  let i = sint33 ch in
+  match Int64.add i 128L with
+  | 0x74L -> NoExn
+  | 0x73L -> NoFunc
+  | 0x72L -> NoExtern
+  | 0x71L -> None_
+  | 0x70L -> Func
+  | 0x6FL -> Extern
+  | 0x6EL -> Any
+  | 0x6DL -> Eq
+  | 0x6CL -> I31
+  | 0x6BL -> Struct
+  | 0x6AL -> Array
+  | 0x69L -> Exn
+  | 0x68L -> Cont
+  | 0x75L -> NoCont
   (* [exact x]: the index is a u32 that follows the 0x62 tag. *)
-  | 0x62 ->
+  | 0x62L ->
       Wax_utils.Feature.mark_used ch.features Custom_descriptors;
-      Exact (uint ch)
+      Exact (uint32 ch)
   | _ ->
-      if i < 0 then error ch "unknown heap type %d" i;
-      Type i
+      if Int64.compare i 0L < 0 then error ch "unknown heap type %Ld" i;
+      Type (Wax_utils.Uint32.of_int32 (Int64.to_int32 i))
 
 let nullable typ = { nullable = true; typ }
 let ref_eq = { nullable = false; typ = Eq }
@@ -292,7 +314,10 @@ let blocktype ch =
     ignore (input_byte ch);
     None)
   else if c > 0x40 && c < 0x80 then Some (Valtype (valtype_first_byte ch))
-  else Some (Typeuse (sint ch))
+  else
+    let i = sint33 ch in
+    if Int64.compare i 0L < 0 then error ch "malformed type index";
+    Some (Typeuse (Wax_utils.Uint32.of_int32 (Int64.to_int32 i)))
 
 let storagetype ch =
   (* The discriminator is a single byte, as in [valtype_first_byte]: the packed
@@ -330,7 +355,7 @@ let supertype ch =
   match input_byte ch with
   | 0 -> None
   | 1 ->
-      let t = uint ch in
+      let t = uint32 ch in
       Some t
   | _ -> error ch "malformed sub type"
 
@@ -342,13 +367,13 @@ let described_comptype b ch =
      unspecified (OCaml evaluates it right-to-left). *)
   let describes, b =
     if b = 0x4C then
-      let x = uint ch in
+      let x = uint32 ch in
       (Some x, input_byte ch)
     else (None, b)
   in
   let descriptor, b =
     if b = 0x4D then
-      let x = uint ch in
+      let x = uint32 ch in
       (Some x, input_byte ch)
     else (None, b)
   in
@@ -403,7 +428,7 @@ let tabletype ch =
   let limits = limits ch in
   { limits; reftype }
 
-let typeidx ch = uint ch
+let typeidx ch = uint32 ch
 
 let globaltype ch =
   let typ = valtype_first_byte ch in
@@ -413,11 +438,11 @@ let globaltype ch =
 
 let importdesc ch d =
   match d with
-  | 0 -> Func { exact = false; typ = uint ch }
+  | 0 -> Func { exact = false; typ = uint32 ch }
   (* 0x20: an exact function import (bit 6 of the func kind marks exactness). *)
   | 0x20 ->
       Wax_utils.Feature.mark_used ch.features Custom_descriptors;
-      Func { exact = true; typ = uint ch }
+      Func { exact = true; typ = uint32 ch }
   | 1 -> Table (tabletype ch)
   | 2 -> Memory (memtype ch)
   | 3 -> Global (globaltype ch)
@@ -426,7 +451,7 @@ let importdesc ch d =
          unbounded LEB: an overlong [80 00] must not read as the required 0. *)
       let b = input_byte ch in
       if b <> 0 then error ch "malformed tag attribute";
-      Tag (uint ch)
+      Tag (uint32 ch)
   | _ -> error ch "malformed import kind 0x%02x" d
 
 (* One entry of the import section, kept as an [import_entry] so the compact
@@ -481,7 +506,7 @@ let export ch =
   (* A single byte, like the import kind above. *)
   let d = input_byte ch in
   if d > 4 then error ch "unknown export description 0x%02x" d;
-  let idx = uint ch in
+  let idx = uint32 ch in
   let kind = exportable_kind d in
   { name = export_name; kind; index = idx }
 
@@ -489,7 +514,10 @@ let memarg ch =
   (* Binary order is align, then (when align's bit 6 is set) the explicit memory
      index, then the offset — read the offset last, after the memory index. *)
   let a = uint ch in
-  let m, a = if a land 0x40 <> 0 then (uint ch, a lxor 0x40) else (0, a) in
+  let m, a =
+    if a land 0x40 <> 0 then (uint32 ch, a lxor 0x40)
+    else (Wax_utils.Uint32.zero, a)
+  in
   if a >= 64 then error ch "malformed memop flags";
   let o = uint64 ch in
   (m, { align = Wax_utils.Uint64.of_int (1 lsl a); offset = o })
@@ -521,11 +549,11 @@ let expect_end ch = if input_byte ch <> 0x0B then error ch "END opcode expected"
 let on_clause ch =
   match input_byte ch with
   | 0x00 ->
-      let tag = uint ch in
-      let label = uint ch in
+      let tag = uint32 ch in
+      let label = uint32 ch in
       OnLabel (tag, label)
   | 0x01 ->
-      let tag = uint ch in
+      let tag = uint32 ch in
       OnSwitch tag
   | c -> error ch "invalid on clause 0x%02x" c
 
@@ -602,7 +630,7 @@ and instruction ch =
           match input_byte ch with
           | 0x0B -> (List.rev catches, None)
           | 0x07 ->
-              let tag = uint ch in
+              let tag = uint32 ch in
               let body = instructions ch [] in
               loop_catches ((tag, body) :: catches)
           | 0x19 ->
@@ -621,52 +649,52 @@ and instruction ch =
             catches = List.map (fun (t, b) -> (t, Ast.no_loc b)) catches;
             catch_all = Option.map Ast.no_loc catch_all;
           }
-    | 0x08 -> Throw (uint ch)
+    | 0x08 -> Throw (uint32 ch)
     | 0x0A -> ThrowRef
-    | 0xE0 -> ContNew (uint ch)
+    | 0xE0 -> ContNew (uint32 ch)
     | 0xE1 ->
-        let i = uint ch in
-        let j = uint ch in
+        let i = uint32 ch in
+        let j = uint32 ch in
         ContBind (i, j)
-    | 0xE2 -> Suspend (uint ch)
+    | 0xE2 -> Suspend (uint32 ch)
     | 0xE3 ->
-        let i = uint ch in
+        let i = uint32 ch in
         let clauses = resumetable ch in
         Resume (i, clauses)
     | 0xE4 ->
-        let i = uint ch in
-        let j = uint ch in
+        let i = uint32 ch in
+        let j = uint32 ch in
         let clauses = resumetable ch in
         ResumeThrow (i, j, clauses)
     | 0xE5 ->
-        let i = uint ch in
+        let i = uint32 ch in
         let clauses = resumetable ch in
         ResumeThrowRef (i, clauses)
     | 0xE6 ->
-        let i = uint ch in
-        let j = uint ch in
+        let i = uint32 ch in
+        let j = uint32 ch in
         Switch (i, j)
-    | 0x0C -> Br (uint ch)
-    | 0x0D -> Br_if (uint ch)
+    | 0x0C -> Br (uint32 ch)
+    | 0x0D -> Br_if (uint32 ch)
     | 0x0E ->
-        let targets = vec uint ch in
-        let default = uint ch in
+        let targets = vec uint32 ch in
+        let default = uint32 ch in
         Br_table (Array.to_list targets, default)
     | 0x0F -> Return
-    | 0x10 -> Call (uint ch)
+    | 0x10 -> Call (uint32 ch)
     | 0x11 ->
         (* Binary order is (type, table); the AST holds (table, type). *)
-        let type_idx = uint ch in
-        let table = uint ch in
+        let type_idx = uint32 ch in
+        let table = uint32 ch in
         CallIndirect (table, type_idx)
-    | 0x12 -> ReturnCall (uint ch)
+    | 0x12 -> ReturnCall (uint32 ch)
     | 0x13 ->
         (* Binary order is (type, table); the AST holds (table, type). *)
-        let type_idx = uint ch in
-        let table = uint ch in
+        let type_idx = uint32 ch in
+        let table = uint32 ch in
         ReturnCallIndirect (table, type_idx)
-    | 0x14 -> CallRef (uint ch)
-    | 0x15 -> ReturnCallRef (uint ch)
+    | 0x14 -> CallRef (uint32 ch)
+    | 0x15 -> ReturnCallRef (uint32 ch)
     | 0x1A -> Drop
     | 0x1B -> Select None
     | 0x1C -> Select (Some (Array.to_list (vec valtype_first_byte ch)))
@@ -677,31 +705,31 @@ and instruction ch =
           List.init n (fun _ ->
               match input_byte ch with
               | 0 ->
-                  let t = uint ch in
-                  let l = uint ch in
+                  let t = uint32 ch in
+                  let l = uint32 ch in
                   Catch (t, l)
               | 1 ->
-                  let t = uint ch in
-                  let l = uint ch in
+                  let t = uint32 ch in
+                  let l = uint32 ch in
                   CatchRef (t, l)
               | 2 ->
-                  let l = uint ch in
+                  let l = uint32 ch in
                   CatchAll l
               | 3 ->
-                  let l = uint ch in
+                  let l = uint32 ch in
                   CatchAllRef l
               | _ -> error ch "invalid catch clause")
         in
         let block = instructions ch [] in
         expect_end ch;
         TryTable { label = (); typ; catches; block = Ast.no_loc block }
-    | 0x20 -> LocalGet (uint ch)
-    | 0x21 -> LocalSet (uint ch)
-    | 0x22 -> LocalTee (uint ch)
-    | 0x23 -> GlobalGet (uint ch)
-    | 0x24 -> GlobalSet (uint ch)
-    | 0x25 -> TableGet (uint ch)
-    | 0x26 -> TableSet (uint ch)
+    | 0x20 -> LocalGet (uint32 ch)
+    | 0x21 -> LocalSet (uint32 ch)
+    | 0x22 -> LocalTee (uint32 ch)
+    | 0x23 -> GlobalGet (uint32 ch)
+    | 0x24 -> GlobalSet (uint32 ch)
+    | 0x25 -> TableGet (uint32 ch)
+    | 0x26 -> TableSet (uint32 ch)
     | 0x28 ->
         let m, arg = memarg ch in
         Load (m, arg, NumI32)
@@ -771,8 +799,8 @@ and instruction ch =
     | 0x3E ->
         let m, arg = memarg ch in
         StoreS (m, arg, `I64, `I32)
-    | 0x3F -> MemorySize (uint ch)
-    | 0x40 -> MemoryGrow (uint ch)
+    | 0x3F -> MemorySize (uint32 ch)
+    | 0x40 -> MemoryGrow (uint32 ch)
     | 0x41 -> Const (I32 (sint32 ch))
     | 0x42 -> Const (I64 (sint64 ch))
     | 0x43 -> Const (F32 (float32_bits ch))
@@ -907,64 +935,64 @@ and instruction ch =
     | 0xC4 -> UnOp (I64 (ExtendS `_32))
     | 0xD0 -> RefNull (heaptype ch)
     | 0xD1 -> RefIsNull
-    | 0xD2 -> RefFunc (uint ch)
+    | 0xD2 -> RefFunc (uint32 ch)
     | 0xD3 -> RefEq
     | 0xD4 -> RefAsNonNull
-    | 0xD5 -> Br_on_null (uint ch)
-    | 0xD6 -> Br_on_non_null (uint ch)
+    | 0xD5 -> Br_on_null (uint32 ch)
+    | 0xD6 -> Br_on_non_null (uint32 ch)
     | 0xFB -> (
         match uint ch with
-        | 0 -> StructNew (uint ch)
-        | 1 -> StructNewDefault (uint ch)
+        | 0 -> StructNew (uint32 ch)
+        | 1 -> StructNewDefault (uint32 ch)
         | 2 ->
-            let i = uint ch in
-            StructGet (None, i, uint ch)
+            let i = uint32 ch in
+            StructGet (None, i, uint32 ch)
         | 3 ->
-            let i = uint ch in
-            StructGet (Some Signed, i, uint ch)
-        | 4 -> let i = uint ch in
-
-               StructGet (Some Unsigned, i, uint ch)
+            let i = uint32 ch in
+            StructGet (Some Signed, i, uint32 ch)
+        | 4 ->
+            let i = uint32 ch in
+            StructGet (Some Unsigned, i, uint32 ch)
         | 5 ->
-            let i = uint ch in
-            StructSet (i, uint ch)
-        | 6 -> ArrayNew (uint ch)
-        | 7 -> ArrayNewDefault (uint ch)
+            let i = uint32 ch in
+            StructSet (i, uint32 ch)
+        | 6 -> ArrayNew (uint32 ch)
+        | 7 -> ArrayNewDefault (uint32 ch)
         | 8 ->
-            let i = uint ch in
-            ArrayNewFixed (i, Wax_utils.Uint32.of_int (uint ch))
+            let i = uint32 ch in
+            ArrayNewFixed (i, uint32 ch)
         | 9 ->
             (* Like [memory.init]/[data.drop], [array.new_data] references a data
                segment, so the data section (which follows the code section)
                must be sized ahead of time by a data count section. *)
             if not ch.has_data_count then error ch "data count section required";
-            let i = uint ch in
-            ArrayNewData (i, uint ch)
+            let i = uint32 ch in
+            ArrayNewData (i, uint32 ch)
         | 10 ->
-            let i = uint ch in
-            ArrayNewElem (i, uint ch)
-        | 11 -> ArrayGet (None, uint ch)
-        | 12 -> ArrayGet (Some Signed, uint ch)
-        | 13 -> ArrayGet (Some Unsigned, uint ch)
-        | 14 -> ArraySet (uint ch)
+            let i = uint32 ch in
+            ArrayNewElem (i, uint32 ch)
+        | 11 -> ArrayGet (None, uint32 ch)
+        | 12 -> ArrayGet (Some Signed, uint32 ch)
+        | 13 -> ArrayGet (Some Unsigned, uint32 ch)
+        | 14 -> ArraySet (uint32 ch)
         | 15 -> ArrayLen
-        | 16 -> ArrayFill (uint ch)
+        | 16 -> ArrayFill (uint32 ch)
         | 17 ->
-            let i = uint ch in
-            ArrayCopy (i, uint ch)
+            let i = uint32 ch in
+            ArrayCopy (i, uint32 ch)
         | 18 ->
-            let i = uint ch in
-            ArrayInitData (i, uint ch)
+            let i = uint32 ch in
+            ArrayInitData (i, uint32 ch)
         | 19 ->
-            let i = uint ch in
-            ArrayInitElem (i, uint ch)
+            let i = uint32 ch in
+            ArrayInitElem (i, uint32 ch)
         | 20 -> RefTest { nullable = false; typ = heaptype ch }
         | 21 -> RefTest (nullable (heaptype ch))
         | 22 -> RefCast { nullable = false; typ = heaptype ch }
         | 23 -> RefCast (nullable (heaptype ch))
         | 24 ->
             let n1, n2 = castflags ch in
-            let label = uint ch in
+            let label = uint32 ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
             let rt1 = { nullable = n1; typ = ht1 } in
@@ -972,7 +1000,7 @@ and instruction ch =
             Br_on_cast (label, rt1, rt2)
         | 25 ->
             let n1, n2 = castflags ch in
-            let label = uint ch in
+            let label = uint32 ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
             let rt1 = { nullable = n1; typ = ht1 } in
@@ -983,14 +1011,14 @@ and instruction ch =
         | 28 -> RefI31
         | 29 -> I31Get Signed
         | 30 -> I31Get Unsigned
-        | 32 -> StructNewDesc (uint ch)
-        | 33 -> StructNewDefaultDesc (uint ch)
-        | 34 -> RefGetDesc (uint ch)
+        | 32 -> StructNewDesc (uint32 ch)
+        | 33 -> StructNewDefaultDesc (uint32 ch)
+        | 34 -> RefGetDesc (uint32 ch)
         | 35 -> RefCastDescEq { nullable = false; typ = heaptype ch }
         | 36 -> RefCastDescEq (nullable (heaptype ch))
         | 37 ->
             let n1, n2 = castflags ch in
-            let label = uint ch in
+            let label = uint32 ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
             let rt1 = { nullable = n1; typ = ht1 } in
@@ -998,7 +1026,7 @@ and instruction ch =
             Br_on_cast_desc_eq (label, rt1, rt2)
         | 38 ->
             let n1, n2 = castflags ch in
-            let label = uint ch in
+            let label = uint32 ch in
             let ht1 = heaptype ch in
             let ht2 = heaptype ch in
             let rt1 = { nullable = n1; typ = ht1 } in
@@ -1017,29 +1045,29 @@ and instruction ch =
         | 7 -> UnOp (I64 (TruncSat (`F64, Unsigned)))
         | 8 ->
             if not ch.has_data_count then error ch "data count section required";
-            let i = uint ch in
-            let m = uint ch in
+            let i = uint32 ch in
+            let m = uint32 ch in
             MemoryInit (i, m)
         | 9 ->
             if not ch.has_data_count then error ch "data count section required";
-            DataDrop (uint ch)
+            DataDrop (uint32 ch)
         | 10 ->
-            let m_dst = uint ch in
-            let m_src = uint ch in
+            let m_dst = uint32 ch in
+            let m_src = uint32 ch in
             MemoryCopy (m_dst, m_src)
         | 11 ->
-            let m = uint ch in
+            let m = uint32 ch in
             MemoryFill m
         | 12 ->
-            let i = uint ch in
-            TableInit (i, uint ch)
-        | 13 -> ElemDrop (uint ch)
+            let i = uint32 ch in
+            TableInit (i, uint32 ch)
+        | 13 -> ElemDrop (uint32 ch)
         | 14 ->
-            let i = uint ch in
-            TableCopy (i, uint ch)
-        | 15 -> TableGrow (uint ch)
-        | 16 -> TableSize (uint ch)
-        | 17 -> TableFill (uint ch)
+            let i = uint32 ch in
+            TableCopy (i, uint32 ch)
+        | 15 -> TableGrow (uint32 ch)
+        | 16 -> TableSize (uint32 ch)
+        | 17 -> TableFill (uint32 ch)
         | 19 -> Add128
         | 20 -> Sub128
         | 21 -> MulWide Signed
@@ -1390,7 +1418,7 @@ let elem ch =
   let mode_byte = uint ch in
   let func (ch : ch) =
     let pos = ch.pos in
-    let desc = RefFunc (uint ch) in
+    let desc = RefFunc (uint32 ch) in
     [ with_loc ch pos desc ]
   in
   match mode_byte with
@@ -1401,7 +1429,7 @@ let elem ch =
       {
         typ = { nullable = false; typ = Func };
         init;
-        mode = Active (0, offset_expr);
+        mode = Active (Wax_utils.Uint32.zero, offset_expr);
       }
   | 0x01 ->
       (* Passive, elemkind=0, vec(funcidx) *)
@@ -1412,7 +1440,7 @@ let elem ch =
       { typ = { nullable = false; typ = Func }; init; mode = Passive }
   | 0x02 ->
       (* Active, tableidx, offset, elemkind=0, vec(funcidx) *)
-      let table_idx = uint ch in
+      let table_idx = uint32 ch in
       let offset_expr = expr ch in
       let elemkind = input_byte ch in
       if elemkind <> 0 then
@@ -1437,7 +1465,7 @@ let elem ch =
       {
         typ = { nullable = true; typ = Func };
         init;
-        mode = Active (0, offset_expr);
+        mode = Active (Wax_utils.Uint32.zero, offset_expr);
       }
   | 0x05 ->
       (* Passive, reftype, vec(expr) *)
@@ -1446,7 +1474,7 @@ let elem ch =
       { typ; init; mode = Passive }
   | 0x06 ->
       (* Active, tableidx, offset, reftype, vec(expr) *)
-      let table_idx = uint ch in
+      let table_idx = uint32 ch in
       let offset_expr = expr ch in
       let typ = reftype_first_byte ch in
       let init = Array.to_list (vec expr ch) in
@@ -1515,11 +1543,11 @@ let data ch =
     | 0x00 ->
         (* Active, memory 0 *)
         let offset_expr = expr ch in
-        Active (0, offset_expr)
+        Active (Wax_utils.Uint32.zero, offset_expr)
     | 0x01 -> Passive
     | 0x02 ->
         (* Active, explicit memory index *)
-        let mem_idx = uint ch in
+        let mem_idx = uint32 ch in
         let offset_expr = expr ch in
         Active (mem_idx, offset_expr)
     | _ -> error ch "unknown data segment kind 0x%02x" mode_byte
@@ -1555,7 +1583,8 @@ let name_map' f ch =
     Array.fold_left
       (fun last_idx (idx, _) ->
         (match last_idx with
-        | Some last when idx <= last -> error ch "name map not sorted"
+        | Some last when Wax_utils.Uint32.compare idx last <= 0 ->
+            error ch "name map not sorted"
         | _ -> ());
         Some idx)
       None arr
@@ -1563,7 +1592,7 @@ let name_map' f ch =
   Array.fold_left (fun acc (idx, n) -> IntMap.add idx n acc) IntMap.empty arr
 
 let name_assoc ch =
-  let i = uint ch in
+  let i = uint32 ch in
   (i, name ch)
 
 (* An EMPTY name is dropped. The name section may carry one (it is a custom
@@ -1579,7 +1608,7 @@ let name_map ch = IntMap.filter (fun _ n -> n <> "") (name_map' name_assoc ch)
 let indirect_name_map ch =
   name_map'
     (fun ch ->
-      let i = uint ch in
+      let i = uint32 ch in
       (i, name_map ch))
     ch
 
@@ -1603,7 +1632,7 @@ let attach_code_metadata ~num_func_imports ~code_starts ~sections
   else
     let by_func :
         ( int,
-          (int, Ast.location -> int Hints.t -> int Hints.t) Hashtbl.t )
+          (int, Ast.location -> idx Hints.t -> idx Hints.t) Hashtbl.t )
         Hashtbl.t =
       Hashtbl.create 16
     in
@@ -1754,7 +1783,7 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
               { m with exports = Array.to_list (vec export ch) }
           | 8 ->
               (* Start section *)
-              { m with start = Some (uint ch) }
+              { m with start = Some (uint32 ch) }
           | 9 ->
               (* Element section *)
               { m with elem = Array.to_list (vec elem ch) }
@@ -1930,7 +1959,14 @@ let module_ diagnostics ?(features = Wax_utils.Feature.default ()) ?filename buf
                         fun loc h -> Hints.freq loc v h
                     | _ -> (
                         match Hints.call_targets_of_payload s with
-                        | Ok l -> fun loc h -> Hints.targets loc l h
+                        | Ok l ->
+                            let l =
+                              List.map
+                                (fun (i, pct) ->
+                                  (Wax_utils.Uint32.of_int i, pct))
+                                l
+                            in
+                            fun loc h -> Hints.targets loc l h
                         | Error msg -> error ch "%s" msg)
                   in
                   let entries =

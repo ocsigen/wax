@@ -29,6 +29,7 @@ let canonical_names (m : _ B.module_) =
             type ctx = unit
 
             let idx () i =
+              let i = Wax_utils.Uint32.to_int i in
               if i >= start then Types.Rec (i - start)
               else Types.Def (Hashtbl.find ids i)
 
@@ -45,7 +46,8 @@ let canonical_names (m : _ B.module_) =
     m.types;
   Hashtbl.fold
     (fun i id map ->
-      B.IntMap.add i
+      B.IntMap.add
+        (Wax_utils.Uint32.of_int i)
         (Printf.sprintf "c%d" (Types.Id.to_int_for_tests_only id))
         map)
     ids B.IntMap.empty

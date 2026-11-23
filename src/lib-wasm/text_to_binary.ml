@@ -2,7 +2,7 @@ open Ast
 module T = Text
 module B = Binary
 module StringMap = Map.Make (String)
-module IntSet = Set.Make (Int)
+module IdxSet = Set.Make (Uint32)
 
 exception Conditional_in_binary of location
 
@@ -18,13 +18,14 @@ type index_space = { map : B.idx StringMap.t; count : int }
 let empty_space = { map = StringMap.empty; count = 0 }
 
 let add_name space id =
-  let idx = space.count in
+  let count = space.count in
+  let idx = Uint32.of_int count in
   let map =
     match id with
     | Some name -> StringMap.add name.Ast.desc idx space.map
     | None -> space.map
   in
-  ({ map; count = idx + 1 }, idx)
+  ({ map; count = count + 1 }, idx)
 
 type context = {
   funcs : index_space;
@@ -32,10 +33,10 @@ type context = {
   tables : index_space;
   memories : index_space;
   types : index_space;
-  fields : int StringMap.t B.IntMap.t;
+  fields : B.idx StringMap.t B.IntMap.t;
   (* Type indices that are [i16] arrays, so a [@string] targeting one is
      UTF-16-encoded rather than kept as raw bytes. *)
-  wide_arrays : IntSet.t;
+  wide_arrays : IdxSet.t;
   tags : index_space;
   datas : index_space;
   elems : index_space;
@@ -53,7 +54,7 @@ let empty_context =
     memories = empty_space;
     types = empty_space;
     fields = B.IntMap.empty;
-    wide_arrays = IntSet.empty;
+    wide_arrays = IdxSet.empty;
     tags = empty_space;
     datas = empty_space;
     elems = empty_space;
@@ -63,7 +64,7 @@ let empty_context =
 
 let resolve_idx space (idx : T.idx) : B.idx =
   match idx.desc with
-  | T.Num n -> Wax_utils.Uint32.to_int n
+  | T.Num n -> n
   | T.Id id -> (
       match StringMap.find_opt id space.map with
       | Some i -> i
@@ -74,7 +75,7 @@ let resolve_idx space (idx : T.idx) : B.idx =
 
 let resolve_label labels (idx : T.idx) : B.idx =
   match idx.desc with
-  | T.Num n -> Wax_utils.Uint32.to_int n
+  | T.Num n -> n
   | T.Id id ->
       let rec find_depth stack depth =
         match stack with
@@ -82,7 +83,8 @@ let resolve_label labels (idx : T.idx) : B.idx =
             raise
               (Unresolved_reference (idx.info, "Unknown label $" ^ id ^ "."))
         | Some name :: rest ->
-            if name = id then depth else find_depth rest (depth + 1)
+            if name = id then Uint32.of_int depth
+            else find_depth rest (depth + 1)
         | None :: rest -> find_depth rest (depth + 1)
       in
       find_depth labels 0
@@ -146,7 +148,7 @@ let on_clause ctx (c : T.on_clause) : B.on_clause =
 
 let resolve_field_idx ctx type_idx (field_idx_text : T.idx) : B.idx =
   match field_idx_text.desc with
-  | T.Num n -> Wax_utils.Uint32.to_int n
+  | T.Num n -> n
   | T.Id id -> (
       match B.IntMap.find_opt type_idx ctx.fields with
       | Some field_map -> (
@@ -450,7 +452,7 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
           | None -> resolve_string_type ()
           | Some id -> resolve_idx ctx.types id
         in
-        string ~wide:(IntSet.mem ty ctx.wide_arrays) i.T.info ty s
+        string ~wide:(IdxSet.mem ty ctx.wide_arrays) i.T.info ty s
     | Char c -> Const (I32 (Int32.of_int (Uchar.to_int c)))
     | If_annotation _ -> raise (Conditional_in_binary i.info)
     | Folded (i, is) ->
@@ -470,7 +472,7 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
 
 let collect_labels instrs ctr map =
   let add ctr map label =
-    let idx = !ctr in
+    let idx = Uint32.of_int !ctr in
     incr ctr;
     match label with Some l -> B.IntMap.add idx l.desc map | None -> map
   in
@@ -574,7 +576,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             let types_space, _ =
               Array.fold_left
                 (fun (space, _) e -> add_name space (fst e.Ast.desc))
-                (ctx.types, 0) r
+                (ctx.types, Uint32.zero) r
             in
             let current_type_idx = ctx.types.count in
             let acc_func_types =
@@ -586,7 +588,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                   | T.Func func_t ->
                       let b_func_t = func_type ctx' func_t in
                       ( B.IntMap.add
-                          (current_type_idx + idx_in_arr)
+                          (Uint32.of_int (current_type_idx + idx_in_arr))
                           (Array.length b_func_t.B.Types.params)
                           acc_map,
                         idx_in_arr + 1 )
@@ -602,7 +604,9 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                      match subtype.T.typ with
                      | T.Array { typ = Packed I16; _ } ->
                          ( idx_in_arr + 1,
-                           IntSet.add (current_type_idx + idx_in_arr) wide )
+                           IdxSet.add
+                             (Uint32.of_int (current_type_idx + idx_in_arr))
+                             wide )
                      | _ -> (idx_in_arr + 1, wide))
                    (0, ctx.wide_arrays) r)
             in
@@ -660,13 +664,17 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                         (fun (fmap, fidx) e ->
                           match fst e.Ast.desc with
                           | Some n ->
-                              (StringMap.add n.Ast.desc fidx fmap, fidx + 1)
+                              ( StringMap.add n.Ast.desc (Uint32.of_int fidx)
+                                  fmap,
+                                fidx + 1 )
                           | None -> (fmap, fidx + 1))
                         (StringMap.empty, 0) field_defs
                       |> fst
                     in
                     if StringMap.is_empty field_map then (acc, i + 1)
-                    else (B.IntMap.add (type_idx + i) field_map acc, i + 1)
+                    else
+                      ( B.IntMap.add (Uint32.of_int (type_idx + i)) field_map acc,
+                        i + 1 )
                 | _ -> (acc, i + 1))
               (acc, 0) r
           in
@@ -708,7 +716,8 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
         }
         :: rest ->
           (let b_f = func_type ctx f in
-           if not (Hashtbl.mem type_map b_f) then Hashtbl.add type_map b_f idx);
+           if not (Hashtbl.mem type_map b_f) then
+             Hashtbl.add type_map b_f (Uint32.of_int idx));
           scan_existing_types (idx + 1) rest
       | {
           desc =
@@ -729,7 +738,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
           _;
         }
         :: rest ->
-          string_type := Some idx;
+          string_type := Some (Uint32.of_int idx);
           scan_existing_types (idx + 1) rest
       | { desc = T.Types r; _ } :: rest ->
           scan_existing_types (idx + Array.length r) rest
@@ -738,24 +747,26 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
     scan_existing_types 0 fields
   in
 
-  let resolve_string_type () =
+  let resolve_string_type () : B.idx =
     match !string_type with
     | Some i -> i
     | None ->
-        let i = !type_count in
-        type_count := i + 1;
+        let count = !type_count in
+        type_count := count + 1;
+        let i = Uint32.of_int count in
         string_type := Some i;
         extra_types := B.Array { mut = true; typ = Packed I8 } :: !extra_types;
         i
   in
 
-  let resolve_func_type ctx (ft : T.functype) : int =
+  let resolve_func_type ctx (ft : T.functype) : B.idx =
     let ft = func_type ctx ft in
     match Hashtbl.find_opt type_map ft with
     | Some i -> i
     | None ->
-        let i = !type_count in
-        type_count := i + 1;
+        let count = !type_count in
+        type_count := count + 1;
+        let i = Uint32.of_int count in
         Hashtbl.add type_map ft i;
         extra_types := B.Func ft :: !extra_types;
         impl_func_params :=
@@ -889,12 +900,14 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
           (* Collect Local Names *)
           let local_map = invert_map locals_space.map in
           if not (B.IntMap.is_empty local_map) then
-            locals_names := B.IntMap.add func_idx local_map !locals_names;
+            locals_names :=
+              B.IntMap.add (Uint32.of_int func_idx) local_map !locals_names;
 
           (* Collect Label Names *)
           let label_map = collect_labels instrs (ref 0) B.IntMap.empty in
           if not (B.IntMap.is_empty label_map) then
-            labels_names := B.IntMap.add func_idx label_map !labels_names;
+            labels_names :=
+              B.IntMap.add (Uint32.of_int func_idx) label_map !labels_names;
 
           let b_locals =
             List.map (fun e -> valtype ctx (snd e.Ast.desc)) locals
@@ -965,7 +978,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
               | None -> (resolve_string_type (), false)
               | Some idx ->
                   let ty = resolve_idx ctx.types idx in
-                  (ty, IntSet.mem ty ctx.wide_arrays)
+                  (ty, IdxSet.mem ty ctx.wide_arrays)
             in
             Some
               {
@@ -1004,37 +1017,57 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                 { B.name = name.desc; kind; index } :: acc
             | T.Func { exports; _ } ->
                 let f (e : T.name) =
-                  { B.name = e.desc; kind = Ast.Func; index = funcs }
+                  {
+                    B.name = e.desc;
+                    kind = Ast.Func;
+                    index = Uint32.of_int funcs;
+                  }
                 in
                 List.rev_map f exports @ acc
             | T.Table { exports; _ } ->
                 let f (e : T.name) =
-                  { B.name = e.desc; kind = Ast.Table; index = tables }
+                  {
+                    B.name = e.desc;
+                    kind = Ast.Table;
+                    index = Uint32.of_int tables;
+                  }
                 in
                 List.rev_map f exports @ acc
             | T.Memory { exports; _ } ->
                 let f (e : T.name) =
-                  { B.name = e.desc; kind = Ast.Memory; index = memories }
+                  {
+                    B.name = e.desc;
+                    kind = Ast.Memory;
+                    index = Uint32.of_int memories;
+                  }
                 in
                 List.rev_map f exports @ acc
             | T.Global { exports; _ } ->
                 let f (e : T.name) =
-                  { B.name = e.desc; kind = Ast.Global; index = globals }
+                  {
+                    B.name = e.desc;
+                    kind = Ast.Global;
+                    index = Uint32.of_int globals;
+                  }
                 in
                 List.rev_map f exports @ acc
             | T.Tag { exports; _ } ->
                 let f (e : T.name) =
-                  { B.name = e.desc; kind = Ast.Tag; index = tags }
+                  {
+                    B.name = e.desc;
+                    kind = Ast.Tag;
+                    index = Uint32.of_int tags;
+                  }
                 in
                 List.rev_map f exports @ acc
             | T.Import { desc; exports; _ } ->
                 let kind, index =
                   match desc with
-                  | T.Func _ -> (Ast.Func, funcs)
-                  | T.Table _ -> (Ast.Table, tables)
-                  | T.Memory _ -> (Ast.Memory, memories)
-                  | T.Global _ -> (Ast.Global, globals)
-                  | T.Tag _ -> (Ast.Tag, tags)
+                  | T.Func _ -> (Ast.Func, Uint32.of_int funcs)
+                  | T.Table _ -> (Ast.Table, Uint32.of_int tables)
+                  | T.Memory _ -> (Ast.Memory, Uint32.of_int memories)
+                  | T.Global _ -> (Ast.Global, Uint32.of_int globals)
+                  | T.Tag _ -> (Ast.Tag, Uint32.of_int tags)
                 in
                 let f (e : T.name) = { B.name = e.desc; kind; index } in
                 List.rev_map f exports @ acc
@@ -1113,7 +1146,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
       | { desc = T.Table { typ; init = T.Init_segment exprs; _ }; _ } :: rest ->
           let mode =
             B.Active
-              ( table_idx,
+              ( Uint32.of_int table_idx,
                 [
                   B.no_loc
                     (B.Const
@@ -1169,7 +1202,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
       | { desc = T.Memory { init = Some init; limits; _ }; _ } :: rest ->
           let (mode : 'info B.datamode) =
             B.Active
-              ( mem_idx,
+              ( Uint32.of_int mem_idx,
                 [
                   B.no_loc
                     (B.Const

@@ -1043,7 +1043,7 @@ module Text = struct
 end
 
 module Binary = struct
-  type idx = int
+  type idx = Uint32.t
 
   module X = struct
     type nonrec idx = idx
@@ -1129,7 +1129,7 @@ module Binary = struct
 
   type 'info data = { init : string; mode : 'info datamode }
 
-  module IntMap = Map.Make (Int)
+  module IntMap = Map.Make (Uint32)
 
   type name_map = string IntMap.t
   type indirect_name_map = string IntMap.t IntMap.t

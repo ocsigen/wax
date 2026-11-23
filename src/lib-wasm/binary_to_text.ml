@@ -3,7 +3,7 @@ module B = Binary
 module T = Text
 
 let no_loc = Ast.no_loc
-let numeric_index i = no_loc (T.Num (Uint32.of_int i))
+let numeric_index i = no_loc (T.Num i)
 
 (* Render a finite-or-infinite float constant as round-trippable text. A finite
    value uses the hex float form ("%h"), which is exact — unlike
@@ -78,6 +78,7 @@ let comptype (names : B.names) s_idx (c : B.comptype) : T.comptype =
       Struct
         (Array.mapi
            (fun f_idx f ->
+             let f_idx = Uint32.of_int f_idx in
              Ast.no_loc (field_name names s_idx f_idx, fieldtype names.types f))
            fa)
   | Array ft -> Array (fieldtype names.types ft)
@@ -95,7 +96,7 @@ let subtype (names : B.names) idx (s : B.subtype) : T.subtype =
 let rectype (names : B.names) index r =
   Array.mapi
     (fun i s ->
-      let idx = index + i in
+      let idx = Uint32.of_int (index + i) in
       let name =
         match B.IntMap.find_opt idx names.types with
         | Some s -> Some (no_loc s)
@@ -115,9 +116,12 @@ let blocktype type_names (b : B.blocktype) : T.blocktype =
   | Valtype v -> Valtype (valtype type_names v)
 
 let get_label_reference stack i =
-  match List.nth stack i with
-  | Some s -> no_loc (T.Id s)
-  | None | (exception Failure _) -> numeric_index i
+  match Int32.unsigned_to_int (Uint32.to_int32 i) with
+  | Some n -> (
+      match List.nth stack n with
+      | Some s -> no_loc (T.Id s)
+      | None | (exception Failure _) -> numeric_index i)
+  | None -> numeric_index i
 
 let catch (names : B.names) stack (c : B.catch) : T.catch =
   match c with
@@ -137,7 +141,7 @@ let on_clause (names : B.names) stack (c : B.on_clause) : T.on_clause =
 let get_label_name label_names label_counter =
   let idx = !label_counter in
   incr label_counter;
-  B.IntMap.find_opt idx label_names
+  B.IntMap.find_opt (Uint32.of_int idx) label_names
 
 let field_index (names : B.names) s_idx f_idx =
   match B.IntMap.find_opt s_idx names.fields with
@@ -449,7 +453,8 @@ let datamode (names : B.names) local_names (d : _ B.datamode) : _ T.datamode =
   | Active (i, ex) ->
       Active (index ~map:names.memories i, expr names local_names ex)
 
-let id map idx = Option.map Ast.no_loc (B.IntMap.find_opt idx map)
+let id map idx =
+  Option.map Ast.no_loc (B.IntMap.find_opt (Uint32.of_int idx) map)
 
 (* A name-section entry that is the EMPTY string cannot be written as an
    identifier at all: [$""] is not valid text, unlike the quoted [$"…"] form that
@@ -578,19 +583,21 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
   in
   let expand_functype func_idx type_idx =
     let local_names =
-      match B.IntMap.find_opt func_idx m.names.locals with
+      match B.IntMap.find_opt (Uint32.of_int func_idx) m.names.locals with
       | Some map -> map
       | None -> B.IntMap.empty
     in
     match
-      if type_idx < 0 || type_idx >= Array.length all_subtypes then None
-      else Some all_subtypes.(type_idx)
+      match Int32.unsigned_to_int (Uint32.to_int32 type_idx) with
+      | Some idx when idx >= 0 && idx < Array.length all_subtypes ->
+          Some all_subtypes.(idx)
+      | _ -> None
     with
     | Some ({ typ = Func ft; supertype; final; _ }, recursive) ->
         let params =
           Array.mapi
             (fun i t ->
-              let name = B.IntMap.find_opt i local_names in
+              let name = B.IntMap.find_opt (Uint32.of_int i) local_names in
               Ast.no_loc (Option.map Ast.no_loc name, valtype m.names.types t))
             ft.params
         in
@@ -717,14 +724,15 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
     List.mapi
       (fun i func_type_idx ->
         let global_idx = func_cnt + i in
+        let global_idx_u32 = Uint32.of_int global_idx in
         let code = code_arr.(i) in
         let local_names =
-          match B.IntMap.find_opt global_idx m.names.locals with
+          match B.IntMap.find_opt global_idx_u32 m.names.locals with
           | Some map -> map
           | None -> B.IntMap.empty
         in
         let label_names =
-          match B.IntMap.find_opt global_idx m.names.labels with
+          match B.IntMap.find_opt global_idx_u32 m.names.labels with
           | Some map -> map
           | None -> B.IntMap.empty
         in
@@ -737,7 +745,9 @@ let module_ ?features (m : _ B.module_) : _ T.module_ =
               (let offset = Array.length sign.params in
                List.mapi
                  (fun i v ->
-                   let name = B.IntMap.find_opt (offset + i) local_names in
+                   let name =
+                     B.IntMap.find_opt (Uint32.of_int (offset + i)) local_names
+                   in
                    Ast.no_loc
                      (Option.map Ast.no_loc name, valtype m.names.types v))
                  code.locals);

@@ -106,6 +106,9 @@ grammar keeps none, and both are versioned independently of the toolchain.
 - A type may have at most 63 supertypes, transitively. Deeper hierarchies were
   accepted in Wax, WAT and binary input alike, producing modules that engines
   reject.
+- A 33-bit signed integer (`s33`) in a Wasm binary — a heap-type or block-type
+  index — now accepts the full 32-bit unsigned index range (`0` to `2^32 - 1`).
+  Indices from `2^31` to `2^32 - 1` were rejected as "integer too large".
 - The value a `resume`, `resume_throw`, `resume_throw_ref`, `suspend` or
   `switch` delivers now has the alias it is declared with, as a call result
   already did, so a block or a local whose type is inferred from it takes that

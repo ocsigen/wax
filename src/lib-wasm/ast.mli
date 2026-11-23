@@ -904,7 +904,7 @@ module Text : sig
 (** Wasm Text format specific AST. *)
 
 module Binary : sig
-  type idx = int
+  type idx = Uint32.t
 
   module X : sig
     type nonrec idx = idx

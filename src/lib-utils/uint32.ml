@@ -22,8 +22,10 @@ let of_int i = Int32.of_int i
 let to_int i =
   match Int32.unsigned_to_int i with Some i -> i | None -> assert false
 
+let to_int32 i = i
+let of_int32 i = i
 let zero = 0l
 let one = 1l
 let succ = Int32.succ
 let add = Int32.add
-let compare = Int32.compare
+let compare = Int32.unsigned_compare

@@ -13,17 +13,21 @@ module Encoder = struct
       byte b (128 + (i land 127));
       uint b (i lsr 7))
 
-  let rec sint b i =
-    if i >= -64 && i < 64 then byte b (i land 127)
-    else (
-      byte b (128 + (i land 127));
-      sint b (i asr 7))
-
   let rec sint32 b i =
     if i >= -64l && i < 64l then byte b (Int32.to_int i land 0x7f)
     else (
       byte b (128 + (Int32.to_int i land 127));
       sint32 b (Int32.shift_right i 7))
+
+  let uint32 b i =
+    let rec uint32 b i =
+      if Int32.compare i 0l >= 0 && Int32.compare i 128l < 0 then
+        byte b (Int32.to_int i)
+      else (
+        byte b (128 + (Int32.to_int i land 127));
+        uint32 b (Int32.shift_right_logical i 7))
+    in
+    uint32 b (Uint32.to_int32 i)
 
   let uint64 b i =
     let rec uint64 b i =
@@ -39,6 +43,9 @@ module Encoder = struct
     else (
       byte b (128 + (Int64.to_int i land 127));
       sint64 b (Int64.shift_right i 7))
+
+  let sint33 b i =
+    sint64 b (Int64.logand (Int64.of_int32 (Uint32.to_int32 i)) 0xffff_ffffL)
 
   (* [i] is the raw 32-bit pattern of the f32 constant (kept exact, including a
      signaling NaN's payload, by not routing it through an OCaml [float]). *)
@@ -89,12 +96,12 @@ module Encoder = struct
     | Exn -> byte b 0x69
     | Cont -> byte b 0x68
     | NoCont -> byte b 0x75
-    | Type idx -> sint b idx
+    | Type idx -> sint33 b idx
     (* [exact] uses a u32 index (not the s33 of [Type]), which makes an exact
        abstract heap type unencodable. *)
     | Exact idx ->
         byte b 0x62;
-        uint b idx
+        uint32 b idx
 
   let reftype b (t : reftype) =
     match t with
@@ -175,12 +182,12 @@ module Encoder = struct
     (match t.describes with
     | Some x ->
         byte b 0x4C;
-        uint b x
+        uint32 b x
     | None -> ());
     (match t.descriptor with
     | Some x ->
         byte b 0x4D;
-        uint b x
+        uint32 b x
     | None -> ());
     comptype b t.typ
 
@@ -188,7 +195,7 @@ module Encoder = struct
     if t.final && t.supertype = None then described_comptype b t
     else (
       byte b (if t.final then 0x4F else 0x50);
-      vec uint b (match t.supertype with Some i -> [ i ] | None -> []);
+      vec uint32 b (match t.supertype with Some i -> [ i ] | None -> []);
       described_comptype b t)
 
   let rectype b (t : rectype) =
@@ -209,16 +216,16 @@ module Encoder = struct
       | Some a when a > 0 -> Int.of_float (Float.log2 (Float.of_int a))
       | _ -> 0
     in
-    if idx = 0 then (
+    if idx = Uint32.zero then (
       uint b align;
       uint64 b m.offset)
     else (
       uint b (align lor 64);
-      uint b idx;
+      uint32 b idx;
       uint64 b m.offset)
 
   let blocktype b (t : blocktype) =
-    match t with Valtype v -> valtype b v | Typeuse i -> sint b i
+    match t with Valtype v -> valtype b v | Typeuse i -> sint33 b i
 
   let resumetable b clauses =
     vec
@@ -226,11 +233,11 @@ module Encoder = struct
         match c with
         | OnLabel (tag, label) ->
             byte b 0x00;
-            uint b tag;
-            uint b label
+            uint32 b tag;
+            uint32 b label
         | OnSwitch tag ->
             byte b 0x01;
-            uint b tag)
+            uint32 b tag)
       b clauses
 
   (* Branch-hinting proposal: while a function body is being encoded this sink
@@ -239,7 +246,7 @@ module Encoder = struct
      (which begins with the locals declaration) — exactly the offset the
      [metadata.code.branch_hint] section stores. Reset to a no-op outside code
      encoding. See [output_code_metadata_section] / the code-section encoder. *)
-  let hint_sink = ref (fun (_ : int) (_ : int Hints.t) -> ())
+  let hint_sink = ref (fun (_ : int) (_ : idx Hints.t) -> ())
 
   (* A source position is real when it names a file and carries a line/column; a
      synthesized node instead has [""]/[-1] sentinels. *)
@@ -289,35 +296,35 @@ module Encoder = struct
     | Nop -> byte b 0x01
     | Throw i ->
         byte b 0x08;
-        uint b i
+        uint32 b i
     | ThrowRef -> byte b 0x0A
     | ContNew i ->
         byte b 0xE0;
-        uint b i
+        uint32 b i
     | ContBind (i, j) ->
         byte b 0xE1;
-        uint b i;
-        uint b j
+        uint32 b i;
+        uint32 b j
     | Suspend i ->
         byte b 0xE2;
-        uint b i
+        uint32 b i
     | Resume (i, clauses) ->
         byte b 0xE3;
-        uint b i;
+        uint32 b i;
         resumetable b clauses
     | ResumeThrow (i, j, clauses) ->
         byte b 0xE4;
-        uint b i;
-        uint b j;
+        uint32 b i;
+        uint32 b j;
         resumetable b clauses
     | ResumeThrowRef (i, clauses) ->
         byte b 0xE5;
-        uint b i;
+        uint32 b i;
         resumetable b clauses
     | Switch (i, j) ->
         byte b 0xE6;
-        uint b i;
-        uint b j
+        uint32 b i;
+        uint32 b j
     | Block { typ; block; _ } ->
         byte b 0x02;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);
@@ -347,18 +354,18 @@ module Encoder = struct
             match c with
             | Catch (tag, label) ->
                 byte b 0x00;
-                uint b tag;
-                uint b label
+                uint32 b tag;
+                uint32 b label
             | CatchRef (tag, label) ->
                 byte b 0x01;
-                uint b tag;
-                uint b label
+                uint32 b tag;
+                uint32 b label
             | CatchAll label ->
                 byte b 0x02;
-                uint b label
+                uint32 b label
             | CatchAllRef label ->
                 byte b 0x03;
-                uint b label)
+                uint32 b label)
           b catches;
         List.iter (instr ~source_map_t b) block.desc;
         map_end ~source_map_t b i.info.loc_end;
@@ -370,7 +377,7 @@ module Encoder = struct
         List.iter
           (fun (tag, block) ->
             byte b 0x07;
-            uint b tag;
+            uint32 b tag;
             List.iter (instr ~source_map_t b) block.Ast.desc)
           catches;
         (match catch_all with
@@ -382,69 +389,69 @@ module Encoder = struct
         byte b 0x0B
     | Br i ->
         byte b 0x0C;
-        uint b i
+        uint32 b i
     | Br_if i ->
         byte b 0x0D;
-        uint b i
+        uint32 b i
     | Br_table (ls, d) ->
         byte b 0x0E;
-        vec uint b ls;
-        uint b d
+        vec uint32 b ls;
+        uint32 b d
     | Br_on_null i ->
         byte b 0xD5;
-        uint b i
+        uint32 b i
     | Br_on_non_null i ->
         byte b 0xD6;
-        uint b i
+        uint32 b i
     | Br_on_cast (i, r1, r2) ->
         byte b 0xFB;
         byte b 0x18;
         byte b ((if r1.nullable then 1 else 0) + if r2.nullable then 2 else 0);
-        uint b i;
+        uint32 b i;
         heaptype b r1.typ;
         heaptype b r2.typ
     | Br_on_cast_fail (i, r1, r2) ->
         byte b 0xFB;
         byte b 0x19;
         byte b ((if r1.nullable then 1 else 0) + if r2.nullable then 2 else 0);
-        uint b i;
+        uint32 b i;
         heaptype b r1.typ;
         heaptype b r2.typ
     | Br_on_cast_desc_eq (i, r1, r2) ->
         byte b 0xFB;
         byte b 0x25;
         byte b ((if r1.nullable then 1 else 0) + if r2.nullable then 2 else 0);
-        uint b i;
+        uint32 b i;
         heaptype b r1.typ;
         heaptype b r2.typ
     | Br_on_cast_desc_eq_fail (i, r1, r2) ->
         byte b 0xFB;
         byte b 0x26;
         byte b ((if r1.nullable then 1 else 0) + if r2.nullable then 2 else 0);
-        uint b i;
+        uint32 b i;
         heaptype b r1.typ;
         heaptype b r2.typ
     | Return -> byte b 0x0F
     | Call i ->
         byte b 0x10;
-        uint b i
+        uint32 b i
     | CallIndirect (table, type_idx) ->
         byte b 0x11;
-        uint b type_idx;
-        uint b table
+        uint32 b type_idx;
+        uint32 b table
     | CallRef i ->
         byte b 0x14;
-        uint b i
+        uint32 b i
     | ReturnCall i ->
         byte b 0x12;
-        uint b i
+        uint32 b i
     | ReturnCallRef i ->
         byte b 0x15;
-        uint b i
+        uint32 b i
     | ReturnCallIndirect (table, type_idx) ->
         byte b 0x13;
-        uint b type_idx;
-        uint b table
+        uint32 b type_idx;
+        uint32 b table
     | Drop -> byte b 0x1A
     | Select None -> byte b 0x1B
     | Select (Some types) ->
@@ -452,51 +459,51 @@ module Encoder = struct
         vec valtype b types
     | LocalGet i ->
         byte b 0x20;
-        uint b i
+        uint32 b i
     | LocalSet i ->
         byte b 0x21;
-        uint b i
+        uint32 b i
     | LocalTee i ->
         byte b 0x22;
-        uint b i
+        uint32 b i
     | GlobalGet i ->
         byte b 0x23;
-        uint b i
+        uint32 b i
     | GlobalSet i ->
         byte b 0x24;
-        uint b i
+        uint32 b i
     | TableGet i ->
         byte b 0x25;
-        uint b i
+        uint32 b i
     | TableSet i ->
         byte b 0x26;
-        uint b i
+        uint32 b i
     | TableSize i ->
         byte b 0xFC;
         byte b 0x10;
-        uint b i
+        uint32 b i
     | TableGrow i ->
         byte b 0xFC;
         byte b 0x0F;
-        uint b i
+        uint32 b i
     | TableFill i ->
         byte b 0xFC;
         byte b 0x11;
-        uint b i
+        uint32 b i
     | TableCopy (i1, i2) ->
         byte b 0xFC;
         byte b 0x0E;
-        uint b i1;
-        uint b i2
+        uint32 b i1;
+        uint32 b i2
     | TableInit (i1, i2) ->
         byte b 0xFC;
         byte b 0x0C;
-        uint b i1;
-        uint b i2
+        uint32 b i1;
+        uint32 b i2
     | ElemDrop i ->
         byte b 0xFC;
         byte b 0x0D;
-        uint b i
+        uint32 b i
     | Load (mem_idx, m, typ) ->
         (match typ with
         | NumI32 -> byte b 0x28
@@ -544,28 +551,28 @@ module Encoder = struct
         byte b 0x00
     | MemorySize i ->
         byte b 0x3F;
-        uint b i
+        uint32 b i
     | MemoryGrow i ->
         byte b 0x40;
-        uint b i
+        uint32 b i
     | MemoryFill i ->
         byte b 0xFC;
         byte b 0x0B;
-        uint b i
+        uint32 b i
     | MemoryCopy (i1, i2) ->
         byte b 0xFC;
         byte b 0x0A;
-        uint b i1;
-        uint b i2
+        uint32 b i1;
+        uint32 b i2
     | MemoryInit (i1, i2) ->
         byte b 0xFC;
         byte b 0x08;
-        uint b i1;
-        uint b i2
+        uint32 b i1;
+        uint32 b i2
     | DataDrop i ->
         byte b 0xFC;
         byte b 0x09;
-        uint b i
+        uint32 b i
     | Const (I32 i) ->
         byte b 0x41;
         sint32 b i
@@ -759,7 +766,7 @@ module Encoder = struct
     | RefIsNull -> byte b 0xD1
     | RefFunc i ->
         byte b 0xD2;
-        uint b i
+        uint32 b i
     | RefEq -> byte b 0xD3
     | RefAsNonNull -> byte b 0xD4
     | RefTest t ->
@@ -777,23 +784,23 @@ module Encoder = struct
     | RefGetDesc i ->
         byte b 0xFB;
         byte b 0x22;
-        uint b i
+        uint32 b i
     | StructNew i ->
         byte b 0xFB;
         byte b 0x00;
-        uint b i
+        uint32 b i
     | StructNewDefault i ->
         byte b 0xFB;
         byte b 0x01;
-        uint b i
+        uint32 b i
     | StructNewDesc i ->
         byte b 0xFB;
         byte b 0x20;
-        uint b i
+        uint32 b i
     | StructNewDefaultDesc i ->
         byte b 0xFB;
         byte b 0x21;
-        uint b i
+        uint32 b i
     | StructGet (s, type_idx, field_idx) ->
         byte b 0xFB;
         byte b
@@ -801,36 +808,36 @@ module Encoder = struct
           | None -> 0x02
           | Some Signed -> 0x03
           | Some Unsigned -> 0x04);
-        uint b type_idx;
-        uint b field_idx
+        uint32 b type_idx;
+        uint32 b field_idx
     | StructSet (type_idx, field_idx) ->
         byte b 0xFB;
         byte b 0x05;
-        uint b type_idx;
-        uint b field_idx
+        uint32 b type_idx;
+        uint32 b field_idx
     | ArrayNew i ->
         byte b 0xFB;
         byte b 0x06;
-        uint b i
+        uint32 b i
     | ArrayNewDefault i ->
         byte b 0xFB;
         byte b 0x07;
-        uint b i
+        uint32 b i
     | ArrayNewFixed (i, len) ->
         byte b 0xFB;
         byte b 0x08;
-        uint b i;
-        uint b (Wax_utils.Uint32.to_int len)
+        uint32 b i;
+        uint32 b len
     | ArrayNewData (type_idx, data_idx) ->
         byte b 0xFB;
         byte b 0x09;
-        uint b type_idx;
-        uint b data_idx
+        uint32 b type_idx;
+        uint32 b data_idx
     | ArrayNewElem (type_idx, elem_idx) ->
         byte b 0xFB;
         byte b 0x0A;
-        uint b type_idx;
-        uint b elem_idx
+        uint32 b type_idx;
+        uint32 b elem_idx
     | ArrayGet (s, type_idx) ->
         byte b 0xFB;
         byte b
@@ -838,33 +845,33 @@ module Encoder = struct
           | None -> 0x0B
           | Some Signed -> 0x0C
           | Some Unsigned -> 0x0D);
-        uint b type_idx
+        uint32 b type_idx
     | ArraySet type_idx ->
         byte b 0xFB;
         byte b 0x0E;
-        uint b type_idx
+        uint32 b type_idx
     | ArrayLen ->
         byte b 0xFB;
         byte b 0x0F
     | ArrayFill type_idx ->
         byte b 0xFB;
         byte b 0x10;
-        uint b type_idx
+        uint32 b type_idx
     | ArrayCopy (type_idx_dst, type_idx_src) ->
         byte b 0xFB;
         byte b 0x11;
-        uint b type_idx_dst;
-        uint b type_idx_src
+        uint32 b type_idx_dst;
+        uint32 b type_idx_src
     | ArrayInitData (type_idx, data_idx) ->
         byte b 0xFB;
         byte b 0x12;
-        uint b type_idx;
-        uint b data_idx
+        uint32 b type_idx;
+        uint32 b data_idx
     | ArrayInitElem (type_idx, elem_idx) ->
         byte b 0xFB;
         byte b 0x13;
-        uint b type_idx;
-        uint b elem_idx
+        uint32 b type_idx;
+        uint32 b elem_idx
     | RefI31 ->
         byte b 0xFB;
         byte b 0x1C
@@ -1256,7 +1263,7 @@ let import_desc b (desc : importdesc) =
   match desc with
   | Func { exact; typ = i } ->
       Encoder.byte b (if exact then 0x20 else 0x00);
-      Encoder.sint b i
+      Encoder.uint32 b i
   | Table t ->
       Encoder.byte b 0x01;
       Encoder.tabletype b t
@@ -1269,7 +1276,7 @@ let import_desc b (desc : importdesc) =
   | Tag t ->
       Encoder.byte b 0x04;
       Encoder.byte b 0x00;
-      Encoder.sint b t
+      Encoder.uint32 b t
 
 let leb_len n =
   let rec go n acc = if n < 128 then acc else go (n lsr 7) (acc + 1) in
@@ -1437,7 +1444,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       (output_import_section ~features ~coalesce_imports out_channel m.imports);
 
   (* 3. Function Section *)
-  if m.functions <> [] then section 3 (Encoder.vec Encoder.sint) m.functions;
+  if m.functions <> [] then section 3 (Encoder.vec Encoder.uint32) m.functions;
 
   (* 4. Table Section *)
   if m.tables <> [] then
@@ -1460,7 +1467,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
     section 13
       (Encoder.vec (fun b i ->
            Encoder.byte b 0x00;
-           Encoder.sint b i))
+           Encoder.uint32 b i))
       m.tags;
 
   (* 7. Global Section *)
@@ -1482,12 +1489,12 @@ let module_ ~out_channel ?output_file ?(source_map = false)
            | Memory -> Encoder.byte b 0x02
            | Global -> Encoder.byte b 0x03
            | Tag -> Encoder.byte b 0x04);
-           Encoder.sint b e.index))
+           Encoder.uint32 b e.index))
       m.exports;
 
   (* 9. Start Section *)
   (match m.start with
-  | Some i -> section 8 Encoder.sint i
+  | Some i -> section 8 Encoder.uint32 i
   | None -> ());
 
   (* 10. Element Section *)
@@ -1521,11 +1528,12 @@ let module_ ~out_channel ?output_file ?(source_map = false)
              if is_ref_func then get_func_indices e.init else None
            in
            match (e.mode, indices_opt) with
-           | Active (0, offset), Some idxs ->
+           | Active (table, offset), Some idxs when table = Uint32.zero ->
                Encoder.byte b 0x00;
                Encoder.expr ~source_map_t b offset;
-               Encoder.vec Encoder.uint b idxs
-           | Active (0, offset), None when is_funcref ->
+               Encoder.vec Encoder.uint32 b idxs
+           | Active (table, offset), None when table = Uint32.zero && is_funcref
+             ->
                Encoder.byte b 0x04;
                Encoder.expr ~source_map_t b offset;
                Encoder.vec
@@ -1533,21 +1541,21 @@ let module_ ~out_channel ?output_file ?(source_map = false)
                  b e.init
            | Active (table, offset), Some idxs ->
                Encoder.byte b 0x02;
-               Encoder.uint b table;
+               Encoder.uint32 b table;
                Encoder.expr ~source_map_t b offset;
                Encoder.byte b 0x00;
-               Encoder.vec Encoder.uint b idxs
+               Encoder.vec Encoder.uint32 b idxs
            | Passive, Some idxs ->
                Encoder.byte b 0x01;
                Encoder.byte b 0x00;
-               Encoder.vec Encoder.uint b idxs
+               Encoder.vec Encoder.uint32 b idxs
            | Declare, Some idxs ->
                Encoder.byte b 0x03;
                Encoder.byte b 0x00;
-               Encoder.vec Encoder.uint b idxs
+               Encoder.vec Encoder.uint32 b idxs
            | Active (table, offset), _ ->
                Encoder.byte b 0x06;
-               Encoder.uint b table;
+               Encoder.uint32 b table;
                Encoder.expr ~source_map_t b offset;
                Encoder.reftype b e.typ;
                Encoder.vec
@@ -1634,22 +1642,26 @@ let module_ ~out_channel ?output_file ?(source_map = false)
               | l -> (funcidx, l) :: acc
             in
             branch_hints :=
-              collect !branch_hints (fun (o, (h : int Hints.t)) ->
+              collect !branch_hints (fun (o, (h : idx Hints.t)) ->
                   Option.map
                     (fun (b : bool Hints.hint) ->
                       (o, String.make 1 (if b.value then '\001' else '\000')))
                     h.Hints.branch);
             freq_hints :=
-              collect !freq_hints (fun (o, (h : int Hints.t)) ->
+              collect !freq_hints (fun (o, (h : idx Hints.t)) ->
                   Option.map
                     (fun (f : Hints.freq Hints.hint) ->
                       (o, Hints.freq_payload f.value))
                     h.Hints.freq);
             target_hints :=
-              collect !target_hints (fun (o, (h : int Hints.t)) ->
+              collect !target_hints (fun (o, (h : idx Hints.t)) ->
                   Option.map
-                    (fun (l : (int * int) list Hints.hint) ->
-                      (o, Hints.call_targets_payload l.value))
+                    (fun (l : (idx * int) list Hints.hint) ->
+                      ( o,
+                        Hints.call_targets_payload
+                          (List.map
+                             (fun (i, pct) -> (Uint32.to_int i, pct))
+                             l.value) ))
                     h.Hints.targets));
         (* The function-level section: one entry per function that has a priority,
            keyed at offset 0 — the position that means "the function itself". *)
@@ -1701,13 +1713,13 @@ let module_ ~out_channel ?output_file ?(source_map = false)
                Encoder.byte b 0x01;
                Encoder.name b d.init
            | Active (mem, offset) ->
-               if mem = 0 then (
+               if mem = Uint32.zero then (
                  Encoder.byte b 0x00;
                  Encoder.expr ~source_map_t b offset;
                  Encoder.name b d.init)
                else (
                  Encoder.byte b 0x02;
-                 Encoder.uint b mem;
+                 Encoder.uint32 b mem;
                  (Encoder.expr ~source_map_t b) offset;
                  Encoder.name b d.init)))
       m.data;
@@ -1741,7 +1753,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       let b_sub = Buffer.create 128 in
       Encoder.vec
         (fun b (idx, name) ->
-          Encoder.uint b idx;
+          Encoder.uint32 b idx;
           Encoder.name b name)
         b_sub
         (IntMap.bindings name_list);
@@ -1755,10 +1767,10 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       let b_sub = Buffer.create 128 in
       Encoder.vec
         (fun b (outer_idx, inner_map) ->
-          Encoder.uint b outer_idx;
+          Encoder.uint32 b outer_idx;
           Encoder.vec
             (fun b (inner_idx, name) ->
-              Encoder.uint b inner_idx;
+              Encoder.uint32 b inner_idx;
               Encoder.name b name)
             b
             (IntMap.bindings inner_map))

@@ -16,6 +16,12 @@ val of_int : int -> t
 val to_int : t -> int
 (** Convert to an OCaml [int]. May raise if the value doesn't fit. *)
 
+val to_int32 : t -> int32
+(** Convert to an OCaml [int32]. *)
+
+val of_int32 : int32 -> t
+(** Convert from an OCaml [int32]. *)
+
 val zero : t
 (** The value 0. *)
 
