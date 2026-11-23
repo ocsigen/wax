@@ -143,7 +143,12 @@ ACK_RED_MAX="${ACK_RED_MAX:-$ACK_DEF}"
 # [Rnullany] earns its core slot: the core set had no ANY-hierarchy reference
 # producer at all (its [Rext] consumes one), and the adaptive-vs-concrete
 # re-parse split it represents is exactly what the scan reasons about.
-CORE="Rext Rnull Rnullany Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq ScondPushEq"
+# [ScondPushNe] earns its slot as the one symbol whose configurations leave
+# stacks of DIFFERENT depths: the typer compares an operation's operand types
+# across configurations (its "no single form" check), and with only the equal
+# push the core never showed it two shapes. The full alphabet caught the
+# over-rejection that cost (ebd71dfea2) at depth 2; the core lane could not.
+CORE="Rext Rnull Rnullany Rnum Radapt Vmulti VmultiRE S0 S0n S1 S2c Bp1 Bif T ScondEq ScondPushEq ScondPushNe"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 freeze_wax "$RESULTS"
