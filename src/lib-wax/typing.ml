@@ -5909,7 +5909,16 @@ and type_branch ctx i =
          [[||]] pseudo-params; the fall-through keeps the below-values. *)
       (match typ with
       | _ when not bound -> ()
-      | Unknown | Error | UnknownRef -> ()
+      | Error -> ()
+      | Unknown | UnknownRef ->
+          (* A reference recovered from a polymorphic value, or [null!]: the
+             branch delivers the non-null bottom reference [UnknownRef], as
+             [br_on_null]'s fall-through does. It must still reach the target:
+             a block whose result is left unwritten takes its type from its
+             branches, and this may be its only one. *)
+          check_subtypes ctx ~location:(snd i'.info)
+            (Array.append types [| Cell.make UnknownRef |])
+            params
       | Valtype
           {
             typ = Ref { nullable = _; typ; _ };

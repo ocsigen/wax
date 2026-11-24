@@ -75,6 +75,10 @@ grammar keeps none, and both are versioned independently of the toolchain.
 
 ### Fixes
 
+- A block whose result type is left unwritten now takes it from a
+  `br_on_non_null` whose operand is known only as a reference, such as
+  `null!`. The block was inferred to return no value, so decompiling some
+  valid WebAssembly gave Wax that did not compile.
 - A function whose result type is not bound no longer crashes `wax` with an
   internal error when the module has a conditional annotation; the unbound
   type is reported, as it is in a module without one.
