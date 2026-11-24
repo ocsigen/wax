@@ -289,9 +289,10 @@ template() { # $1 = |-separated instruction list
   # Pure parameter expansion: every '|' becomes a newline plus the indent. A
   # pipeline here ran three processes for each of the grid's cells, the ~two
   # thirds that are skipped included.
-  local body
+  # The text goes out through builtins, not [cat]: a process per cell again.
+  local body text
   body="    ${1//|/$'\n'    }"
-  cat <<EOF
+  IFS= read -r -d '' text <<EOF || true
 (module
   (type \$s (struct (field (mut i64))))
   (memory 1 1 shared)
@@ -307,24 +308,30 @@ template() { # $1 = |-separated instruction list
     return
 $body))
 EOF
+  printf '%s' "$text"
 }
 
 # ---- Enumerate sequences of length 0..DEPTH, each under each reader. ----
+# One cell per line of $COMBOS, which each worker reads its own slice of. The
+# cells are not held in an array of this shell: every worker is a fork of it,
+# and every [timeout] and [wax] a worker runs is a fork of the worker, whose
+# cost grows with its size. Holding the depth-4 grid (600k cells, ~120 MB)
+# made those forks the bulk of the run, growing with each symbol added.
 NSYM=${#E_NAME[@]}
-COMBOS=()
+COMBOS="$RESULTS/combos"
 gen() { # $1 = remaining depth, $2 = name path, $3 = code path
   local r
   for r in "${!R_NAME[@]}"; do
-    COMBOS+=("$2+${R_NAME[$r]}"$'\t'"$r"$'\t'"$3")
+    printf '%s\t%s\t%s\n' "$2+${R_NAME[$r]}" "$r" "$3"
   done
   [ "$1" -eq 0 ] && return
   local i
-  for i in $(seq 0 $((NSYM - 1))); do
+  for ((i = 0; i < NSYM; i++)); do
     gen $(($1 - 1)) "$2${E_NAME[$i]}." "$3${E_CODE[$i]}|"
   done
 }
-gen "$DEPTH" "" ""
-N=${#COMBOS[@]}
+gen "$DEPTH" "" "" >"$COMBOS"
+N=$(wc -l <"$COMBOS")
 
 # Occurrences of opcode $2 in the text $1, word-anchored (so [ref.cast] does
 # not match [ref.cast_desc_eq]) — the anchor the [grep -oE '…([^0-9a-z_.]|$)']
@@ -347,6 +354,8 @@ count_ops_in() { # $1 = text, $2 = opcode -> OPS_N
 
 worker() {
   local first="$1" last="$2" i name ridx codes v mode out="" skipped=0 acked=0
+  local -a cells
+  mapfile -t -s "$first" -n $((last - first + 1)) cells <"$COMBOS"
   local p="$RESULTS/w$first"
   local wax="$p.wax" back="$p.back.wat"
   local dir="$p.cells"
@@ -384,14 +393,15 @@ worker() {
       || { [ "$rc" -eq 0 ] && [ "$errs" -eq 1 ]; }; then
       for f in "${chunk[@]}"; do
         unset "BAD[$f]"
-        [ "$(classify_wax check "$f")" != ok ] && BAD["$f"]=1
+        classify_wax_v check "$f"
+        [ "$WAX_VERDICT" != ok ] && BAD["$f"]=1
       done
     fi
     chunk=()
     return 0
   }
   for ((i = first; i <= last; i++)); do
-    local rest="${COMBOS[$i]#*$'\t'}"
+    local rest="${cells[i - first]#*$'\t'}"
     ridx="${rest%%$'\t'*}"
     codes="${rest#*$'\t'}${R_CODE[$ridx]}|unreachable"
     template "$codes" >"$dir/$i.wat"
@@ -411,8 +421,8 @@ worker() {
     fi
   }
   for ((i = first; i <= last; i++)); do
-    name="${COMBOS[$i]%%$'\t'*}"
-    local rest="${COMBOS[$i]#*$'\t'}"
+    name="${cells[i - first]%%$'\t'*}"
+    local rest="${cells[i - first]#*$'\t'}"
     ridx="${rest%%$'\t'*}"
     local wat="$dir/$i.wat"
     # The trailing [unreachable] absorbs whatever the cell leaves on the
@@ -437,7 +447,8 @@ worker() {
       acked=$((acked + 1))
     fi
     for mode in "" "--faithful"; do
-      v="$(classify_wax -i wat -f wax $mode --error-format short "$wat" -o "$wax")"
+      classify_wax_v -i wat -f wax $mode --error-format short "$wat" -o "$wax"
+      v=$WAX_VERDICT
       if [ "$v" != ok ]; then
         if [ "$sev" = ACK ] && [ "$v" = rejected ]; then
           out+="$(finding BACKSCAN ACK "$name" \
@@ -448,7 +459,8 @@ worker() {
           "${mode:-default}: $v (wat->wax): $(head -1 "$ERRLOG")" "$codes")"$'\n'
         printf F >&2; continue
       fi
-      v="$(classify_wax -i wax -f wat "$wax" -o "$back")"
+      classify_wax_v -i wax -f wat "$wax" -o "$back"
+      v=$WAX_VERDICT
       if [ "$v" != ok ]; then
         out+="$(finding BACKSCAN HIGH "$name" \
           "${mode:-default}: $v (wax->wat): $(head -1 "$ERRLOG")" "$codes")"$'\n'

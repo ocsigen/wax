@@ -102,15 +102,23 @@ freeze_wax() {
 # bucket. The same is true of [--debug width-check], which turns every repairable
 # disagreement into that error as well.
 classify_wax() {
+  classify_wax_v "$@"
+  echo "$WAX_VERDICT"
+}
+
+# As classify_wax, but leaves the verdict in $WAX_VERDICT instead of printing
+# it, for a hot loop: the $(...) that reads a printed verdict forks the calling
+# shell, which costs more than the wax run itself when that shell is large.
+classify_wax_v() {
   timeout -k 5 "$TIMEOUT" "$WAX" "$@" >/dev/null 2>"$ERRLOG"
   local code=$?
   case $code in
-    0)       echo ok ;;
-    123|128) echo rejected ;;
-    124)     echo "crash:timeout(${TIMEOUT}s)" ;;
-    2|125)   echo "crash:uncaught-exception(exit $code)" ;;
-    13[2-9]|140) echo "crash:signal($((code-128)))" ;;
-    *)       echo "crash:exit($code)" ;;
+    0)       WAX_VERDICT=ok ;;
+    123|128) WAX_VERDICT=rejected ;;
+    124)     WAX_VERDICT="crash:timeout(${TIMEOUT}s)" ;;
+    2|125)   WAX_VERDICT="crash:uncaught-exception(exit $code)" ;;
+    13[2-9]|140) WAX_VERDICT="crash:signal($((code-128)))" ;;
+    *)       WAX_VERDICT="crash:exit($code)" ;;
   esac
   return 0
 }
